@@ -50,7 +50,7 @@ export default function ClientDashboard() {
           {SERVICE_CATEGORIES.map((c) => (
             <Pressable
               key={c.label}
-              onPress={() => router.push({ pathname: '/(client)/new-request', params: { category: c.label } })}
+              onPress={() => router.push(`/(client)/new-request?category=${encodeURIComponent(c.label)}`)}
               className="mb-2.5 w-[48%] rounded-2xl border border-gray-200 bg-white p-3.5"
             >
               <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-50">
