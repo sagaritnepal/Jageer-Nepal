@@ -122,6 +122,16 @@ export interface SupportTicket {
   created_at: string;
 }
 
+export interface ServiceCategory {
+  id: string;
+  label: string;
+  description: string | null;
+  icon: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 // Minimal shape expected by Supabase's generated Database type.
 // Expand this if/when you swap in the CLI-generated version.
 export interface Database {
@@ -144,6 +154,12 @@ export interface Database {
         Row: SupportTicket;
         Insert: Partial<SupportTicket>;
         Update: Partial<SupportTicket>;
+        Relationships: [];
+      };
+      service_categories: {
+        Row: ServiceCategory;
+        Insert: Partial<ServiceCategory>;
+        Update: Partial<ServiceCategory>;
         Relationships: [];
       };
     };

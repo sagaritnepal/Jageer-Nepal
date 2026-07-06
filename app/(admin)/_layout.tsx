@@ -11,6 +11,8 @@ export default function AdminLayout() {
         <Tabs.Screen name="dashboard" options={{ title: 'Overview', tabBarIcon: () => <TabIcon emoji="📊" /> }} />
         <Tabs.Screen name="reports" options={{ title: 'Reports', tabBarIcon: () => <TabIcon emoji="📈" /> }} />
         <Tabs.Screen name="users" options={{ title: 'Users', tabBarIcon: () => <TabIcon emoji="👥" /> }} />
+        <Tabs.Screen name="categories" options={{ title: 'Categories', tabBarIcon: () => <TabIcon emoji="🏷️" /> }} />
+        <Tabs.Screen name="products" options={{ title: 'Products', tabBarIcon: () => <TabIcon emoji="🛍️" /> }} />
         <Tabs.Screen name="support" options={{ title: 'Support', tabBarIcon: () => <TabIcon emoji="🎧" /> }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
       </Tabs>

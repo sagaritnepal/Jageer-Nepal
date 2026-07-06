@@ -3,8 +3,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable, Alert, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
-import { SERVICE_CATEGORIES } from '../../lib/constants/serviceCategories';
+import { useSupabaseInsert, useSupabaseQuery } from '../../lib/hooks/useSupabase';
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
@@ -13,12 +12,18 @@ export default function NewRequest() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const createRequest = useSupabaseInsert('service_requests');
 
-  const [category, setCategory] = useState(presetCategory || SERVICE_CATEGORIES[0].label);
+  const { data: categories, isLoading: loadingCategories } = useSupabaseQuery('service_categories', {
+    filters: { is_active: true },
+    orderBy: { column: 'sort_order' },
+  });
+
+  const [categoryOverride, setCategoryOverride] = useState<string | null>(presetCategory ?? null);
+  const category = categoryOverride ?? categories?.[0]?.label ?? null;
   const [action, setAction] = useState<(typeof SERVICE_ACTIONS)[number]>(SERVICE_ACTIONS[0]);
   const [description, setDescription] = useState('');
 
   async function handleSubmit() {
-    if (!userId) return;
+    if (!userId || !category) return;
     if (!description.trim()) {
       Alert.alert('Add a description', 'Let us know a bit more about the issue.');
       return;
@@ -43,11 +48,12 @@ export default function NewRequest() {
       <Text className="mb-6 text-2xl font-bold text-gray-900">Request a repair</Text>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">What do you need help with?</Text>
+      {loadingCategories && <Text className="mb-4 text-gray-500">Loading categories…</Text>}
       <View className="mb-6 flex-row flex-wrap justify-between">
-        {SERVICE_CATEGORIES.map((c) => (
+        {(categories ?? []).map((c) => (
           <Pressable
-            key={c.label}
-            onPress={() => setCategory(c.label)}
+            key={c.id}
+            onPress={() => setCategoryOverride(c.label)}
             className={`mb-2.5 w-[48%] rounded-2xl border p-3.5 ${
               category === c.label ? 'border-blue-700 bg-blue-50' : 'border-gray-200 bg-white'
             }`}
@@ -66,7 +72,7 @@ export default function NewRequest() {
             >
               {c.label}
             </Text>
-            <Text className="mt-0.5 text-[11px] text-gray-400">{c.desc}</Text>
+            {c.description && <Text className="mt-0.5 text-[11px] text-gray-400">{c.description}</Text>}
           </Pressable>
         ))}
       </View>
@@ -99,7 +105,7 @@ export default function NewRequest() {
 
       <Pressable
         onPress={handleSubmit}
-        disabled={createRequest.isPending}
+        disabled={createRequest.isPending || !category}
         className="items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
       >
         <Text className="text-base font-semibold text-white">

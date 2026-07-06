@@ -69,19 +69,13 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
 function MyListings({ products, isLoading }: { products: Product[]; isLoading: boolean }) {
   return (
     <>
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text className="text-sm text-gray-500">Products you're selling</Text>
-        <Pressable
-          onPress={() => router.push('/(reseller)/add-product')}
-          className="rounded-lg bg-blue-700 px-4 py-2"
-        >
-          <Text className="font-semibold text-white">+ Add</Text>
-        </Pressable>
-      </View>
+      <Text className="mb-4 text-sm text-gray-500">
+        Products you're selling — listings are added by Jageer admin. Contact support to get a product listed.
+      </Text>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && products.length === 0 && (
-        <Text className="text-gray-500">No products yet. Tap "+ Add" to list your first item.</Text>
+        <Text className="text-gray-500">No products listed for you yet.</Text>
       )}
 
       <FlatList

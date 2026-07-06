@@ -3,7 +3,6 @@ import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
-import { SERVICE_CATEGORIES } from '../../lib/constants/serviceCategories';
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -22,6 +21,11 @@ export default function ClientDashboard() {
     filters: { role: 'technician', is_active: true },
   });
   const nearbyTechnicians = technicians?.slice(0, 3) ?? [];
+
+  const { data: categories } = useSupabaseQuery('service_categories', {
+    filters: { is_active: true },
+    orderBy: { column: 'sort_order' },
+  });
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
@@ -47,9 +51,9 @@ export default function ClientDashboard() {
       <View className="px-6 pt-5">
         <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
         <View className="flex-row flex-wrap justify-between">
-          {SERVICE_CATEGORIES.map((c) => (
+          {(categories ?? []).map((c) => (
             <Pressable
-              key={c.label}
+              key={c.id}
               onPress={() => router.push(`/(client)/new-request?category=${encodeURIComponent(c.label)}`)}
               className="mb-2.5 w-[48%] rounded-2xl border border-gray-200 bg-white p-3.5"
             >
@@ -57,7 +61,7 @@ export default function ClientDashboard() {
                 <Text className="text-base">{c.icon}</Text>
               </View>
               <Text className="mt-2 text-[13px] font-bold leading-[1.25] text-gray-900">{c.label}</Text>
-              <Text className="mt-0.5 text-[11px] text-gray-400">{c.desc}</Text>
+              {c.description && <Text className="mt-0.5 text-[11px] text-gray-400">{c.description}</Text>}
             </Pressable>
           ))}
         </View>

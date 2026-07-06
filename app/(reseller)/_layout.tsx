@@ -15,7 +15,6 @@ export default function ResellerLayout() {
         <Tabs.Screen name="shop" options={{ title: 'Shop', tabBarIcon: () => <TabIcon emoji="🛍️" /> }} />
         <Tabs.Screen name="orders" options={{ title: 'Orders', tabBarIcon: () => <TabIcon emoji="📦" /> }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
-        <Tabs.Screen name="add-product" options={{ href: null, title: 'Add Product' }} />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Assign Technician' }} />
         <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
