@@ -9,6 +9,7 @@ const ROLES: { label: string; value: UserRole }[] = [
   { label: 'Client', value: 'client' },
   { label: 'Technician', value: 'technician' },
   { label: 'Reseller', value: 'reseller' },
+  { label: 'Wholesaler', value: 'wholesaler' },
 ];
 
 export default function Register() {
@@ -16,7 +17,10 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('client');
+  const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const selectedRole = ROLES.find((r) => r.value === role)!;
 
   async function handleRegister() {
     setIsSubmitting(true);
@@ -67,19 +71,33 @@ export default function Register() {
         className="mb-4 rounded-lg border border-gray-300 px-4 py-3 text-base"
       />
 
-      <Text className="mb-2 text-sm font-medium text-gray-700">I am a…</Text>
-      <View className="mb-6 flex-row gap-2">
-        {ROLES.map((r) => (
-          <Pressable
-            key={r.value}
-            onPress={() => setRole(r.value)}
-            className={`flex-1 items-center rounded-lg border py-2 ${
-              role === r.value ? 'border-blue-700 bg-blue-50' : 'border-gray-300'
-            }`}
-          >
-            <Text className={role === r.value ? 'font-semibold text-blue-700' : 'text-gray-600'}>{r.label}</Text>
-          </Pressable>
-        ))}
+      <Text className="mb-1 text-sm font-medium text-gray-700">I am a…</Text>
+      <View className="mb-6">
+        <Pressable
+          onPress={() => setShowRoleMenu((v) => !v)}
+          className="flex-row items-center justify-between rounded-lg border border-gray-300 px-4 py-3"
+        >
+          <Text className="text-base text-gray-900">{selectedRole.label}</Text>
+          <Text className="text-gray-400">{showRoleMenu ? '▲' : '▼'}</Text>
+        </Pressable>
+        {showRoleMenu && (
+          <View className="mt-1 rounded-lg border border-gray-200 bg-white">
+            {ROLES.map((r) => (
+              <Pressable
+                key={r.value}
+                onPress={() => {
+                  setRole(r.value);
+                  setShowRoleMenu(false);
+                }}
+                className="px-4 py-2.5"
+              >
+                <Text className={r.value === role ? 'font-semibold text-blue-700' : 'text-gray-700'}>
+                  {r.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
       <Pressable
