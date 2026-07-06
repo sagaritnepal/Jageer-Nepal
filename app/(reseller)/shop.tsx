@@ -22,36 +22,38 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
 
   return (
     <View className="mb-4 w-[48%] rounded-xl border border-gray-200 bg-white p-3">
-      <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
-        ) : (
-          <Text className="text-3xl">🖥️</Text>
-        )}
-        {item.is_dead_stock && (
-          <View className="absolute left-1 top-1 rounded-full bg-amber-500 px-2 py-0.5">
-            <Text className="text-[10px] font-semibold text-white">Dead stock</Text>
-          </View>
-        )}
-        {outOfStock && (
-          <View className="absolute inset-0 items-center justify-center bg-black/40">
-            <Text className="text-xs font-bold text-white">OUT OF STOCK</Text>
-          </View>
-        )}
-      </View>
+      <Pressable onPress={() => router.push(`/(reseller)/product/${item.id}`)}>
+        <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+          ) : (
+            <Text className="text-3xl">🖥️</Text>
+          )}
+          {item.is_dead_stock && (
+            <View className="absolute left-1 top-1 rounded-full bg-amber-500 px-2 py-0.5">
+              <Text className="text-[10px] font-semibold text-white">Dead stock</Text>
+            </View>
+          )}
+          {outOfStock && (
+            <View className="absolute inset-0 items-center justify-center bg-black/40">
+              <Text className="text-xs font-bold text-white">OUT OF STOCK</Text>
+            </View>
+          )}
+        </View>
 
-      {item.category && (
-        <Text className="mb-0.5 text-[11px] uppercase tracking-wide text-blue-600">{item.category}</Text>
-      )}
-      <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
-        {item.name}
-      </Text>
-      <Text className="text-base font-bold text-gray-900">
-        NPR {Number(item.price).toLocaleString()}
-      </Text>
-      <Text className="mb-2 mt-0.5 text-xs text-gray-400">
-        {outOfStock ? 'Out of stock' : `${item.stock_level} in stock`}
-      </Text>
+        {item.category && (
+          <Text className="mb-0.5 text-[11px] uppercase tracking-wide text-blue-600">{item.category}</Text>
+        )}
+        <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
+          {item.name}
+        </Text>
+        <Text className="text-base font-bold text-gray-900">
+          NPR {Number(item.price).toLocaleString()}
+        </Text>
+        <Text className="mb-2 mt-0.5 text-xs text-gray-400">
+          {outOfStock ? 'Out of stock' : `${item.stock_level} in stock`}
+        </Text>
+      </Pressable>
 
       <Pressable
         onPress={() => onAdd(item)}

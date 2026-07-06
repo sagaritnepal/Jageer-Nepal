@@ -19,6 +19,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Assign Technician' }} />
         <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
+        <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Product' }} />
       </Tabs>
     </RoleGuard>
   );
