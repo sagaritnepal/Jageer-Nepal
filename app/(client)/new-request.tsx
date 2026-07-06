@@ -6,16 +6,16 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
 
 const CATEGORIES = [
-  'Computer',
-  'Printer',
-  'Laptop',
-  'CCTV',
-  'Intercom',
-  'Electrical',
-  'Doorlock',
-  'AC',
-  'Attendance',
-  'Wifi/Router',
+  { label: 'Computer', icon: '🖥️' },
+  { label: 'Printer', icon: '🖨️' },
+  { label: 'Laptop', icon: '💻' },
+  { label: 'CCTV', icon: '📹' },
+  { label: 'Intercom', icon: '☎️' },
+  { label: 'Electrical', icon: '⚡' },
+  { label: 'Doorlock', icon: '🔒' },
+  { label: 'AC', icon: '❄️' },
+  { label: 'Attendance', icon: '🕒' },
+  { label: 'Wifi/Router', icon: '📶' },
 ];
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
@@ -24,7 +24,7 @@ export default function NewRequest() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const createRequest = useSupabaseInsert('service_requests');
 
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [category, setCategory] = useState(CATEGORIES[0].label);
   const [action, setAction] = useState<(typeof SERVICE_ACTIONS)[number]>(SERVICE_ACTIONS[0]);
   const [description, setDescription] = useState('');
 
@@ -54,16 +54,29 @@ export default function NewRequest() {
       <Text className="mb-6 text-2xl font-bold text-gray-900">Request a repair</Text>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">What do you need help with?</Text>
-      <View className="mb-6 flex-row flex-wrap gap-2">
+      <View className="mb-6 flex-row flex-wrap justify-between">
         {CATEGORIES.map((c) => (
           <Pressable
-            key={c}
-            onPress={() => setCategory(c)}
-            className={`rounded-full border px-4 py-2 ${
-              category === c ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
+            key={c.label}
+            onPress={() => setCategory(c.label)}
+            className={`mb-2.5 w-[48%] rounded-2xl border p-3.5 ${
+              category === c.label ? 'border-blue-700 bg-blue-50' : 'border-gray-200 bg-white'
             }`}
           >
-            <Text className={category === c ? 'font-semibold text-blue-700' : 'text-gray-600'}>{c}</Text>
+            <View
+              className={`h-9 w-9 items-center justify-center rounded-xl ${
+                category === c.label ? 'bg-blue-100' : 'bg-gray-100'
+              }`}
+            >
+              <Text className="text-base">{c.icon}</Text>
+            </View>
+            <Text
+              className={`mt-2 text-[13px] font-bold ${
+                category === c.label ? 'text-blue-700' : 'text-gray-900'
+              }`}
+            >
+              {c.label}
+            </Text>
           </Pressable>
         ))}
       </View>
