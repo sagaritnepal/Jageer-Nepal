@@ -1,30 +1,19 @@
 // app/(client)/new-request.tsx
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, Alert, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
-
-const CATEGORIES = [
-  { label: 'Computer', icon: '🖥️' },
-  { label: 'Printer', icon: '🖨️' },
-  { label: 'Laptop', icon: '💻' },
-  { label: 'CCTV', icon: '📹' },
-  { label: 'Intercom', icon: '☎️' },
-  { label: 'Electrical', icon: '⚡' },
-  { label: 'Doorlock', icon: '🔒' },
-  { label: 'AC', icon: '❄️' },
-  { label: 'Attendance', icon: '🕒' },
-  { label: 'Wifi/Router', icon: '📶' },
-];
+import { SERVICE_CATEGORIES } from '../../lib/constants/serviceCategories';
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
 export default function NewRequest() {
+  const { category: presetCategory } = useLocalSearchParams<{ category?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const createRequest = useSupabaseInsert('service_requests');
 
-  const [category, setCategory] = useState(CATEGORIES[0].label);
+  const [category, setCategory] = useState(presetCategory || SERVICE_CATEGORIES[0].label);
   const [action, setAction] = useState<(typeof SERVICE_ACTIONS)[number]>(SERVICE_ACTIONS[0]);
   const [description, setDescription] = useState('');
 
@@ -55,7 +44,7 @@ export default function NewRequest() {
 
       <Text className="mb-2 text-sm font-medium text-gray-700">What do you need help with?</Text>
       <View className="mb-6 flex-row flex-wrap justify-between">
-        {CATEGORIES.map((c) => (
+        {SERVICE_CATEGORIES.map((c) => (
           <Pressable
             key={c.label}
             onPress={() => setCategory(c.label)}
@@ -71,12 +60,13 @@ export default function NewRequest() {
               <Text className="text-base">{c.icon}</Text>
             </View>
             <Text
-              className={`mt-2 text-[13px] font-bold ${
+              className={`mt-2 text-[13px] font-bold leading-[1.25] ${
                 category === c.label ? 'text-blue-700' : 'text-gray-900'
               }`}
             >
               {c.label}
             </Text>
+            <Text className="mt-0.5 text-[11px] text-gray-400">{c.desc}</Text>
           </Pressable>
         ))}
       </View>

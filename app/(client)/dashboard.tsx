@@ -1,64 +1,89 @@
 // app/(client)/dashboard.tsx
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { SERVICE_CATEGORIES } from '../../lib/constants/serviceCategories';
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'text-amber-600',
-  assigned: 'text-blue-700',
-  in_progress: 'text-blue-700',
-  resolved: 'text-green-600',
-  cancelled: 'text-gray-400',
-};
+function initialsOf(name: string | null | undefined) {
+  if (!name) return '?';
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+}
 
 export default function ClientDashboard() {
   const profile = useAuthStore((state) => state.profile);
-  const userId = useAuthStore((state) => state.session?.user.id);
 
-  const { data: requests } = useSupabaseQuery('service_requests', {
-    filters: userId ? { client_id: userId } : {},
-    orderBy: { column: 'created_at', ascending: false },
-    enabled: !!userId,
+  const { data: technicians } = useSupabaseQuery('profiles', {
+    filters: { role: 'technician', is_active: true },
   });
-
-  const recentRequests = requests?.slice(0, 3) ?? [];
+  const nearbyTechnicians = technicians?.slice(0, 3) ?? [];
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
-      <Text className="mb-1 text-2xl font-bold text-gray-900">
-        Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
-      </Text>
-      <Text className="mb-8 text-gray-500">What do you need help with today?</Text>
+    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
+      <View className="rounded-b-[22px] bg-blue-700 px-6 pb-6 pt-16">
+        <Text className="text-[19px] font-extrabold text-white">
+          Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
+        </Text>
 
-      <Pressable
-        onPress={() => router.push('/(client)/new-request')}
-        className="mb-3 rounded-xl bg-blue-700 p-5"
-      >
-        <Text className="text-lg font-semibold text-white">Request a repair</Text>
-        <Text className="mt-1 text-blue-100">Get a technician assigned to your issue</Text>
-      </Pressable>
+        <Pressable
+          onPress={() => router.push('/(client)/new-request')}
+          className="mt-4 flex-row items-center justify-between rounded-2xl bg-white px-4 py-3.5"
+        >
+          <View>
+            <Text className="text-[14.5px] font-bold text-gray-900">Need IT help?</Text>
+            <Text className="mt-0.5 text-xs text-gray-500">Report an issue in seconds</Text>
+          </View>
+          <View className="rounded-full bg-blue-700 px-4 py-2">
+            <Text className="text-xs font-bold text-white">Request</Text>
+          </View>
+        </Pressable>
+      </View>
 
-      {recentRequests.length > 0 && (
-        <View className="mt-4">
-          <Text className="mb-2 text-sm font-semibold text-gray-900">Recent requests</Text>
-          {recentRequests.map((r) => (
+      <View className="px-6 pt-5">
+        <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
+        <View className="flex-row flex-wrap justify-between">
+          {SERVICE_CATEGORIES.map((c) => (
             <Pressable
-              key={r.id}
-              onPress={() => router.push(`/(client)/request/${r.id}`)}
-              className="mb-2 rounded-lg border border-gray-200 bg-white p-4"
+              key={c.label}
+              onPress={() => router.push({ pathname: '/(client)/new-request', params: { category: c.label } })}
+              className="mb-2.5 w-[48%] rounded-2xl border border-gray-200 bg-white p-3.5"
             >
-              <Text className="font-semibold text-gray-900">{r.issue_type}</Text>
-              <Text className={`mt-1 text-sm capitalize ${STATUS_COLORS[r.status] ?? 'text-gray-500'}`}>
-                {r.status.replace('_', ' ')}
-              </Text>
+              <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-50">
+                <Text className="text-base">{c.icon}</Text>
+              </View>
+              <Text className="mt-2 text-[13px] font-bold leading-[1.25] text-gray-900">{c.label}</Text>
+              <Text className="mt-0.5 text-[11px] text-gray-400">{c.desc}</Text>
             </Pressable>
           ))}
-          <Pressable onPress={() => router.push('/(client)/requests')} className="mb-2">
-            <Text className="text-sm font-semibold text-blue-700">View all requests →</Text>
-          </Pressable>
         </View>
-      )}
-    </View>
+
+        {nearbyTechnicians.length > 0 && (
+          <>
+            <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Nearby technicians</Text>
+            {nearbyTechnicians.map((tech) => (
+              <View
+                key={tech.id}
+                className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
+              >
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-teal-600">
+                  <Text className="text-xs font-bold text-white">{initialsOf(tech.full_name)}</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[13.5px] font-bold text-gray-900">{tech.full_name ?? 'Technician'}</Text>
+                  <Text className="mt-0.5 text-[11.5px] text-gray-400">
+                    {tech.city ?? 'Nepal'} · Available now
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+      </View>
+    </ScrollView>
   );
 }
