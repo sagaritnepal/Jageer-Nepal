@@ -6,7 +6,7 @@ import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 
 export default function ResellerLayout() {
   return (
-    <RoleGuard allow={['reseller', 'wholesaler']}>
+    <RoleGuard allow={['reseller']}>
       <Tabs
         screenOptions={{ headerTintColor: ROLE_ACCENT.reseller, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
       >

@@ -1,8 +1,8 @@
 // lib/components/ProfileScreen.tsx
-import { useMemo } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, Pressable, ScrollView, TextInput, Alert } from 'react-native';
 import { useAuthStore } from '../hooks/useAuth';
-import { useSupabaseQuery } from '../hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseInsert } from '../hooks/useSupabase';
 import { ROLE_ACCENT } from '../constants/roleColors';
 
 function initialsOf(name: string | null | undefined) {
@@ -29,6 +29,63 @@ function TechnicianRatingStat({ technicianId }: { technicianId: string }) {
       <Text className="mt-0.5 text-center text-[10.5px] text-white/85">
         {reviews?.length ?? 0} review{(reviews?.length ?? 0) === 1 ? '' : 's'}
       </Text>
+    </View>
+  );
+}
+
+function ReportIssue({ userId }: { userId: string }) {
+  const [open, setOpen] = useState(false);
+  const [subject, setSubject] = useState('');
+  const insertTicket = useSupabaseInsert('support_tickets');
+
+  async function handleSubmit() {
+    if (!subject.trim()) return;
+    try {
+      await insertTicket.mutateAsync({ user_id: userId, subject: subject.trim() });
+      setSubject('');
+      setOpen(false);
+      Alert.alert('Reported', "We've received your issue and will look into it.");
+    } catch (err) {
+      Alert.alert('Could not submit', err instanceof Error ? err.message : 'Please try again.');
+    }
+  }
+
+  if (!open) {
+    return (
+      <Pressable
+        onPress={() => setOpen(true)}
+        className="mb-4 items-center rounded-xl border border-gray-200 bg-white py-3.5"
+      >
+        <Text className="font-semibold text-gray-700">Report an issue</Text>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+      <Text className="mb-2 text-sm font-semibold text-gray-900">What's going wrong?</Text>
+      <TextInput
+        value={subject}
+        onChangeText={setSubject}
+        placeholder="Describe the issue"
+        multiline
+        className="mb-3 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+      />
+      <View className="flex-row gap-2">
+        <Pressable
+          onPress={() => setOpen(false)}
+          className="flex-1 items-center rounded-lg border border-gray-300 py-2.5"
+        >
+          <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleSubmit}
+          disabled={insertTicket.isPending}
+          className="flex-1 items-center rounded-lg bg-blue-700 py-2.5 disabled:opacity-50"
+        >
+          <Text className="text-sm font-semibold text-white">{insertTicket.isPending ? 'Sending…' : 'Submit'}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -69,6 +126,8 @@ export function ProfileScreen() {
           <Text className="text-sm text-gray-400">City</Text>
           <Text className="text-gray-900">{profile?.city ?? 'Not set'}</Text>
         </View>
+
+        {profile && <ReportIssue userId={profile.id} />}
 
         <Pressable onPress={signOut} className="items-center rounded-xl border border-red-200 bg-red-50 py-3.5">
           <Text className="font-semibold text-red-600">Sign out</Text>

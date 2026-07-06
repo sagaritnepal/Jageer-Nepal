@@ -13,9 +13,13 @@ export default function ClientLayout() {
           name="requests"
           options={{ title: 'My Requests', tabBarIcon: () => <TabIcon emoji="📋" /> }}
         />
+        <Tabs.Screen name="market" options={{ title: 'Market', tabBarIcon: () => <TabIcon emoji="🛍️" /> }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'New Request' }} />
+        <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
+        <Tabs.Screen name="product-orders" options={{ href: null, title: 'My Orders' }} />
+        <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
       </Tabs>
     </RoleGuard>
   );

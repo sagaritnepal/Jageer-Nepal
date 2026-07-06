@@ -9,7 +9,7 @@ const ROLE_HOME: Record<string, string> = {
   client: '/(client)/dashboard',
   technician: '/(technician)/dashboard',
   reseller: '/(reseller)/dashboard',
-  wholesaler: '/(reseller)/dashboard', // shares the reseller area for now
+  wholesaler: '/(wholesaler)/market',
   admin: '/(admin)/dashboard',
 };
 

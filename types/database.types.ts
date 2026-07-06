@@ -112,6 +112,16 @@ export interface Message {
   read_at: string | null;
 }
 
+export type TicketStatus = 'open' | 'resolved';
+
+export interface SupportTicket {
+  id: string;
+  user_id: string;
+  subject: string;
+  status: TicketStatus;
+  created_at: string;
+}
+
 // Minimal shape expected by Supabase's generated Database type.
 // Expand this if/when you swap in the CLI-generated version.
 export interface Database {
@@ -130,6 +140,12 @@ export interface Database {
       job_cards: { Row: JobCard; Insert: Partial<JobCard>; Update: Partial<JobCard>; Relationships: [] };
       reviews: { Row: Review; Insert: Partial<Review>; Update: Partial<Review>; Relationships: [] };
       messages: { Row: Message; Insert: Partial<Message>; Update: Partial<Message>; Relationships: [] };
+      support_tickets: {
+        Row: SupportTicket;
+        Insert: Partial<SupportTicket>;
+        Update: Partial<SupportTicket>;
+        Relationships: [];
+      };
     };
   };
 }

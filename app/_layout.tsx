@@ -30,6 +30,7 @@ export default function RootLayout() {
           <Stack.Screen name="(client)" />
           <Stack.Screen name="(technician)" />
           <Stack.Screen name="(reseller)" />
+          <Stack.Screen name="(wholesaler)" />
           <Stack.Screen name="(admin)" />
         </Stack>
       </AuthGate>

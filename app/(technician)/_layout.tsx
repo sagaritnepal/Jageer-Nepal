@@ -15,6 +15,7 @@ export default function TechnicianLayout() {
       >
         <Tabs.Screen name="dashboard" options={{ title: 'Home', tabBarIcon: () => <TabIcon emoji="🏠" /> }} />
         <Tabs.Screen name="jobs" options={{ title: 'My Jobs', tabBarIcon: () => <TabIcon emoji="🧰" /> }} />
+        <Tabs.Screen name="earnings" options={{ title: 'Earnings', tabBarIcon: () => <TabIcon emoji="💰" /> }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
         <Tabs.Screen name="job/[id]" options={{ href: null, title: 'Job Card' }} />
         {/* "available" self-assign screen removed: resellers now assign

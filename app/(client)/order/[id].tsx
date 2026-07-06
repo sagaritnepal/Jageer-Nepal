@@ -1,6 +1,6 @@
-// app/(reseller)/order/[id].tsx
+// app/(client)/order/[id].tsx
 import { OrderDetailScreen } from '../../../lib/components/OrderDetailScreen';
 
-export default function OrderDetail() {
+export default function ClientOrderDetail() {
   return <OrderDetailScreen />;
 }
