@@ -1,0 +1,308 @@
+// app/(reseller)/shop.tsx
+import { useMemo, useState } from 'react';
+import { View, Text, TextInput, Pressable, FlatList, Image, Alert } from 'react-native';
+import { router } from 'expo-router';
+import { useAuthStore } from '../../lib/hooks/useAuth';
+import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { useCartStore } from '../../lib/hooks/useCart';
+import type { Product } from '../../types/database.types';
+
+type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'name';
+type ViewMode = 'marketplace' | 'mine';
+
+const SORT_LABELS: Record<SortOption, string> = {
+  newest: 'Newest',
+  price_asc: 'Price: Low to High',
+  price_desc: 'Price: High to Low',
+  name: 'Name',
+};
+
+function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product) => void }) {
+  const outOfStock = item.stock_level <= 0;
+
+  return (
+    <View className="mb-4 w-[48%] rounded-xl border border-gray-200 bg-white p-3">
+      <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+        ) : (
+          <Text className="text-3xl">🖥️</Text>
+        )}
+        {item.is_dead_stock && (
+          <View className="absolute left-1 top-1 rounded-full bg-amber-500 px-2 py-0.5">
+            <Text className="text-[10px] font-semibold text-white">Dead stock</Text>
+          </View>
+        )}
+        {outOfStock && (
+          <View className="absolute inset-0 items-center justify-center bg-black/40">
+            <Text className="text-xs font-bold text-white">OUT OF STOCK</Text>
+          </View>
+        )}
+      </View>
+
+      {item.category && (
+        <Text className="mb-0.5 text-[11px] uppercase tracking-wide text-blue-600">{item.category}</Text>
+      )}
+      <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
+        {item.name}
+      </Text>
+      <Text className="text-base font-bold text-gray-900">
+        NPR {Number(item.price).toLocaleString()}
+      </Text>
+      <Text className="mb-2 mt-0.5 text-xs text-gray-400">
+        {outOfStock ? 'Out of stock' : `${item.stock_level} in stock`}
+      </Text>
+
+      <Pressable
+        onPress={() => onAdd(item)}
+        disabled={outOfStock}
+        className="items-center rounded-lg bg-blue-700 py-2 disabled:opacity-40"
+      >
+        <Text className="text-xs font-semibold text-white">Add to cart</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function MyListings({ products, isLoading }: { products: Product[]; isLoading: boolean }) {
+  return (
+    <>
+      <View className="mb-4 flex-row items-center justify-between">
+        <Text className="text-sm text-gray-500">Products you're selling</Text>
+        <Pressable
+          onPress={() => router.push('/(reseller)/add-product')}
+          className="rounded-lg bg-blue-700 px-4 py-2"
+        >
+          <Text className="font-semibold text-white">+ Add</Text>
+        </Pressable>
+      </View>
+
+      {isLoading && <Text className="text-gray-500">Loading…</Text>}
+      {!isLoading && products.length === 0 && (
+        <Text className="text-gray-500">No products yet. Tap "+ Add" to list your first item.</Text>
+      )}
+
+      <FlatList
+        data={products}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View className="mb-3 flex-row items-center justify-between rounded-lg border border-gray-200 bg-white p-4">
+            <View>
+              <Text className="font-semibold text-gray-900">{item.name}</Text>
+              <Text className="text-sm text-gray-500">
+                Stock: {item.stock_level} · NPR {Number(item.price).toLocaleString()}
+              </Text>
+            </View>
+            {item.is_dead_stock && (
+              <View className="rounded-full bg-amber-100 px-3 py-1">
+                <Text className="text-xs font-semibold text-amber-700">Dead stock</Text>
+              </View>
+            )}
+          </View>
+        )}
+      />
+    </>
+  );
+}
+
+export default function Shop() {
+  const userId = useAuthStore((state) => state.session?.user.id);
+  const [viewMode, setViewMode] = useState<ViewMode>('marketplace');
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+
+  const cartItems = useCartStore((state) => state.items);
+  const cartSellerId = useCartStore((state) => state.sellerId);
+  const addToCart = useCartStore((state) => state.addItem);
+  const clearCart = useCartStore((state) => state.clearCart);
+
+  const { data: products, isLoading } = useSupabaseQuery('products', {});
+  const marketplaceProducts = useMemo(
+    () => (products ?? []).filter((p) => p.seller_id !== userId),
+    [products, userId]
+  );
+  const myProducts = useMemo(() => (products ?? []).filter((p) => p.seller_id === userId), [products, userId]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    marketplaceProducts.forEach((p) => p.category && set.add(p.category));
+    return Array.from(set);
+  }, [marketplaceProducts]);
+
+  const filtered = useMemo(() => {
+    let list = marketplaceProducts;
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((p) => p.name.toLowerCase().includes(q));
+    }
+    if (category) {
+      list = list.filter((p) => p.category === category);
+    }
+
+    const sorted = [...list];
+    switch (sortBy) {
+      case 'price_asc':
+        sorted.sort((a, b) => Number(a.price) - Number(b.price));
+        break;
+      case 'price_desc':
+        sorted.sort((a, b) => Number(b.price) - Number(a.price));
+        break;
+      case 'name':
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case 'newest':
+      default:
+        sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+    return sorted;
+  }, [marketplaceProducts, search, category, sortBy]);
+
+  function handleAdd(product: Product) {
+    const added = addToCart(product);
+    if (!added) {
+      Alert.alert(
+        'Cart has items from another seller',
+        'Your cart can only hold products from one seller at a time. Clear it and add this item instead?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Clear cart',
+            style: 'destructive',
+            onPress: () => {
+              clearCart();
+              addToCart(product);
+            },
+          },
+        ]
+      );
+    }
+  }
+
+  const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+
+  return (
+    <View className="flex-1 bg-gray-50 px-6 pt-16">
+      <View className="mb-4 flex-row items-center justify-between">
+        <Text className="text-2xl font-bold text-gray-900">Shop</Text>
+        {viewMode === 'marketplace' && cartCount > 0 && (
+          <Pressable
+            onPress={() => router.push('/(reseller)/checkout')}
+            className="rounded-full bg-blue-700 px-4 py-2"
+          >
+            <Text className="text-sm font-semibold text-white">Cart ({cartCount})</Text>
+          </Pressable>
+        )}
+      </View>
+
+      <View className="mb-4 flex-row rounded-lg border border-gray-300 bg-white p-1">
+        <Pressable
+          onPress={() => setViewMode('marketplace')}
+          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'marketplace' ? 'bg-blue-700' : ''}`}
+        >
+          <Text className={`text-sm font-semibold ${viewMode === 'marketplace' ? 'text-white' : 'text-gray-600'}`}>
+            Marketplace
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setViewMode('mine')}
+          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'mine' ? 'bg-blue-700' : ''}`}
+        >
+          <Text className={`text-sm font-semibold ${viewMode === 'mine' ? 'text-white' : 'text-gray-600'}`}>
+            My Listings
+          </Text>
+        </Pressable>
+      </View>
+
+      {viewMode === 'mine' ? (
+        <MyListings products={myProducts} isLoading={isLoading} />
+      ) : (
+        <>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search products…"
+            className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm"
+          />
+
+          {categories.length > 0 && (
+            <View className="mb-3 flex-row flex-wrap gap-2">
+              <Pressable
+                onPress={() => setCategory(null)}
+                className={`rounded-full border px-3 py-1.5 ${
+                  category === null ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
+                }`}
+              >
+                <Text className={category === null ? 'text-xs font-semibold text-blue-700' : 'text-xs text-gray-600'}>
+                  All
+                </Text>
+              </Pressable>
+              {categories.map((c) => (
+                <Pressable
+                  key={c}
+                  onPress={() => setCategory(c)}
+                  className={`rounded-full border px-3 py-1.5 ${
+                    category === c ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
+                  }`}
+                >
+                  <Text className={category === c ? 'text-xs font-semibold text-blue-700' : 'text-xs text-gray-600'}>
+                    {c}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <View className="mb-4">
+            <Pressable
+              onPress={() => setShowSortMenu((v) => !v)}
+              className="flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-2"
+            >
+              <Text className="text-sm text-gray-700">Sort: {SORT_LABELS[sortBy]}</Text>
+              <Text className="text-gray-400">{showSortMenu ? '▲' : '▼'}</Text>
+            </Pressable>
+            {showSortMenu && (
+              <View className="mt-1 rounded-lg border border-gray-200 bg-white">
+                {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      setSortBy(option);
+                      setShowSortMenu(false);
+                    }}
+                    className="px-4 py-2.5"
+                  >
+                    <Text className={option === sortBy ? 'font-semibold text-blue-700' : 'text-gray-700'}>
+                      {SORT_LABELS[option]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {isLoading && <Text className="text-gray-500">Loading…</Text>}
+          {!isLoading && filtered.length === 0 && (
+            <Text className="text-gray-500">No products match your search.</Text>
+          )}
+          {cartSellerId && (
+            <Text className="mb-2 text-xs text-gray-400">
+              Cart is limited to one seller at a time — clear it to buy from someone else.
+            </Text>
+          )}
+
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            columnWrapperStyle={{ justifyContent: 'space-between' }}
+            renderItem={({ item }) => <ProductCard item={item} onAdd={handleAdd} />}
+            showsVerticalScrollIndicator={false}
+          />
+        </>
+      )}
+    </View>
+  );
+}

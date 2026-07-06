@@ -1,5 +1,7 @@
 {
   "expo": {
+    "scheme": "jageer",
+    "plugins": ["expo-router"],
     "name": "jageer-app",
     "slug": "jageer-app",
     "version": "1.0.0",
