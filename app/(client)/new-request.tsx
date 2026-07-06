@@ -5,13 +5,27 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
 
-const ISSUE_TYPES = ['Laptop repair', 'Desktop repair', 'Network setup', 'Software issue', 'Other'];
+const CATEGORIES = [
+  'Computer',
+  'Printer',
+  'Laptop',
+  'CCTV',
+  'Intercom',
+  'Electrical',
+  'Doorlock',
+  'AC',
+  'Attendance',
+  'Wifi/Router',
+];
+
+const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
 export default function NewRequest() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const createRequest = useSupabaseInsert('service_requests');
 
-  const [issueType, setIssueType] = useState(ISSUE_TYPES[0]);
+  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [action, setAction] = useState<(typeof SERVICE_ACTIONS)[number]>(SERVICE_ACTIONS[0]);
   const [description, setDescription] = useState('');
 
   async function handleSubmit() {
@@ -24,7 +38,7 @@ export default function NewRequest() {
     try {
       await createRequest.mutateAsync({
         client_id: userId,
-        issue_type: issueType,
+        issue_type: `${category} - ${action}`,
         description: description.trim(),
         status: 'pending',
       });
@@ -39,17 +53,32 @@ export default function NewRequest() {
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-16">
       <Text className="mb-6 text-2xl font-bold text-gray-900">Request a repair</Text>
 
-      <Text className="mb-2 text-sm font-medium text-gray-700">What's the issue?</Text>
+      <Text className="mb-2 text-sm font-medium text-gray-700">What do you need help with?</Text>
       <View className="mb-6 flex-row flex-wrap gap-2">
-        {ISSUE_TYPES.map((type) => (
+        {CATEGORIES.map((c) => (
           <Pressable
-            key={type}
-            onPress={() => setIssueType(type)}
+            key={c}
+            onPress={() => setCategory(c)}
             className={`rounded-full border px-4 py-2 ${
-              issueType === type ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
+              category === c ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
             }`}
           >
-            <Text className={issueType === type ? 'font-semibold text-blue-700' : 'text-gray-600'}>{type}</Text>
+            <Text className={category === c ? 'font-semibold text-blue-700' : 'text-gray-600'}>{c}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text className="mb-2 text-sm font-medium text-gray-700">Repair or installation?</Text>
+      <View className="mb-6 flex-row gap-2">
+        {SERVICE_ACTIONS.map((a) => (
+          <Pressable
+            key={a}
+            onPress={() => setAction(a)}
+            className={`flex-1 items-center rounded-lg border py-3 ${
+              action === a ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
+            }`}
+          >
+            <Text className={action === a ? 'font-semibold text-blue-700' : 'text-gray-600'}>{a}</Text>
           </Pressable>
         ))}
       </View>
