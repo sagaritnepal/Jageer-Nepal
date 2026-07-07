@@ -23,7 +23,14 @@ export default function NewRequest() {
   const [description, setDescription] = useState('');
 
   async function handleSubmit() {
-    if (!userId || !category) return;
+    if (!userId) {
+      Alert.alert('Please sign in', 'Your session may have expired — sign in again and retry.');
+      return;
+    }
+    if (!category) {
+      Alert.alert('Choose a category', 'Pick what you need help with before submitting.');
+      return;
+    }
     if (!description.trim()) {
       Alert.alert('Add a description', 'Let us know a bit more about the issue.');
       return;
