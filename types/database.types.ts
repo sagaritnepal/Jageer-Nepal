@@ -16,6 +16,9 @@ export interface Profile {
   avatar_url: string | null;
   city: string | null;
   is_active: boolean;
+  is_available: boolean;
+  latitude: number | null;
+  longitude: number | null;
   verification_status: VerificationStatus;
   verification_notes: string | null;
   created_at: string;
@@ -27,6 +30,8 @@ export interface RequestLocation {
   longitude?: number;
   address: string;
 }
+
+export type PaymentStatus = 'unpaid' | 'paid';
 
 export interface ServiceRequest {
   id: string;
@@ -41,6 +46,8 @@ export interface ServiceRequest {
   scheduled_date: string | null;
   scheduled_time: string | null;
   photo_urls: string[];
+  payment_status: PaymentStatus;
+  paid_at: string | null;
   created_at: string;
   updated_at: string;
 }

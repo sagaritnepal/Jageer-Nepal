@@ -1,9 +1,11 @@
 // lib/components/ProfileScreen.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, Alert } from 'react-native';
+import * as Location from 'expo-location';
 import { useAuthStore } from '../hooks/useAuth';
-import { useSupabaseQuery, useSupabaseInsert } from '../hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate } from '../hooks/useSupabase';
 import { ROLE_ACCENT } from '../constants/roleColors';
+import type { Profile } from '../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -29,6 +31,76 @@ function TechnicianRatingStat({ technicianId }: { technicianId: string }) {
       <Text className="mt-0.5 text-center text-[10.5px] text-white/85">
         {reviews?.length ?? 0} review{(reviews?.length ?? 0) === 1 ? '' : 's'}
       </Text>
+    </View>
+  );
+}
+
+function TechnicianAvailability({ profile }: { profile: Profile }) {
+  const setProfile = useAuthStore((state) => state.setProfile);
+  const updateProfile = useSupabaseUpdate('profiles');
+  const [locating, setLocating] = useState(false);
+
+  async function toggleAvailable() {
+    const is_available = !profile.is_available;
+    try {
+      await updateProfile.mutateAsync({ id: profile.id, values: { is_available } });
+      setProfile({ ...profile, is_available });
+    } catch (err) {
+      Alert.alert('Could not update', err instanceof Error ? err.message : 'Please try again.');
+    }
+  }
+
+  async function updateLocation() {
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location permission needed', 'Allow location access so resellers can find nearby jobs.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = position.coords;
+      await updateProfile.mutateAsync({ id: profile.id, values: { latitude, longitude } });
+      setProfile({ ...profile, latitude, longitude });
+      Alert.alert('Location updated', 'Resellers can now see how far you are from a job.');
+    } catch (err) {
+      Alert.alert('Could not get location', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  return (
+    <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
+      <View className="flex-row items-center justify-between">
+        <View>
+          <Text className="font-semibold text-gray-900">Available for jobs</Text>
+          <Text className="mt-0.5 text-xs text-gray-400">Resellers only assign jobs to available technicians</Text>
+        </View>
+        <Pressable
+          onPress={toggleAvailable}
+          disabled={updateProfile.isPending}
+          className={`rounded-full px-4 py-2 ${profile.is_available ? 'bg-green-100' : 'bg-gray-100'}`}
+        >
+          <Text className={`text-xs font-bold ${profile.is_available ? 'text-green-700' : 'text-gray-500'}`}>
+            {profile.is_available ? 'Available' : 'Unavailable'}
+          </Text>
+        </Pressable>
+      </View>
+
+      <Pressable
+        onPress={updateLocation}
+        disabled={locating}
+        className="mt-4 items-center rounded-lg border border-blue-700 bg-blue-50 py-2.5 disabled:opacity-50"
+      >
+        <Text className="text-sm font-semibold text-blue-700">
+          {locating
+            ? 'Locating…'
+            : profile.latitude != null
+              ? '📍 Location set — tap to update'
+              : '📍 Share my location'}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -126,6 +198,8 @@ export function ProfileScreen() {
           <Text className="text-sm text-gray-400">City</Text>
           <Text className="text-gray-900">{profile?.city ?? 'Not set'}</Text>
         </View>
+
+        {profile?.role === 'technician' && <TechnicianAvailability profile={profile} />}
 
         {profile && <ReportIssue userId={profile.id} />}
 

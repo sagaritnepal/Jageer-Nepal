@@ -155,6 +155,13 @@ export default function RequestDetail() {
             Quoted price: NPR {Number(request.quoted_price).toLocaleString()}
           </Text>
         )}
+        {request.status === 'resolved' && (
+          <View className={`mt-3 self-start rounded-full px-3 py-1 ${request.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
+            <Text className={`text-xs font-bold ${request.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'}`}>
+              {request.payment_status === 'paid' ? 'Payment received' : 'Payment due to reseller'}
+            </Text>
+          </View>
+        )}
       </View>
 
       <RequestDetailsExtras
