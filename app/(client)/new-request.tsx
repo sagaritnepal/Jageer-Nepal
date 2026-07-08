@@ -1,16 +1,13 @@
 // app/(client)/new-request.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseInsert, useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
 export default function NewRequest() {
   const { category: presetCategory } = useLocalSearchParams<{ category?: string }>();
-  const userId = useAuthStore((state) => state.session?.user.id);
-  const createRequest = useSupabaseInsert('service_requests');
 
   const { data: categories, isLoading: loadingCategories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
@@ -19,35 +16,12 @@ export default function NewRequest() {
 
   const [categoryOverride, setCategoryOverride] = useState<string | null>(presetCategory ?? null);
   const category = categoryOverride ?? categories?.[0]?.label ?? null;
-  const [action, setAction] = useState<(typeof SERVICE_ACTIONS)[number]>(SERVICE_ACTIONS[0]);
-  const [description, setDescription] = useState('');
 
-  async function handleSubmit() {
-    if (!userId) {
-      Alert.alert('Please sign in', 'Your session may have expired — sign in again and retry.');
-      return;
-    }
-    if (!category) {
-      Alert.alert('Choose a category', 'Pick what you need help with before submitting.');
-      return;
-    }
-    if (!description.trim()) {
-      Alert.alert('Add a description', 'Let us know a bit more about the issue.');
-      return;
-    }
-
-    try {
-      await createRequest.mutateAsync({
-        client_id: userId,
-        issue_type: `${category} - ${action}`,
-        description: description.trim(),
-        status: 'pending',
-      });
-      Alert.alert('Request submitted', 'A technician will be assigned soon.');
-      router.replace('/(client)/requests');
-    } catch (err) {
-      Alert.alert('Something went wrong', err instanceof Error ? err.message : 'Please try again.');
-    }
+  function goToDetails(action: (typeof SERVICE_ACTIONS)[number]) {
+    if (!category) return;
+    router.push(
+      `/(client)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}`
+    );
   }
 
   return (
@@ -89,14 +63,10 @@ export default function NewRequest() {
                   {SERVICE_ACTIONS.map((a) => (
                     <Pressable
                       key={a}
-                      onPress={() => setAction(a)}
-                      className={`flex-1 items-center rounded-lg border py-1.5 ${
-                        action === a ? 'border-blue-700 bg-blue-700' : 'border-gray-300 bg-white'
-                      }`}
+                      onPress={() => goToDetails(a)}
+                      className="flex-1 items-center rounded-lg border border-gray-300 bg-white py-1.5"
                     >
-                      <Text className={`text-[11px] font-semibold ${action === a ? 'text-white' : 'text-gray-600'}`}>
-                        {a}
-                      </Text>
+                      <Text className="text-[11px] font-semibold text-gray-600">{a}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -106,26 +76,9 @@ export default function NewRequest() {
         })}
       </View>
 
-      <Text className="mb-2 text-sm font-medium text-gray-700">Describe the problem</Text>
-      <TextInput
-        value={description}
-        onChangeText={setDescription}
-        placeholder="e.g. Laptop won't turn on, screen is cracked, etc."
-        multiline
-        numberOfLines={4}
-        className="mb-6 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-        style={{ minHeight: 100, textAlignVertical: 'top' }}
-      />
-
-      <Pressable
-        onPress={handleSubmit}
-        disabled={createRequest.isPending || !category}
-        className="items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
-      >
-        <Text className="text-base font-semibold text-white">
-          {createRequest.isPending ? 'Submitting…' : 'Submit request'}
-        </Text>
-      </Pressable>
+      <Text className="text-xs text-gray-400">
+        Tap Repair or Installation on a category above to continue with date, location, and photos.
+      </Text>
     </ScrollView>
   );
 }

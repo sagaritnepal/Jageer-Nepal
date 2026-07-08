@@ -22,6 +22,12 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface RequestLocation {
+  latitude?: number;
+  longitude?: number;
+  address: string;
+}
+
 export interface ServiceRequest {
   id: string;
   client_id: string;
@@ -30,8 +36,11 @@ export interface ServiceRequest {
   issue_type: string;
   description: string | null;
   status: RequestStatus;
-  location_data: Record<string, unknown> | null;
+  location_data: RequestLocation | null;
   quoted_price: number | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+  photo_urls: string[];
   created_at: string;
   updated_at: string;
 }

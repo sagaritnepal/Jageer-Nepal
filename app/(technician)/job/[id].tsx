@@ -5,6 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { ChatThread } from '../../../lib/components/ChatThread';
+import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import type { RequestStatus } from '../../../types/database.types';
 
 const NEXT_STATUS: Partial<Record<RequestStatus, RequestStatus>> = {
@@ -116,6 +117,13 @@ export default function JobCard() {
           </Text>
         )}
       </View>
+
+      <RequestDetailsExtras
+        scheduledDate={request.scheduled_date}
+        scheduledTime={request.scheduled_time}
+        location={request.location_data}
+        photoUrls={request.photo_urls}
+      />
 
       {request.status === 'in_progress' && (
         <View className="mb-6 rounded-xl bg-white p-5">

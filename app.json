@@ -1,7 +1,21 @@
 {
   "expo": {
     "scheme": "jageer",
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Jageer needs access to your photos so you can attach pictures of the issue to a service request."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Jageer needs your location to attach it to a service request so a technician can find you."
+        }
+      ]
+    ],
     "name": "jageer-app",
     "slug": "jageer-app",
     "version": "1.0.0",

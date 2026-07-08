@@ -4,6 +4,7 @@ import { View, Text, TextInput, FlatList, Pressable, Alert } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseQuery, useSupabaseUpdate } from '../../../lib/hooks/useSupabase';
+import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 
 export default function AssignTechnician() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -55,9 +56,16 @@ export default function AssignTechnician() {
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-16">
       <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
-      <Text className="mb-6 text-gray-600">{request.description}</Text>
+      <Text className="mb-2 text-gray-600">{request.description}</Text>
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Quoted price (NPR, optional)</Text>
+      <RequestDetailsExtras
+        scheduledDate={request.scheduled_date}
+        scheduledTime={request.scheduled_time}
+        location={request.location_data}
+        photoUrls={request.photo_urls}
+      />
+
+      <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Quoted price (NPR, optional)</Text>
       <TextInput
         value={quotedPrice}
         onChangeText={setQuotedPrice}

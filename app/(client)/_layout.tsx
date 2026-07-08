@@ -17,6 +17,7 @@ export default function ClientLayout() {
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'New Request' }} />
+        <Tabs.Screen name="request-details" options={{ href: null, title: 'Service Details' }} />
         <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
         <Tabs.Screen name="product-orders" options={{ href: null, title: 'My Orders' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />

@@ -5,6 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSupabaseRow, useSupabaseQuery, useSupabaseInsert, useRealtimeSync } from '../../../lib/hooks/useSupabase';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { ChatThread } from '../../../lib/components/ChatThread';
+import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import type { JobCard } from '../../../types/database.types';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -155,6 +156,13 @@ export default function RequestDetail() {
           </Text>
         )}
       </View>
+
+      <RequestDetailsExtras
+        scheduledDate={request.scheduled_date}
+        scheduledTime={request.scheduled_time}
+        location={request.location_data}
+        photoUrls={request.photo_urls}
+      />
 
       {request.status === 'resolved' && jobCards?.[0] && <JobCardBreakdown jobCard={jobCards[0]} />}
 
