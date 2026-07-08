@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
+import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 
 const PHOTO_SLOTS = 3;
 
@@ -33,17 +34,21 @@ export default function RequestDetails() {
         return;
       }
       const position = await Location.getCurrentPositionAsync({});
-      setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      const { latitude, longitude } = position.coords;
+      setCoords({ latitude, longitude });
 
       try {
-        const [place] = await Location.reverseGeocodeAsync(position.coords);
-        if (place) {
-          const parts = [place.street, place.city, place.region].filter(Boolean);
-          if (parts.length) setAddress(parts.join(', '));
-        }
+        // expo-location's reverseGeocodeAsync isn't supported on web, so we
+        // use OpenStreetMap's free Nominatim API (no key needed) instead -
+        // it works the same way on every platform since it's a plain fetch.
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+          { headers: { Accept: 'application/json' } }
+        );
+        const data = await res.json();
+        if (data?.display_name) setAddress(data.display_name);
       } catch {
-        // Reverse geocoding isn't supported on every platform (e.g. web) -
-        // the client can still type the address manually.
+        // The client can still type the address manually if this fails.
       }
     } catch (err) {
       Alert.alert('Could not get location', err instanceof Error ? err.message : 'Please try again.');
@@ -133,20 +138,14 @@ export default function RequestDetails() {
       </View>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Date</Text>
-      <TextInput
-        value={date}
-        onChangeText={setDate}
-        placeholder="YYYY-MM-DD"
-        className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-      />
+      <View className="mb-4">
+        <DateField value={date} onChange={setDate} />
+      </View>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Time</Text>
-      <TextInput
-        value={time}
-        onChangeText={setTime}
-        placeholder="e.g. 2:30 PM"
-        className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-      />
+      <View className="mb-4">
+        <TimeField value={time} onChange={setTime} />
+      </View>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Location</Text>
       <Pressable
@@ -161,9 +160,16 @@ export default function RequestDetails() {
       {coords && (
         <Pressable
           onPress={() => Linking.openURL(`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`)}
-          className="mb-2"
+          className="mb-2 overflow-hidden rounded-lg border border-gray-200"
         >
-          <Text className="text-xs text-blue-600">View pinned location on Google Maps →</Text>
+          <Image
+            source={{
+              uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${coords.latitude},${coords.longitude}&zoom=15&size=600x220&markers=${coords.latitude},${coords.longitude},red-pushpin`,
+            }}
+            style={{ width: '100%', height: 160 }}
+            resizeMode="cover"
+          />
+          <Text className="px-2 py-1.5 text-xs text-blue-600">Open in Google Maps →</Text>
         </Pressable>
       )}
       <TextInput
