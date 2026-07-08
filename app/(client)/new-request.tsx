@@ -57,46 +57,53 @@ export default function NewRequest() {
       <Text className="mb-2 text-sm font-medium text-gray-700">What do you need help with?</Text>
       {loadingCategories && <Text className="mb-4 text-gray-500">Loading categories…</Text>}
       <View className="mb-6 flex-row flex-wrap justify-between">
-        {(categories ?? []).map((c) => (
-          <Pressable
-            key={c.id}
-            onPress={() => setCategoryOverride(c.label)}
-            className={`mb-2.5 w-[48%] rounded-2xl border p-3.5 ${
-              category === c.label ? 'border-blue-700 bg-blue-50' : 'border-gray-200 bg-white'
-            }`}
-          >
+        {(categories ?? []).map((c) => {
+          const isSelected = category === c.label;
+          return (
             <View
-              className={`h-9 w-9 items-center justify-center rounded-xl ${
-                category === c.label ? 'bg-blue-100' : 'bg-gray-100'
+              key={c.id}
+              className={`mb-2.5 w-[48%] rounded-2xl border p-3.5 ${
+                isSelected ? 'border-blue-700 bg-blue-50' : 'border-gray-200 bg-white'
               }`}
             >
-              <Text className="text-base">{c.icon}</Text>
-            </View>
-            <Text
-              className={`mt-2 text-[13px] font-bold leading-[1.25] ${
-                category === c.label ? 'text-blue-700' : 'text-gray-900'
-              }`}
-            >
-              {c.label}
-            </Text>
-            {c.description && <Text className="mt-0.5 text-[11px] text-gray-400">{c.description}</Text>}
-          </Pressable>
-        ))}
-      </View>
+              <Pressable onPress={() => setCategoryOverride(c.label)}>
+                <View
+                  className={`h-9 w-9 items-center justify-center rounded-xl ${
+                    isSelected ? 'bg-blue-100' : 'bg-gray-100'
+                  }`}
+                >
+                  <Text className="text-base">{c.icon}</Text>
+                </View>
+                <Text
+                  className={`mt-2 text-[13px] font-bold leading-[1.25] ${
+                    isSelected ? 'text-blue-700' : 'text-gray-900'
+                  }`}
+                >
+                  {c.label}
+                </Text>
+                {c.description && <Text className="mt-0.5 text-[11px] text-gray-400">{c.description}</Text>}
+              </Pressable>
 
-      <Text className="mb-2 text-sm font-medium text-gray-700">Repair or installation?</Text>
-      <View className="mb-6 flex-row gap-2">
-        {SERVICE_ACTIONS.map((a) => (
-          <Pressable
-            key={a}
-            onPress={() => setAction(a)}
-            className={`flex-1 items-center rounded-lg border py-3 ${
-              action === a ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
-            }`}
-          >
-            <Text className={action === a ? 'font-semibold text-blue-700' : 'text-gray-600'}>{a}</Text>
-          </Pressable>
-        ))}
+              {isSelected && (
+                <View className="mt-3 flex-row gap-1.5">
+                  {SERVICE_ACTIONS.map((a) => (
+                    <Pressable
+                      key={a}
+                      onPress={() => setAction(a)}
+                      className={`flex-1 items-center rounded-lg border py-1.5 ${
+                        action === a ? 'border-blue-700 bg-blue-700' : 'border-gray-300 bg-white'
+                      }`}
+                    >
+                      <Text className={`text-[11px] font-semibold ${action === a ? 'text-white' : 'text-gray-600'}`}>
+                        {a}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
       </View>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Describe the problem</Text>
