@@ -45,6 +45,8 @@ function JobTracking({ request }: { request: ServiceRequest }) {
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
+        customerName={request.customer_name}
+        customerPhone={request.customer_phone}
       />
 
       <View className="mt-4 rounded-xl bg-white p-5">
@@ -174,6 +176,8 @@ export default function AssignTechnician() {
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
+        customerName={request.customer_name}
+        customerPhone={request.customer_phone}
       />
 
       <View className="mt-4">

@@ -48,6 +48,8 @@ export interface ServiceRequest {
   photo_urls: string[];
   payment_status: PaymentStatus;
   paid_at: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -123,6 +123,8 @@ export default function JobCard() {
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
+        customerName={request.customer_name}
+        customerPhone={request.customer_phone}
       />
 
       {request.status === 'in_progress' && (

@@ -45,19 +45,36 @@ export function RequestDetailsExtras({
   scheduledTime,
   location,
   photoUrls,
+  customerName,
+  customerPhone,
 }: {
   scheduledDate: string | null;
   scheduledTime: string | null;
   location: RequestLocation | null;
   photoUrls: string[];
+  customerName?: string | null;
+  customerPhone?: string | null;
 }) {
   const hasSchedule = !!(scheduledDate || scheduledTime);
   const hasLocation = !!(location?.address || (location?.latitude != null && location?.longitude != null));
+  const hasCustomerContact = !!(customerName || customerPhone);
 
-  if (!hasSchedule && !hasLocation && photoUrls.length === 0) return null;
+  if (!hasSchedule && !hasLocation && !hasCustomerContact && photoUrls.length === 0) return null;
 
   return (
     <View className="mt-4 rounded-xl bg-white p-5">
+      {hasCustomerContact && (
+        <View className="mb-4">
+          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Customer</Text>
+          {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
+          {customerPhone && (
+            <Pressable onPress={() => Linking.openURL(`tel:${customerPhone}`)}>
+              <Text className="mt-0.5 text-sm text-blue-600">{customerPhone}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Appointment</Text>
 
       {hasSchedule && (
