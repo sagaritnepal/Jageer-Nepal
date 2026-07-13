@@ -1,6 +1,6 @@
 // lib/components/DateTimeFields.tsx
 import { createElement, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 const webInputStyle = {
@@ -105,38 +105,71 @@ function nearestSlotIndexToNow(): number {
   return Math.min(rounded, TIME_SLOTS.length - 1);
 }
 
-/** A scrollable list of 24-hour time slots (e.g. 20:00, 20:15, 20:30...) — tap one to select it. */
+/** A single box that opens a popup with a scrollable list of 24-hour time slots (e.g. 20:00, 20:15, 20:30...) to pick from. */
 export function TimeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [showPicker, setShowPicker] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
+    if (!showPicker) return;
     const index = value ? TIME_SLOTS.indexOf(value) : nearestSlotIndexToNow();
-    scrollRef.current?.scrollTo({ y: Math.max(0, index) * ROW_HEIGHT, animated: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Wait a tick so the ScrollView inside the just-opened modal has mounted before jumping.
+    const id = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, index) * ROW_HEIGHT, animated: false });
+    }, 0);
+    return () => clearTimeout(id);
+  }, [showPicker]);
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={{ height: ROW_HEIGHT * VISIBLE_ROWS }}
-      className="rounded-lg border border-gray-300 bg-white"
-      showsVerticalScrollIndicator={true}
-    >
-      {TIME_SLOTS.map((slot) => {
-        const selected = slot === value;
-        return (
-          <Pressable
-            key={slot}
-            onPress={() => onChange(slot)}
-            style={{ height: ROW_HEIGHT }}
-            className={`justify-center border-b border-gray-100 px-4 ${selected ? 'bg-blue-50' : ''}`}
-          >
-            <Text className={selected ? 'text-base font-semibold text-blue-700' : 'text-base text-gray-700'}>
-              {slot}
-            </Text>
+    <View>
+      <Pressable
+        onPress={() => setShowPicker(true)}
+        className="rounded-lg border border-gray-300 bg-white px-4 py-3"
+      >
+        <Text className={value ? 'text-base text-gray-900' : 'text-base text-gray-400'}>
+          {value || 'Select a time'}
+        </Text>
+      </Pressable>
+
+      <Modal visible={showPicker} transparent animationType="fade" onRequestClose={() => setShowPicker(false)}>
+        <Pressable
+          className="flex-1 items-center justify-center bg-black/40"
+          onPress={() => setShowPicker(false)}
+        >
+          <Pressable onPress={() => {}} className="w-64 rounded-xl bg-white p-3">
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-gray-900">Select a time</Text>
+              <Pressable onPress={() => setShowPicker(false)} className="px-2 py-1">
+                <Text className="text-sm font-semibold text-blue-700">Done</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              ref={scrollRef}
+              style={{ height: ROW_HEIGHT * VISIBLE_ROWS }}
+              showsVerticalScrollIndicator={true}
+            >
+              {TIME_SLOTS.map((slot) => {
+                const selected = slot === value;
+                return (
+                  <Pressable
+                    key={slot}
+                    onPress={() => {
+                      onChange(slot);
+                      setShowPicker(false);
+                    }}
+                    style={{ height: ROW_HEIGHT }}
+                    className={`justify-center border-b border-gray-100 px-4 ${selected ? 'bg-blue-50' : ''}`}
+                  >
+                    <Text className={selected ? 'text-base font-semibold text-blue-700' : 'text-base text-gray-700'}>
+                      {slot}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </Pressable>
-        );
-      })}
-    </ScrollView>
+        </Pressable>
+      </Modal>
+    </View>
   );
 }
