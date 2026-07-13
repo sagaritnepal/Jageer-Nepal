@@ -4,6 +4,17 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 
+const CATEGORY_COLORS = [
+  { bg: 'bg-blue-50', text: 'text-blue-600' },
+  { bg: 'bg-purple-50', text: 'text-purple-600' },
+  { bg: 'bg-amber-50', text: 'text-amber-600' },
+  { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+  { bg: 'bg-pink-50', text: 'text-pink-600' },
+  { bg: 'bg-teal-50', text: 'text-teal-600' },
+  { bg: 'bg-orange-50', text: 'text-orange-600' },
+  { bg: 'bg-indigo-50', text: 'text-indigo-600' },
+];
+
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
   return name
@@ -50,20 +61,27 @@ export default function ClientDashboard() {
 
       <View className="px-6 pt-5">
         <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
-        <View className="flex-row flex-wrap justify-between">
-          {(categories ?? []).map((c) => (
-            <Pressable
-              key={c.id}
-              onPress={() => router.push(`/(client)/new-request?category=${encodeURIComponent(c.label)}`)}
-              className="mb-2.5 w-[48%] rounded-2xl border border-gray-200 bg-white p-3.5"
-            >
-              <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-50">
-                <Text className="text-base">{c.icon}</Text>
-              </View>
-              <Text className="mt-2 text-[13px] font-bold leading-[1.25] text-gray-900">{c.label}</Text>
-              {c.description && <Text className="mt-0.5 text-[11px] text-gray-400">{c.description}</Text>}
-            </Pressable>
-          ))}
+        <View className="flex-row flex-wrap">
+          {(categories ?? []).map((c, i) => {
+            const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+            return (
+              <Pressable
+                key={c.id}
+                onPress={() => router.push(`/(client)/new-request?category=${encodeURIComponent(c.label)}`)}
+                className="mb-5 w-1/4 items-center px-1"
+              >
+                <View className={`h-14 w-14 items-center justify-center rounded-2xl ${color.bg}`}>
+                  <Text className="text-2xl">{c.icon}</Text>
+                </View>
+                <Text
+                  numberOfLines={2}
+                  className="mt-2 text-center text-[11.5px] font-semibold leading-[1.2] text-gray-800"
+                >
+                  {c.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {nearbyTechnicians.length > 0 && (
