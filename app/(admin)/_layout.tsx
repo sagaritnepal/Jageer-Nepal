@@ -9,6 +9,7 @@ export default function AdminLayout() {
     <RoleGuard allow={['admin']}>
       <Tabs screenOptions={{ headerTintColor: ROLE_ACCENT.admin, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
         <Tabs.Screen name="dashboard" options={{ title: 'Overview', tabBarIcon: () => <TabIcon emoji="📊" /> }} />
+        <Tabs.Screen name="requests" options={{ title: 'Requests', tabBarIcon: () => <TabIcon emoji="🧰" /> }} />
         <Tabs.Screen name="reports" options={{ title: 'Reports', tabBarIcon: () => <TabIcon emoji="📈" /> }} />
         <Tabs.Screen name="users" options={{ title: 'Users', tabBarIcon: () => <TabIcon emoji="👥" /> }} />
         <Tabs.Screen name="categories" options={{ title: 'Categories', tabBarIcon: () => <TabIcon emoji="🏷️" /> }} />
