@@ -17,6 +17,65 @@ const webInputStyle = {
   boxSizing: 'border-box' as const,
 };
 
+const webSelectStyle = { ...webInputStyle, flex: 1 };
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+function webSelect(
+  key: string,
+  value: string,
+  onChange: (v: string) => void,
+  placeholder: string,
+  options: { value: string; label: string }[]
+) {
+  return createElement(
+    'select',
+    { key, value, onChange: (e: any) => onChange(e.target.value), style: webSelectStyle },
+    [
+      createElement('option', { value: '', key: 'placeholder' }, placeholder),
+      ...options.map((o) => createElement('option', { value: o.value, key: o.value }, o.label)),
+    ]
+  );
+}
+
+function getDateParts(value: string): { day: string; month: string; year: string } {
+  const [year, month, day] = value.split('-');
+  return { day: day ?? '', month: month ?? '', year: year ?? '' };
+}
+
+function buildDateValue(day: string, month: string, year: string): string {
+  return day && month && year ? `${year}-${month}-${day}` : '';
+}
+
+function getTimeParts(value: string): { hour: string; minute: string; period: string } {
+  if (!value) return { hour: '', minute: '', period: '' };
+  const [hStr, minute] = value.split(':');
+  const h = Number(hStr);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return { hour: String(hour12).padStart(2, '0'), minute: minute ?? '', period };
+}
+
+function buildTimeValue(hour: string, minute: string, period: string): string {
+  if (!hour || !minute || !period) return '';
+  let h = Number(hour) % 12;
+  if (period === 'PM') h += 12;
+  return `${String(h).padStart(2, '0')}:${minute}`;
+}
+
 function parseDateValue(value: string): Date {
   const [y, m, d] = value.split('-').map(Number);
   if (!y || !m || !d) return new Date();
@@ -56,17 +115,29 @@ function formatTimeLabel(value: string): string {
   return parseTimeValue(value).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-/** A real browser calendar picker on web; a native picker wheel on iOS/Android. */
+/** Day/Month/Year dropdown selects on web; a native picker wheel on iOS/Android. */
 export function DateField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [showPicker, setShowPicker] = useState(false);
+  const initialParts = getDateParts(value);
+  const [day, setDay] = useState(initialParts.day);
+  const [month, setMonth] = useState(initialParts.month);
+  const [year, setYear] = useState(initialParts.year);
 
   if (Platform.OS === 'web') {
-    return createElement('input', {
-      type: 'date',
-      value,
-      onChange: (e: any) => onChange(e.target.value),
-      style: webInputStyle,
+    const currentYear = new Date().getFullYear();
+
+    const days = Array.from({ length: 31 }, (_, i) => {
+      const d = String(i + 1).padStart(2, '0');
+      return { value: d, label: d };
     });
+    const months = MONTH_NAMES.map((label, i) => ({ value: String(i + 1).padStart(2, '0'), label }));
+    const years = [currentYear, currentYear + 1].map((y) => ({ value: String(y), label: String(y) }));
+
+    return createElement('div', { style: { display: 'flex', gap: 8 } }, [
+      webSelect('day', day, (v) => { setDay(v); onChange(buildDateValue(v, month, year)); }, 'Day', days),
+      webSelect('month', month, (v) => { setMonth(v); onChange(buildDateValue(day, v, year)); }, 'Month', months),
+      webSelect('year', year, (v) => { setYear(v); onChange(buildDateValue(day, month, v)); }, 'Year', years),
+    ]);
   }
 
   function handleChange(event: DateTimePickerEvent, selectedDate?: Date) {
@@ -102,17 +173,30 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
   );
 }
 
-/** A real browser time picker on web; a native picker wheel on iOS/Android. */
+/** Hour/Minute/AM-PM dropdown selects on web; a native picker wheel on iOS/Android. */
 export function TimeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [showPicker, setShowPicker] = useState(false);
+  const initialParts = getTimeParts(value);
+  const [hour, setHour] = useState(initialParts.hour);
+  const [minute, setMinute] = useState(initialParts.minute);
+  const [period, setPeriod] = useState(initialParts.period);
 
   if (Platform.OS === 'web') {
-    return createElement('input', {
-      type: 'time',
-      value,
-      onChange: (e: any) => onChange(e.target.value),
-      style: webInputStyle,
+    const hours = Array.from({ length: 12 }, (_, i) => {
+      const h = String(i + 1).padStart(2, '0');
+      return { value: h, label: h };
     });
+    const minutes = ['00', '15', '30', '45'].map((m) => ({ value: m, label: m }));
+    const periods = [
+      { value: 'AM', label: 'AM' },
+      { value: 'PM', label: 'PM' },
+    ];
+
+    return createElement('div', { style: { display: 'flex', gap: 8 } }, [
+      webSelect('hour', hour, (v) => { setHour(v); onChange(buildTimeValue(v, minute, period)); }, 'Hour', hours),
+      webSelect('minute', minute, (v) => { setMinute(v); onChange(buildTimeValue(hour, v, period)); }, 'Min', minutes),
+      webSelect('period', period, (v) => { setPeriod(v); onChange(buildTimeValue(hour, minute, v)); }, 'AM/PM', periods),
+    ]);
   }
 
   function handleChange(event: DateTimePickerEvent, selectedTime?: Date) {
