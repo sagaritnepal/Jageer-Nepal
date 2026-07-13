@@ -14,7 +14,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Jageer needs your location to attach it to a service request so a technician can find you."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "name": "jageer-app",
     "slug": "jageer-app",
