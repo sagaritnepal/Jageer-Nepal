@@ -2,19 +2,71 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useSupabaseRow, useSupabaseQuery, useSupabaseInsert, useRealtimeSync } from '../../../lib/hooks/useSupabase';
+import { useSupabaseRow, useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useRealtimeSync } from '../../../lib/hooks/useSupabase';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
-import { ChatThread } from '../../../lib/components/ChatThread';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
-import type { JobCard } from '../../../types/database.types';
+import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
+import type { JobCard, ServiceRequest } from '../../../types/database.types';
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending — awaiting technician assignment',
+  pending: 'Pending — awaiting a price quote',
+  quoted: 'Quote sent — awaiting your approval',
+  approved: 'Approved — awaiting technician assignment',
   assigned: 'Assigned — technician is on the way',
   in_progress: 'In progress — repair underway',
   resolved: 'Resolved',
   cancelled: 'Cancelled',
 };
+
+function QuoteApproval({ request }: { request: ServiceRequest }) {
+  const updateRequest = useSupabaseUpdate('service_requests');
+
+  async function handleApprove() {
+    try {
+      await updateRequest.mutateAsync({ id: request.id, values: { status: 'approved' } });
+    } catch (err) {
+      showAlert('Could not approve', getErrorMessage(err));
+    }
+  }
+
+  async function handleDecline() {
+    try {
+      await updateRequest.mutateAsync({ id: request.id, values: { status: 'cancelled' } });
+    } catch (err) {
+      showAlert('Could not decline', getErrorMessage(err));
+    }
+  }
+
+  return (
+    <View className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
+      <Text className="text-sm uppercase tracking-wide text-amber-600">Price quote</Text>
+      <Text className="mt-1 text-2xl font-bold text-amber-800">
+        NPR {Number(request.quoted_price).toLocaleString()}
+      </Text>
+      <Text className="mt-2 text-sm text-amber-700">
+        Approve to let the reseller assign a technician, or decline to cancel this request.
+      </Text>
+      <View className="mt-4 flex-row gap-2">
+        <Pressable
+          onPress={handleDecline}
+          disabled={updateRequest.isPending}
+          className="flex-1 items-center rounded-lg border border-amber-300 bg-white py-2.5 disabled:opacity-50"
+        >
+          <Text className="text-sm font-semibold text-amber-700">Decline</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleApprove}
+          disabled={updateRequest.isPending}
+          className="flex-1 items-center rounded-lg bg-amber-600 py-2.5 disabled:opacity-50"
+        >
+          <Text className="text-sm font-semibold text-white">
+            {updateRequest.isPending ? 'Updating…' : 'Approve quote'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 function JobCardBreakdown({ jobCard }: { jobCard: JobCard }) {
   const total = Number(jobCard.labor_cost) + Number(jobCard.parts_cost);
@@ -164,6 +216,8 @@ export default function RequestDetail() {
         )}
       </View>
 
+      {request.status === 'quoted' && <QuoteApproval request={request} />}
+
       <RequestDetailsExtras
         scheduledDate={request.scheduled_date}
         scheduledTime={request.scheduled_time}
@@ -171,13 +225,14 @@ export default function RequestDetail() {
         photoUrls={request.photo_urls}
       />
 
-      {request.status === 'resolved' && jobCards?.[0] && <JobCardBreakdown jobCard={jobCards[0]} />}
-
-      {request.technician_id && (
-        <View className="mt-4">
-          <ChatThread subjectType="service_request" subjectId={request.id} />
+      {request.remark && (
+        <View className="mt-4 rounded-xl bg-white p-5">
+          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Reseller's remark</Text>
+          <Text className="text-sm text-gray-700">{request.remark}</Text>
         </View>
       )}
+
+      {request.status === 'resolved' && jobCards?.[0] && <JobCardBreakdown jobCard={jobCards[0]} />}
 
       {request.status === 'resolved' &&
         request.technician_id &&

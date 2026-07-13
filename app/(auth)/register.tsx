@@ -1,8 +1,9 @@
 // app/(auth)/register.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { showAlert } from '../../lib/utils/alert';
 import type { UserRole } from '../../types/database.types';
 
 const ROLES: { label: string; value: UserRole }[] = [
@@ -32,10 +33,10 @@ export default function Register() {
     setIsSubmitting(false);
 
     if (error) {
-      Alert.alert('Registration failed', error.message);
+      showAlert('Registration failed', error.message);
       return;
     }
-    Alert.alert('Check your email', 'Confirm your account, then sign in.');
+    showAlert('Check your email', 'Confirm your account, then sign in.');
     router.replace('/(auth)/login');
   }
 

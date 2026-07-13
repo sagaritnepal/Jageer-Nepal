@@ -1,11 +1,11 @@
 // app/(technician)/job/[id].tsx
 import { useState } from 'react';
-import { View, Text, Pressable, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
-import { ChatThread } from '../../../lib/components/ChatThread';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
+import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { RequestStatus } from '../../../types/database.types';
 
 const NEXT_STATUS: Partial<Record<RequestStatus, RequestStatus>> = {
@@ -33,6 +33,7 @@ export default function JobCard() {
     enabled: !!id,
   });
   const jobCard = jobCards?.[0] ?? null;
+  const { data: customer } = useSupabaseRow('profiles', request?.client_id);
 
   const updateRequest = useSupabaseUpdate('service_requests');
   const insertJobCard = useSupabaseInsert('job_cards');
@@ -95,7 +96,7 @@ export default function JobCard() {
 
       await updateRequest.mutateAsync({ id: request.id, values: { status: nextStatus } });
     } catch (err) {
-      Alert.alert('Could not update job', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not update job', getErrorMessage(err));
     }
   }
 
@@ -123,9 +124,16 @@ export default function JobCard() {
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
-        customerName={request.customer_name}
-        customerPhone={request.customer_phone}
+        customerName={request.customer_name ?? customer?.full_name}
+        customerPhone={request.customer_phone ?? customer?.phone}
       />
+
+      {request.remark && (
+        <View className="mb-6 mt-4 rounded-xl bg-white p-5">
+          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Remark</Text>
+          <Text className="text-sm text-gray-700">{request.remark}</Text>
+        </View>
+      )}
 
       {request.status === 'in_progress' && (
         <View className="mb-6 rounded-xl bg-white p-5">
@@ -182,8 +190,6 @@ export default function JobCard() {
           </Text>
         </Pressable>
       )}
-
-      <ChatThread subjectType="service_request" subjectId={request.id} />
     </ScrollView>
   );
 }

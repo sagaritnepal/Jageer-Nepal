@@ -1,9 +1,10 @@
 // app/(wholesaler)/product/[id].tsx
 import { useState } from 'react';
-import { View, Text, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseInsert } from '../../../lib/hooks/useSupabase';
+import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 
 const PLATFORM_FEE_RATE = 0.075;
 
@@ -34,11 +35,11 @@ export default function WholesaleProductDetail() {
   async function handleRequestOrder() {
     if (!userId) return;
     if (qty < product!.min_order_qty) {
-      Alert.alert('Below minimum order', `This listing requires at least ${product!.min_order_qty} units.`);
+      showAlert('Below minimum order', `This listing requires at least ${product!.min_order_qty} units.`);
       return;
     }
     if (qty > product!.stock_level) {
-      Alert.alert('Not enough stock', `Only ${product!.stock_level} units are available.`);
+      showAlert('Not enough stock', `Only ${product!.stock_level} units are available.`);
       return;
     }
 
@@ -59,10 +60,10 @@ export default function WholesaleProductDetail() {
         quantity: qty,
         unit_price: unitPrice,
       });
-      Alert.alert('Bulk order requested', 'The seller will confirm your order shortly.');
+      showAlert('Bulk order requested', 'The seller will confirm your order shortly.');
       router.replace('/(wholesaler)/orders');
     } catch (err) {
-      Alert.alert('Could not place order', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not place order', getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

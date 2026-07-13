@@ -1,6 +1,6 @@
 // app/(reseller)/request-details.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ScrollView, Image, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,6 +8,7 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 
 const PHOTO_SLOTS = 3;
 
@@ -25,6 +26,7 @@ export default function ResellerRequestDetails() {
   const [locatingMe, setLocatingMe] = useState(false);
   const [photos, setPhotos] = useState<(string | null)[]>(Array(PHOTO_SLOTS).fill(null));
   const [notes, setNotes] = useState('');
+  const [quotedPrice, setQuotedPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleUseMyLocation() {
@@ -32,7 +34,7 @@ export default function ResellerRequestDetails() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location permission needed', 'Allow location access to attach your position.');
+        showAlert('Location permission needed', 'Allow location access to attach your position.');
         return;
       }
       const position = await Location.getCurrentPositionAsync({});
@@ -53,7 +55,7 @@ export default function ResellerRequestDetails() {
         // The reseller can still type the address manually if this fails.
       }
     } catch (err) {
-      Alert.alert('Could not get location', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not get location', getErrorMessage(err));
     } finally {
       setLocatingMe(false);
     }
@@ -62,7 +64,7 @@ export default function ResellerRequestDetails() {
   async function handlePickPhoto(index: number) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Photo access needed', 'Allow photo library access to attach pictures.');
+      showAlert('Photo access needed', 'Allow photo library access to attach pictures.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -90,19 +92,24 @@ export default function ResellerRequestDetails() {
 
   async function handleSubmit() {
     if (!userId) {
-      Alert.alert('Please sign in', 'Your session may have expired — sign in again and retry.');
+      showAlert('Please sign in', 'Your session may have expired — sign in again and retry.');
       return;
     }
     if (!customerName.trim() || !customerPhone.trim()) {
-      Alert.alert('Add customer details', "Enter the customer's name and phone so the technician can reach them.");
+      showAlert('Add customer details', "Enter the customer's name and phone so the technician can reach them.");
       return;
     }
     if (!date.trim() || !time.trim()) {
-      Alert.alert('Add date and time', 'Let us know when you need this service.');
+      showAlert('Add date and time', 'Let us know when you need this service.');
       return;
     }
     if (!address.trim() && !coords) {
-      Alert.alert('Add a location', 'Use your current location or type an address.');
+      showAlert('Add a location', 'Use your current location or type an address.');
+      return;
+    }
+    const price = quotedPrice.trim() ? Number(quotedPrice) : null;
+    if (price != null && (Number.isNaN(price) || price <= 0)) {
+      showAlert('Invalid price', 'Enter a valid price in NPR, or leave it blank if you don\'t know it yet.');
       return;
     }
 
@@ -116,21 +123,24 @@ export default function ResellerRequestDetails() {
 
       await createRequest.mutateAsync({
         client_id: userId,
+        reseller_id: userId,
+        origin: 'reseller',
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         issue_type: `${category} - ${action}`,
         description: notes.trim() || null,
         status: 'pending',
+        quoted_price: price,
         scheduled_date: date.trim(),
         scheduled_time: time.trim(),
         location_data: { ...coords, address: address.trim() },
         photo_urls: photoUrls,
       });
 
-      Alert.alert('Request submitted', 'Assign a technician from the Requests tab whenever you’re ready.');
+      showAlert('Request submitted', 'Assign a technician from the Requests tab whenever you’re ready.');
       router.replace('/(reseller)/requests');
     } catch (err) {
-      Alert.alert('Something went wrong', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Something went wrong', getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -233,6 +243,19 @@ export default function ResellerRequestDetails() {
         numberOfLines={4}
         className="mb-6 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
         style={{ minHeight: 100, textAlignVertical: 'top' }}
+      />
+
+      <Text className="mb-2 text-sm font-medium text-gray-700">Quoted price (NPR, optional)</Text>
+      <Text className="mb-2 text-xs text-gray-400">
+        If you already know what you'd charge, add it now so the technician knows what the job is worth — the
+        customer still has to approve it before you can assign anyone. Leave it blank to price it later instead.
+      </Text>
+      <TextInput
+        value={quotedPrice}
+        onChangeText={setQuotedPrice}
+        placeholder="e.g. 2000"
+        keyboardType="numeric"
+        className="mb-6 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
       />
 
       <Pressable

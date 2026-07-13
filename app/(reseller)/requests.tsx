@@ -12,7 +12,7 @@ export default function ResellerRequestQueue() {
   const [viewMode, setViewMode] = useState<ViewMode>('incoming');
 
   const { data: incoming, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
-    filters: { status: 'pending' },
+    filters: { status: 'pending', origin: 'app' },
     orderBy: { column: 'created_at', ascending: true },
     enabled: viewMode === 'incoming',
   });
@@ -73,15 +73,26 @@ export default function ResellerRequestQueue() {
                 {viewMode === 'incoming' ? 'Pending — needs a technician' : item.status.replace('_', ' ')}
               </Text>
               {viewMode === 'mine' && (
-                <View className={`rounded-full px-2 py-0.5 ${item.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
-                  <Text
-                    className={`text-[10px] font-semibold ${
-                      item.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'
-                    }`}
-                  >
-                    {item.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
-                  </Text>
-                </View>
+                <>
+                  <View className={`rounded-full px-2 py-0.5 ${item.origin === 'app' ? 'bg-blue-50' : 'bg-purple-50'}`}>
+                    <Text
+                      className={`text-[10px] font-semibold ${
+                        item.origin === 'app' ? 'text-blue-700' : 'text-purple-700'
+                      }`}
+                    >
+                      {item.origin === 'app' ? 'App customer' : 'Your customer'}
+                    </Text>
+                  </View>
+                  <View className={`rounded-full px-2 py-0.5 ${item.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
+                    <Text
+                      className={`text-[10px] font-semibold ${
+                        item.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'
+                      }`}
+                    >
+                      {item.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
+                    </Text>
+                  </View>
+                </>
               )}
             </View>
           </Pressable>

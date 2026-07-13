@@ -4,7 +4,8 @@
 //   npx supabase gen types typescript --project-id <your-project-id> > types/database.types.ts
 
 export type UserRole = 'client' | 'technician' | 'reseller' | 'wholesaler' | 'admin';
-export type RequestStatus = 'pending' | 'assigned' | 'in_progress' | 'resolved' | 'cancelled';
+export type RequestStatus = 'pending' | 'quoted' | 'approved' | 'assigned' | 'in_progress' | 'resolved' | 'cancelled';
+export type RequestOrigin = 'app' | 'reseller';
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
 
@@ -50,6 +51,8 @@ export interface ServiceRequest {
   paid_at: string | null;
   customer_name: string | null;
   customer_phone: string | null;
+  origin: RequestOrigin;
+  remark: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,10 +1,11 @@
 // lib/components/OrderDetailScreen.tsx
 import { useMemo } from 'react';
-import { View, Text, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseRow, useSupabaseQuery, useSupabaseUpdate } from '../hooks/useSupabase';
 import { ChatThread } from './ChatThread';
+import { showAlert, getErrorMessage } from '../utils/alert';
 import type { OrderStatus } from '../../types/database.types';
 
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
@@ -64,7 +65,7 @@ export function OrderDetailScreen() {
       }
       await updateOrder.mutateAsync({ id: order.id, values: { status: nextStatus } });
     } catch (err) {
-      Alert.alert('Could not update order', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not update order', getErrorMessage(err));
     }
   }
 

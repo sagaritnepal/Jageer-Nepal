@@ -1,10 +1,11 @@
 // lib/components/CheckoutScreen.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
 import { useCartStore } from '../hooks/useCart';
 import { useSupabaseInsert } from '../hooks/useSupabase';
+import { showAlert, getErrorMessage } from '../utils/alert';
 
 const PLATFORM_FEE_RATE = 0.075;
 
@@ -29,7 +30,7 @@ export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
   async function handlePlaceOrder() {
     if (!userId || !sellerId || items.length === 0) return;
     if (!address.trim() || !city.trim()) {
-      Alert.alert('Shipping address required', 'Please fill in an address and city.');
+      showAlert('Shipping address required', 'Please fill in an address and city.');
       return;
     }
 
@@ -56,10 +57,10 @@ export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
       }
 
       clearCart();
-      Alert.alert('Order placed', 'The seller will confirm your order shortly.');
+      showAlert('Order placed', 'The seller will confirm your order shortly.');
       router.replace(redirectTo as never);
     } catch (err) {
-      Alert.alert('Could not place order', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not place order', getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

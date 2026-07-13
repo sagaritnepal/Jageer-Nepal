@@ -1,14 +1,15 @@
 // app/(admin)/products.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { Product, Profile } from '../../types/database.types';
 
 function ProductRow({ product, sellerName }: { product: Product; sellerName: string }) {
   const deleteProduct = useSupabaseDelete('products');
 
   function confirmRemove() {
-    Alert.alert('Remove this listing?', `"${product.name}" will be delisted from the marketplace.`, [
+    showAlert('Remove this listing?', `"${product.name}" will be delisted from the marketplace.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => deleteProduct.mutate(product.id) },
     ]);
@@ -69,21 +70,21 @@ export default function AdminProducts() {
 
   async function handleAdd() {
     if (!sellerId) {
-      Alert.alert('Choose a seller', 'Pick which reseller or wholesaler this product belongs to.');
+      showAlert('Choose a seller', 'Pick which reseller or wholesaler this product belongs to.');
       return;
     }
     if (!name.trim()) {
-      Alert.alert('Add a name', 'Product name is required.');
+      showAlert('Add a name', 'Product name is required.');
       return;
     }
     const priceNum = parseFloat(price);
     if (Number.isNaN(priceNum) || priceNum < 0) {
-      Alert.alert('Invalid price', 'Enter a valid price in NPR.');
+      showAlert('Invalid price', 'Enter a valid price in NPR.');
       return;
     }
     const stockNum = parseInt(stockLevel, 10);
     if (Number.isNaN(stockNum) || stockNum < 0) {
-      Alert.alert('Invalid stock level', 'Enter a valid whole number.');
+      showAlert('Invalid stock level', 'Enter a valid whole number.');
       return;
     }
 
@@ -99,7 +100,7 @@ export default function AdminProducts() {
       });
       resetForm();
     } catch (err) {
-      Alert.alert('Could not add product', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not add product', getErrorMessage(err));
     }
   }
 

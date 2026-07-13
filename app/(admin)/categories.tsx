@@ -1,7 +1,8 @@
 // app/(admin)/categories.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { ServiceCategory } from '../../types/database.types';
 
 function CategoryRow({ category }: { category: ServiceCategory }) {
@@ -9,7 +10,7 @@ function CategoryRow({ category }: { category: ServiceCategory }) {
   const deleteCategory = useSupabaseDelete('service_categories');
 
   function confirmRemove() {
-    Alert.alert('Remove this category?', `"${category.label}" will no longer appear in the client app.`, [
+    showAlert('Remove this category?', `"${category.label}" will no longer appear in the client app.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => deleteCategory.mutate(category.id) },
     ]);
@@ -57,7 +58,7 @@ export default function AdminCategories() {
 
   async function handleAdd() {
     if (!label.trim()) {
-      Alert.alert('Add a name', 'Category name is required.');
+      showAlert('Add a name', 'Category name is required.');
       return;
     }
     try {
@@ -72,7 +73,7 @@ export default function AdminCategories() {
       setIcon('');
       setShowForm(false);
     } catch (err) {
-      Alert.alert('Could not add category', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not add category', getErrorMessage(err));
     }
   }
 

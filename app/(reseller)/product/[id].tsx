@@ -1,8 +1,9 @@
 // app/(reseller)/product/[id].tsx
-import { View, Text, Pressable, Alert, ScrollView, Image } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSupabaseRow } from '../../../lib/hooks/useSupabase';
 import { useCartStore } from '../../../lib/hooks/useCart';
+import { showAlert } from '../../../lib/utils/alert';
 
 export default function ResellerProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,7 +25,7 @@ export default function ResellerProductDetail() {
   function handleAddToCart() {
     const added = addToCart(product!);
     if (!added) {
-      Alert.alert(
+      showAlert(
         'Cart has items from another seller',
         'Your cart can only hold products from one seller at a time. Clear it and add this item instead?',
         [
@@ -46,7 +47,7 @@ export default function ResellerProductDetail() {
   }
 
   function promptCheckout() {
-    Alert.alert('Added to cart', 'What would you like to do next?', [
+    showAlert('Added to cart', 'What would you like to do next?', [
       { text: 'Keep browsing', style: 'cancel' },
       { text: 'Go to cart', onPress: () => router.push('/(reseller)/checkout') },
     ]);

@@ -1,7 +1,8 @@
 // app/(admin)/users.tsx
 import { useState } from 'react';
-import { View, Text, FlatList, Pressable, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable } from 'react-native';
 import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { showAlert } from '../../lib/utils/alert';
 import type { Profile, VerificationStatus } from '../../types/database.types';
 
 const VERIFICATION_COLORS: Record<VerificationStatus, string> = {
@@ -27,7 +28,7 @@ function UserRow({ user }: { user: Profile }) {
   }
 
   function confirmRemove() {
-    Alert.alert(
+    showAlert(
       'Remove this user?',
       'This deletes their profile and revokes app access. Their login itself must still be deleted from the Supabase dashboard separately.',
       [

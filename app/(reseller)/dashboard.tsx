@@ -39,6 +39,19 @@ export default function ResellerDashboard() {
     filters: userId ? { seller_id: userId } : {},
     enabled: !!userId,
   });
+  const { data: myRequests } = useSupabaseQuery('service_requests', {
+    filters: userId ? { reseller_id: userId } : {},
+    enabled: !!userId,
+  });
+
+  const appCustomerCount = useMemo(
+    () => (myRequests ?? []).filter((r) => r.origin === 'app').length,
+    [myRequests]
+  );
+  const ownCustomerCount = useMemo(
+    () => (myRequests ?? []).filter((r) => r.origin === 'reseller').length,
+    [myRequests]
+  );
 
   const revenue = useMemo(
     () =>
@@ -111,6 +124,22 @@ export default function ResellerDashboard() {
                 </View>
               </View>
             ))}
+          </>
+        )}
+
+        {(appCustomerCount > 0 || ownCustomerCount > 0) && (
+          <>
+            <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Where your customers come from</Text>
+            <View className="mb-2.5 flex-row gap-3">
+              <View className="flex-1 rounded-xl bg-white p-5">
+                <Text className="text-2xl font-bold text-blue-700">{appCustomerCount}</Text>
+                <Text className="text-sm text-gray-500">From the app</Text>
+              </View>
+              <View className="flex-1 rounded-xl bg-white p-5">
+                <Text className="text-2xl font-bold text-purple-700">{ownCustomerCount}</Text>
+                <Text className="text-sm text-gray-500">Your own customers</Text>
+              </View>
+            </View>
           </>
         )}
 

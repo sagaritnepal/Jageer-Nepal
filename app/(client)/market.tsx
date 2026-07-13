@@ -1,9 +1,10 @@
 // app/(client)/market.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Image, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, FlatList, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
+import { showAlert } from '../../lib/utils/alert';
 import type { Product } from '../../types/database.types';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'name';
@@ -108,7 +109,7 @@ export default function ClientMarket() {
   function handleAdd(product: Product) {
     const added = addToCart(product);
     if (!added) {
-      Alert.alert(
+      showAlert(
         'Cart has items from another seller',
         'Your cart can only hold products from one seller at a time. Clear it and add this item instead?',
         [

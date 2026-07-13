@@ -8,10 +8,12 @@ import type { RequestStatus } from '../../types/database.types';
 
 type ViewMode = 'active' | 'history';
 
-const ACTIVE_STATUSES: RequestStatus[] = ['pending', 'assigned', 'in_progress'];
+const ACTIVE_STATUSES: RequestStatus[] = ['pending', 'quoted', 'approved', 'assigned', 'in_progress'];
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'text-amber-600',
+  quoted: 'text-amber-600',
+  approved: 'text-blue-700',
   assigned: 'text-blue-700',
   in_progress: 'text-blue-700',
   resolved: 'text-green-600',

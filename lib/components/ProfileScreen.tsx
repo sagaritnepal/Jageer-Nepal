@@ -1,10 +1,11 @@
 // lib/components/ProfileScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate } from '../hooks/useSupabase';
 import { ROLE_ACCENT } from '../constants/roleColors';
+import { showAlert, getErrorMessage } from '../utils/alert';
 import type { Profile } from '../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
@@ -46,7 +47,7 @@ function TechnicianAvailability({ profile }: { profile: Profile }) {
       await updateProfile.mutateAsync({ id: profile.id, values: { is_available } });
       setProfile({ ...profile, is_available });
     } catch (err) {
-      Alert.alert('Could not update', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not update', getErrorMessage(err));
     }
   }
 
@@ -55,16 +56,16 @@ function TechnicianAvailability({ profile }: { profile: Profile }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location permission needed', 'Allow location access so resellers can find nearby jobs.');
+        showAlert('Location permission needed', 'Allow location access so resellers can find nearby jobs.');
         return;
       }
       const position = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = position.coords;
       await updateProfile.mutateAsync({ id: profile.id, values: { latitude, longitude } });
       setProfile({ ...profile, latitude, longitude });
-      Alert.alert('Location updated', 'Resellers can now see how far you are from a job.');
+      showAlert('Location updated', 'Resellers can now see how far you are from a job.');
     } catch (err) {
-      Alert.alert('Could not get location', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not get location', getErrorMessage(err));
     } finally {
       setLocating(false);
     }
@@ -116,9 +117,9 @@ function ReportIssue({ userId }: { userId: string }) {
       await insertTicket.mutateAsync({ user_id: userId, subject: subject.trim() });
       setSubject('');
       setOpen(false);
-      Alert.alert('Reported', "We've received your issue and will look into it.");
+      showAlert('Reported', "We've received your issue and will look into it.");
     } catch (err) {
-      Alert.alert('Could not submit', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not submit', getErrorMessage(err));
     }
   }
 

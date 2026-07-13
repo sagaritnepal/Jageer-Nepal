@@ -1,6 +1,6 @@
 // app/(client)/request-details.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ScrollView, Image, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,6 +8,7 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 
 const PHOTO_SLOTS = 3;
 
@@ -30,7 +31,7 @@ export default function RequestDetails() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location permission needed', 'Allow location access to attach your position.');
+        showAlert('Location permission needed', 'Allow location access to attach your position.');
         return;
       }
       const position = await Location.getCurrentPositionAsync({});
@@ -51,7 +52,7 @@ export default function RequestDetails() {
         // The client can still type the address manually if this fails.
       }
     } catch (err) {
-      Alert.alert('Could not get location', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Could not get location', getErrorMessage(err));
     } finally {
       setLocatingMe(false);
     }
@@ -60,7 +61,7 @@ export default function RequestDetails() {
   async function handlePickPhoto(index: number) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Photo access needed', 'Allow photo library access to attach pictures.');
+      showAlert('Photo access needed', 'Allow photo library access to attach pictures.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -88,15 +89,15 @@ export default function RequestDetails() {
 
   async function handleSubmit() {
     if (!userId) {
-      Alert.alert('Please sign in', 'Your session may have expired — sign in again and retry.');
+      showAlert('Please sign in', 'Your session may have expired — sign in again and retry.');
       return;
     }
     if (!date.trim() || !time.trim()) {
-      Alert.alert('Add date and time', 'Let us know when you need this service.');
+      showAlert('Add date and time', 'Let us know when you need this service.');
       return;
     }
     if (!address.trim() && !coords) {
-      Alert.alert('Add a location', 'Use your current location or type an address.');
+      showAlert('Add a location', 'Use your current location or type an address.');
       return;
     }
 
@@ -119,10 +120,10 @@ export default function RequestDetails() {
         photo_urls: photoUrls,
       });
 
-      Alert.alert('Request submitted', 'A reseller will review it and assign a technician soon.');
+      showAlert('Request submitted', 'A reseller will review it and assign a technician soon.');
       router.replace('/(client)/requests');
     } catch (err) {
-      Alert.alert('Something went wrong', err instanceof Error ? err.message : 'Please try again.');
+      showAlert('Something went wrong', getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

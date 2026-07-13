@@ -1,8 +1,9 @@
 // app/(auth)/login.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable } from 'react-native';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { showAlert } from '../../lib/utils/alert';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,7 +16,7 @@ export default function Login() {
     setIsSubmitting(false);
 
     if (error) {
-      Alert.alert('Login failed', error.message);
+      showAlert('Login failed', error.message);
       return;
     }
     router.replace('/');
