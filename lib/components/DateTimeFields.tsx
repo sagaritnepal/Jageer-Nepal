@@ -1,8 +1,7 @@
 // lib/components/DateTimeFields.tsx
-import { createElement, useEffect, useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { createElement, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { WheelColumn } from './WheelPicker';
 
 const webInputStyle = {
   border: '1px solid #d1d5db',
@@ -17,21 +16,6 @@ const webInputStyle = {
   width: '100%',
   boxSizing: 'border-box' as const,
 };
-
-function getTimeParts(value: string): { hour: string; minute: string; period: string } {
-  if (!value) return { hour: '09', minute: '00', period: 'AM' };
-  const [hStr, minute] = value.split(':');
-  const h = Number(hStr);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return { hour: String(hour12).padStart(2, '0'), minute: minute ?? '00', period };
-}
-
-function buildTimeValue(hour: string, minute: string, period: string): string {
-  let h = Number(hour) % 12;
-  if (period === 'PM') h += 12;
-  return `${String(h).padStart(2, '0')}:${minute}`;
-}
 
 function parseDateValue(value: string): Date {
   const [y, m, d] = value.split('-').map(Number);
@@ -103,27 +87,56 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
   );
 }
 
-const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
-const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
-const PERIODS = ['AM', 'PM'];
+const SLOT_MINUTES = 15;
+const ROW_HEIGHT = 44;
+const VISIBLE_ROWS = 5;
 
-/** Hour/Minute/AM-PM wheel picker — the same scrollable-reel component on web, iOS, and Android. */
+// 24-hour "HH:MM" slots in 15-minute steps, e.g. 00:00, 00:15, ... 23:45.
+const TIME_SLOTS = Array.from({ length: (24 * 60) / SLOT_MINUTES }, (_, i) => {
+  const totalMinutes = i * SLOT_MINUTES;
+  const h = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const m = String(totalMinutes % 60).padStart(2, '0');
+  return `${h}:${m}`;
+});
+
+function nearestSlotIndexToNow(): number {
+  const now = new Date();
+  const rounded = Math.round((now.getHours() * 60 + now.getMinutes()) / SLOT_MINUTES);
+  return Math.min(rounded, TIME_SLOTS.length - 1);
+}
+
+/** A scrollable list of 24-hour time slots (e.g. 20:00, 20:15, 20:30...) — tap one to select it. */
 export function TimeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { hour, minute, period } = getTimeParts(value);
+  const scrollRef = useRef<ScrollView>(null);
 
-  // The wheel always shows a concrete position (there's no "blank" reel state
-  // like a placeholder), so push that default up front instead of leaving
-  // `value` empty while the wheel visually shows 9:00 AM.
   useEffect(() => {
-    if (!value) onChange(buildTimeValue(hour, minute, period));
+    const index = value ? TIME_SLOTS.indexOf(value) : nearestSlotIndexToNow();
+    scrollRef.current?.scrollTo({ y: Math.max(0, index) * ROW_HEIGHT, animated: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <View className="flex-row items-center gap-2">
-      <WheelColumn options={HOURS} value={hour} onChange={(h) => onChange(buildTimeValue(h, minute, period))} />
-      <Text className="text-lg font-semibold text-gray-400">:</Text>
-      <WheelColumn options={MINUTES} value={minute} onChange={(m) => onChange(buildTimeValue(hour, m, period))} />
-      <WheelColumn options={PERIODS} value={period} onChange={(p) => onChange(buildTimeValue(hour, minute, p))} width={60} />
-    </View>
+    <ScrollView
+      ref={scrollRef}
+      style={{ height: ROW_HEIGHT * VISIBLE_ROWS }}
+      className="rounded-lg border border-gray-300 bg-white"
+      showsVerticalScrollIndicator={true}
+    >
+      {TIME_SLOTS.map((slot) => {
+        const selected = slot === value;
+        return (
+          <Pressable
+            key={slot}
+            onPress={() => onChange(slot)}
+            style={{ height: ROW_HEIGHT }}
+            className={`justify-center border-b border-gray-100 px-4 ${selected ? 'bg-blue-50' : ''}`}
+          >
+            <Text className={selected ? 'text-base font-semibold text-blue-700' : 'text-base text-gray-700'}>
+              {slot}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 }
