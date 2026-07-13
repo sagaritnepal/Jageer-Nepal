@@ -3,9 +3,159 @@ import { useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
+import { distanceKm } from '../../lib/utils/distance';
+import type { RequestStatus, ServiceRequest } from '../../types/database.types';
 
 type ViewMode = 'incoming' | 'mine';
+
+const STATUS_STYLES: Record<RequestStatus, { bg: string; text: string; label: string }> = {
+  pending: { bg: 'bg-amber-50', text: 'text-amber-600', label: 'Pending' },
+  quoted: { bg: 'bg-amber-50', text: 'text-amber-600', label: 'Quote sent' },
+  approved: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Approved' },
+  assigned: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Assigned' },
+  in_progress: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'In progress' },
+  resolved: { bg: 'bg-green-50', text: 'text-green-700', label: 'Resolved' },
+  cancelled: { bg: 'bg-red-50', text: 'text-red-600', label: 'Cancelled' },
+};
+
+function StatusPill({ status }: { status: RequestStatus }) {
+  const style = STATUS_STYLES[status];
+  return (
+    <View className={`rounded-full px-2 py-0.5 ${style.bg}`}>
+      <Text className={`text-[10px] font-semibold uppercase ${style.text}`}>{style.label}</Text>
+    </View>
+  );
+}
+
+function IncomingRequestCard({ item }: { item: ServiceRequest }) {
+  return (
+    <Pressable
+      onPress={() => router.push(`/(reseller)/request/${item.id}`)}
+      className="mb-3 rounded-lg border border-gray-200 bg-white p-4"
+    >
+      <View className="flex-row items-start justify-between gap-2">
+        <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
+        <View className="rounded-full bg-amber-50 px-2 py-0.5">
+          <Text className="text-[10px] font-semibold uppercase text-amber-600">Needs a technician</Text>
+        </View>
+      </View>
+      {item.description && (
+        <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
+          {item.description}
+        </Text>
+      )}
+      <View className="mt-3 gap-1">
+        {(item.scheduled_date || item.scheduled_time) && (
+          <Text className="text-xs text-gray-500">
+            {item.scheduled_date ?? 'Date TBD'} · {item.scheduled_time ?? 'Time TBD'}
+          </Text>
+        )}
+        {item.location_data?.address && (
+          <Text className="text-xs text-gray-500" numberOfLines={1}>
+            {item.location_data.address}
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+function MyRequestCard({ item }: { item: ServiceRequest }) {
+  const needsCustomerLookup = item.origin === 'app' && !item.customer_name;
+  const { data: customerProfile } = useSupabaseRow('profiles', needsCustomerLookup ? item.client_id : undefined);
+  const { data: technicianProfile } = useSupabaseRow('profiles', item.technician_id ?? undefined);
+
+  const customerName = item.customer_name ?? customerProfile?.full_name;
+  const customerPhone = item.customer_phone ?? customerProfile?.phone;
+
+  const distance =
+    item.location_data?.latitude != null &&
+    item.location_data?.longitude != null &&
+    technicianProfile?.latitude != null &&
+    technicianProfile?.longitude != null
+      ? distanceKm(
+          { latitude: item.location_data.latitude, longitude: item.location_data.longitude },
+          { latitude: technicianProfile.latitude, longitude: technicianProfile.longitude }
+        )
+      : null;
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/(reseller)/request/${item.id}`)}
+      className="mb-3 rounded-lg border border-gray-200 bg-white p-4"
+    >
+      <View className="flex-row items-start justify-between gap-2">
+        <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
+        <StatusPill status={item.status} />
+      </View>
+      {item.description && (
+        <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
+          {item.description}
+        </Text>
+      )}
+
+      <View className="mt-2 flex-row flex-wrap items-center gap-2">
+        <View className={`rounded-full px-2 py-0.5 ${item.origin === 'app' ? 'bg-blue-50' : 'bg-purple-50'}`}>
+          <Text
+            className={`text-[10px] font-semibold ${item.origin === 'app' ? 'text-blue-700' : 'text-purple-700'}`}
+          >
+            {item.origin === 'app' ? 'App customer' : 'Your customer'}
+          </Text>
+        </View>
+        <View className={`rounded-full px-2 py-0.5 ${item.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
+          <Text
+            className={`text-[10px] font-semibold ${
+              item.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'
+            }`}
+          >
+            {item.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
+          </Text>
+        </View>
+      </View>
+
+      <View className="mt-3 gap-1">
+        {(customerName || customerPhone) && (
+          <Text className="text-xs text-gray-500">
+            <Text className="font-medium text-gray-600">Customer: </Text>
+            {customerName ?? 'Unknown'}
+            {customerPhone ? ` · ${customerPhone}` : ''}
+          </Text>
+        )}
+        {(item.scheduled_date || item.scheduled_time) && (
+          <Text className="text-xs text-gray-500">
+            <Text className="font-medium text-gray-600">When: </Text>
+            {item.scheduled_date ?? 'Date TBD'} · {item.scheduled_time ?? 'Time TBD'}
+          </Text>
+        )}
+        {item.location_data?.address && (
+          <Text className="text-xs text-gray-500" numberOfLines={1}>
+            <Text className="font-medium text-gray-600">Address: </Text>
+            {item.location_data.address}
+          </Text>
+        )}
+        {item.quoted_price != null && (
+          <Text className="text-xs text-gray-500">
+            <Text className="font-medium text-gray-600">Price: </Text>
+            NPR {Number(item.quoted_price).toLocaleString()}
+          </Text>
+        )}
+        {technicianProfile && (
+          <Text className="text-xs text-gray-500">
+            <Text className="font-medium text-gray-600">Technician: </Text>
+            {technicianProfile.full_name ?? 'Unnamed'}
+            {distance != null ? ` · ${distance.toFixed(1)} km from job` : ''}
+          </Text>
+        )}
+        {item.remark && (
+          <Text className="mt-1 text-xs italic text-gray-400" numberOfLines={2}>
+            "{item.remark}"
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
+}
 
 export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -59,44 +209,9 @@ export default function ResellerRequestQueue() {
       <FlatList
         data={requests}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => router.push(`/(reseller)/request/${item.id}`)}
-            className="mb-3 rounded-lg border border-gray-200 bg-white p-4"
-          >
-            <Text className="font-semibold text-gray-900">{item.issue_type}</Text>
-            <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
-              {item.description}
-            </Text>
-            <View className="mt-2 flex-row items-center gap-2">
-              <Text className="text-xs uppercase tracking-wide text-amber-600">
-                {viewMode === 'incoming' ? 'Pending — needs a technician' : item.status.replace('_', ' ')}
-              </Text>
-              {viewMode === 'mine' && (
-                <>
-                  <View className={`rounded-full px-2 py-0.5 ${item.origin === 'app' ? 'bg-blue-50' : 'bg-purple-50'}`}>
-                    <Text
-                      className={`text-[10px] font-semibold ${
-                        item.origin === 'app' ? 'text-blue-700' : 'text-purple-700'
-                      }`}
-                    >
-                      {item.origin === 'app' ? 'App customer' : 'Your customer'}
-                    </Text>
-                  </View>
-                  <View className={`rounded-full px-2 py-0.5 ${item.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
-                    <Text
-                      className={`text-[10px] font-semibold ${
-                        item.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'
-                      }`}
-                    >
-                      {item.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
-                    </Text>
-                  </View>
-                </>
-              )}
-            </View>
-          </Pressable>
-        )}
+        renderItem={({ item }) =>
+          viewMode === 'incoming' ? <IncomingRequestCard item={item} /> : <MyRequestCard item={item} />
+        }
       />
     </View>
   );
