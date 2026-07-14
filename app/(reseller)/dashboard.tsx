@@ -1,22 +1,13 @@
 // app/(reseller)/dashboard.tsx
-import { useMemo } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { CategoryGrid } from '../../lib/components/CategoryGrid';
 
 const LOW_STOCK_THRESHOLD = 5;
-
-const CATEGORY_COLORS = [
-  { bg: 'bg-blue-50', text: 'text-blue-600' },
-  { bg: 'bg-purple-50', text: 'text-purple-600' },
-  { bg: 'bg-amber-50', text: 'text-amber-600' },
-  { bg: 'bg-emerald-50', text: 'text-emerald-600' },
-  { bg: 'bg-pink-50', text: 'text-pink-600' },
-  { bg: 'bg-teal-50', text: 'text-teal-600' },
-  { bg: 'bg-orange-50', text: 'text-orange-600' },
-  { bg: 'bg-indigo-50', text: 'text-indigo-600' },
-];
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -31,11 +22,18 @@ function initialsOf(name: string | null | undefined) {
 export default function ResellerDashboard() {
   const profile = useAuthStore((state) => state.profile);
   const userId = useAuthStore((state) => state.session?.user.id);
+  const [search, setSearch] = useState('');
 
   const { data: categories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
     orderBy: { column: 'sort_order' },
   });
+
+  const filteredCategories = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return categories ?? [];
+    return (categories ?? []).filter((c) => c.label.toLowerCase().includes(q));
+  }, [categories, search]);
 
   const { data: technicians } = useSupabaseQuery('profiles', {
     filters: { role: 'technician', is_active: true },
@@ -79,49 +77,42 @@ export default function ResellerDashboard() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="rounded-b-[22px] bg-blue-700 px-6 pb-6 pt-16">
-        <Text className="text-[19px] font-extrabold text-white">
+      <View className="px-6 pb-2 pt-16">
+        <Text className="text-2xl font-extrabold text-gray-900">
           Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
         </Text>
+      </View>
+
+      <View className="px-6 pt-3">
+        <View className="mb-4 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-3">
+          <Ionicons name="search" size={18} color="#9CA3AF" />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search for services..."
+            placeholderTextColor="#9CA3AF"
+            className="ml-2 flex-1 text-sm text-gray-900"
+          />
+        </View>
 
         <Pressable
           onPress={() => router.push('/(reseller)/new-request')}
-          className="mt-4 flex-row items-center justify-between rounded-2xl bg-white px-4 py-3.5"
+          className="mb-5 flex-row items-center justify-between rounded-2xl bg-orange-500 px-4 py-3.5"
         >
           <View>
-            <Text className="text-[14.5px] font-bold text-gray-900">Need a technician?</Text>
-            <Text className="mt-0.5 text-xs text-gray-500">Request one directly in seconds</Text>
+            <Text className="text-[14.5px] font-bold text-white">Need a technician?</Text>
+            <Text className="mt-0.5 text-xs text-orange-100">Request one directly in seconds</Text>
           </View>
-          <View className="rounded-full bg-blue-700 px-4 py-2">
-            <Text className="text-xs font-bold text-white">Request</Text>
+          <View className="rounded-full bg-white px-4 py-2">
+            <Text className="text-xs font-bold text-orange-600">Request</Text>
           </View>
         </Pressable>
-      </View>
 
-      <View className="px-6 pt-5">
         <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
-        <View className="flex-row flex-wrap">
-          {(categories ?? []).map((c, i) => {
-            const color = CATEGORY_COLORS[i % CATEGORY_COLORS.length];
-            return (
-              <Pressable
-                key={c.id}
-                onPress={() => router.push(`/(reseller)/new-request?category=${encodeURIComponent(c.label)}`)}
-                className="mb-5 w-1/4 items-center px-1"
-              >
-                <View className={`h-14 w-14 items-center justify-center rounded-2xl ${color.bg}`}>
-                  <Text className="text-2xl">{c.icon}</Text>
-                </View>
-                <Text
-                  numberOfLines={2}
-                  className="mt-2 text-center text-[11.5px] font-semibold leading-[1.2] text-gray-800"
-                >
-                  {c.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <CategoryGrid
+          categories={filteredCategories}
+          onSelect={(c) => router.push(`/(reseller)/new-request?category=${encodeURIComponent(c.label)}`)}
+        />
 
         {nearbyTechnicians.length > 0 && (
           <>
@@ -150,7 +141,7 @@ export default function ResellerDashboard() {
             <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Where your customers come from</Text>
             <View className="mb-2.5 flex-row gap-3">
               <View className="flex-1 rounded-xl bg-white p-5">
-                <Text className="text-2xl font-bold text-blue-700">{appCustomerCount}</Text>
+                <Text className="text-2xl font-bold text-orange-600">{appCustomerCount}</Text>
                 <Text className="text-sm text-gray-500">From the app</Text>
               </View>
               <View className="flex-1 rounded-xl bg-white p-5">
@@ -164,11 +155,11 @@ export default function ResellerDashboard() {
         <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Shop performance</Text>
         <View className="mb-2.5 flex-row gap-3">
           <View className="flex-1 rounded-xl bg-white p-5">
-            <Text className="text-2xl font-bold text-blue-700">NPR {revenue.toLocaleString()}</Text>
+            <Text className="text-2xl font-bold text-orange-600">NPR {revenue.toLocaleString()}</Text>
             <Text className="text-sm text-gray-500">Revenue</Text>
           </View>
           <View className="flex-1 rounded-xl bg-white p-5">
-            <Text className="text-2xl font-bold text-blue-700">{lowStock.length}</Text>
+            <Text className="text-2xl font-bold text-orange-600">{lowStock.length}</Text>
             <Text className="text-sm text-gray-500">Low stock items</Text>
           </View>
         </View>

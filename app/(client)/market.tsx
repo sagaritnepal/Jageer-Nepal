@@ -1,6 +1,7 @@
 // app/(client)/market.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
@@ -36,7 +37,7 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
         </View>
 
         {item.category && (
-          <Text className="mb-0.5 text-[11px] uppercase tracking-wide text-blue-600">{item.category}</Text>
+          <Text className="mb-0.5 text-[11px] uppercase tracking-wide text-orange-600">{item.category}</Text>
         )}
         <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
           {item.name}
@@ -50,9 +51,9 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
       <Pressable
         onPress={() => onAdd(item)}
         disabled={outOfStock}
-        className="items-center rounded-lg bg-blue-700 py-2 disabled:opacity-40"
+        className="items-center rounded-lg bg-orange-500 py-2 disabled:opacity-40"
       >
-        <Text className="text-xs font-semibold text-white">Add to cart</Text>
+        <Text className="text-xs font-semibold text-white">Add to Cart</Text>
       </Pressable>
     </View>
   );
@@ -135,12 +136,12 @@ export default function ClientMarket() {
         <Text className="text-2xl font-bold text-gray-900">Marketplace</Text>
         <View className="flex-row items-center gap-2">
           <Pressable onPress={() => router.push('/(client)/product-orders')}>
-            <Text className="text-sm font-semibold text-blue-700">My Orders</Text>
+            <Text className="text-sm font-semibold text-orange-600">My Orders</Text>
           </Pressable>
           {cartCount > 0 && (
             <Pressable
               onPress={() => router.push('/(client)/checkout')}
-              className="rounded-full bg-blue-700 px-4 py-2"
+              className="rounded-full bg-orange-500 px-4 py-2"
             >
               <Text className="text-sm font-semibold text-white">Cart ({cartCount})</Text>
             </Pressable>
@@ -148,22 +149,26 @@ export default function ClientMarket() {
         </View>
       </View>
 
-      <TextInput
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search products…"
-        className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm"
-      />
+      <View className="mb-3 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
+        <Ionicons name="search" size={18} color="#9CA3AF" />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search for services..."
+          placeholderTextColor="#9CA3AF"
+          className="ml-2 flex-1 text-sm text-gray-900"
+        />
+      </View>
 
       {categories.length > 0 && (
         <View className="mb-3 flex-row flex-wrap gap-2">
           <Pressable
             onPress={() => setCategory(null)}
             className={`rounded-full border px-3 py-1.5 ${
-              category === null ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
+              category === null ? 'border-orange-500 bg-orange-50' : 'border-gray-300 bg-white'
             }`}
           >
-            <Text className={category === null ? 'text-xs font-semibold text-blue-700' : 'text-xs text-gray-600'}>
+            <Text className={category === null ? 'text-xs font-semibold text-orange-600' : 'text-xs text-gray-600'}>
               All
             </Text>
           </Pressable>
@@ -172,10 +177,10 @@ export default function ClientMarket() {
               key={c}
               onPress={() => setCategory(c)}
               className={`rounded-full border px-3 py-1.5 ${
-                category === c ? 'border-blue-700 bg-blue-50' : 'border-gray-300 bg-white'
+                category === c ? 'border-orange-500 bg-orange-50' : 'border-gray-300 bg-white'
               }`}
             >
-              <Text className={category === c ? 'text-xs font-semibold text-blue-700' : 'text-xs text-gray-600'}>
+              <Text className={category === c ? 'text-xs font-semibold text-orange-600' : 'text-xs text-gray-600'}>
                 {c}
               </Text>
             </Pressable>
@@ -202,7 +207,7 @@ export default function ClientMarket() {
                 }}
                 className="px-4 py-2.5"
               >
-                <Text className={option === sortBy ? 'font-semibold text-blue-700' : 'text-gray-700'}>
+                <Text className={option === sortBy ? 'font-semibold text-orange-600' : 'text-gray-700'}>
                   {SORT_LABELS[option]}
                 </Text>
               </Pressable>

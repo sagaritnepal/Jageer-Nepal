@@ -1,9 +1,11 @@
 // app/(technician)/jobs.tsx
 import { View, Text, FlatList, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
+import { getCategoryVisual } from '../../lib/constants/categoryIcons';
 import type { ServiceRequest } from '../../types/database.types';
 
 function StatusPill({ status }: { status: ServiceRequest['status'] }) {
@@ -20,12 +22,17 @@ function JobListCard({ item }: { item: ServiceRequest }) {
   const { data: customer } = useSupabaseRow('profiles', needsCustomerLookup ? item.client_id : undefined);
   const customerName = item.customer_name ?? customer?.full_name;
   const customerPhone = item.customer_phone ?? customer?.phone;
+  const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(item.issue_type);
 
   return (
     <Pressable
       onPress={() => router.push(`/(technician)/job/${item.id}`)}
-      className="mb-3 rounded-lg border border-gray-200 bg-white p-4"
+      className="mb-3 flex-row items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4"
     >
+      <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
+        <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />
+      </View>
+      <View className="flex-1">
       <View className="flex-row items-start justify-between gap-2">
         <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
         <StatusPill status={item.status} />
@@ -67,6 +74,7 @@ function JobListCard({ item }: { item: ServiceRequest }) {
             "{item.remark}"
           </Text>
         )}
+      </View>
       </View>
     </Pressable>
   );

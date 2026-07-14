@@ -8,14 +8,38 @@ export default function AdminLayout() {
   return (
     <RoleGuard allow={['admin']}>
       <Tabs screenOptions={{ headerTintColor: ROLE_ACCENT.admin, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
-        <Tabs.Screen name="dashboard" options={{ title: 'Overview', tabBarIcon: () => <TabIcon emoji="📊" /> }} />
-        <Tabs.Screen name="requests" options={{ title: 'Requests', tabBarIcon: () => <TabIcon emoji="🧰" /> }} />
-        <Tabs.Screen name="reports" options={{ title: 'Reports', tabBarIcon: () => <TabIcon emoji="📈" /> }} />
-        <Tabs.Screen name="users" options={{ title: 'Users', tabBarIcon: () => <TabIcon emoji="👥" /> }} />
-        <Tabs.Screen name="categories" options={{ title: 'Categories', tabBarIcon: () => <TabIcon emoji="🏷️" /> }} />
-        <Tabs.Screen name="products" options={{ title: 'Products', tabBarIcon: () => <TabIcon emoji="🛍️" /> }} />
-        <Tabs.Screen name="support" options={{ title: 'Support', tabBarIcon: () => <TabIcon emoji="🎧" /> }} />
-        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
+        <Tabs.Screen
+          name="dashboard"
+          options={{ title: 'Overview', tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="requests"
+          options={{ title: 'Requests', tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="reports"
+          options={{ title: 'Reports', tabBarIcon: ({ color, focused }) => <TabIcon name="bar-chart" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="users"
+          options={{ title: 'Users', tabBarIcon: ({ color, focused }) => <TabIcon name="people" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="categories"
+          options={{ title: 'Categories', tabBarIcon: ({ color, focused }) => <TabIcon name="pricetag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="products"
+          options={{ title: 'Products', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="support"
+          options={{ title: 'Support', tabBarIcon: ({ color, focused }) => <TabIcon name="headset" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
+        />
       </Tabs>
     </RoleGuard>
   );

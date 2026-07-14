@@ -10,11 +10,26 @@ export default function ResellerLayout() {
       <Tabs
         screenOptions={{ headerTintColor: ROLE_ACCENT.reseller, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
       >
-        <Tabs.Screen name="dashboard" options={{ title: 'Home', tabBarIcon: () => <TabIcon emoji="🏠" /> }} />
-        <Tabs.Screen name="requests" options={{ title: 'Requests', tabBarIcon: () => <TabIcon emoji="📋" /> }} />
-        <Tabs.Screen name="shop" options={{ title: 'Shop', tabBarIcon: () => <TabIcon emoji="🛍️" /> }} />
-        <Tabs.Screen name="orders" options={{ title: 'Orders', tabBarIcon: () => <TabIcon emoji="📦" /> }} />
-        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
+        <Tabs.Screen
+          name="dashboard"
+          options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="requests"
+          options={{ title: 'Requests', tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="shop"
+          options={{ title: 'Shop', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="orders"
+          options={{ title: 'Orders', tabBarIcon: ({ color, focused }) => <TabIcon name="time" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
+        />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Service Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'New Request' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service Details' }} />

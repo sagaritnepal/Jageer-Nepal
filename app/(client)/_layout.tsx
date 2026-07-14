@@ -8,13 +8,25 @@ export default function ClientLayout() {
   return (
     <RoleGuard allow={['client']}>
       <Tabs screenOptions={{ headerTintColor: ROLE_ACCENT.client, tabBarActiveTintColor: ROLE_ACCENT.client }}>
-        <Tabs.Screen name="dashboard" options={{ title: 'Home', tabBarIcon: () => <TabIcon emoji="🏠" /> }} />
+        <Tabs.Screen
+          name="dashboard"
+          options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} /> }}
+        />
         <Tabs.Screen
           name="requests"
-          options={{ title: 'My Requests', tabBarIcon: () => <TabIcon emoji="📋" /> }}
+          options={{
+            title: 'My Requests',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
+          }}
         />
-        <Tabs.Screen name="market" options={{ title: 'Market', tabBarIcon: () => <TabIcon emoji="🛍️" /> }} />
-        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
+        <Tabs.Screen
+          name="market"
+          options={{ title: 'Market', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
+        />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'New Request' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service Details' }} />

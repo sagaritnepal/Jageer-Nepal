@@ -1,6 +1,7 @@
 // lib/components/RequestDetailsExtras.tsx
 import { useEffect, useState } from 'react';
 import { View, Text, Image, Pressable, Linking, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import type { RequestLocation } from '../../types/database.types';
 
@@ -68,9 +69,25 @@ export function RequestDetailsExtras({
           <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Customer</Text>
           {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
           {customerPhone && (
-            <Pressable onPress={() => Linking.openURL(`tel:${customerPhone}`)}>
-              <Text className="mt-0.5 text-sm text-blue-600">{customerPhone}</Text>
-            </Pressable>
+            <>
+              <Text className="mt-0.5 text-sm text-gray-500">{customerPhone}</Text>
+              <View className="mt-2.5 flex-row gap-2">
+                <Pressable
+                  onPress={() => Linking.openURL(`sms:${customerPhone}`)}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-teal-50 py-2.5"
+                >
+                  <Ionicons name="chatbubble-outline" size={15} color="#0F766E" />
+                  <Text className="text-sm font-semibold text-teal-700">Message</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => Linking.openURL(`tel:${customerPhone}`)}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-orange-50 py-2.5"
+                >
+                  <Ionicons name="call-outline" size={15} color="#C2410C" />
+                  <Text className="text-sm font-semibold text-orange-700">Call Customer</Text>
+                </Pressable>
+              </View>
+            </>
           )}
         </View>
       )}

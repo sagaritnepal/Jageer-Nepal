@@ -13,9 +13,18 @@ export default function WholesalerLayout() {
           tabBarActiveTintColor: ROLE_ACCENT.wholesaler,
         }}
       >
-        <Tabs.Screen name="market" options={{ title: 'Market', tabBarIcon: () => <TabIcon emoji="📦" /> }} />
-        <Tabs.Screen name="orders" options={{ title: 'Orders', tabBarIcon: () => <TabIcon emoji="📋" /> }} />
-        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: () => <TabIcon emoji="👤" /> }} />
+        <Tabs.Screen
+          name="market"
+          options={{ title: 'Market', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="orders"
+          options={{ title: 'Orders', tabBarIcon: ({ color, focused }) => <TabIcon name="time" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
+        />
         <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Bulk Pricing' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
       </Tabs>

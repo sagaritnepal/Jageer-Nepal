@@ -1,6 +1,7 @@
 // lib/components/ProfileScreen.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate } from '../hooks/useSupabase';
@@ -92,9 +93,9 @@ function TechnicianAvailability({ profile }: { profile: Profile }) {
       <Pressable
         onPress={updateLocation}
         disabled={locating}
-        className="mt-4 items-center rounded-lg border border-blue-700 bg-blue-50 py-2.5 disabled:opacity-50"
+        className="mt-4 items-center rounded-lg border border-orange-500 bg-orange-50 py-2.5 disabled:opacity-50"
       >
-        <Text className="text-sm font-semibold text-blue-700">
+        <Text className="text-sm font-semibold text-orange-600">
           {locating
             ? 'Locating…'
             : profile.latitude != null
@@ -127,15 +128,22 @@ function ReportIssue({ userId }: { userId: string }) {
     return (
       <Pressable
         onPress={() => setOpen(true)}
-        className="mb-4 items-center rounded-xl border border-gray-200 bg-white py-3.5"
+        className="mb-4 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5"
       >
-        <Text className="font-semibold text-gray-700">Report an issue</Text>
+        <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-50">
+          <Ionicons name="help-buoy-outline" size={18} color="#EA580C" />
+        </View>
+        <View className="flex-1">
+          <Text className="font-semibold text-gray-900">Report an Issue / Support</Text>
+          <Text className="mt-0.5 text-xs text-gray-400">24/7 help desk</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
       </Pressable>
     );
   }
 
   return (
-    <View className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
       <Text className="mb-2 text-sm font-semibold text-gray-900">What's going wrong?</Text>
       <TextInput
         value={subject}
@@ -154,7 +162,7 @@ function ReportIssue({ userId }: { userId: string }) {
         <Pressable
           onPress={handleSubmit}
           disabled={insertTicket.isPending}
-          className="flex-1 items-center rounded-lg bg-blue-700 py-2.5 disabled:opacity-50"
+          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
         >
           <Text className="text-sm font-semibold text-white">{insertTicket.isPending ? 'Sending…' : 'Submit'}</Text>
         </Pressable>
@@ -179,7 +187,9 @@ export function ProfileScreen() {
           <Text className="text-xl font-extrabold text-white">{initialsOf(profile?.full_name)}</Text>
         </View>
         <Text className="mt-2.5 text-lg font-extrabold text-white">{profile?.full_name ?? 'Your profile'}</Text>
-        <Text className="mt-0.5 text-[12.5px] capitalize text-white/85">{profile?.role}</Text>
+        <View className="mt-1.5 rounded-full bg-white/20 px-3 py-1">
+          <Text className="text-[11px] font-bold uppercase tracking-wide text-white">{profile?.role}</Text>
+        </View>
 
         {profile?.role === 'technician' ? (
           <View className="mt-4 w-full flex-row gap-2.5">
@@ -204,8 +214,8 @@ export function ProfileScreen() {
 
         {profile && <ReportIssue userId={profile.id} />}
 
-        <Pressable onPress={signOut} className="items-center rounded-xl border border-red-200 bg-red-50 py-3.5">
-          <Text className="font-semibold text-red-600">Sign out</Text>
+        <Pressable onPress={signOut} className="items-center rounded-xl border border-red-300 bg-white py-3.5">
+          <Text className="font-semibold text-red-600">Sign Out from Jageer Nepal</Text>
         </Pressable>
       </View>
     </ScrollView>

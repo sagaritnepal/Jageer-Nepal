@@ -1,10 +1,12 @@
 // app/(technician)/job/[id].tsx
 import { useState } from 'react';
 import { View, Text, Pressable, TextInput, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
+import { getCategoryVisual } from '../../../lib/constants/categoryIcons';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { RequestStatus } from '../../../types/database.types';
 
@@ -101,15 +103,21 @@ export default function JobCard() {
   }
 
   const isSaving = updateRequest.isPending || insertJobCard.isPending || updateJobCard.isPending;
+  const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(request.issue_type);
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text className="mb-2 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
+      <View className="mb-4 flex-row items-center gap-3">
+        <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
+          <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />
+        </View>
+        <Text className="flex-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
+      </View>
       <Text className="mb-6 text-gray-600">{request.description}</Text>
 
       <View className="mb-6 rounded-xl bg-white p-5">
         <Text className="text-sm uppercase tracking-wide text-gray-400">Current status</Text>
-        <Text className="mt-1 text-lg font-semibold capitalize text-blue-700">
+        <Text className="mt-1 text-lg font-semibold capitalize text-orange-600">
           {request.status.replace('_', ' ')}
         </Text>
         {request.quoted_price != null && (
@@ -166,7 +174,7 @@ export default function JobCard() {
             </View>
           ))}
           <Pressable onPress={addPart} className="mb-4 self-start">
-            <Text className="text-sm font-semibold text-blue-700">+ Add part</Text>
+            <Text className="text-sm font-semibold text-orange-600">+ Add part</Text>
           </Pressable>
 
           <Text className="mb-1 text-sm font-semibold text-gray-900">Labor cost (NPR)</Text>
@@ -183,7 +191,7 @@ export default function JobCard() {
         <Pressable
           onPress={handleAdvance}
           disabled={isSaving}
-          className="mb-4 items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
+          className="mb-4 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
         >
           <Text className="text-base font-semibold text-white">
             {isSaving ? 'Updating…' : STATUS_ACTION_LABEL[request.status]}

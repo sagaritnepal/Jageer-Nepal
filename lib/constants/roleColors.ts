@@ -1,10 +1,14 @@
 // lib/constants/roleColors.ts
 import type { UserRole } from '../../types/database.types';
 
+// One shared brand color across every role (Tailwind's orange-500), replacing
+// the old per-role tint so the whole app reads as a single consistent brand.
+const BRAND_ORANGE = '#F97316';
+
 export const ROLE_ACCENT: Record<UserRole, string> = {
-  client: '#2F5CFF',
-  technician: '#0D9488',
-  reseller: '#D97706',
-  wholesaler: '#7C3AED',
-  admin: '#111827',
+  client: BRAND_ORANGE,
+  technician: BRAND_ORANGE,
+  reseller: BRAND_ORANGE,
+  wholesaler: BRAND_ORANGE,
+  admin: BRAND_ORANGE,
 };
