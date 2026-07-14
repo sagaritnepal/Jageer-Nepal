@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid } from '../../lib/components/CategoryGrid';
+import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
+import type { ServiceCategory } from '../../types/database.types';
 
 const LOW_STOCK_THRESHOLD = 5;
 
@@ -23,6 +25,7 @@ export default function ResellerDashboard() {
   const profile = useAuthStore((state) => state.profile);
   const userId = useAuthStore((state) => state.session?.user.id);
   const [search, setSearch] = useState('');
+  const [pickerCategory, setPickerCategory] = useState<ServiceCategory | null>(null);
 
   const { data: categories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
@@ -76,110 +79,122 @@ export default function ResellerDashboard() {
   );
 
   return (
-    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="px-6 pb-2 pt-16">
-        <Text className="text-2xl font-extrabold text-gray-900">
-          Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
-        </Text>
-      </View>
-
-      <View className="px-6 pt-3">
-        <View className="mb-4 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-3">
-          <Ionicons name="search" size={18} color="#9CA3AF" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search for services..."
-            placeholderTextColor="#9CA3AF"
-            className="ml-2 flex-1 text-sm text-gray-900"
-          />
+    <>
+      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
+        <View className="px-6 pb-2 pt-16">
+          <Text className="text-2xl font-extrabold text-gray-900">
+            Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
+          </Text>
         </View>
 
-        <Pressable
-          onPress={() => router.push('/(reseller)/new-request')}
-          className="mb-5 flex-row items-center justify-between rounded-2xl bg-orange-500 px-4 py-3.5"
-        >
-          <View>
-            <Text className="text-[14.5px] font-bold text-white">Need a technician?</Text>
-            <Text className="mt-0.5 text-xs text-orange-100">Request one directly in seconds</Text>
+        <View className="px-6 pt-3">
+          <View className="mb-4 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-3">
+            <Ionicons name="search" size={18} color="#9CA3AF" />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search for services..."
+              placeholderTextColor="#9CA3AF"
+              className="ml-2 flex-1 text-sm text-gray-900"
+            />
           </View>
-          <View className="rounded-full bg-white px-4 py-2">
-            <Text className="text-xs font-bold text-orange-600">Request</Text>
-          </View>
-        </Pressable>
 
-        <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
-        <CategoryGrid
-          categories={filteredCategories}
-          onSelect={(c) => router.push(`/(reseller)/new-request?category=${encodeURIComponent(c.label)}`)}
-        />
-
-        {nearbyTechnicians.length > 0 && (
-          <>
-            <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Nearby technicians</Text>
-            {nearbyTechnicians.map((tech) => (
-              <View
-                key={tech.id}
-                className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
-              >
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-teal-600">
-                  <Text className="text-xs font-bold text-white">{initialsOf(tech.full_name)}</Text>
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[13.5px] font-bold text-gray-900">{tech.full_name ?? 'Technician'}</Text>
-                  <Text className="mt-0.5 text-[11.5px] text-gray-400">
-                    {tech.city ?? 'Nepal'} · Available now
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </>
-        )}
-
-        {(appCustomerCount > 0 || ownCustomerCount > 0) && (
-          <>
-            <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Where your customers come from</Text>
-            <View className="mb-2.5 flex-row gap-3">
-              <View className="flex-1 rounded-xl bg-white p-5">
-                <Text className="text-2xl font-bold text-orange-600">{appCustomerCount}</Text>
-                <Text className="text-sm text-gray-500">From the app</Text>
-              </View>
-              <View className="flex-1 rounded-xl bg-white p-5">
-                <Text className="text-2xl font-bold text-purple-700">{ownCustomerCount}</Text>
-                <Text className="text-sm text-gray-500">Your own customers</Text>
-              </View>
+          <Pressable
+            onPress={() => router.push('/(reseller)/new-request')}
+            className="mb-5 flex-row items-center justify-between rounded-2xl bg-orange-500 px-4 py-3.5"
+          >
+            <View>
+              <Text className="text-[14.5px] font-bold text-white">Need a technician?</Text>
+              <Text className="mt-0.5 text-xs text-orange-100">Request one directly in seconds</Text>
             </View>
-          </>
-        )}
+            <View className="rounded-full bg-white px-4 py-2">
+              <Text className="text-xs font-bold text-orange-600">Request</Text>
+            </View>
+          </Pressable>
 
-        <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Shop performance</Text>
-        <View className="mb-2.5 flex-row gap-3">
-          <View className="flex-1 rounded-xl bg-white p-5">
-            <Text className="text-2xl font-bold text-orange-600">NPR {revenue.toLocaleString()}</Text>
-            <Text className="text-sm text-gray-500">Revenue</Text>
-          </View>
-          <View className="flex-1 rounded-xl bg-white p-5">
-            <Text className="text-2xl font-bold text-orange-600">{lowStock.length}</Text>
-            <Text className="text-sm text-gray-500">Low stock items</Text>
-          </View>
-        </View>
+          <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
+          <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} />
 
-        {deadStock.length > 0 && (
-          <Text className="mb-2.5 text-sm text-gray-500">{deadStock.length} item(s) flagged as dead stock</Text>
-        )}
+          {nearbyTechnicians.length > 0 && (
+            <>
+              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Nearby technicians</Text>
+              {nearbyTechnicians.map((tech) => (
+                <View
+                  key={tech.id}
+                  className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
+                >
+                  <View className="h-11 w-11 items-center justify-center rounded-full bg-teal-600">
+                    <Text className="text-xs font-bold text-white">{initialsOf(tech.full_name)}</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[13.5px] font-bold text-gray-900">{tech.full_name ?? 'Technician'}</Text>
+                    <Text className="mt-0.5 text-[11.5px] text-gray-400">
+                      {tech.city ?? 'Nepal'} · Available now
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
 
-        {lowStock.length > 0 && (
-          <View className="rounded-xl bg-white p-5">
-            <Text className="mb-3 text-sm font-semibold text-gray-900">Low stock</Text>
-            {lowStock.map((p) => (
-              <View key={p.id} className="mb-1 flex-row justify-between">
-                <Text className="text-sm text-gray-700">{p.name}</Text>
-                <Text className="text-sm text-amber-600">{p.stock_level} left</Text>
+          {(appCustomerCount > 0 || ownCustomerCount > 0) && (
+            <>
+              <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Where your customers come from</Text>
+              <View className="mb-2.5 flex-row gap-3">
+                <View className="flex-1 rounded-xl bg-white p-5">
+                  <Text className="text-2xl font-bold text-orange-600">{appCustomerCount}</Text>
+                  <Text className="text-sm text-gray-500">From the app</Text>
+                </View>
+                <View className="flex-1 rounded-xl bg-white p-5">
+                  <Text className="text-2xl font-bold text-purple-700">{ownCustomerCount}</Text>
+                  <Text className="text-sm text-gray-500">Your own customers</Text>
+                </View>
               </View>
-            ))}
+            </>
+          )}
+
+          <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Shop performance</Text>
+          <View className="mb-2.5 flex-row gap-3">
+            <View className="flex-1 rounded-xl bg-white p-5">
+              <Text className="text-2xl font-bold text-orange-600">NPR {revenue.toLocaleString()}</Text>
+              <Text className="text-sm text-gray-500">Revenue</Text>
+            </View>
+            <View className="flex-1 rounded-xl bg-white p-5">
+              <Text className="text-2xl font-bold text-orange-600">{lowStock.length}</Text>
+              <Text className="text-sm text-gray-500">Low stock items</Text>
+            </View>
           </View>
-        )}
-      </View>
-    </ScrollView>
+
+          {deadStock.length > 0 && (
+            <Text className="mb-2.5 text-sm text-gray-500">{deadStock.length} item(s) flagged as dead stock</Text>
+          )}
+
+          {lowStock.length > 0 && (
+            <View className="rounded-xl bg-white p-5">
+              <Text className="mb-3 text-sm font-semibold text-gray-900">Low stock</Text>
+              {lowStock.map((p) => (
+                <View key={p.id} className="mb-1 flex-row justify-between">
+                  <Text className="text-sm text-gray-700">{p.name}</Text>
+                  <Text className="text-sm text-amber-600">{p.stock_level} left</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      <ServiceActionSheet
+        category={pickerCategory}
+        onClose={() => setPickerCategory(null)}
+        onSelect={(action) => {
+          if (!pickerCategory) return;
+          const category = pickerCategory.label;
+          setPickerCategory(null);
+          router.push(
+            `/(reseller)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}`
+          );
+        }}
+      />
+    </>
   );
 }
