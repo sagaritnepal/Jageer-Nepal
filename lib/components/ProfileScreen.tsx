@@ -62,17 +62,119 @@ function AvatarEditor({ profile }: { profile: Profile }) {
 
   return (
     <Pressable onPress={handlePick} disabled={uploading} className="relative">
-      <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-white/20">
+      <View className="h-32 w-32 items-center justify-center overflow-hidden rounded-2xl border-2 border-white/40 bg-white/20">
         {profile.avatar_url ? (
           <Image source={{ uri: profile.avatar_url }} className="h-full w-full" resizeMode="cover" />
         ) : (
-          <Text className="text-xl font-extrabold text-white">{initialsOf(profile.full_name)}</Text>
+          <Text className="text-4xl font-extrabold text-white">{initialsOf(profile.full_name)}</Text>
         )}
       </View>
-      <View className="absolute -bottom-1 -right-1 h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-900">
-        <Ionicons name={uploading ? 'hourglass-outline' : 'camera'} size={12} color="white" />
+      <View className="absolute -bottom-1.5 -right-1.5 h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-gray-900">
+        <Ionicons name={uploading ? 'hourglass-outline' : 'camera'} size={16} color="white" />
       </View>
     </Pressable>
+  );
+}
+
+function ProfileDetails({ profile }: { profile: Profile }) {
+  const setProfile = useAuthStore((state) => state.setProfile);
+  const updateProfile = useSupabaseUpdate('profiles');
+  const [editing, setEditing] = useState(false);
+  const [fullName, setFullName] = useState(profile.full_name ?? '');
+  const [address, setAddress] = useState(profile.city ?? '');
+  const [phone, setPhone] = useState(profile.phone ?? '');
+  const [saving, setSaving] = useState(false);
+
+  function startEditing() {
+    setFullName(profile.full_name ?? '');
+    setAddress(profile.city ?? '');
+    setPhone(profile.phone ?? '');
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const values = {
+        full_name: fullName.trim() || null,
+        city: address.trim() || null,
+        phone: phone.trim() || null,
+      };
+      await updateProfile.mutateAsync({ id: profile.id, values });
+      setProfile({ ...profile, ...values });
+      setEditing(false);
+    } catch (err) {
+      showAlert('Could not save', getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text className="text-sm font-semibold text-gray-900">Your details</Text>
+          <Pressable onPress={startEditing} className="flex-row items-center gap-1">
+            <Ionicons name="pencil" size={13} color="#EA580C" />
+            <Text className="text-xs font-bold text-orange-600">Edit</Text>
+          </Pressable>
+        </View>
+        <Text className="text-sm text-gray-400">Name</Text>
+        <Text className="mb-3 text-gray-900">{profile.full_name ?? 'Not set'}</Text>
+        <Text className="text-sm text-gray-400">Address</Text>
+        <Text className="mb-3 text-gray-900">{profile.city ?? 'Not set'}</Text>
+        <Text className="text-sm text-gray-400">Contact</Text>
+        <Text className="text-gray-900">{profile.phone ?? 'Not set'}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
+      <Text className="mb-3 text-sm font-semibold text-gray-900">Edit your details</Text>
+
+      <Text className="mb-1 text-xs font-medium text-gray-500">Name</Text>
+      <TextInput
+        value={fullName}
+        onChangeText={setFullName}
+        placeholder="Your full name"
+        className="mb-3 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+      />
+
+      <Text className="mb-1 text-xs font-medium text-gray-500">Address</Text>
+      <TextInput
+        value={address}
+        onChangeText={setAddress}
+        placeholder="Your address"
+        className="mb-3 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+      />
+
+      <Text className="mb-1 text-xs font-medium text-gray-500">Contact</Text>
+      <TextInput
+        value={phone}
+        onChangeText={setPhone}
+        placeholder="Phone number"
+        keyboardType="phone-pad"
+        className="mb-4 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+      />
+
+      <View className="flex-row gap-2">
+        <Pressable
+          onPress={() => setEditing(false)}
+          className="flex-1 items-center rounded-lg border border-gray-300 py-2.5"
+        >
+          <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
+        >
+          <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save'}</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -349,8 +451,8 @@ export function ProfileScreen() {
         {profile ? (
           <AvatarEditor profile={profile} />
         ) : (
-          <View className="h-16 w-16 items-center justify-center rounded-full bg-white/20">
-            <Text className="text-xl font-extrabold text-white">?</Text>
+          <View className="h-32 w-32 items-center justify-center rounded-2xl border-2 border-white/40 bg-white/20">
+            <Text className="text-4xl font-extrabold text-white">?</Text>
           </View>
         )}
         <Text className="mt-2.5 text-lg font-extrabold text-white">{profile?.full_name ?? 'Your profile'}</Text>
@@ -370,12 +472,7 @@ export function ProfileScreen() {
       </View>
 
       <View className="px-6 pt-5">
-        <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
-          <Text className="text-sm text-gray-400">Phone</Text>
-          <Text className="mb-3 text-gray-900">{profile?.phone ?? 'Not set'}</Text>
-          <Text className="text-sm text-gray-400">City</Text>
-          <Text className="text-gray-900">{profile?.city ?? 'Not set'}</Text>
-        </View>
+        {profile && <ProfileDetails profile={profile} />}
 
         {profile?.role === 'technician' && <TechnicianAvailability profile={profile} />}
 
