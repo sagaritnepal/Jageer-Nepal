@@ -18,6 +18,7 @@ export interface Profile {
   city: string | null;
   is_active: boolean;
   is_available: boolean;
+  skill_ids: string[];
   latitude: number | null;
   longitude: number | null;
   verification_status: VerificationStatus;
