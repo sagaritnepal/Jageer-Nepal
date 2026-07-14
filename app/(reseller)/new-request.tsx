@@ -1,8 +1,10 @@
 // app/(reseller)/new-request.tsx
 import { useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { getCategoryVisual } from '../../lib/constants/categoryIcons';
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
@@ -33,24 +35,21 @@ export default function ResellerNewRequest() {
       <View className="mb-6 flex-row flex-wrap justify-between">
         {(categories ?? []).map((c) => {
           const isSelected = category === c.label;
+          const { bg, icon } = getCategoryVisual(c.label);
           return (
             <View
               key={c.id}
               className={`mb-2.5 w-[48%] rounded-2xl border p-3.5 ${
-                isSelected ? 'border-blue-700 bg-blue-50' : 'border-gray-200 bg-white'
+                isSelected ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'
               }`}
             >
               <Pressable onPress={() => setCategoryOverride(c.label)}>
-                <View
-                  className={`h-9 w-9 items-center justify-center rounded-xl ${
-                    isSelected ? 'bg-blue-100' : 'bg-gray-100'
-                  }`}
-                >
-                  <Text className="text-base">{c.icon}</Text>
+                <View className={`h-11 w-11 items-center justify-center rounded-2xl ${bg}`}>
+                  {icon ? <Ionicons name={icon} size={20} color="white" /> : <Text className="text-lg">{c.icon}</Text>}
                 </View>
                 <Text
                   className={`mt-2 text-[13px] font-bold leading-[1.25] ${
-                    isSelected ? 'text-blue-700' : 'text-gray-900'
+                    isSelected ? 'text-orange-600' : 'text-gray-900'
                   }`}
                 >
                   {c.label}
