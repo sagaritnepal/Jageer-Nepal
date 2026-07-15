@@ -1,6 +1,6 @@
 // app/(admin)/catalog.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { CatalogProduct } from '../../types/database.types';
@@ -99,7 +99,7 @@ export default function AdminCatalog() {
   }
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-gray-900">Product Catalog</Text>
         <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-blue-700 px-4 py-2">
@@ -157,7 +157,9 @@ export default function AdminCatalog() {
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
 
-      <FlatList data={items} keyExtractor={(item) => item.id} renderItem={({ item }) => <CatalogRow item={item} />} />
-    </View>
+      {(items ?? []).map((item) => (
+        <CatalogRow key={item.id} item={item} />
+      ))}
+    </ScrollView>
   );
 }

@@ -1,6 +1,6 @@
 // app/(client)/market.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
@@ -133,7 +133,11 @@ export default function ClientMarket() {
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <ScrollView
+      className="flex-1 bg-gray-50 px-6 pt-16"
+      contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+    >
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-gray-900">Marketplace</Text>
         <View className="flex-row items-center gap-2">
@@ -229,14 +233,11 @@ export default function ClientMarket() {
         </Text>
       )}
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={{ justifyContent: 'space-between' }}
-        renderItem={({ item }) => <ProductCard item={item} onAdd={handleAdd} />}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
+      <View className="flex-row flex-wrap justify-between">
+        {filtered.map((item) => (
+          <ProductCard key={item.id} item={item} onAdd={handleAdd} />
+        ))}
+      </View>
+    </ScrollView>
   );
 }

@@ -1,6 +1,6 @@
 // app/(admin)/products.tsx
 import { useMemo } from 'react';
-import { View, Text, Pressable, FlatList } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useSupabaseQuery, useSupabaseDelete } from '../../lib/hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { Product } from '../../types/database.types';
@@ -59,7 +59,7 @@ export default function AdminProducts() {
   const sellerMap = useMemo(() => new Map((profiles ?? []).map((p) => [p.id, p])), [profiles]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">All Listings</Text>
       <Text className="mb-4 text-sm text-gray-500">
         Every product currently stocked by a wholesaler or reseller. New listings are self-service — manage what can
@@ -69,13 +69,9 @@ export default function AdminProducts() {
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && (products?.length ?? 0) === 0 && <Text className="text-gray-500">No listings yet.</Text>}
 
-      <FlatList
-        data={products}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ProductRow product={item} sellerName={sellerMap.get(item.seller_id)?.full_name ?? 'Unknown'} />
-        )}
-      />
-    </View>
+      {(products ?? []).map((item) => (
+        <ProductRow key={item.id} product={item} sellerName={sellerMap.get(item.seller_id)?.full_name ?? 'Unknown'} />
+      ))}
+    </ScrollView>
   );
 }

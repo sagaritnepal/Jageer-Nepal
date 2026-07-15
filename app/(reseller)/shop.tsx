@@ -1,6 +1,6 @@
 // app/(reseller)/shop.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
@@ -189,9 +189,11 @@ export default function Shop() {
       </View>
 
       {viewMode === 'mine' ? (
-        <MyListings />
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
+          <MyListings />
+        </ScrollView>
       ) : (
-        <>
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
           <View className="mb-3 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
             <Ionicons name="search" size={18} color="#9CA3AF" />
             <TextInput
@@ -269,15 +271,12 @@ export default function Shop() {
             </Text>
           )}
 
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.id}
-            numColumns={2}
-            columnWrapperStyle={{ justifyContent: 'space-between' }}
-            renderItem={({ item }) => <ProductCard item={item} onAdd={handleAdd} />}
-            showsVerticalScrollIndicator={false}
-          />
-        </>
+          <View className="flex-row flex-wrap justify-between">
+            {filtered.map((item) => (
+              <ProductCard key={item.id} item={item} onAdd={handleAdd} />
+            ))}
+          </View>
+        </ScrollView>
       )}
     </View>
   );

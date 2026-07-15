@@ -1,6 +1,6 @@
 // lib/components/CatalogStockingList.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, Image } from 'react-native';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpsert } from '../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../utils/alert';
@@ -136,13 +136,15 @@ export function CatalogStockingList({ priceLabel }: { priceLabel: string }) {
       {!isLoading && (catalog?.length ?? 0) === 0 && (
         <Text className="text-gray-500">No catalog items available yet — check back soon.</Text>
       )}
-      <FlatList
-        data={catalog}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <StockRow item={item} existing={myProductByCatalogId.get(item.id)} priceLabel={priceLabel} userId={userId} />
-        )}
-      />
+      {(catalog ?? []).map((item) => (
+        <StockRow
+          key={item.id}
+          item={item}
+          existing={myProductByCatalogId.get(item.id)}
+          priceLabel={priceLabel}
+          userId={userId}
+        />
+      ))}
     </View>
   );
 }
