@@ -15,7 +15,11 @@ export default function WholesalerLayout() {
       >
         <Tabs.Screen
           name="market"
-          options={{ title: 'Market', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+          options={{ title: 'Products', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
+          name="marketplace"
+          options={{ title: 'Marketplace', tabBarIcon: ({ color, focused }) => <TabIcon name="storefront" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
           name="orders"
