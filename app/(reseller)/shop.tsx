@@ -175,7 +175,7 @@ export default function Shop() {
           className={`flex-1 items-center rounded-md py-2 ${viewMode === 'marketplace' ? 'bg-orange-500' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'marketplace' ? 'text-white' : 'text-gray-600'}`}>
-            Marketplace
+            Wholesale
           </Text>
         </Pressable>
         <Pressable
@@ -183,7 +183,7 @@ export default function Shop() {
           className={`flex-1 items-center rounded-md py-2 ${viewMode === 'mine' ? 'bg-orange-500' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'mine' ? 'text-white' : 'text-gray-600'}`}>
-            My Listings
+            Products
           </Text>
         </Pressable>
       </View>
