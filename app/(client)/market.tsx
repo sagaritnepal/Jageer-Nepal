@@ -20,8 +20,6 @@ const SORT_LABELS: Record<SortOption, string> = {
 };
 
 function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product) => void }) {
-  const outOfStock = item.stock_level <= 0;
-
   return (
     <View className="mb-4 w-[48%] rounded-xl border border-gray-200 bg-white p-3">
       <Pressable onPress={() => router.push(`/(client)/product/${item.id}`)}>
@@ -30,11 +28,6 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
             <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
           ) : (
             <Text className="text-3xl">🖥️</Text>
-          )}
-          {outOfStock && (
-            <View className="absolute inset-0 items-center justify-center bg-black/40">
-              <Text className="text-xs font-bold text-white">OUT OF STOCK</Text>
-            </View>
           )}
         </View>
 
@@ -45,16 +38,10 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
           {item.name}
         </Text>
         <Text className="text-base font-bold text-gray-900">NPR {Number(item.price).toLocaleString()}</Text>
-        <Text className="mb-2 mt-0.5 text-xs text-gray-400">
-          {outOfStock ? 'Out of stock' : `${item.stock_level} in stock`}
-        </Text>
+        <Text className="mb-2 mt-0.5 text-xs text-gray-400">{item.stock_level} in stock</Text>
       </Pressable>
 
-      <Pressable
-        onPress={() => onAdd(item)}
-        disabled={outOfStock}
-        className="items-center rounded-lg bg-orange-500 py-2 disabled:opacity-40"
-      >
+      <Pressable onPress={() => onAdd(item)} className="items-center rounded-lg bg-orange-500 py-2">
         <Text className="text-xs font-semibold text-white">Add to Cart</Text>
       </Pressable>
     </View>
@@ -77,14 +64,16 @@ export default function ClientMarket() {
     filters: { seller_role: 'reseller' },
   });
 
+  const inStockProducts = useMemo(() => (products ?? []).filter((p) => p.stock_level > 0), [products]);
+
   const categories = useMemo(() => {
     const set = new Set<string>();
-    (products ?? []).forEach((p) => p.category && set.add(p.category));
+    inStockProducts.forEach((p) => p.category && set.add(p.category));
     return Array.from(set);
-  }, [products]);
+  }, [inStockProducts]);
 
   const filtered = useMemo(() => {
-    let list = filterBySearch(products ?? [], search);
+    let list = filterBySearch(inStockProducts, search);
     if (category) {
       list = list.filter((p) => p.category === category);
     }
@@ -105,11 +94,11 @@ export default function ClientMarket() {
         sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
     return sorted;
-  }, [products, search, category, sortBy]);
+  }, [inStockProducts, search, category, sortBy]);
 
   const suggestions = useMemo(
-    () => (search.trim() ? filterBySearch(products ?? [], search).slice(0, 5) : []),
-    [products, search]
+    () => (search.trim() ? filterBySearch(inStockProducts, search).slice(0, 5) : []),
+    [inStockProducts, search]
   );
 
   function handleAdd(product: Product) {

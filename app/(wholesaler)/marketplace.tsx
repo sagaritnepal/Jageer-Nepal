@@ -10,6 +10,7 @@ export default function WholesaleMarketplace() {
         sellerRole="wholesaler"
         note="This is exactly what resellers see when they browse your shop, with your actual stock on hand and price for each item. Go to Products to change what's listed here."
         emptyText="Nothing listed yet — add items from the Products tab to appear here."
+        basePath="/(wholesaler)"
       />
     </ScrollView>
   );

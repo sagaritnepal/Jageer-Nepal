@@ -210,6 +210,7 @@ export default function Shop() {
             sellerRole="reseller"
             note="This is exactly what customers see when they browse your shop in the Marketplace — including anything out of stock. Go to Products to change what's listed here."
             emptyText="Nothing listed yet — add items from the Products tab to appear here."
+            basePath="/(reseller)"
           />
         </ScrollView>
       ) : (

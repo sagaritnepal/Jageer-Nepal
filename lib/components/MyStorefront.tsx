@@ -1,13 +1,15 @@
 // lib/components/MyStorefront.tsx
-import { View, Text, Image } from 'react-native';
+import { View, Text, Pressable, Image } from 'react-native';
+import { router } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery } from '../hooks/useSupabase';
 import type { Product, UserRole } from '../../types/database.types';
 
-function StorefrontCard({ item }: { item: Product }) {
+function StorefrontCard({ item, basePath }: { item: Product; basePath: string }) {
   const outOfStock = item.stock_level <= 0;
+  const detailHref = item.catalog_id ? `${basePath}/catalog/${item.catalog_id}` : null;
 
-  return (
+  const card = (
     <View className="mb-4 w-[48%] rounded-xl border border-gray-200 bg-white p-3">
       <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
         {item.image_url ? (
@@ -36,16 +38,22 @@ function StorefrontCard({ item }: { item: Product }) {
       </Text>
     </View>
   );
+
+  if (!detailHref) return card;
+
+  return <Pressable onPress={() => router.push(detailHref)}>{card}</Pressable>;
 }
 
 export function MyStorefront({
   sellerRole,
   note,
   emptyText,
+  basePath,
 }: {
   sellerRole: UserRole;
   note: string;
   emptyText: string;
+  basePath: string;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: products, isLoading } = useSupabaseQuery('products', {
@@ -76,7 +84,7 @@ export function MyStorefront({
       )}
       <View className="flex-row flex-wrap justify-between">
         {listed.map((item) => (
-          <StorefrontCard key={item.id} item={item} />
+          <StorefrontCard key={item.id} item={item} basePath={basePath} />
         ))}
       </View>
     </>
