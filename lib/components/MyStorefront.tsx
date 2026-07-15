@@ -28,7 +28,9 @@ function StorefrontCard({ item }: { item: Product }) {
       <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
         {item.name}
       </Text>
-      <Text className="text-base font-bold text-gray-900">NPR {Number(item.price).toLocaleString()}</Text>
+      <Text className="text-base font-bold text-gray-900">
+        NPR {Number(item.price).toLocaleString()} <Text className="text-xs font-normal text-gray-400">/ unit</Text>
+      </Text>
       <Text className="mt-0.5 text-xs text-gray-400">
         {outOfStock ? 'Out of stock' : `${item.stock_level} in stock`}
       </Text>
