@@ -5,7 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
+import { SearchSuggestions } from '../../lib/components/SearchSuggestions';
 import { showAlert } from '../../lib/utils/alert';
+import { filterBySearch } from '../../lib/utils/search';
 import type { Product } from '../../types/database.types';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'name';
@@ -61,6 +63,7 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
 
 export default function ClientMarket() {
   const [search, setSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -81,12 +84,7 @@ export default function ClientMarket() {
   }, [products]);
 
   const filtered = useMemo(() => {
-    let list = products ?? [];
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter((p) => p.name.toLowerCase().includes(q));
-    }
+    let list = filterBySearch(products ?? [], search);
     if (category) {
       list = list.filter((p) => p.category === category);
     }
@@ -108,6 +106,11 @@ export default function ClientMarket() {
     }
     return sorted;
   }, [products, search, category, sortBy]);
+
+  const suggestions = useMemo(
+    () => (search.trim() ? filterBySearch(products ?? [], search).slice(0, 5) : []),
+    [products, search]
+  );
 
   function handleAdd(product: Product) {
     const added = addToCart(product);
@@ -158,14 +161,27 @@ export default function ClientMarket() {
         </View>
       </View>
 
-      <View className="mb-3 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
-        <Ionicons name="search" size={18} color="#9CA3AF" />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search for services..."
-          placeholderTextColor="#9CA3AF"
-          className="ml-2 flex-1 text-sm text-gray-900"
+      <View className="relative z-10 mb-3">
+        <View className="flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
+          <Ionicons name="search" size={18} color="#9CA3AF" />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+            placeholder="Search by name or model…"
+            placeholderTextColor="#9CA3AF"
+            className="ml-2 flex-1 text-sm text-gray-900"
+          />
+        </View>
+        <SearchSuggestions
+          items={suggestions}
+          visible={searchFocused}
+          onSelect={(item) => {
+            setSearch('');
+            setSearchFocused(false);
+            router.push(`/(client)/product/${item.id}`);
+          }}
         />
       </View>
 

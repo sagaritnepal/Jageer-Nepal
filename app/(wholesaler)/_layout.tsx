@@ -30,6 +30,7 @@ export default function WholesalerLayout() {
           options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
         />
         <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Bulk Pricing' }} />
+        <Tabs.Screen name="catalog/[id]" options={{ href: null, title: 'Product Details' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
       </Tabs>
     </RoleGuard>

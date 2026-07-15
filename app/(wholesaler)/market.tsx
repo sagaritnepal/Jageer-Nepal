@@ -10,7 +10,7 @@ export default function WholesaleMarket() {
         Set quantity and your price for anything you carry — resellers buy from you at this price.
       </Text>
 
-      <CatalogStockingList priceLabel="Your price to resellers" />
+      <CatalogStockingList priceLabel="Your price to resellers" basePath="/(wholesaler)" />
     </ScrollView>
   );
 }

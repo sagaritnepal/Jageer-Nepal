@@ -1,11 +1,13 @@
 // app/(admin)/catalog.tsx
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
+import { SearchSuggestions } from '../../lib/components/SearchSuggestions';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
+import { filterBySearch } from '../../lib/utils/search';
 import type { CatalogProduct } from '../../types/database.types';
 
 async function pickAndUploadCatalogImage(): Promise<string | null> {
@@ -119,6 +121,11 @@ export default function AdminCatalog() {
   const [category, setCategory] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingNew, setUploadingNew] = useState(false);
+  const [search, setSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  const filtered = useMemo(() => filterBySearch(items ?? [], search), [items, search]);
+  const suggestions = useMemo(() => (search.trim() ? filtered.slice(0, 5) : []), [filtered, search]);
 
   function resetForm() {
     setName('');
@@ -219,9 +226,35 @@ export default function AdminCatalog() {
         </View>
       )}
 
-      {isLoading && <Text className="text-gray-500">Loading…</Text>}
+      <View className="relative z-10 mb-4">
+        <View className="flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
+          <Ionicons name="search" size={18} color="#9CA3AF" />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+            placeholder="Search by name or model…"
+            placeholderTextColor="#9CA3AF"
+            className="ml-2 flex-1 text-sm text-gray-900"
+          />
+        </View>
+        <SearchSuggestions
+          items={suggestions}
+          visible={searchFocused}
+          onSelect={(item) => {
+            setSearch(item.name);
+            setSearchFocused(false);
+          }}
+        />
+      </View>
 
-      {(items ?? []).map((item) => (
+      {isLoading && <Text className="text-gray-500">Loading…</Text>}
+      {!isLoading && (items?.length ?? 0) > 0 && filtered.length === 0 && (
+        <Text className="text-gray-500">No items match your search.</Text>
+      )}
+
+      {filtered.map((item) => (
         <CatalogRow key={item.id} item={item} />
       ))}
     </ScrollView>
