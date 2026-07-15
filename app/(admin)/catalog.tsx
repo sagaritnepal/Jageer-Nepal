@@ -1,13 +1,56 @@
 // app/(admin)/catalog.tsx
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { supabase } from '../../lib/supabase';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { CatalogProduct } from '../../types/database.types';
+
+async function pickAndUploadCatalogImage(): Promise<string | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) {
+    showAlert('Photo access needed', 'Allow photo library access to upload a product photo.');
+    return null;
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    quality: 0.7,
+    allowsEditing: true,
+    aspect: [1, 1],
+  });
+  if (result.canceled || !result.assets[0]) return null;
+
+  const arraybuffer = await fetch(result.assets[0].uri).then((res) => res.arrayBuffer());
+  const path = `catalog/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const { error: uploadError } = await supabase.storage
+    .from('catalog-images')
+    .upload(path, arraybuffer, { contentType: 'image/jpeg', upsert: true });
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from('catalog-images').getPublicUrl(path);
+  return `${data.publicUrl}?t=${Date.now()}`;
+}
 
 function CatalogRow({ item }: { item: CatalogProduct }) {
   const updateItem = useSupabaseUpdate('catalog_products');
   const deleteItem = useSupabaseDelete('catalog_products');
+  const [uploading, setUploading] = useState(false);
+
+  async function handleReplacePhoto() {
+    setUploading(true);
+    try {
+      const image_url = await pickAndUploadCatalogImage();
+      if (image_url) {
+        await updateItem.mutateAsync({ id: item.id, values: { image_url } });
+      }
+    } catch (err) {
+      showAlert('Could not update photo', getErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function confirmRemove() {
     showAlert(
@@ -31,13 +74,17 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
       }`}
     >
       <View className="flex-1 flex-row items-center gap-3">
-        <View className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
+        <Pressable
+          onPress={handleReplacePhoto}
+          disabled={uploading}
+          className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100"
+        >
           {item.image_url ? (
             <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
           ) : (
-            <Text className="text-lg">📦</Text>
+            <Ionicons name={uploading ? 'hourglass-outline' : 'camera'} size={16} color="#9CA3AF" />
           )}
-        </View>
+        </Pressable>
         <View className="flex-1">
           <Text className="font-semibold text-gray-900">{item.name}</Text>
           {item.category && <Text className="mt-0.5 text-xs text-orange-600">{item.category}</Text>}
@@ -71,6 +118,7 @@ export default function AdminCatalog() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [uploadingNew, setUploadingNew] = useState(false);
 
   function resetForm() {
     setName('');
@@ -78,6 +126,18 @@ export default function AdminCatalog() {
     setCategory('');
     setImageUrl('');
     setShowForm(false);
+  }
+
+  async function handlePickNewImage() {
+    setUploadingNew(true);
+    try {
+      const url = await pickAndUploadCatalogImage();
+      if (url) setImageUrl(url);
+    } catch (err) {
+      showAlert('Could not upload photo', getErrorMessage(err));
+    } finally {
+      setUploadingNew(false);
+    }
   }
 
   async function handleAdd() {
@@ -135,14 +195,18 @@ export default function AdminCatalog() {
             placeholder="e.g. Mobile Phones"
             className="mb-3 rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
-          <Text className="mb-1 text-sm font-medium text-gray-700">Image URL (optional)</Text>
-          <TextInput
-            value={imageUrl}
-            onChangeText={setImageUrl}
-            placeholder="https://…"
-            autoCapitalize="none"
-            className="mb-3 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          />
+          <Text className="mb-1 text-sm font-medium text-gray-700">Photo (optional)</Text>
+          <Pressable
+            onPress={handlePickNewImage}
+            disabled={uploadingNew}
+            className="mb-3 h-24 w-24 items-center justify-center overflow-hidden rounded-lg border border-gray-300 bg-gray-50"
+          >
+            {imageUrl ? (
+              <Image source={{ uri: imageUrl }} className="h-full w-full" resizeMode="cover" />
+            ) : (
+              <Ionicons name={uploadingNew ? 'hourglass-outline' : 'camera'} size={22} color="#9CA3AF" />
+            )}
+          </Pressable>
           <Pressable
             onPress={handleAdd}
             disabled={insertItem.isPending}
