@@ -70,6 +70,8 @@ function StockRow({
         </View>
       </View>
 
+      {item.description && <Text className="mt-2 text-[11px] leading-4 text-gray-500">{item.description}</Text>}
+
       <View className="mt-3 flex-row items-center gap-2">
         <View className="flex-row items-center rounded-lg border border-gray-300">
           <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-3 py-2">
