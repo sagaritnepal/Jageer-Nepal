@@ -7,8 +7,10 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 export default function WholesaleOrders() {
   const userId = useAuthStore((state) => state.session?.user.id);
 
+  // Wholesalers only ever sell through this app (they source their own stock
+  // outside it), so incoming orders are the ones where they're the seller.
   const { data: orders, isLoading } = useSupabaseQuery('orders', {
-    filters: userId ? { buyer_id: userId } : {},
+    filters: { seller_id: userId ?? '' },
     orderBy: { column: 'created_at', ascending: false },
     enabled: !!userId,
   });

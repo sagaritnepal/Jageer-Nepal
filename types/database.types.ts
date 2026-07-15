@@ -74,6 +74,8 @@ export interface Product {
   is_dead_stock: boolean;
   catalog_id: string | null;
   seller_role: UserRole;
+  purchased_stock: number;
+  purchase_price: number | null;
   created_at: string;
   updated_at: string;
 }

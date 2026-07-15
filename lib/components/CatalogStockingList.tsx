@@ -11,11 +11,13 @@ function StockRow({
   existing,
   priceLabel,
   userId,
+  capToPurchasedStock,
 }: {
   item: CatalogProduct;
   existing: Product | undefined;
   priceLabel: string;
   userId: string;
+  capToPurchasedStock: boolean;
 }) {
   const upsertProduct = useSupabaseUpsert('products', 'seller_id,catalog_id');
   const [qty, setQty] = useState(existing?.stock_level ?? 0);
@@ -24,8 +26,16 @@ function StockRow({
 
   const isStocked = !!existing;
   const dirty = qty !== (existing?.stock_level ?? 0) || price !== (existing ? String(existing.price) : '');
+  const purchasedStock = existing?.purchased_stock ?? 0;
+  const purchasePrice = existing?.purchase_price ?? null;
+  const atPurchasedCap = capToPurchasedStock && qty >= purchasedStock;
+  const nothingPurchased = capToPurchasedStock && purchasedStock <= 0;
 
   async function handleSave() {
+    if (capToPurchasedStock && qty > purchasedStock) {
+      showAlert('Not enough purchased stock', `You've only bought ${purchasedStock} of this item from wholesale.`);
+      return;
+    }
     const priceNum = parseFloat(price);
     if (qty > 0 && (Number.isNaN(priceNum) || priceNum <= 0)) {
       showAlert('Set a price', 'Enter a valid price before stocking this item.');
@@ -72,13 +82,27 @@ function StockRow({
 
       {item.description && <Text className="mt-2 text-[11px] leading-4 text-gray-500">{item.description}</Text>}
 
+      {capToPurchasedStock && (
+        <Text className="mt-2 text-[11px] font-medium text-gray-500">
+          {purchasedStock > 0
+            ? `Purchased from wholesale: ${purchasedStock} units${
+                purchasePrice != null ? ` @ NPR ${Number(purchasePrice).toLocaleString()}` : ''
+              }`
+            : 'Buy this from Wholesale first to list it here.'}
+        </Text>
+      )}
+
       <View className="mt-3 flex-row items-center gap-2">
         <View className="flex-row items-center rounded-lg border border-gray-300">
           <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-3 py-2">
             <Text className="text-lg text-gray-500">−</Text>
           </Pressable>
           <Text className="w-10 text-center text-sm font-semibold text-gray-900">{qty}</Text>
-          <Pressable onPress={() => setQty((q) => q + 1)} className="px-3 py-2">
+          <Pressable
+            onPress={() => setQty((q) => (capToPurchasedStock ? Math.min(purchasedStock, q + 1) : q + 1))}
+            disabled={atPurchasedCap}
+            className="px-3 py-2 disabled:opacity-30"
+          >
             <Text className="text-lg text-gray-500">+</Text>
           </Pressable>
         </View>
@@ -90,13 +114,14 @@ function StockRow({
             onChangeText={setPrice}
             placeholder="0.00"
             keyboardType="decimal-pad"
+            editable={!nothingPurchased}
             className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm text-gray-900"
           />
         </View>
 
         <Pressable
           onPress={handleSave}
-          disabled={saving || !dirty}
+          disabled={saving || !dirty || nothingPurchased}
           className="items-center rounded-lg bg-orange-500 px-3 py-2.5 disabled:opacity-40"
         >
           <Text className="text-xs font-semibold text-white">{saving ? 'Saving…' : isStocked ? 'Update' : 'Add'}</Text>
@@ -106,7 +131,13 @@ function StockRow({
   );
 }
 
-export function CatalogStockingList({ priceLabel }: { priceLabel: string }) {
+export function CatalogStockingList({
+  priceLabel,
+  capToPurchasedStock = false,
+}: {
+  priceLabel: string;
+  capToPurchasedStock?: boolean;
+}) {
   const userId = useAuthStore((state) => state.session?.user.id);
 
   const { data: catalog, isLoading: loadingCatalog } = useSupabaseQuery('catalog_products', {
@@ -143,6 +174,7 @@ export function CatalogStockingList({ priceLabel }: { priceLabel: string }) {
           existing={myProductByCatalogId.get(item.id)}
           priceLabel={priceLabel}
           userId={userId}
+          capToPurchasedStock={capToPurchasedStock}
         />
       ))}
     </View>

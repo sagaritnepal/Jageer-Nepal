@@ -73,9 +73,9 @@ function MyListings() {
   return (
     <>
       <Text className="mb-4 text-sm text-gray-500">
-        Set quantity and your price for anything you carry — customers buy from you at this price.
+        List only what you've bought from Wholesale — the quantity you can set is capped by your purchases there.
       </Text>
-      <CatalogStockingList priceLabel="Your price to customers" />
+      <CatalogStockingList priceLabel="Your price to customers" capToPurchasedStock />
     </>
   );
 }
