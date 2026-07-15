@@ -23,6 +23,10 @@ export default function ResellerLayout() {
           options={{ title: 'Shop', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
+          name="quotes"
+          options={{ title: 'Quotes', tabBarIcon: ({ color, focused }) => <TabIcon name="pricetag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
           name="orders"
           options={{ title: 'Orders', tabBarIcon: ({ color, focused }) => <TabIcon name="time" color={color} focused={focused} /> }}
         />
@@ -36,6 +40,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
         <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Product' }} />
+        <Tabs.Screen name="quote/[id]" options={{ href: null, title: 'Quote' }} />
       </Tabs>
     </RoleGuard>
   );

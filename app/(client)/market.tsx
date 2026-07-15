@@ -70,7 +70,9 @@ export default function ClientMarket() {
   const addToCart = useCartStore((state) => state.addItem);
   const clearCart = useCartStore((state) => state.clearCart);
 
-  const { data: products, isLoading } = useSupabaseQuery('products', {});
+  const { data: products, isLoading } = useSupabaseQuery('products', {
+    filters: { seller_role: 'reseller' },
+  });
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -135,6 +137,9 @@ export default function ClientMarket() {
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-gray-900">Marketplace</Text>
         <View className="flex-row items-center gap-2">
+          <Pressable onPress={() => router.push('/(client)/quotes')}>
+            <Text className="text-sm font-semibold text-orange-600">My Quotes</Text>
+          </Pressable>
           <Pressable onPress={() => router.push('/(client)/product-orders')}>
             <Text className="text-sm font-semibold text-orange-600">My Orders</Text>
           </Pressable>

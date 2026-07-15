@@ -8,6 +8,7 @@ export type RequestStatus = 'pending' | 'quoted' | 'approved' | 'assigned' | 'in
 export type RequestOrigin = 'app' | 'reseller';
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+export type QuoteStatus = 'pending' | 'quoted' | 'accepted' | 'declined';
 
 export interface Profile {
   id: string;
@@ -71,6 +72,32 @@ export interface Product {
   image_url: string | null;
   last_sold_at: string | null;
   is_dead_stock: boolean;
+  catalog_id: string | null;
+  seller_role: UserRole;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CatalogProduct {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  image_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductQuote {
+  id: string;
+  client_id: string;
+  reseller_id: string;
+  product_id: string;
+  quantity: number;
+  message: string | null;
+  quoted_price: number | null;
+  status: QuoteStatus;
   created_at: string;
   updated_at: string;
 }
@@ -182,6 +209,18 @@ export interface Database {
         Row: ServiceCategory;
         Insert: Partial<ServiceCategory>;
         Update: Partial<ServiceCategory>;
+        Relationships: [];
+      };
+      catalog_products: {
+        Row: CatalogProduct;
+        Insert: Partial<CatalogProduct>;
+        Update: Partial<CatalogProduct>;
+        Relationships: [];
+      };
+      product_quotes: {
+        Row: ProductQuote;
+        Insert: Partial<ProductQuote>;
+        Update: Partial<ProductQuote>;
         Relationships: [];
       };
     };

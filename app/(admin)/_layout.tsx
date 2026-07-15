@@ -29,8 +29,12 @@ export default function AdminLayout() {
           options={{ title: 'Categories', tabBarIcon: ({ color, focused }) => <TabIcon name="pricetag" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
+          name="catalog"
+          options={{ title: 'Catalog', tabBarIcon: ({ color, focused }) => <TabIcon name="albums" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
           name="products"
-          options={{ title: 'Products', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+          options={{ title: 'Listings', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
           name="support"

@@ -96,6 +96,22 @@ export function useSupabaseUpdate<T extends TableName>(table: T) {
   });
 }
 
+/** Upsert a row by a unique constraint and invalidate that table's queries on success. */
+export function useSupabaseUpsert<T extends TableName>(table: T, conflictColumns: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (values: Insert<T>) => {
+      const { data, error } = await (supabase.from(table) as any)
+        .upsert(values, { onConflict: conflictColumns })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Row<T>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [table] }),
+  });
+}
+
 /**
  * Delete a row by id and invalidate that table's queries on success.
  *

@@ -3,9 +3,9 @@ import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
+import { CatalogStockingList } from '../../lib/components/CatalogStockingList';
 import { showAlert } from '../../lib/utils/alert';
 import type { Product } from '../../types/database.types';
 
@@ -68,43 +68,18 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
   );
 }
 
-function MyListings({ products, isLoading }: { products: Product[]; isLoading: boolean }) {
+function MyListings() {
   return (
     <>
       <Text className="mb-4 text-sm text-gray-500">
-        Products you're selling — listings are added by Jageer admin. Contact support to get a product listed.
+        Set quantity and your price for anything you carry — customers buy from you at this price.
       </Text>
-
-      {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && products.length === 0 && (
-        <Text className="text-gray-500">No products listed for you yet.</Text>
-      )}
-
-      <FlatList
-        data={products}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View className="mb-3 flex-row items-center justify-between rounded-lg border border-gray-200 bg-white p-4">
-            <View>
-              <Text className="font-semibold text-gray-900">{item.name}</Text>
-              <Text className="text-sm text-gray-500">
-                Stock: {item.stock_level} · NPR {Number(item.price).toLocaleString()}
-              </Text>
-            </View>
-            {item.is_dead_stock && (
-              <View className="rounded-full bg-amber-100 px-3 py-1">
-                <Text className="text-xs font-semibold text-amber-700">Dead stock</Text>
-              </View>
-            )}
-          </View>
-        )}
-      />
+      <CatalogStockingList priceLabel="Your price to customers" />
     </>
   );
 }
 
 export default function Shop() {
-  const userId = useAuthStore((state) => state.session?.user.id);
   const [viewMode, setViewMode] = useState<ViewMode>('marketplace');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
@@ -118,10 +93,9 @@ export default function Shop() {
 
   const { data: products, isLoading } = useSupabaseQuery('products', {});
   const marketplaceProducts = useMemo(
-    () => (products ?? []).filter((p) => p.seller_id !== userId),
-    [products, userId]
+    () => (products ?? []).filter((p) => p.seller_role === 'wholesaler'),
+    [products]
   );
-  const myProducts = useMemo(() => (products ?? []).filter((p) => p.seller_id === userId), [products, userId]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -215,7 +189,7 @@ export default function Shop() {
       </View>
 
       {viewMode === 'mine' ? (
-        <MyListings products={myProducts} isLoading={isLoading} />
+        <MyListings />
       ) : (
         <>
           <View className="mb-3 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
