@@ -35,7 +35,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-2 text-gray-600">{request.description}</Text>
 
@@ -128,7 +128,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-2 text-gray-600">{request.description}</Text>
 
@@ -195,7 +195,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 100 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-2 text-gray-600">{request.description}</Text>
 
@@ -250,7 +250,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
 
 function WaitingForApproval({ request }: { request: ServiceRequest }) {
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-2 text-gray-600">{request.description}</Text>
 
@@ -296,7 +296,7 @@ function ChooseTechnician({ request }: { request: ServiceRequest }) {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-2 text-gray-600">{request.description}</Text>
 
@@ -349,7 +349,7 @@ export default function ResellerRequestDetail() {
     if (request.origin === 'reseller') {
       if (!isMine) {
         return (
-          <View className="flex-1 bg-gray-50 px-6 pt-16">
+          <View className="flex-1 bg-gray-50 px-6 pt-4">
             <Text className="text-lg font-semibold text-gray-900">This is another reseller's customer.</Text>
           </View>
         );
@@ -372,7 +372,7 @@ export default function ResellerRequestDetail() {
   }
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <Text className="text-lg font-semibold text-gray-900">This request is already {request.status}.</Text>
       <Text className="mt-2 text-gray-500">Someone else may have claimed it already.</Text>
     </View>

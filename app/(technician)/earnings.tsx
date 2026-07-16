@@ -47,7 +47,7 @@ export default function TechnicianEarnings() {
   }, [jobCards]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <Text className="mb-6 text-2xl font-bold text-gray-900">Earnings</Text>
 
       <View className="mb-6 rounded-2xl bg-[#0D9488] p-5">

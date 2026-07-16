@@ -112,7 +112,7 @@ export default function AdminUsers() {
   const filtered = roleFilter === 'all' ? profiles : profiles?.filter((p) => p.role === roleFilter);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <Text className="mb-4 text-2xl font-bold text-gray-900">Users</Text>
 
       <View className="mb-4 flex-row flex-wrap gap-2">

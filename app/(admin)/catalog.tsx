@@ -155,7 +155,7 @@ export default function AdminCatalog() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-gray-900">Product Catalog</Text>
         <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-blue-700 px-4 py-2">

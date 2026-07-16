@@ -81,7 +81,7 @@ export default function ResellerDashboard() {
   return (
     <>
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
-        <View className="px-6 pb-2 pt-16">
+        <View className="px-6 pb-2 pt-4">
           <Text className="text-2xl font-extrabold text-gray-900">
             Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
           </Text>

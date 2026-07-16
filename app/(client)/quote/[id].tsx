@@ -37,7 +37,7 @@ export default function ClientQuoteDetail() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{product?.name ?? 'Quote request'}</Text>
       <Text className="mb-6 text-gray-600">Qty: {quote.quantity}</Text>
 

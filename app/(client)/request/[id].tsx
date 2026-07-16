@@ -193,7 +193,7 @@ export default function RequestDetail() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-2 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-6 text-gray-600">{request.description}</Text>
 

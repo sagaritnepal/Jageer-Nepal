@@ -2,6 +2,7 @@
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
+import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 
 export default function WholesalerLayout() {
@@ -9,7 +10,7 @@ export default function WholesalerLayout() {
     <RoleGuard allow={['wholesaler']}>
       <Tabs
         screenOptions={{
-          headerShown: false,
+          header: () => <PortalHeaderBar />,
           tabBarActiveTintColor: ROLE_ACCENT.wholesaler,
         }}
       >

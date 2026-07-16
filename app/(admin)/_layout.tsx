@@ -2,12 +2,13 @@
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
+import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 
 export default function AdminLayout() {
   return (
     <RoleGuard allow={['admin']}>
-      <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
+      <Tabs screenOptions={{ header: () => <PortalHeaderBar />, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
         <Tabs.Screen
           name="dashboard"
           options={{ title: 'Overview', tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} /> }}

@@ -126,7 +126,7 @@ export default function ClientMarket() {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50 px-6 pt-16"
+      className="flex-1 bg-gray-50 px-6 pt-4"
       contentContainerStyle={{ paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >

@@ -2,13 +2,14 @@
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
+import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 
 export default function ResellerLayout() {
   return (
     <RoleGuard allow={['reseller']}>
       <Tabs
-        screenOptions={{ headerShown: false, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
+        screenOptions={{ header: () => <PortalHeaderBar />, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
       >
         <Tabs.Screen
           name="dashboard"

@@ -106,7 +106,7 @@ export default function JobCard() {
   const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(request.issue_type);
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <View className="mb-4 flex-row items-center gap-3">
         <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
           <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />

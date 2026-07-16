@@ -55,7 +55,7 @@ export default function ResellerProductDetail() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="px-6 pt-16">
+      <View className="px-6 pt-4">
         <View className="mb-4 aspect-square items-center justify-center overflow-hidden rounded-2xl bg-blue-50">
           {product.image_url ? (
             <Image source={{ uri: product.image_url }} className="h-full w-full" resizeMode="cover" />

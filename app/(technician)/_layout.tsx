@@ -2,6 +2,7 @@
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
+import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 
 export default function TechnicianLayout() {
@@ -9,7 +10,7 @@ export default function TechnicianLayout() {
     <RoleGuard allow={['technician']}>
       <Tabs
         screenOptions={{
-          headerShown: false,
+          header: () => <PortalHeaderBar />,
           tabBarActiveTintColor: ROLE_ACCENT.technician,
         }}
       >

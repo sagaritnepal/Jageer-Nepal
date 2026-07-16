@@ -160,7 +160,7 @@ export default function Shop() {
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-gray-900">Shop</Text>
         {viewMode === 'wholesale' && cartCount > 0 && (

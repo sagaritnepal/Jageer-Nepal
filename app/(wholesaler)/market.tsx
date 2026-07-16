@@ -142,7 +142,7 @@ export default function WholesaleMarket() {
   const [showForm, setShowForm] = useState(false);
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <View className="mb-1 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-gray-900">Stock Your Shop</Text>
         <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-orange-500 px-3 py-2">

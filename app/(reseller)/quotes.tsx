@@ -68,7 +68,7 @@ export default function ResellerQuotes() {
   }, [quotes, viewMode]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <Text className="mb-6 text-2xl font-bold text-gray-900">Quotes</Text>
 
       <View className="mb-4 flex-row rounded-lg border border-gray-300 bg-white p-1">

@@ -106,7 +106,7 @@ export default function ClientRequests() {
   }, [requests, viewMode]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-6 flex-row items-center justify-between">
         <Text className="text-2xl font-bold text-gray-900">My Requests</Text>
         <Pressable

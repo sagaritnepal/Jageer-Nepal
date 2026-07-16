@@ -16,7 +16,7 @@ export default function WholesaleOrders() {
   });
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <Text className="mb-6 text-2xl font-bold text-gray-900">Bulk Orders</Text>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}

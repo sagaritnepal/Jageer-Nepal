@@ -70,7 +70,7 @@ export default function WholesaleProductDetail() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{product.name}</Text>
       <Text className="mb-6 text-sm text-gray-500">Minimum order quantity: {product.min_order_qty} units</Text>
 

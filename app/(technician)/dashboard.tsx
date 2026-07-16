@@ -28,7 +28,7 @@ export default function TechnicianDashboard() {
   }, [reviews]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <Text className="mb-1 text-2xl font-bold text-gray-900">
         Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
       </Text>

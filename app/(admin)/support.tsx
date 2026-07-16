@@ -13,7 +13,7 @@ export default function AdminSupport() {
   const profileMap = useMemo(() => new Map((profiles ?? []).map((p) => [p.id, p])), [profiles]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-16">
+    <View className="flex-1 bg-gray-50 px-6 pt-4">
       <Text className="mb-6 text-2xl font-bold text-gray-900">Support Tickets</Text>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
