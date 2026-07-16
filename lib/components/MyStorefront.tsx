@@ -22,8 +22,8 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
   const outOfStock = item.stock_level <= 0;
   const detailHref = item.catalog_id ? `${basePath}/catalog/${item.catalog_id}` : null;
 
-  const card = (
-    <View className="mb-4 w-[48%] rounded-xl border border-gray-200 bg-white p-3">
+  const content = (
+    <>
       <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
         {item.image_url ? (
           <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
@@ -53,12 +53,18 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
         <Text className="text-xs text-gray-400">{outOfStock ? 'Restock to sell' : `${item.stock_level} in stock`}</Text>
         {detailHref && <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />}
       </View>
-    </View>
+    </>
   );
 
-  if (!detailHref) return card;
-
-  return <Pressable onPress={() => router.push(detailHref)}>{card}</Pressable>;
+  // The width class must stay on this outer View no matter what - nesting it
+  // inside a conditional Pressable instead (as before) left Pressable as the
+  // flex-wrap item with no width of its own, which broke the 2-column grid
+  // for every tappable card.
+  return (
+    <View className="mb-4 w-[48%] rounded-xl border border-gray-200 bg-white p-3">
+      {detailHref ? <Pressable onPress={() => router.push(detailHref)}>{content}</Pressable> : content}
+    </View>
+  );
 }
 
 export function MyStorefront({
