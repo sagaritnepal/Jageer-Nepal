@@ -84,7 +84,10 @@ export function MyStorefront({
     enabled: !!userId,
   });
 
-  const listed = useMemo(() => products ?? [], [products]);
+  // A row with no price was never actually priced for sale (e.g. "Add" was
+  // tapped without setting a price/qty) - it isn't a real listing yet, so
+  // don't show it as one.
+  const listed = useMemo(() => (products ?? []).filter((p) => Number(p.price) > 0), [products]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
