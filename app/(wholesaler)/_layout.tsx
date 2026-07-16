@@ -9,7 +9,7 @@ export default function WholesalerLayout() {
     <RoleGuard allow={['wholesaler']}>
       <Tabs
         screenOptions={{
-          headerTintColor: ROLE_ACCENT.wholesaler,
+          headerShown: false,
           tabBarActiveTintColor: ROLE_ACCENT.wholesaler,
         }}
       >

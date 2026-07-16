@@ -7,7 +7,7 @@ import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 export default function AdminLayout() {
   return (
     <RoleGuard allow={['admin']}>
-      <Tabs screenOptions={{ headerTintColor: ROLE_ACCENT.admin, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
+      <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
         <Tabs.Screen
           name="dashboard"
           options={{ title: 'Overview', tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} /> }}

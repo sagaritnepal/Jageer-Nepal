@@ -9,7 +9,7 @@ export default function TechnicianLayout() {
     <RoleGuard allow={['technician']}>
       <Tabs
         screenOptions={{
-          headerTintColor: ROLE_ACCENT.technician,
+          headerShown: false,
           tabBarActiveTintColor: ROLE_ACCENT.technician,
         }}
       >

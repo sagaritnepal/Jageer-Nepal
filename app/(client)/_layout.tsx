@@ -7,7 +7,7 @@ import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 export default function ClientLayout() {
   return (
     <RoleGuard allow={['client']}>
-      <Tabs screenOptions={{ headerTintColor: ROLE_ACCENT.client, tabBarActiveTintColor: ROLE_ACCENT.client }}>
+      <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: ROLE_ACCENT.client }}>
         <Tabs.Screen
           name="dashboard"
           options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} /> }}

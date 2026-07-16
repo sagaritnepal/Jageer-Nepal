@@ -8,7 +8,7 @@ export default function ResellerLayout() {
   return (
     <RoleGuard allow={['reseller']}>
       <Tabs
-        screenOptions={{ headerTintColor: ROLE_ACCENT.reseller, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
+        screenOptions={{ headerShown: false, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
       >
         <Tabs.Screen
           name="dashboard"
