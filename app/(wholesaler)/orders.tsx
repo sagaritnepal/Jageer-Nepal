@@ -1,8 +1,9 @@
 // app/(wholesaler)/orders.tsx
-import { View, Text, FlatList, Pressable } from 'react-native';
-import { router } from 'expo-router';
+import { useMemo } from 'react';
+import { View, Text, FlatList } from 'react-native';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { OrderCard } from '../../lib/components/OrderCard';
 
 export default function WholesaleOrders() {
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -14,6 +15,9 @@ export default function WholesaleOrders() {
     orderBy: { column: 'created_at', ascending: false },
     enabled: !!userId,
   });
+  const { data: products } = useSupabaseQuery('products', {});
+
+  const productMap = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
@@ -25,15 +29,11 @@ export default function WholesaleOrders() {
       <FlatList
         data={orders}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => router.push(`/(wholesaler)/order/${item.id}`)}
-            className="mb-3 rounded-lg border border-gray-200 bg-white p-4"
-          >
-            <Text className="font-semibold text-gray-900">NPR {Number(item.total_amount).toLocaleString()}</Text>
-            <Text className="mt-1 text-sm capitalize text-[#7C3AED]">{item.status}</Text>
-          </Pressable>
-        )}
+        renderItem={({ item }) =>
+          userId ? (
+            <OrderCard order={item} productMap={productMap} viewerId={userId} basePath="/(wholesaler)" />
+          ) : null
+        }
       />
     </View>
   );

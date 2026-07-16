@@ -3,22 +3,10 @@ import { useMemo } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
-import { useSupabaseRow, useSupabaseQuery, useSupabaseUpdate } from '../hooks/useSupabase';
+import { useSupabaseRow, useSupabaseQuery } from '../hooks/useSupabase';
+import { useAdvanceOrder } from '../hooks/useAdvanceOrder';
 import { ChatThread } from './ChatThread';
-import { showAlert, getErrorMessage } from '../utils/alert';
-import type { OrderStatus } from '../../types/database.types';
-
-const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
-  pending: 'confirmed',
-  confirmed: 'shipped',
-  shipped: 'delivered',
-};
-
-const STATUS_ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
-  pending: 'Confirm order',
-  confirmed: 'Mark shipped',
-  shipped: 'Mark delivered',
-};
+import { NEXT_STATUS, STATUS_ACTION_LABEL } from '../utils/orderStatus';
 
 export function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,8 +20,7 @@ export function OrderDetailScreen() {
   const { data: products } = useSupabaseQuery('products', {});
   const { data: buyer } = useSupabaseRow('profiles', order?.buyer_id);
 
-  const updateOrder = useSupabaseUpdate('orders');
-  const updateProduct = useSupabaseUpdate('products');
+  const { advance, isBusy } = useAdvanceOrder();
 
   const productMap = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
 
@@ -48,31 +35,8 @@ export function OrderDetailScreen() {
   const nextStatus = NEXT_STATUS[order.status];
   const isOwner = order.seller_id === userId;
 
-  async function handleAdvance() {
-    if (!nextStatus || !order) return;
-    try {
-      // Confirming is the seller's commitment, so stock is decremented here -
-      // the seller owns the product rows and is the one allowed to write to them.
-      if (order.status === 'pending' && orderItems) {
-        for (const item of orderItems) {
-          const product = productMap.get(item.product_id);
-          if (!product) continue;
-          await updateProduct.mutateAsync({
-            id: product.id,
-            values: { stock_level: Math.max(0, product.stock_level - item.quantity) },
-          });
-        }
-      }
-      await updateOrder.mutateAsync({ id: order.id, values: { status: nextStatus } });
-    } catch (err) {
-      showAlert('Could not update order', getErrorMessage(err));
-    }
-  }
-
-  const isBusy = updateOrder.isPending || updateProduct.isPending;
-
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-16" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">Order #{order.id.slice(0, 8)}</Text>
       <Text className="mb-6 text-gray-500">Buyer: {buyer?.full_name ?? 'Unknown'}</Text>
 
@@ -100,7 +64,7 @@ export function OrderDetailScreen() {
 
       {isOwner && nextStatus && (
         <Pressable
-          onPress={handleAdvance}
+          onPress={() => advance(order, orderItems, productMap)}
           disabled={isBusy}
           className="mb-4 items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
         >
