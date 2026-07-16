@@ -87,6 +87,9 @@ export interface CatalogProduct {
   category: string | null;
   image_url: string | null;
   is_active: boolean;
+  submitted_by: string | null;
+  pending_price: number | null;
+  pending_stock: number | null;
   created_at: string;
   updated_at: string;
 }

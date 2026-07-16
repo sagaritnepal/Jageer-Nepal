@@ -2,43 +2,18 @@
 import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
-import { supabase } from '../../lib/supabase';
 import { SearchSuggestions } from '../../lib/components/SearchSuggestions';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
+import { pickAndUploadCatalogImage } from '../../lib/utils/catalogImage';
 import type { CatalogProduct } from '../../types/database.types';
-
-async function pickAndUploadCatalogImage(): Promise<string | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
-    showAlert('Photo access needed', 'Allow photo library access to upload a product photo.');
-    return null;
-  }
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    quality: 0.7,
-    allowsEditing: true,
-    aspect: [1, 1],
-  });
-  if (result.canceled || !result.assets[0]) return null;
-
-  const arraybuffer = await fetch(result.assets[0].uri).then((res) => res.arrayBuffer());
-  const path = `catalog/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-  const { error: uploadError } = await supabase.storage
-    .from('catalog-images')
-    .upload(path, arraybuffer, { contentType: 'image/jpeg', upsert: true });
-  if (uploadError) throw uploadError;
-
-  const { data } = supabase.storage.from('catalog-images').getPublicUrl(path);
-  return `${data.publicUrl}?t=${Date.now()}`;
-}
 
 function CatalogRow({ item }: { item: CatalogProduct }) {
   const updateItem = useSupabaseUpdate('catalog_products');
   const deleteItem = useSupabaseDelete('catalog_products');
   const [uploading, setUploading] = useState(false);
+  const isPendingSubmission = !item.is_active && !!item.submitted_by;
 
   async function handleReplacePhoto() {
     setUploading(true);
@@ -88,9 +63,21 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
           )}
         </Pressable>
         <View className="flex-1">
-          <Text className="font-semibold text-gray-900">{item.name}</Text>
+          <View className="flex-row items-center gap-1.5">
+            <Text className="font-semibold text-gray-900">{item.name}</Text>
+            {isPendingSubmission && (
+              <View className="rounded-full bg-amber-100 px-2 py-0.5">
+                <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Pending review</Text>
+              </View>
+            )}
+          </View>
           {item.category && <Text className="mt-0.5 text-xs text-orange-600">{item.category}</Text>}
           {item.description && <Text className="mt-0.5 text-xs text-gray-400">{item.description}</Text>}
+          {isPendingSubmission && item.pending_price != null && (
+            <Text className="mt-0.5 text-xs text-gray-400">
+              Submitted at NPR {Number(item.pending_price).toLocaleString()} · {item.pending_stock ?? 0} units
+            </Text>
+          )}
         </View>
       </View>
       <View className="flex-row items-center gap-2">
@@ -99,7 +86,9 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
           disabled={updateItem.isPending}
           className="rounded-lg border border-gray-300 px-3 py-1.5"
         >
-          <Text className="text-xs font-semibold text-gray-700">{item.is_active ? 'Hide' : 'Show'}</Text>
+          <Text className="text-xs font-semibold text-gray-700">
+            {item.is_active ? 'Hide' : isPendingSubmission ? 'Approve' : 'Show'}
+          </Text>
         </Pressable>
         <Pressable onPress={confirmRemove} className="rounded-lg bg-red-50 px-3 py-1.5">
           <Text className="text-xs font-semibold text-red-700">Remove</Text>
