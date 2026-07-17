@@ -82,7 +82,7 @@ export default function BuyFromWholesaler() {
 
   const { data: products, isLoading } = useSupabaseQuery('products', {});
   const marketplaceProducts = useMemo(
-    () => (products ?? []).filter((p) => p.seller_role === 'wholesaler'),
+    () => (products ?? []).filter((p) => p.seller_role === 'wholesaler' && p.is_listed !== false),
     [products]
   );
 

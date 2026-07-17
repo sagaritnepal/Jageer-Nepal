@@ -1,10 +1,10 @@
 // lib/components/CatalogStockingList.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
-import { useSupabaseQuery, useSupabaseUpsert } from '../hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseUpsert, useSupabaseUpdate } from '../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { filterBySearch } from '../utils/search';
 import { SearchSuggestions } from './SearchSuggestions';
@@ -26,6 +26,7 @@ function StockRow({
   basePath: string;
 }) {
   const upsertProduct = useSupabaseUpsert('products', 'seller_id,catalog_id');
+  const updateProduct = useSupabaseUpdate('products');
   const [qty, setQty] = useState(existing?.stock_level ?? 0);
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
   const [saving, setSaving] = useState(false);
@@ -36,6 +37,15 @@ function StockRow({
   const purchasePrice = existing?.purchase_price ?? null;
   const atPurchasedCap = capToPurchasedStock && qty >= purchasedStock;
   const nothingPurchased = capToPurchasedStock && purchasedStock <= 0;
+
+  async function handleToggleListed(nextValue: boolean) {
+    if (!existing) return;
+    try {
+      await updateProduct.mutateAsync({ id: existing.id, values: { is_listed: nextValue } });
+    } catch (err) {
+      showAlert('Could not update availability', getErrorMessage(err));
+    }
+  }
 
   async function handleSave() {
     if (capToPurchasedStock && qty > purchasedStock) {
@@ -100,6 +110,19 @@ function StockRow({
         </Text>
       )}
 
+      {isStocked && (
+        <View className="mt-3 flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+          <Text className="text-xs font-medium text-gray-600">Available on market</Text>
+          <Switch
+            value={existing?.is_listed ?? true}
+            onValueChange={handleToggleListed}
+            disabled={updateProduct.isPending}
+            trackColor={{ false: '#D1D5DB', true: '#FDBA74' }}
+            thumbColor={(existing?.is_listed ?? true) ? '#F97316' : '#F3F4F6'}
+          />
+        </View>
+      )}
+
       <View className="mt-3 flex-row items-center gap-2">
         <View className="flex-row items-center rounded-lg border border-gray-300">
           <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-3 py-2">
@@ -142,10 +165,12 @@ function StockRow({
 export function CatalogStockingList({
   priceLabel,
   capToPurchasedStock = false,
+  onlyStocked = false,
   basePath,
 }: {
   priceLabel: string;
   capToPurchasedStock?: boolean;
+  onlyStocked?: boolean;
   basePath: string;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -169,7 +194,11 @@ export function CatalogStockingList({
     return map;
   }, [myProducts]);
 
-  const filtered = useMemo(() => filterBySearch(catalog ?? [], search), [catalog, search]);
+  const scoped = useMemo(
+    () => (onlyStocked ? (catalog ?? []).filter((item) => myProductByCatalogId.has(item.id)) : catalog ?? []),
+    [catalog, onlyStocked, myProductByCatalogId]
+  );
+  const filtered = useMemo(() => filterBySearch(scoped, search), [scoped, search]);
   const suggestions = useMemo(() => (search.trim() ? filtered.slice(0, 5) : []), [filtered, search]);
 
   const isLoading = loadingCatalog || loadingMine;
@@ -203,10 +232,15 @@ export function CatalogStockingList({
       </View>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && (catalog?.length ?? 0) === 0 && (
+      {!isLoading && onlyStocked && scoped.length === 0 && (
+        <Text className="text-gray-500">
+          Nothing purchased yet — buy stock from a wholesaler and it'll show up here.
+        </Text>
+      )}
+      {!isLoading && !onlyStocked && (catalog?.length ?? 0) === 0 && (
         <Text className="text-gray-500">No catalog items available yet — check back soon.</Text>
       )}
-      {!isLoading && (catalog?.length ?? 0) > 0 && filtered.length === 0 && (
+      {!isLoading && scoped.length > 0 && filtered.length === 0 && (
         <Text className="text-gray-500">No items match your search.</Text>
       )}
       {filtered.map((item) => (

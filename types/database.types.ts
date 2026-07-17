@@ -76,6 +76,7 @@ export interface Product {
   seller_role: UserRole;
   purchased_stock: number;
   purchase_price: number | null;
+  is_listed: boolean;
   created_at: string;
   updated_at: string;
 }

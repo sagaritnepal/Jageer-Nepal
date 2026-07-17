@@ -11,10 +11,12 @@ type ViewMode = 'products' | 'storefront';
 function MyListings() {
   return (
     <>
+      <Text className="mb-1 text-[15px] font-bold text-gray-900">My Inventory</Text>
       <Text className="mb-4 text-sm text-gray-500">
-        List only what you've bought from Wholesale — the quantity you can set is capped by your purchases there.
+        Only items you've bought from Wholesale show up here — the quantity you can set is capped by your
+        purchases. Flip a switch to pull something off the market without losing your stock count.
       </Text>
-      <CatalogStockingList priceLabel="Your price to customers" capToPurchasedStock basePath="/(reseller)" />
+      <CatalogStockingList priceLabel="Your price to customers" capToPurchasedStock onlyStocked basePath="/(reseller)" />
     </>
   );
 }
@@ -43,7 +45,7 @@ export default function Shop() {
           className={`flex-1 items-center rounded-md py-2 ${viewMode === 'products' ? 'bg-orange-500' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'products' ? 'text-white' : 'text-gray-600'}`}>
-            My Inventory
+            Products
           </Text>
         </Pressable>
         <Pressable
@@ -62,8 +64,8 @@ export default function Shop() {
         ) : (
           <MyStorefront
             sellerRole="reseller"
-            note="This is exactly what customers see when they browse your shop in the Marketplace — including anything out of stock. Go to My Inventory to change what's listed here."
-            emptyText="Nothing listed yet — add items from My Inventory to appear here."
+            note="This is exactly what customers see when they browse your shop in the Marketplace — including anything out of stock. Go to Products to change what's listed here."
+            emptyText="Nothing listed yet — add items from Products to appear here."
             basePath="/(reseller)"
           />
         )}

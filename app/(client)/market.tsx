@@ -64,7 +64,10 @@ export default function ClientMarket() {
     filters: { seller_role: 'reseller' },
   });
 
-  const inStockProducts = useMemo(() => (products ?? []).filter((p) => p.stock_level > 0), [products]);
+  const inStockProducts = useMemo(
+    () => (products ?? []).filter((p) => p.stock_level > 0 && p.is_listed !== false),
+    [products]
+  );
 
   const categories = useMemo(() => {
     const set = new Set<string>();
