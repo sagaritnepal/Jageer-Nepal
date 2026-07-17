@@ -38,6 +38,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Service Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'New Request' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service Details' }} />
+        <Tabs.Screen name="wholesale" options={{ href: null, title: 'Buy From Wholesaler' }} />
         <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
         <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Product' }} />
