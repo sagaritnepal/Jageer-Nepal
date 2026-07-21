@@ -16,7 +16,7 @@ export function PortalHeaderBar({ title }: { title?: string }) {
   const profile = useAuthStore((state) => state.profile);
 
   return (
-    <View className="flex-row items-center justify-between gap-2 border-b border-gray-100 bg-white px-6 pb-2.5 pt-10">
+    <View className="flex-row items-center justify-between gap-2 border-b border-gray-100 bg-white px-6 pb-2.5 pt-4">
       <Text className="flex-1 text-xl font-bold text-gray-900" numberOfLines={1}>
         {title ?? ''}
       </Text>
