@@ -7,7 +7,7 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
-import type { ServiceCategory } from '../../types/database.types';
+import type { Profile, ServiceCategory } from '../../types/database.types';
 
 const LOW_STOCK_THRESHOLD = 5;
 
@@ -39,9 +39,8 @@ export default function ResellerDashboard() {
   }, [categories, search]);
 
   const { data: technicians } = useSupabaseQuery('profiles', {
-    filters: { role: 'technician', is_active: true },
+    filters: { role: 'technician' },
   });
-  const nearbyTechnicians = technicians?.slice(0, 3) ?? [];
 
   const { data: products } = useSupabaseQuery('products', {
     filters: userId ? { seller_id: userId } : {},
@@ -55,6 +54,24 @@ export default function ResellerDashboard() {
     filters: userId ? { reseller_id: userId } : {},
     enabled: !!userId,
   });
+
+  const recentlyHiredTechnicians = useMemo(() => {
+    const statsByTech = new Map<string, { lastHired: string; count: number }>();
+    (myRequests ?? []).forEach((r) => {
+      if (!r.technician_id) return;
+      const existing = statsByTech.get(r.technician_id);
+      statsByTech.set(r.technician_id, {
+        lastHired: existing && existing.lastHired > r.created_at ? existing.lastHired : r.created_at,
+        count: (existing?.count ?? 0) + 1,
+      });
+    });
+    const techMap = new Map((technicians ?? []).map((t) => [t.id, t]));
+    return Array.from(statsByTech.entries())
+      .map(([techId, stats]) => ({ tech: techMap.get(techId), ...stats }))
+      .filter((entry): entry is { tech: Profile; lastHired: string; count: number } => !!entry.tech)
+      .sort((a, b) => new Date(b.lastHired).getTime() - new Date(a.lastHired).getTime())
+      .slice(0, 3);
+  }, [myRequests, technicians]);
 
   const appCustomerCount = useMemo(
     () => (myRequests ?? []).filter((r) => r.origin === 'app').length,
@@ -115,10 +132,10 @@ export default function ResellerDashboard() {
           <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
           <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} />
 
-          {nearbyTechnicians.length > 0 && (
+          {recentlyHiredTechnicians.length > 0 && (
             <>
-              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Nearby technicians</Text>
-              {nearbyTechnicians.map((tech) => (
+              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Recently Hired Technicians</Text>
+              {recentlyHiredTechnicians.map(({ tech, count }) => (
                 <View
                   key={tech.id}
                   className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
@@ -127,9 +144,13 @@ export default function ResellerDashboard() {
                     <Text className="text-xs font-bold text-white">{initialsOf(tech.full_name)}</Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="text-[13.5px] font-bold text-gray-900">{tech.full_name ?? 'Technician'}</Text>
+                    <Pressable onPress={() => router.push(`/(reseller)/technician/${tech.id}`)}>
+                      <Text className="text-[13.5px] font-bold text-teal-700 underline">
+                        {tech.full_name ?? 'Technician'}
+                      </Text>
+                    </Pressable>
                     <Text className="mt-0.5 text-[11.5px] text-gray-400">
-                      {tech.city ?? 'Nepal'} · Available now
+                      {tech.city ?? 'Nepal'} · {count} job{count === 1 ? '' : 's'} together
                     </Text>
                   </View>
                 </View>
