@@ -60,7 +60,6 @@ export default function AdminProducts() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">All Listings</Text>
       <Text className="mb-4 text-sm text-gray-500">
         Every product currently stocked by a wholesaler or reseller. New listings are self-service — manage what can
         be stocked from the Catalog tab.

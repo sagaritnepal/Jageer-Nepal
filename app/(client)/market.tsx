@@ -133,8 +133,7 @@ export default function ClientMarket() {
       contentContainerStyle={{ paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-gray-900">Marketplace</Text>
+      <View className="mb-4 flex-row items-center justify-end">
         <View className="flex-row items-center gap-2">
           <Pressable onPress={() => router.push('/(client)/quotes')}>
             <Text className="text-sm font-semibold text-orange-600">My Quotes</Text>

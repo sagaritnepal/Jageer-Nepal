@@ -206,8 +206,6 @@ export default function ResellerRequestQueue() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <Text className="mb-4 text-2xl font-bold text-gray-900">Reseller Console</Text>
-
       <View className="mb-4 flex-row rounded-full bg-gray-100 p-1">
         <Pressable
           onPress={() => setViewMode('incoming')}

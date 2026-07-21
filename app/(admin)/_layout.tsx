@@ -8,18 +8,30 @@ import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 export default function AdminLayout() {
   return (
     <RoleGuard allow={['admin']}>
-      <Tabs screenOptions={{ header: () => <PortalHeaderBar />, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
+      <Tabs screenOptions={{ header: ({ options }) => <PortalHeaderBar title={options.title} />, tabBarActiveTintColor: ROLE_ACCENT.admin }}>
         <Tabs.Screen
           name="dashboard"
-          options={{ title: 'Overview', tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} /> }}
+          options={{
+            title: 'Platform Overview',
+            tabBarLabel: 'Overview',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="requests"
-          options={{ title: 'Requests', tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} /> }}
+          options={{
+            title: 'Service Requests',
+            tabBarLabel: 'Requests',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="reports"
-          options={{ title: 'Reports', tabBarIcon: ({ color, focused }) => <TabIcon name="bar-chart" color={color} focused={focused} /> }}
+          options={{
+            title: 'Financial & Platform Reports',
+            tabBarLabel: 'Reports',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="bar-chart" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="users"
@@ -27,19 +39,35 @@ export default function AdminLayout() {
         />
         <Tabs.Screen
           name="categories"
-          options={{ title: 'Categories', tabBarIcon: ({ color, focused }) => <TabIcon name="pricetag" color={color} focused={focused} /> }}
+          options={{
+            title: 'Service Categories',
+            tabBarLabel: 'Categories',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="pricetag" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="catalog"
-          options={{ title: 'Catalog', tabBarIcon: ({ color, focused }) => <TabIcon name="albums" color={color} focused={focused} /> }}
+          options={{
+            title: 'Product Catalog',
+            tabBarLabel: 'Catalog',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="albums" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="products"
-          options={{ title: 'Listings', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+          options={{
+            title: 'All Listings',
+            tabBarLabel: 'Listings',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="support"
-          options={{ title: 'Support', tabBarIcon: ({ color, focused }) => <TabIcon name="headset" color={color} focused={focused} /> }}
+          options={{
+            title: 'Support Tickets',
+            tabBarLabel: 'Support',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="headset" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="profile"

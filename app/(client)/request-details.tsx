@@ -131,7 +131,6 @@ export default function RequestDetails() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">Service details</Text>
       <View className="mb-6 flex-row items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
         <Text className="text-sm font-semibold text-blue-700">
           {category} · {action}

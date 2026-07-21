@@ -143,8 +143,7 @@ export default function WholesaleMarket() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="mb-1 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-gray-900">Stock Your Shop</Text>
+      <View className="mb-1 flex-row items-center justify-end">
         <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-orange-500 px-3 py-2">
           <Text className="text-xs font-semibold text-white">{showForm ? 'Cancel' : '+ Create Product'}</Text>
         </Pressable>

@@ -20,8 +20,6 @@ export default function ResellerOrders() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <Text className="mb-6 text-2xl font-bold text-gray-900">Orders</Text>
-
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && myOrders?.length === 0 && <Text className="text-gray-500">No orders yet.</Text>}
 

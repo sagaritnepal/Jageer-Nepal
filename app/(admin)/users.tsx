@@ -113,8 +113,6 @@ export default function AdminUsers() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <Text className="mb-4 text-2xl font-bold text-gray-900">Users</Text>
-
       <View className="mb-4 flex-row flex-wrap gap-2">
         {ROLE_FILTERS.map((role) => (
           <Pressable

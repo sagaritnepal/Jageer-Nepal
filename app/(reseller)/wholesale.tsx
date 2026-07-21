@@ -146,17 +146,16 @@ export default function BuyFromWholesaler() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text className="text-2xl font-bold text-gray-900">Buy From Wholesaler</Text>
-        {cartCount > 0 && (
+      {cartCount > 0 && (
+        <View className="mb-4 flex-row items-center justify-end">
           <Pressable
             onPress={() => router.push('/(reseller)/checkout')}
             className="rounded-full bg-orange-500 px-4 py-2"
           >
             <Text className="text-sm font-semibold text-white">Cart ({cartCount})</Text>
           </Pressable>
-        )}
-      </View>
+        </View>
+      )}
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View className="relative z-10 mb-3">

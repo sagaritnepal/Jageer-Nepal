@@ -9,7 +9,7 @@ export default function ResellerLayout() {
   return (
     <RoleGuard allow={['reseller']}>
       <Tabs
-        screenOptions={{ header: () => <PortalHeaderBar />, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
+        screenOptions={{ header: ({ options }) => <PortalHeaderBar title={options.title} />, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
       >
         <Tabs.Screen
           name="dashboard"
@@ -17,7 +17,11 @@ export default function ResellerLayout() {
         />
         <Tabs.Screen
           name="requests"
-          options={{ title: 'Requests', tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} /> }}
+          options={{
+            title: 'Reseller Console',
+            tabBarLabel: 'Requests',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="shop"
@@ -36,8 +40,8 @@ export default function ResellerLayout() {
           options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
         />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Service Request' }} />
-        <Tabs.Screen name="new-request" options={{ href: null, title: 'New Request' }} />
-        <Tabs.Screen name="request-details" options={{ href: null, title: 'Service Details' }} />
+        <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a technician' }} />
+        <Tabs.Screen name="request-details" options={{ href: null, title: 'Service details' }} />
         <Tabs.Screen name="wholesale" options={{ href: null, title: 'Buy From Wholesaler' }} />
         <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />

@@ -53,8 +53,6 @@ export default function AdminReports() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4">
-      <Text className="mb-6 text-2xl font-bold text-gray-900">Financial & Platform Reports</Text>
-
       <Text className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Revenue</Text>
       <View className="mb-2 flex-row flex-wrap justify-between">
         <StatCard label="Total order revenue (NPR)" value={totalRevenue.toLocaleString()} />

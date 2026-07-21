@@ -125,8 +125,6 @@ export default function AdminRequests() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <Text className="mb-6 text-2xl font-bold text-gray-900">Service Requests</Text>
-
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && requests?.length === 0 && <Text className="text-gray-500">No requests yet.</Text>}
 

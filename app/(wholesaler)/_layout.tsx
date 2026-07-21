@@ -10,13 +10,17 @@ export default function WholesalerLayout() {
     <RoleGuard allow={['wholesaler']}>
       <Tabs
         screenOptions={{
-          header: () => <PortalHeaderBar />,
+          header: ({ options }) => <PortalHeaderBar title={options.title} />,
           tabBarActiveTintColor: ROLE_ACCENT.wholesaler,
         }}
       >
         <Tabs.Screen
           name="market"
-          options={{ title: 'Products', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+          options={{
+            title: 'Stock Your Shop',
+            tabBarLabel: 'Products',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="marketplace"
@@ -24,7 +28,11 @@ export default function WholesalerLayout() {
         />
         <Tabs.Screen
           name="orders"
-          options={{ title: 'Orders', tabBarIcon: ({ color, focused }) => <TabIcon name="time" color={color} focused={focused} /> }}
+          options={{
+            title: 'Bulk Orders',
+            tabBarLabel: 'Orders',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="time" color={color} focused={focused} />,
+          }}
         />
         <Tabs.Screen
           name="profile"

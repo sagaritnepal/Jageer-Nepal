@@ -48,8 +48,6 @@ export default function TechnicianEarnings() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <Text className="mb-6 text-2xl font-bold text-gray-900">Earnings</Text>
-
       <View className="mb-6 rounded-2xl bg-[#0D9488] p-5">
         <Text className="text-[12.5px] font-semibold text-white/85">This week</Text>
         <Text className="mt-1 text-[28px] font-extrabold text-white">

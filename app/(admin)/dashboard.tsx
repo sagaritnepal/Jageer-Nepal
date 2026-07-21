@@ -37,8 +37,6 @@ export default function AdminDashboard() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <Text className="mb-8 text-2xl font-bold text-gray-900">Platform Overview</Text>
-
       <View className="mb-4 flex-row gap-3">
         <View className="flex-1 rounded-xl bg-white p-5">
           <Text className="text-2xl font-bold text-blue-700">NPR {platformRevenue.toLocaleString()}</Text>

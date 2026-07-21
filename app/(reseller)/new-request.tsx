@@ -23,8 +23,6 @@ export default function ResellerNewRequest() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
-      <Text className="mb-6 text-2xl font-bold text-gray-900">Request a technician</Text>
-
       <Text className="mb-2 text-sm font-medium text-gray-700">What do you need help with?</Text>
       {loadingCategories && <Text className="mb-4 text-gray-500">Loading categories…</Text>}
       <View className="mb-6 flex-row flex-wrap justify-between">
