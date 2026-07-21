@@ -87,27 +87,29 @@ function StockRow({
 
   return (
     <View className="mb-2 rounded-xl border border-gray-200 bg-white p-2.5">
-      <Pressable
-        onPress={() => router.push(`${basePath}/catalog/${item.id}`)}
-        className="flex-row items-center gap-2.5"
-      >
-        <View className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
-          ) : (
-            <Text className="text-base">📦</Text>
-          )}
-        </View>
-        <View className="flex-1">
-          <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
-            {item.category && <Text className="text-orange-600">{item.category}</Text>}
-            {item.category && metaText && '  ·  '}
-            {metaText}
-          </Text>
-        </View>
+      <View className="flex-row items-center gap-2.5">
+        <Pressable
+          onPress={() => router.push(`${basePath}/catalog/${item.id}`)}
+          className="flex-1 flex-row items-center gap-2.5"
+        >
+          <View className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+            ) : (
+              <Text className="text-base">📦</Text>
+            )}
+          </View>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
+              {item.category && <Text className="text-orange-600">{item.category}</Text>}
+              {item.category && metaText && '  ·  '}
+              {metaText}
+            </Text>
+          </View>
+        </Pressable>
         {isStocked && (
           <Switch
             value={existing?.is_listed ?? true}
@@ -117,7 +119,7 @@ function StockRow({
             thumbColor={(existing?.is_listed ?? true) ? '#F97316' : '#F3F4F6'}
           />
         )}
-      </Pressable>
+      </View>
 
       <View className="mt-2 flex-row items-center gap-1.5">
         <View className="shrink-0 flex-row items-center rounded-lg border border-gray-300">

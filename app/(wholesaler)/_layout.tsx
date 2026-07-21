@@ -9,6 +9,7 @@ export default function WholesalerLayout() {
   return (
     <RoleGuard allow={['wholesaler']}>
       <Tabs
+        backBehavior="history"
         screenOptions={{
           header: ({ options }) => <PortalHeaderBar title={options.title} />,
           tabBarActiveTintColor: ROLE_ACCENT.wholesaler,

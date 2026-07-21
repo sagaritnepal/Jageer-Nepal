@@ -9,6 +9,7 @@ export default function TechnicianLayout() {
   return (
     <RoleGuard allow={['technician']}>
       <Tabs
+        backBehavior="history"
         screenOptions={{
           header: ({ options }) => <PortalHeaderBar title={options.title} />,
           tabBarActiveTintColor: ROLE_ACCENT.technician,

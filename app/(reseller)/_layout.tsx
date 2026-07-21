@@ -9,6 +9,7 @@ export default function ResellerLayout() {
   return (
     <RoleGuard allow={['reseller']}>
       <Tabs
+        backBehavior="history"
         screenOptions={{ header: ({ options }) => <PortalHeaderBar title={options.title} />, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
       >
         <Tabs.Screen
