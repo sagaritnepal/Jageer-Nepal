@@ -120,15 +120,15 @@ function StockRow({
       </Pressable>
 
       <View className="mt-2 flex-row items-center gap-1.5">
-        <View className="flex-row items-center rounded-lg border border-gray-300">
-          <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-2.5 py-1.5">
+        <View className="shrink-0 flex-row items-center rounded-lg border border-gray-300">
+          <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-2 py-1.5">
             <Text className="text-base text-gray-500">−</Text>
           </Pressable>
-          <Text className="w-8 text-center text-sm font-semibold text-gray-900">{qty}</Text>
+          <Text className="w-6 text-center text-sm font-semibold text-gray-900">{qty}</Text>
           <Pressable
             onPress={() => setQty((q) => (capToPurchasedStock ? Math.min(purchasedStock, q + 1) : q + 1))}
             disabled={atPurchasedCap}
-            className="px-2.5 py-1.5 disabled:opacity-30"
+            className="px-2 py-1.5 disabled:opacity-30"
           >
             <Text className="text-base text-gray-500">+</Text>
           </Pressable>
@@ -140,13 +140,13 @@ function StockRow({
           placeholder={priceLabel}
           keyboardType="decimal-pad"
           editable={!nothingPurchased}
-          className="flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm text-gray-900"
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
         />
 
         <Pressable
           onPress={handleSave}
           disabled={saving || !dirty || nothingPurchased}
-          className="items-center rounded-lg bg-orange-500 px-3 py-1.5 disabled:opacity-40"
+          className="shrink-0 items-center rounded-lg bg-orange-500 px-2.5 py-1.5 disabled:opacity-40"
         >
           <Text className="text-xs font-semibold text-white">{saving ? 'Saving…' : isStocked ? 'Update' : 'Add'}</Text>
         </Pressable>
