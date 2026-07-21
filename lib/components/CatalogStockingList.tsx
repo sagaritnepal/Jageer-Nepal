@@ -27,15 +27,20 @@ function StockRow({
 }) {
   const upsertProduct = useSupabaseUpsert('products', 'seller_id,catalog_id');
   const updateProduct = useSupabaseUpdate('products');
+  const purchasedStock = existing?.purchased_stock ?? 0;
+  // Resellers can't hand-pick a listing quantity - it's whatever they've
+  // actually got in stock, credited automatically from wholesale purchases.
+  // Only wholesalers (capToPurchasedStock false) set their own quantity here.
   const [qty, setQty] = useState(existing?.stock_level ?? 0);
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
   const [saving, setSaving] = useState(false);
 
   const isStocked = !!existing;
-  const dirty = qty !== (existing?.stock_level ?? 0) || price !== (existing ? String(existing.price) : '');
-  const purchasedStock = existing?.purchased_stock ?? 0;
+  const effectiveQty = capToPurchasedStock ? (existing?.stock_level ?? purchasedStock) : qty;
+  const dirty = capToPurchasedStock
+    ? price !== (existing ? String(existing.price) : '')
+    : qty !== (existing?.stock_level ?? 0) || price !== (existing ? String(existing.price) : '');
   const purchasePrice = existing?.purchase_price ?? null;
-  const atPurchasedCap = capToPurchasedStock && qty >= purchasedStock;
   const nothingPurchased = capToPurchasedStock && purchasedStock <= 0;
 
   async function handleToggleListed(nextValue: boolean) {
@@ -48,12 +53,8 @@ function StockRow({
   }
 
   async function handleSave() {
-    if (capToPurchasedStock && qty > purchasedStock) {
-      showAlert('Not enough purchased stock', `You've only bought ${purchasedStock} of this item from wholesale.`);
-      return;
-    }
     const priceNum = parseFloat(price);
-    if (qty > 0 && (Number.isNaN(priceNum) || priceNum <= 0)) {
+    if (effectiveQty > 0 && (Number.isNaN(priceNum) || priceNum <= 0)) {
       showAlert('Set a price', 'Enter a valid price before stocking this item.');
       return;
     }
@@ -67,7 +68,7 @@ function StockRow({
         category: item.category,
         image_url: item.image_url,
         price: Number.isNaN(priceNum) ? 0 : priceNum,
-        stock_level: qty,
+        stock_level: effectiveQty,
         min_order_qty: existing?.min_order_qty ?? 1,
       });
     } catch (err) {
@@ -122,19 +123,21 @@ function StockRow({
       </View>
 
       <View className="mt-2 flex-row items-center gap-1.5">
-        <View className="shrink-0 flex-row items-center rounded-lg border border-gray-300">
-          <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-2 py-1.5">
-            <Text className="text-base text-gray-500">−</Text>
-          </Pressable>
-          <Text className="w-6 text-center text-sm font-semibold text-gray-900">{qty}</Text>
-          <Pressable
-            onPress={() => setQty((q) => (capToPurchasedStock ? Math.min(purchasedStock, q + 1) : q + 1))}
-            disabled={atPurchasedCap}
-            className="px-2 py-1.5 disabled:opacity-30"
-          >
-            <Text className="text-base text-gray-500">+</Text>
-          </Pressable>
-        </View>
+        {capToPurchasedStock ? (
+          <View className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5">
+            <Text className="text-sm font-semibold text-gray-900">{effectiveQty} in stock</Text>
+          </View>
+        ) : (
+          <View className="shrink-0 flex-row items-center rounded-lg border border-gray-300">
+            <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-2 py-1.5">
+              <Text className="text-base text-gray-500">−</Text>
+            </Pressable>
+            <Text className="w-6 text-center text-sm font-semibold text-gray-900">{qty}</Text>
+            <Pressable onPress={() => setQty((q) => q + 1)} className="px-2 py-1.5">
+              <Text className="text-base text-gray-500">+</Text>
+            </Pressable>
+          </View>
+        )}
 
         <TextInput
           value={price}
