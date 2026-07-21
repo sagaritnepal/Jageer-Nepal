@@ -77,42 +77,38 @@ function StockRow({
     }
   }
 
+  const metaText = capToPurchasedStock
+    ? purchasedStock > 0
+      ? `${purchasedStock} purchased${purchasePrice != null ? ` @ NPR ${Number(purchasePrice).toLocaleString()}` : ''}`
+      : 'Buy from Wholesale first'
+    : isStocked
+      ? 'Stocked'
+      : null;
+
   return (
-    <View className="mb-2.5 rounded-xl border border-gray-200 bg-white p-3.5">
-      <Pressable onPress={() => router.push(`${basePath}/catalog/${item.id}`)}>
-        <View className="flex-row items-center gap-3">
-          <View className="h-11 w-11 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
-            {item.image_url ? (
-              <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
-            ) : (
-              <Text className="text-lg">📦</Text>
-            )}
-          </View>
-          <View className="flex-1">
-            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-              {item.name}
-            </Text>
-            {item.category && <Text className="mt-0.5 text-[11px] text-orange-600">{item.category}</Text>}
-            {isStocked && <Text className="mt-0.5 text-[11px] text-gray-400">Currently stocked</Text>}
-          </View>
+    <View className="mb-2 rounded-xl border border-gray-200 bg-white p-2.5">
+      <Pressable
+        onPress={() => router.push(`${basePath}/catalog/${item.id}`)}
+        className="flex-row items-center gap-2.5"
+      >
+        <View className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+          ) : (
+            <Text className="text-base">📦</Text>
+          )}
         </View>
-
-        {item.description && <Text className="mt-2 text-[11px] leading-4 text-gray-500">{item.description}</Text>}
-      </Pressable>
-
-      {capToPurchasedStock && (
-        <Text className="mt-2 text-[11px] font-medium text-gray-500">
-          {purchasedStock > 0
-            ? `Purchased from wholesale: ${purchasedStock} units${
-                purchasePrice != null ? ` @ NPR ${Number(purchasePrice).toLocaleString()}` : ''
-              }`
-            : 'Buy this from Wholesale first to list it here.'}
-        </Text>
-      )}
-
-      {isStocked && (
-        <View className="mt-3 flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-          <Text className="text-xs font-medium text-gray-600">Available on market</Text>
+        <View className="flex-1">
+          <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
+            {item.category && <Text className="text-orange-600">{item.category}</Text>}
+            {item.category && metaText && '  ·  '}
+            {metaText}
+          </Text>
+        </View>
+        {isStocked && (
           <Switch
             value={existing?.is_listed ?? true}
             onValueChange={handleToggleListed}
@@ -120,40 +116,37 @@ function StockRow({
             trackColor={{ false: '#D1D5DB', true: '#FDBA74' }}
             thumbColor={(existing?.is_listed ?? true) ? '#F97316' : '#F3F4F6'}
           />
-        </View>
-      )}
+        )}
+      </Pressable>
 
-      <View className="mt-3 flex-row items-center gap-2">
+      <View className="mt-2 flex-row items-center gap-1.5">
         <View className="flex-row items-center rounded-lg border border-gray-300">
-          <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-3 py-2">
-            <Text className="text-lg text-gray-500">−</Text>
+          <Pressable onPress={() => setQty((q) => Math.max(0, q - 1))} className="px-2.5 py-1.5">
+            <Text className="text-base text-gray-500">−</Text>
           </Pressable>
-          <Text className="w-10 text-center text-sm font-semibold text-gray-900">{qty}</Text>
+          <Text className="w-8 text-center text-sm font-semibold text-gray-900">{qty}</Text>
           <Pressable
             onPress={() => setQty((q) => (capToPurchasedStock ? Math.min(purchasedStock, q + 1) : q + 1))}
             disabled={atPurchasedCap}
-            className="px-3 py-2 disabled:opacity-30"
+            className="px-2.5 py-1.5 disabled:opacity-30"
           >
-            <Text className="text-lg text-gray-500">+</Text>
+            <Text className="text-base text-gray-500">+</Text>
           </Pressable>
         </View>
 
-        <View className="flex-1">
-          <Text className="mb-0.5 text-[10px] text-gray-400">{priceLabel} (NPR)</Text>
-          <TextInput
-            value={price}
-            onChangeText={setPrice}
-            placeholder="0.00"
-            keyboardType="decimal-pad"
-            editable={!nothingPurchased}
-            className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm text-gray-900"
-          />
-        </View>
+        <TextInput
+          value={price}
+          onChangeText={setPrice}
+          placeholder={priceLabel}
+          keyboardType="decimal-pad"
+          editable={!nothingPurchased}
+          className="flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm text-gray-900"
+        />
 
         <Pressable
           onPress={handleSave}
           disabled={saving || !dirty || nothingPurchased}
-          className="items-center rounded-lg bg-orange-500 px-3 py-2.5 disabled:opacity-40"
+          className="items-center rounded-lg bg-orange-500 px-3 py-1.5 disabled:opacity-40"
         >
           <Text className="text-xs font-semibold text-white">{saving ? 'Saving…' : isStocked ? 'Update' : 'Add'}</Text>
         </Pressable>
