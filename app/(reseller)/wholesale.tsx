@@ -19,7 +19,15 @@ const SORT_LABELS: Record<SortOption, string> = {
   name: 'Name',
 };
 
-function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product) => void }) {
+function ProductCard({
+  item,
+  sellerName,
+  onAdd,
+}: {
+  item: Product;
+  sellerName: string | undefined;
+  onAdd: (product: Product) => void;
+}) {
   const outOfStock = item.stock_level <= 0;
 
   return (
@@ -52,9 +60,14 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
         <Text className="text-base font-bold text-gray-900">
           NPR {Number(item.price).toLocaleString()}
         </Text>
-        <Text className="mb-2 mt-0.5 text-xs text-gray-400">
+        <Text className="mt-0.5 text-xs text-gray-400">
           {outOfStock ? 'Out of stock' : `${item.stock_level} in stock`}
         </Text>
+        {sellerName && (
+          <Text className="mb-2 mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
+            Sold by {sellerName}
+          </Text>
+        )}
       </Pressable>
 
       <Pressable
@@ -81,10 +94,20 @@ export default function BuyFromWholesaler() {
   const clearCart = useCartStore((state) => state.clearCart);
 
   const { data: products, isLoading } = useSupabaseQuery('products', {});
+  const { data: wholesalers } = useSupabaseQuery('profiles', { filters: { role: 'wholesaler' } });
   const marketplaceProducts = useMemo(
     () => (products ?? []).filter((p) => p.seller_role === 'wholesaler' && p.is_listed !== false),
     [products]
   );
+
+  const sellerNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    (wholesalers ?? []).forEach((w) => {
+      if (w.full_name) map.set(w.id, w.full_name);
+    });
+    return map;
+  }, [wholesalers]);
+  const getSellerName = (item: Product) => sellerNameById.get(item.seller_id);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -93,7 +116,7 @@ export default function BuyFromWholesaler() {
   }, [marketplaceProducts]);
 
   const filtered = useMemo(() => {
-    let list = filterBySearch(marketplaceProducts, search);
+    let list = filterBySearch(marketplaceProducts, search, getSellerName);
     if (category) {
       list = list.filter((p) => p.category === category);
     }
@@ -114,11 +137,11 @@ export default function BuyFromWholesaler() {
         sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
     return sorted;
-  }, [marketplaceProducts, search, category, sortBy]);
+  }, [marketplaceProducts, search, category, sortBy, sellerNameById]);
 
   const suggestions = useMemo(
-    () => (search.trim() ? filterBySearch(marketplaceProducts, search).slice(0, 5) : []),
-    [marketplaceProducts, search]
+    () => (search.trim() ? filterBySearch(marketplaceProducts, search, getSellerName).slice(0, 5) : []),
+    [marketplaceProducts, search, sellerNameById]
   );
 
   function handleAdd(product: Product) {
@@ -166,7 +189,7 @@ export default function BuyFromWholesaler() {
               onChangeText={setSearch}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-              placeholder="Search by name or model…"
+              placeholder="Search by name, model, or wholesaler…"
               placeholderTextColor="#9CA3AF"
               className="ml-2 flex-1 text-sm text-gray-900"
             />
@@ -250,7 +273,7 @@ export default function BuyFromWholesaler() {
 
         <View className="flex-row flex-wrap justify-between">
           {filtered.map((item) => (
-            <ProductCard key={item.id} item={item} onAdd={handleAdd} />
+            <ProductCard key={item.id} item={item} sellerName={getSellerName(item)} onAdd={handleAdd} />
           ))}
         </View>
       </ScrollView>
