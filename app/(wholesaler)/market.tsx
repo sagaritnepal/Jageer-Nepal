@@ -155,7 +155,7 @@ export default function WholesaleMarket() {
 
       {showForm && <CreateProductForm onDone={() => setShowForm(false)} />}
 
-      <CatalogStockingList priceLabel="Your price to resellers" basePath="/(wholesaler)" />
+      <CatalogStockingList priceLabel="Your price to resellers" useFilterSheet basePath="/(wholesaler)" />
     </ScrollView>
   );
 }

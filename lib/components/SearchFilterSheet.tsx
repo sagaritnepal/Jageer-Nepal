@@ -1,8 +1,8 @@
-// lib/components/InventoryFilterSheet.tsx
+// lib/components/SearchFilterSheet.tsx
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
-export function InventoryFilterSheet({
+export function SearchFilterSheet({
   visible,
   initialSearch,
   initialCategory,

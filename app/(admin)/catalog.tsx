@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
-import { SearchSuggestions } from '../../lib/components/SearchSuggestions';
+import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
 import { pickAndUploadCatalogImage } from '../../lib/utils/catalogImage';
@@ -111,10 +111,19 @@ export default function AdminCatalog() {
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingNew, setUploadingNew] = useState(false);
   const [search, setSearch] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-  const filtered = useMemo(() => filterBySearch(items ?? [], search), [items, search]);
-  const suggestions = useMemo(() => (search.trim() ? filtered.slice(0, 5) : []), [filtered, search]);
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    (items ?? []).forEach((item) => item.category && set.add(item.category));
+    return Array.from(set);
+  }, [items]);
+  const categoryScoped = useMemo(
+    () => (filterCategory ? (items ?? []).filter((item) => item.category === filterCategory) : items ?? []),
+    [items, filterCategory]
+  );
+  const filtered = useMemo(() => filterBySearch(categoryScoped, search), [categoryScoped, search]);
 
   function resetForm() {
     setName('');
@@ -214,28 +223,31 @@ export default function AdminCatalog() {
         </View>
       )}
 
-      <View className="relative z-10 mb-4">
-        <View className="flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
-          <Ionicons name="search" size={18} color="#9CA3AF" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-            placeholder="Search by name or model…"
-            placeholderTextColor="#9CA3AF"
-            className="ml-2 flex-1 text-sm text-gray-900"
-          />
-        </View>
-        <SearchSuggestions
-          items={suggestions}
-          visible={searchFocused}
-          onSelect={(item) => {
-            setSearch(item.name);
-            setSearchFocused(false);
-          }}
-        />
-      </View>
+      <Pressable
+        onPress={() => setSheetOpen(true)}
+        className="mb-4 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
+      >
+        <Ionicons name="search" size={18} color="#9CA3AF" />
+        <Text
+          className={`ml-2 flex-1 text-sm ${[search, filterCategory].filter(Boolean).length ? 'text-gray-900' : 'text-gray-400'}`}
+          numberOfLines={1}
+        >
+          {[search, filterCategory].filter(Boolean).join(' · ') || 'Search by name or model…'}
+        </Text>
+        <Ionicons name="options-outline" size={18} color="#9CA3AF" />
+      </Pressable>
+
+      <SearchFilterSheet
+        visible={sheetOpen}
+        initialSearch={search}
+        initialCategory={filterCategory}
+        categories={categories}
+        onApply={({ search: nextSearch, category: nextCategory }) => {
+          setSearch(nextSearch);
+          setFilterCategory(nextCategory);
+        }}
+        onClose={() => setSheetOpen(false)}
+      />
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && (items?.length ?? 0) > 0 && filtered.length === 0 && (

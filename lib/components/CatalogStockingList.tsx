@@ -8,7 +8,7 @@ import { useSupabaseQuery, useSupabaseUpsert, useSupabaseUpdate } from '../hooks
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { filterBySearch } from '../utils/search';
 import { SearchSuggestions } from './SearchSuggestions';
-import { InventoryFilterSheet } from './InventoryFilterSheet';
+import { SearchFilterSheet } from './SearchFilterSheet';
 import type { CatalogProduct, Product } from '../../types/database.types';
 
 function StockRow({
@@ -261,7 +261,7 @@ export function CatalogStockingList({
       </View>
 
       {useFilterSheet && (
-        <InventoryFilterSheet
+        <SearchFilterSheet
           visible={sheetOpen}
           initialSearch={search}
           initialCategory={category}

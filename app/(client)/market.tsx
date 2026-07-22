@@ -1,11 +1,11 @@
 // app/(client)/market.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
-import { SearchSuggestions } from '../../lib/components/SearchSuggestions';
+import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { showAlert } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
 import type { Product } from '../../types/database.types';
@@ -50,8 +50,8 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
 
 export default function ClientMarket() {
   const [search, setSearch] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showSortMenu, setShowSortMenu] = useState(false);
 
@@ -99,11 +99,6 @@ export default function ClientMarket() {
     return sorted;
   }, [inStockProducts, search, category, sortBy]);
 
-  const suggestions = useMemo(
-    () => (search.trim() ? filterBySearch(inStockProducts, search).slice(0, 5) : []),
-    [inStockProducts, search]
-  );
-
   function handleAdd(product: Product) {
     const added = addToCart(product);
     if (!added) {
@@ -126,6 +121,7 @@ export default function ClientMarket() {
   }
 
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+  const searchSummary = [search, category].filter(Boolean).join(' · ');
 
   return (
     <ScrollView
@@ -152,57 +148,28 @@ export default function ClientMarket() {
         </View>
       </View>
 
-      <View className="relative z-10 mb-3">
-        <View className="flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
-          <Ionicons name="search" size={18} color="#9CA3AF" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-            placeholder="Search by name or model…"
-            placeholderTextColor="#9CA3AF"
-            className="ml-2 flex-1 text-sm text-gray-900"
-          />
-        </View>
-        <SearchSuggestions
-          items={suggestions}
-          visible={searchFocused}
-          onSelect={(item) => {
-            setSearch('');
-            setSearchFocused(false);
-            router.push(`/(client)/product/${item.id}`);
-          }}
-        />
-      </View>
+      <Pressable
+        onPress={() => setSheetOpen(true)}
+        className="mb-3 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
+      >
+        <Ionicons name="search" size={18} color="#9CA3AF" />
+        <Text className={`ml-2 flex-1 text-sm ${searchSummary ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+          {searchSummary || 'Search by name or model…'}
+        </Text>
+        <Ionicons name="options-outline" size={18} color="#9CA3AF" />
+      </Pressable>
 
-      {categories.length > 0 && (
-        <View className="mb-3 flex-row flex-wrap gap-2">
-          <Pressable
-            onPress={() => setCategory(null)}
-            className={`rounded-full border px-3 py-1.5 ${
-              category === null ? 'border-orange-500 bg-orange-50' : 'border-gray-300 bg-white'
-            }`}
-          >
-            <Text className={category === null ? 'text-xs font-semibold text-orange-600' : 'text-xs text-gray-600'}>
-              All
-            </Text>
-          </Pressable>
-          {categories.map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => setCategory(c)}
-              className={`rounded-full border px-3 py-1.5 ${
-                category === c ? 'border-orange-500 bg-orange-50' : 'border-gray-300 bg-white'
-              }`}
-            >
-              <Text className={category === c ? 'text-xs font-semibold text-orange-600' : 'text-xs text-gray-600'}>
-                {c}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
+      <SearchFilterSheet
+        visible={sheetOpen}
+        initialSearch={search}
+        initialCategory={category}
+        categories={categories}
+        onApply={({ search: nextSearch, category: nextCategory }) => {
+          setSearch(nextSearch);
+          setCategory(nextCategory);
+        }}
+        onClose={() => setSheetOpen(false)}
+      />
 
       <View className="mb-4">
         <Pressable
