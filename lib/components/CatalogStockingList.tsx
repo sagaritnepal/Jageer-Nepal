@@ -8,6 +8,7 @@ import { useSupabaseQuery, useSupabaseUpsert, useSupabaseUpdate } from '../hooks
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { filterBySearch } from '../utils/search';
 import { SearchSuggestions } from './SearchSuggestions';
+import { InventoryFilterSheet } from './InventoryFilterSheet';
 import type { CatalogProduct, Product } from '../../types/database.types';
 
 function StockRow({
@@ -164,16 +165,20 @@ export function CatalogStockingList({
   priceLabel,
   capToPurchasedStock = false,
   onlyStocked = false,
+  useFilterSheet = false,
   basePath,
 }: {
   priceLabel: string;
   capToPurchasedStock?: boolean;
   onlyStocked?: boolean;
+  useFilterSheet?: boolean;
   basePath: string;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [category, setCategory] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const { data: catalog, isLoading: loadingCatalog } = useSupabaseQuery('catalog_products', {
     filters: { is_active: true },
@@ -196,38 +201,78 @@ export function CatalogStockingList({
     () => (onlyStocked ? (catalog ?? []).filter((item) => myProductByCatalogId.has(item.id)) : catalog ?? []),
     [catalog, onlyStocked, myProductByCatalogId]
   );
-  const filtered = useMemo(() => filterBySearch(scoped, search), [scoped, search]);
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    scoped.forEach((item) => item.category && set.add(item.category));
+    return Array.from(set);
+  }, [scoped]);
+  const categoryScoped = useMemo(
+    () => (category ? scoped.filter((item) => item.category === category) : scoped),
+    [scoped, category]
+  );
+  const filtered = useMemo(() => filterBySearch(categoryScoped, search), [categoryScoped, search]);
   const suggestions = useMemo(() => (search.trim() ? filtered.slice(0, 5) : []), [filtered, search]);
 
   const isLoading = loadingCatalog || loadingMine;
 
   if (!userId) return null;
 
+  const searchSummary = [search, category].filter(Boolean).join(' · ');
+
   return (
     <View>
       <View className="relative z-10 mb-3">
-        <View className="flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
-          <Ionicons name="search" size={18} color="#9CA3AF" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-            placeholder="Search by name or model…"
-            placeholderTextColor="#9CA3AF"
-            className="ml-2 flex-1 text-sm text-gray-900"
-          />
-        </View>
-        <SearchSuggestions
-          items={suggestions}
-          visible={searchFocused}
-          onSelect={(item) => {
-            setSearch('');
-            setSearchFocused(false);
-            router.push(`${basePath}/catalog/${item.id}`);
-          }}
-        />
+        {useFilterSheet ? (
+          <Pressable
+            onPress={() => setSheetOpen(true)}
+            className="flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
+          >
+            <Ionicons name="search" size={18} color="#9CA3AF" />
+            <Text className={`ml-2 flex-1 text-sm ${searchSummary ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+              {searchSummary || 'Search by name, model, or category…'}
+            </Text>
+            <Ionicons name="options-outline" size={18} color="#9CA3AF" />
+          </Pressable>
+        ) : (
+          <>
+            <View className="flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5">
+              <Ionicons name="search" size={18} color="#9CA3AF" />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                placeholder="Search by name or model…"
+                placeholderTextColor="#9CA3AF"
+                className="ml-2 flex-1 text-sm text-gray-900"
+              />
+            </View>
+            <SearchSuggestions
+              items={suggestions}
+              visible={searchFocused}
+              onSelect={(item) => {
+                setSearch('');
+                setSearchFocused(false);
+                router.push(`${basePath}/catalog/${item.id}`);
+              }}
+            />
+          </>
+        )}
       </View>
+
+      {useFilterSheet && (
+        <InventoryFilterSheet
+          visible={sheetOpen}
+          initialSearch={search}
+          initialCategory={category}
+          categories={categories}
+          onApply={({ search: nextSearch, category: nextCategory }) => {
+            setSearch(nextSearch);
+            setCategory(nextCategory);
+          }}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && onlyStocked && scoped.length === 0 && (
