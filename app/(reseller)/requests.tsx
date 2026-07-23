@@ -1,6 +1,6 @@
 // app/(reseller)/requests.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, FlatList, SectionList, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -13,6 +13,73 @@ import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import type { RequestStatus, ServiceRequest } from '../../types/database.types';
 
 type ViewMode = 'incoming' | 'mine';
+
+// "My Jobs" mixed every status (and payment state) into one flat list, so it
+// was hard to tell what actually needed attention. Group by pipeline stage
+// instead - what the reseller should be doing right now for that job - with
+// a plain-language hint per card, rather than making them decode raw status
+// strings across the whole list.
+type Stage = 'action' | 'waiting_customer' | 'in_progress' | 'awaiting_payment' | 'completed' | 'cancelled';
+
+const STAGE_ORDER: Stage[] = ['action', 'waiting_customer', 'in_progress', 'awaiting_payment', 'completed', 'cancelled'];
+
+const STAGE_META: Record<Stage, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
+  action: { label: 'Needs your action', icon: 'alert-circle', color: '#EA580C', bg: 'bg-orange-50' },
+  waiting_customer: { label: 'Waiting on customer', icon: 'time-outline', color: '#D97706', bg: 'bg-amber-50' },
+  in_progress: { label: 'Job in progress', icon: 'build', color: '#2563EB', bg: 'bg-blue-50' },
+  awaiting_payment: { label: 'Awaiting payment', icon: 'cash-outline', color: '#DC2626', bg: 'bg-red-50' },
+  completed: { label: 'Completed', icon: 'checkmark-done-circle', color: '#16A34A', bg: 'bg-green-50' },
+  cancelled: { label: 'Cancelled', icon: 'close-circle', color: '#9CA3AF', bg: 'bg-gray-100' },
+};
+
+function stageOf(item: ServiceRequest): Stage {
+  switch (item.status) {
+    case 'cancelled':
+      return 'cancelled';
+    case 'pending':
+    case 'approved':
+      return 'action';
+    case 'quoted':
+      return 'waiting_customer';
+    case 'assigned':
+    case 'in_progress':
+      return 'in_progress';
+    case 'resolved':
+      return item.payment_status === 'paid' ? 'completed' : 'awaiting_payment';
+  }
+}
+
+function nextStepHint(item: ServiceRequest): string | null {
+  switch (item.status) {
+    case 'pending':
+      return 'Call the customer to verify the issue, then send them a quote.';
+    case 'quoted':
+      return `Waiting for the customer to approve NPR ${Number(item.quoted_price ?? 0).toLocaleString()}.`;
+    case 'approved':
+      return 'Customer approved the price — pick a technician to assign.';
+    case 'assigned':
+      return 'Technician assigned — job hasn’t started yet.';
+    case 'in_progress':
+      return 'Technician is on the job right now.';
+    case 'resolved':
+      return item.payment_status === 'paid' ? 'Paid in full.' : 'Job done — collect payment from the customer.';
+    case 'cancelled':
+      return 'This request was cancelled.';
+    default:
+      return null;
+  }
+}
+
+function StageSectionHeader({ stage, count }: { stage: Stage; count: number }) {
+  const meta = STAGE_META[stage];
+  return (
+    <View className="mb-2.5 mt-3 flex-row items-center gap-1.5 bg-gray-50 pt-1">
+      <Ionicons name={meta.icon} size={15} color={meta.color} />
+      <Text className="text-[15px] font-bold text-gray-900">{meta.label}</Text>
+      <Text className="text-xs text-gray-400">({count})</Text>
+    </View>
+  );
+}
 
 function StatusPill({ status }: { status: RequestStatus }) {
   const style = STATUS_STYLES[status];
@@ -89,6 +156,8 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
 
   const customerName = item.customer_name ?? customerProfile?.full_name;
   const customerPhone = item.customer_phone ?? customerProfile?.phone;
+  const hint = nextStepHint(item);
+  const stageMeta = STAGE_META[stageOf(item)];
 
   const distance =
     item.location_data?.latitude != null &&
@@ -119,6 +188,14 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
           <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
             {item.description}
           </Text>
+        )}
+
+        {hint && (
+          <View className={`mt-2.5 rounded-lg px-3 py-2 ${stageMeta.bg}`}>
+            <Text className="text-xs font-medium" style={{ color: stageMeta.color }}>
+              {hint}
+            </Text>
+          </View>
         )}
 
         <View className="mt-2 flex-row flex-wrap items-center gap-2">
@@ -209,6 +286,19 @@ export default function ResellerRequestQueue() {
   const requests = viewMode === 'incoming' ? incoming : mine;
   const isLoading = viewMode === 'incoming' ? loadingIncoming : loadingMine;
 
+  const mySections = useMemo(() => {
+    const groups = new Map<Stage, ServiceRequest[]>();
+    (mine ?? []).forEach((item) => {
+      const stage = stageOf(item);
+      if (!groups.has(stage)) groups.set(stage, []);
+      groups.get(stage)!.push(item);
+    });
+    return STAGE_ORDER.filter((stage) => groups.has(stage)).map((stage) => ({
+      stage,
+      data: groups.get(stage)!,
+    }));
+  }, [mine]);
+
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-4 flex-row rounded-full bg-gray-100 p-1">
@@ -241,13 +331,21 @@ export default function ResellerRequestQueue() {
         </Text>
       )}
 
-      <FlatList
-        data={requests}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) =>
-          viewMode === 'incoming' ? <IncomingRequestCard item={item} /> : <MyRequestCard item={item} />
-        }
-      />
+      {viewMode === 'incoming' ? (
+        <FlatList
+          data={requests}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <IncomingRequestCard item={item} />}
+        />
+      ) : (
+        <SectionList
+          sections={mySections}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <MyRequestCard item={item} />}
+          renderSectionHeader={({ section }) => <StageSectionHeader stage={section.stage} count={section.data.length} />}
+          stickySectionHeadersEnabled={false}
+        />
+      )}
     </View>
   );
 }
