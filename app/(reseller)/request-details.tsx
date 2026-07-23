@@ -9,6 +9,7 @@ import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
+import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 
 const PHOTO_SLOTS = 3;
 
@@ -72,7 +73,9 @@ export default function ResellerRequestDetails() {
       quality: 0.6,
     });
     if (!result.canceled && result.assets[0]) {
-      setPhotos((prev) => prev.map((p, i) => (i === index ? result.assets[0].uri : p)));
+      const asset = result.assets[0];
+      const resizedUri = await resizeImageForUpload(asset.uri, asset.width, 1024);
+      setPhotos((prev) => prev.map((p, i) => (i === index ? resizedUri : p)));
     }
   }
 

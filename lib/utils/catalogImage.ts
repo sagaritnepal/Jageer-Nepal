@@ -2,6 +2,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../supabase';
 import { showAlert } from './alert';
+import { resizeImageForUpload } from './resizeImage';
 
 export async function pickAndUploadCatalogImage(): Promise<string | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -17,7 +18,9 @@ export async function pickAndUploadCatalogImage(): Promise<string | null> {
   });
   if (result.canceled || !result.assets[0]) return null;
 
-  const arraybuffer = await fetch(result.assets[0].uri).then((res) => res.arrayBuffer());
+  const asset = result.assets[0];
+  const resizedUri = await resizeImageForUpload(asset.uri, asset.width, 1024);
+  const arraybuffer = await fetch(resizedUri).then((res) => res.arrayBuffer());
   const path = `catalog/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
   const { error: uploadError } = await supabase.storage
     .from('catalog-images')

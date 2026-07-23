@@ -10,6 +10,7 @@
     "@tanstack/react-query": "^5.101.2",
     "expo": "~56.0.12",
     "expo-constants": "^56.0.18",
+    "expo-image-manipulator": "~56.0.23",
     "expo-image-picker": "~56.0.20",
     "expo-linking": "^56.0.14",
     "expo-location": "~56.0.20",

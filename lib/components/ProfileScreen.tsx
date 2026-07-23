@@ -9,6 +9,7 @@ import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate } from '../hooks
 import { supabase } from '../supabase';
 import { ROLE_ACCENT } from '../constants/roleColors';
 import { showAlert, getErrorMessage } from '../utils/alert';
+import { resizeImageForUpload } from '../utils/resizeImage';
 import type { Profile } from '../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
@@ -42,7 +43,9 @@ function AvatarEditor({ profile }: { profile: Profile }) {
 
     setUploading(true);
     try {
-      const arraybuffer = await fetch(result.assets[0].uri).then((res) => res.arrayBuffer());
+      const asset = result.assets[0];
+      const resizedUri = await resizeImageForUpload(asset.uri, asset.width, 512);
+      const arraybuffer = await fetch(resizedUri).then((res) => res.arrayBuffer());
       const path = `${profile.id}/avatar.jpg`;
       const { error: uploadError } = await supabase.storage
         .from('avatars')
