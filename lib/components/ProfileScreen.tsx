@@ -1,6 +1,6 @@
 // lib/components/ProfileScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Image } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -204,8 +204,7 @@ function TechnicianAvailability({ profile }: { profile: Profile }) {
   const updateProfile = useSupabaseUpdate('profiles');
   const [locating, setLocating] = useState(false);
 
-  async function toggleAvailable() {
-    const is_available = !profile.is_available;
+  async function toggleAvailable(is_available: boolean) {
     try {
       await updateProfile.mutateAsync({ id: profile.id, values: { is_available } });
       setProfile({ ...profile, is_available });
@@ -237,19 +236,21 @@ function TechnicianAvailability({ profile }: { profile: Profile }) {
   return (
     <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
       <View className="flex-row items-center justify-between">
-        <View>
-          <Text className="font-semibold text-gray-900">Available for jobs</Text>
-          <Text className="mt-0.5 text-xs text-gray-400">Resellers only assign jobs to available technicians</Text>
-        </View>
-        <Pressable
-          onPress={toggleAvailable}
-          disabled={updateProfile.isPending}
-          className={`rounded-full px-4 py-2 ${profile.is_available ? 'bg-green-100' : 'bg-gray-100'}`}
-        >
-          <Text className={`text-xs font-bold ${profile.is_available ? 'text-green-700' : 'text-gray-500'}`}>
-            {profile.is_available ? 'Available' : 'Unavailable'}
+        <View className="flex-1 pr-3">
+          <Text className="font-semibold text-gray-900">My Status</Text>
+          <Text className="mt-0.5 text-xs text-gray-400">
+            {profile.is_available
+              ? "You're available — resellers can assign you jobs"
+              : "You're unavailable — resellers won't assign you jobs"}
           </Text>
-        </Pressable>
+        </View>
+        <Switch
+          value={profile.is_available}
+          onValueChange={toggleAvailable}
+          disabled={updateProfile.isPending}
+          trackColor={{ false: '#D1D5DB', true: '#FDBA74' }}
+          thumbColor={profile.is_available ? '#F97316' : '#F3F4F6'}
+        />
       </View>
 
       <Pressable
