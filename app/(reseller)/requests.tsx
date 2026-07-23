@@ -1,6 +1,6 @@
 // app/(reseller)/requests.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, FlatList, SectionList, Pressable } from 'react-native';
+import { View, Text, FlatList, ScrollView, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -68,17 +68,6 @@ function nextStepHint(item: ServiceRequest): string | null {
     default:
       return null;
   }
-}
-
-function StageSectionHeader({ stage, count }: { stage: Stage; count: number }) {
-  const meta = STAGE_META[stage];
-  return (
-    <View className="mb-2.5 mt-3 flex-row items-center gap-1.5 bg-gray-50 pt-1">
-      <Ionicons name={meta.icon} size={15} color={meta.color} />
-      <Text className="text-[15px] font-bold text-gray-900">{meta.label}</Text>
-      <Text className="text-xs text-gray-400">({count})</Text>
-    </View>
-  );
 }
 
 function StatusPill({ status }: { status: RequestStatus }) {
@@ -267,6 +256,7 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
 export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [viewMode, setViewMode] = useState<ViewMode>('incoming');
+  const [jobStage, setJobStage] = useState<Stage | null>(null);
 
   const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
     filters: { status: 'pending', origin: 'app' },
@@ -283,21 +273,20 @@ export default function ResellerRequestQueue() {
     enabled: !!userId,
   });
 
-  const requests = viewMode === 'incoming' ? incoming : mine;
   const isLoading = viewMode === 'incoming' ? loadingIncoming : loadingMine;
 
-  const mySections = useMemo(() => {
+  // My Jobs gets its own stage tabs, one level below Incoming/My Jobs, so a
+  // reseller can jump straight to e.g. "Awaiting payment" instead of
+  // scrolling past every other stage to find it.
+  const myByStage = useMemo(() => {
     const groups = new Map<Stage, ServiceRequest[]>();
-    (mine ?? []).forEach((item) => {
-      const stage = stageOf(item);
-      if (!groups.has(stage)) groups.set(stage, []);
-      groups.get(stage)!.push(item);
-    });
-    return STAGE_ORDER.filter((stage) => groups.has(stage)).map((stage) => ({
-      stage,
-      data: groups.get(stage)!,
-    }));
+    STAGE_ORDER.forEach((stage) => groups.set(stage, []));
+    (mine ?? []).forEach((item) => groups.get(stageOf(item))!.push(item));
+    return groups;
   }, [mine]);
+
+  const activeStage = jobStage ?? STAGE_ORDER.find((stage) => (myByStage.get(stage)?.length ?? 0) > 0) ?? 'action';
+  const stageJobs = myByStage.get(activeStage) ?? [];
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
@@ -320,30 +309,62 @@ export default function ResellerRequestQueue() {
         </Pressable>
       </View>
 
+      {viewMode === 'mine' && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, flexShrink: 0 }}
+          className="mb-4"
+          contentContainerStyle={{ alignItems: 'center', gap: 8, paddingRight: 8 }}
+        >
+          {STAGE_ORDER.map((stage) => {
+            const meta = STAGE_META[stage];
+            const count = myByStage.get(stage)?.length ?? 0;
+            const active = activeStage === stage;
+            return (
+              <Pressable
+                key={stage}
+                onPress={() => setJobStage(stage)}
+                className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
+                style={{
+                  backgroundColor: active ? meta.color : '#FFFFFF',
+                  borderWidth: active ? 0 : 1,
+                  borderColor: '#E5E7EB',
+                }}
+              >
+                <Ionicons name={meta.icon} size={13} color={active ? 'white' : meta.color} />
+                <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
+                  {meta.label} ({count})
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+
       <Text className="mb-3 text-base font-bold text-gray-900">
-        {viewMode === 'incoming' ? 'Incoming Requests' : 'My Jobs'}
+        {viewMode === 'incoming' ? 'Incoming Requests' : STAGE_META[activeStage].label}
       </Text>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && requests?.length === 0 && (
-        <Text className="text-gray-500">
-          {viewMode === 'incoming' ? 'No pending requests right now.' : "You haven't taken on any jobs yet."}
-        </Text>
+      {!isLoading && viewMode === 'incoming' && incoming.length === 0 && (
+        <Text className="text-gray-500">No pending requests right now.</Text>
+      )}
+      {!isLoading && viewMode === 'mine' && stageJobs.length === 0 && (
+        <Text className="text-gray-500">Nothing here right now.</Text>
       )}
 
       {viewMode === 'incoming' ? (
         <FlatList
-          data={requests}
+          data={incoming}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <IncomingRequestCard item={item} />}
         />
       ) : (
-        <SectionList
-          sections={mySections}
+        <FlatList
+          data={stageJobs}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <MyRequestCard item={item} />}
-          renderSectionHeader={({ section }) => <StageSectionHeader stage={section.stage} count={section.data.length} />}
-          stickySectionHeadersEnabled={false}
         />
       )}
     </View>
