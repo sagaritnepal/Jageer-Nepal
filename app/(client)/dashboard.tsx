@@ -7,7 +7,9 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
-import type { ServiceCategory } from '../../types/database.types';
+import { STATUS_STYLES } from '../../lib/constants/requestStatus';
+import { getCategoryVisual } from '../../lib/constants/categoryIcons';
+import type { Profile, ServiceCategory, ServiceRequest, RequestStatus } from '../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -19,15 +21,26 @@ function initialsOf(name: string | null | undefined) {
     .join('');
 }
 
+function StatusPill({ status }: { status: RequestStatus }) {
+  const style = STATUS_STYLES[status];
+  return (
+    <View className={`rounded-full px-2 py-0.5 ${style.bg}`}>
+      <Text className={`text-[10px] font-semibold uppercase ${style.text}`}>{style.label}</Text>
+    </View>
+  );
+}
+
 export default function ClientDashboard() {
   const profile = useAuthStore((state) => state.profile);
+  const userId = useAuthStore((state) => state.session?.user.id);
   const [search, setSearch] = useState('');
   const [pickerCategory, setPickerCategory] = useState<ServiceCategory | null>(null);
 
-  const { data: technicians } = useSupabaseQuery('profiles', {
-    filters: { role: 'technician', is_active: true },
+  const { data: resellers } = useSupabaseQuery('profiles', { filters: { role: 'reseller' } });
+  const { data: myRequests } = useSupabaseQuery('service_requests', {
+    filters: userId ? { client_id: userId } : {},
+    enabled: !!userId,
   });
-  const nearbyTechnicians = technicians?.slice(0, 3) ?? [];
 
   const { data: categories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
@@ -39,6 +52,25 @@ export default function ClientDashboard() {
     if (!q) return categories ?? [];
     return (categories ?? []).filter((c) => c.label.toLowerCase().includes(q));
   }, [categories, search]);
+
+  const recentlyHiredResellers = useMemo(() => {
+    const statsByReseller = new Map<string, { lastRequest: ServiceRequest; count: number }>();
+    (myRequests ?? []).forEach((r) => {
+      if (!r.reseller_id) return;
+      const existing = statsByReseller.get(r.reseller_id);
+      const isNewer = !existing || r.created_at > existing.lastRequest.created_at;
+      statsByReseller.set(r.reseller_id, {
+        lastRequest: isNewer ? r : existing!.lastRequest,
+        count: (existing?.count ?? 0) + 1,
+      });
+    });
+    const resellerMap = new Map((resellers ?? []).map((p) => [p.id, p]));
+    return Array.from(statsByReseller.entries())
+      .map(([resellerId, stats]) => ({ reseller: resellerMap.get(resellerId), ...stats }))
+      .filter((entry): entry is { reseller: Profile; lastRequest: ServiceRequest; count: number } => !!entry.reseller)
+      .sort((a, b) => new Date(b.lastRequest.created_at).getTime() - new Date(a.lastRequest.created_at).getTime())
+      .slice(0, 3);
+  }, [myRequests, resellers]);
 
   return (
     <>
@@ -77,25 +109,48 @@ export default function ClientDashboard() {
           <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
           <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} />
 
-          {nearbyTechnicians.length > 0 && (
+          {recentlyHiredResellers.length > 0 && (
             <>
-              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Nearby technicians</Text>
-              {nearbyTechnicians.map((tech) => (
-                <View
-                  key={tech.id}
-                  className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
-                >
-                  <View className="h-11 w-11 items-center justify-center rounded-full bg-teal-600">
-                    <Text className="text-xs font-bold text-white">{initialsOf(tech.full_name)}</Text>
+              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Recently Hired Reseller</Text>
+              {recentlyHiredResellers.map(({ reseller, lastRequest, count }) => {
+                const { bg, icon } = getCategoryVisual(lastRequest.issue_type);
+                return (
+                  <View key={reseller.id} className="mb-2.5 rounded-2xl border border-gray-200 bg-white p-3.5">
+                    <View className="flex-row items-center gap-3">
+                      <View className="h-11 w-11 items-center justify-center rounded-full bg-teal-600">
+                        <Text className="text-xs font-bold text-white">{initialsOf(reseller.full_name)}</Text>
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-[13.5px] font-bold text-gray-900">
+                          {reseller.full_name ?? 'Reseller'}
+                        </Text>
+                        <Text className="mt-0.5 text-[11.5px] text-gray-400" numberOfLines={1}>
+                          {reseller.city ?? 'Nepal'}
+                          {reseller.phone ? ` · ${reseller.phone}` : ''} · {count} job{count === 1 ? '' : 's'} together
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      onPress={() => router.push(`/(client)/request/${lastRequest.id}`)}
+                      className="mt-3 flex-row items-center gap-2.5 rounded-xl bg-gray-50 p-2.5"
+                    >
+                      <View className={`h-8 w-8 items-center justify-center rounded-lg ${bg}`}>
+                        <Ionicons name={icon ?? 'construct'} size={16} color="white" />
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-xs font-semibold text-gray-800" numberOfLines={1}>
+                          {lastRequest.issue_type}
+                        </Text>
+                        <Text className="mt-0.5 text-[10.5px] text-gray-400">
+                          Last task · {new Date(lastRequest.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <StatusPill status={lastRequest.status} />
+                    </Pressable>
                   </View>
-                  <View className="flex-1">
-                    <Text className="text-[13.5px] font-bold text-gray-900">{tech.full_name ?? 'Technician'}</Text>
-                    <Text className="mt-0.5 text-[11.5px] text-gray-400">
-                      {tech.city ?? 'Nepal'} · Available now
-                    </Text>
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </>
           )}
         </View>
