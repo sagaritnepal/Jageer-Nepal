@@ -134,7 +134,7 @@ export default function ClientMarket() {
           <Pressable onPress={() => router.push('/(client)/quotes')}>
             <Text className="text-sm font-semibold text-orange-600">My Quotes</Text>
           </Pressable>
-          <Pressable onPress={() => router.push('/(client)/requests?type=orders')}>
+          <Pressable onPress={() => router.push('/(client)/requests')}>
             <Text className="text-sm font-semibold text-orange-600">My Orders</Text>
           </Pressable>
           {cartCount > 0 && (

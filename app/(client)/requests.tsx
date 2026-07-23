@@ -1,18 +1,21 @@
 // app/(client)/requests.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { OrderCard } from '../../lib/components/OrderCard';
-import type { RequestStatus, ServiceRequest, OrderStatus } from '../../types/database.types';
+import type { RequestStatus, ServiceRequest, Order, OrderStatus } from '../../types/database.types';
 
-type RequestKind = 'services' | 'orders';
 type ViewMode = 'active' | 'history';
 
 const ACTIVE_STATUSES: RequestStatus[] = ['pending', 'quoted', 'approved', 'assigned', 'in_progress'];
 const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'shipped'];
+
+type CombinedItem =
+  | { kind: 'service'; key: string; created_at: string; data: ServiceRequest }
+  | { kind: 'order'; key: string; created_at: string; data: Order };
 
 function StatusPill({ status }: { status: RequestStatus }) {
   const style = STATUS_STYLES[status];
@@ -92,9 +95,7 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
 }
 
 export default function ClientRequests() {
-  const { type } = useLocalSearchParams<{ type?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
-  const [requestKind, setRequestKind] = useState<RequestKind>(type === 'orders' ? 'orders' : 'services');
   const [viewMode, setViewMode] = useState<ViewMode>('active');
 
   const { data: requests, isLoading: loadingRequests } = useSupabaseQuery('service_requests', {
@@ -111,51 +112,29 @@ export default function ClientRequests() {
   const { data: products } = useSupabaseQuery('products', {});
   const productMap = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
 
-  const filteredRequests = useMemo(() => {
-    const list = requests ?? [];
-    return viewMode === 'active'
-      ? list.filter((r) => ACTIVE_STATUSES.includes(r.status))
-      : list.filter((r) => !ACTIVE_STATUSES.includes(r.status));
-  }, [requests, viewMode]);
+  const combined = useMemo(() => {
+    const services: CombinedItem[] = (requests ?? [])
+      .filter((r) => (viewMode === 'active' ? ACTIVE_STATUSES.includes(r.status) : !ACTIVE_STATUSES.includes(r.status)))
+      .map((r) => ({ kind: 'service' as const, key: `s-${r.id}`, created_at: r.created_at, data: r }));
 
-  const filteredOrders = useMemo(() => {
-    const list = orders ?? [];
-    return viewMode === 'active'
-      ? list.filter((o) => ACTIVE_ORDER_STATUSES.includes(o.status))
-      : list.filter((o) => !ACTIVE_ORDER_STATUSES.includes(o.status));
-  }, [orders, viewMode]);
+    const orderItems: CombinedItem[] = (orders ?? [])
+      .filter((o) =>
+        viewMode === 'active' ? ACTIVE_ORDER_STATUSES.includes(o.status) : !ACTIVE_ORDER_STATUSES.includes(o.status)
+      )
+      .map((o) => ({ kind: 'order' as const, key: `o-${o.id}`, created_at: o.created_at, data: o }));
 
-  const isLoading = requestKind === 'services' ? loadingRequests : loadingOrders;
+    return [...services, ...orderItems].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [requests, orders, viewMode]);
+
+  const isLoading = loadingRequests || loadingOrders;
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-4 flex-row items-center justify-end">
-        {requestKind === 'services' && (
-          <Pressable
-            onPress={() => router.push('/(client)/new-request')}
-            className="rounded-lg bg-blue-700 px-4 py-2"
-          >
-            <Text className="font-semibold text-white">+ New</Text>
-          </Pressable>
-        )}
-      </View>
-
-      <View className="mb-3 flex-row rounded-lg border border-gray-300 bg-white p-1">
-        <Pressable
-          onPress={() => setRequestKind('services')}
-          className={`flex-1 items-center rounded-md py-2 ${requestKind === 'services' ? 'bg-blue-700' : ''}`}
-        >
-          <Text className={`text-sm font-semibold ${requestKind === 'services' ? 'text-white' : 'text-gray-600'}`}>
-            Services
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setRequestKind('orders')}
-          className={`flex-1 items-center rounded-md py-2 ${requestKind === 'orders' ? 'bg-blue-700' : ''}`}
-        >
-          <Text className={`text-sm font-semibold ${requestKind === 'orders' ? 'text-white' : 'text-gray-600'}`}>
-            Orders
-          </Text>
+        <Pressable onPress={() => router.push('/(client)/new-request')} className="rounded-lg bg-blue-700 px-4 py-2">
+          <Text className="font-semibold text-white">+ New</Text>
         </Pressable>
       </View>
 
@@ -179,38 +158,21 @@ export default function ClientRequests() {
       </View>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
-
-      {requestKind === 'services' ? (
-        <>
-          {!isLoading && filteredRequests.length === 0 && (
-            <Text className="text-gray-500">
-              {viewMode === 'active' ? 'No active requests.' : 'No completed requests yet.'}
-            </Text>
-          )}
-          <FlatList
-            data={filteredRequests}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <ClientRequestCard item={item} />}
-          />
-        </>
-      ) : (
-        <>
-          {!isLoading && filteredOrders.length === 0 && (
-            <Text className="text-gray-500">
-              {viewMode === 'active' ? 'No active orders.' : 'No past orders yet.'}
-            </Text>
-          )}
-          <FlatList
-            data={filteredOrders}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) =>
-              userId ? (
-                <OrderCard order={item} productMap={productMap} viewerId={userId} basePath="/(client)" />
-              ) : null
-            }
-          />
-        </>
+      {!isLoading && combined.length === 0 && (
+        <Text className="text-gray-500">{viewMode === 'active' ? 'Nothing active right now.' : 'No history yet.'}</Text>
       )}
+
+      <FlatList
+        data={combined}
+        keyExtractor={(item) => item.key}
+        renderItem={({ item }) =>
+          item.kind === 'service' ? (
+            <ClientRequestCard item={item.data} />
+          ) : userId ? (
+            <OrderCard order={item.data} productMap={productMap} viewerId={userId} basePath="/(client)" />
+          ) : null
+        }
+      />
     </View>
   );
 }
