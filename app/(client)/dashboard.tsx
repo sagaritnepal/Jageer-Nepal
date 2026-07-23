@@ -7,18 +7,9 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
+import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import type { Profile, ServiceCategory, ServiceRequest, RequestStatus } from '../../types/database.types';
-
-function initialsOf(name: string | null | undefined) {
-  if (!name) return '?';
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
-}
 
 function StatusPill({ status }: { status: RequestStatus }) {
   const style = STATUS_STYLES[status];
@@ -117,9 +108,7 @@ export default function ClientDashboard() {
                   onPress={() => router.push(`/(client)/reseller/${reseller.id}`)}
                   className="mb-2.5 flex-row items-center gap-2.5 rounded-2xl border border-gray-200 bg-white p-3"
                 >
-                  <View className="h-9 w-9 items-center justify-center rounded-full bg-teal-600">
-                    <Text className="text-[11px] font-bold text-white">{initialsOf(reseller.full_name)}</Text>
-                  </View>
+                  <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={36} />
                   <Text className="flex-1 text-[13px] text-gray-900" numberOfLines={1}>
                     <Text className="font-bold">{reseller.full_name ?? 'Reseller'}</Text>
                     <Text className="text-gray-400"> · {lastRequest.issue_type} · </Text>

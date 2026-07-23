@@ -8,6 +8,7 @@ import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { distanceKm } from '../../lib/utils/distance';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { getCategoryVisual } from '../../lib/constants/categoryIcons';
+import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import type { RequestStatus, ServiceRequest } from '../../types/database.types';
 
 type ViewMode = 'incoming' | 'mine';
@@ -141,7 +142,7 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
 
         {technicianProfile && (
           <View className="mt-2.5 flex-row items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
-            <Ionicons name="person-circle" size={20} color="#6B7280" />
+            <PersonAvatar name={technicianProfile.full_name} photoUrl={technicianProfile.avatar_url} size={22} bg="bg-blue-600" />
             <Text className="flex-1 text-xs text-gray-600" numberOfLines={1}>
               Assigned to {technicianProfile.full_name ?? 'Unnamed'}
               {distance != null ? ` · ${distance.toFixed(1)} km away` : ''}
