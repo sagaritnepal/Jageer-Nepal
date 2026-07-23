@@ -1,12 +1,14 @@
 // app/(reseller)/request/[id].tsx
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate } from '../../../lib/hooks/useSupabase';
 import { useRankedTechnicians } from '../../../lib/hooks/useTechnicianRanking';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { TechnicianPicker } from '../../../lib/components/TechnicianPicker';
+import { getCategoryVisual } from '../../../lib/constants/categoryIcons';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { ServiceRequest } from '../../../types/database.types';
 
@@ -157,6 +159,59 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
         onAssign={handleAssign}
         disabled={updateRequest.isPending}
       />
+    </ScrollView>
+  );
+}
+
+// Any reseller can see this pending app request in their Incoming queue, so
+// customer contact stays hidden until one of them claims it - claiming just
+// stamps reseller_id, which is enough to pull it into that reseller's My
+// Jobs tab and drop it out of everyone else's Incoming queue.
+function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; userId: string }) {
+  const updateRequest = useSupabaseUpdate('service_requests');
+  const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(request.issue_type);
+
+  async function handleAccept() {
+    try {
+      await updateRequest.mutateAsync({ id: request.id, values: { reseller_id: userId } });
+    } catch (err) {
+      showAlert('Could not accept job', getErrorMessage(err));
+    }
+  }
+
+  return (
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      <View className="mb-4 flex-row items-center gap-3">
+        <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
+          <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />
+        </View>
+        <Text className="flex-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
+      </View>
+      <Text className="mb-6 text-gray-600">{request.description}</Text>
+
+      <View className="mb-6 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white p-4">
+        <Ionicons name="lock-closed-outline" size={16} color="#9CA3AF" />
+        <Text className="flex-1 text-xs text-gray-400">
+          Customer contact details unlock once you accept this job.
+        </Text>
+      </View>
+
+      <RequestDetailsExtras
+        scheduledDate={request.scheduled_date}
+        scheduledTime={request.scheduled_time}
+        location={request.location_data}
+        photoUrls={request.photo_urls}
+      />
+
+      <Pressable
+        onPress={handleAccept}
+        disabled={updateRequest.isPending}
+        className="mt-6 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
+      >
+        <Text className="text-base font-semibold text-white">
+          {updateRequest.isPending ? 'Accepting…' : 'Accept Job'}
+        </Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -355,6 +410,9 @@ export default function ResellerRequestDetail() {
         );
       }
       return <SelfSourcedAssign request={request} userId={userId} />;
+    }
+    if (!isMine) {
+      return <AcceptIncomingRequest request={request} userId={userId} />;
     }
     return <SendQuote request={request} userId={userId} />;
   }

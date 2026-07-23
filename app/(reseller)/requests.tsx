@@ -1,5 +1,5 @@
 // app/(reseller)/requests.tsx
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -71,20 +71,13 @@ function IncomingRequestCard({ item }: { item: ServiceRequest }) {
         </View>
       </Pressable>
 
-      <View className="mt-3 flex-row gap-2">
-        <Pressable
-          onPress={() => router.push(`/(reseller)/request/${item.id}`)}
-          className="flex-1 items-center rounded-xl bg-teal-50 py-2.5"
-        >
-          <Text className="text-sm font-semibold text-teal-700">Assign Tech</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push(`/(reseller)/request/${item.id}`)}
-          className="flex-1 items-center rounded-xl bg-orange-500 py-2.5"
-        >
-          <Text className="text-sm font-semibold text-white">Accept Job</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        onPress={() => router.push(`/(reseller)/request/${item.id}`)}
+        className="mt-3 flex-row items-center justify-center gap-1.5 rounded-xl bg-orange-500 py-2.5"
+      >
+        <Ionicons name="checkmark-circle" size={16} color="white" />
+        <Text className="text-sm font-semibold text-white">View &amp; Accept</Text>
+      </Pressable>
     </View>
   );
 }
@@ -198,10 +191,14 @@ export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [viewMode, setViewMode] = useState<ViewMode>('incoming');
 
-  const { data: incoming, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
+  const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
     filters: { status: 'pending', origin: 'app' },
     orderBy: { column: 'created_at', ascending: true },
   });
+  // Any reseller can see a pending app request until someone claims it -
+  // once reseller_id is stamped (see AcceptIncomingRequest), it belongs to
+  // that reseller's My Jobs tab and drops out of everyone's Incoming queue.
+  const incoming = useMemo(() => (incomingRaw ?? []).filter((r) => !r.reseller_id), [incomingRaw]);
 
   const { data: mine, isLoading: loadingMine } = useSupabaseQuery('service_requests', {
     filters: userId ? { reseller_id: userId } : {},
