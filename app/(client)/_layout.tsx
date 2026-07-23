@@ -39,7 +39,6 @@ export default function ClientLayout() {
         <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a repair' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service details' }} />
         <Tabs.Screen name="checkout" options={{ href: null, title: 'Checkout' }} />
-        <Tabs.Screen name="product-orders" options={{ href: null, title: 'My Orders' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
         <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Product' }} />
         <Tabs.Screen name="quotes" options={{ href: null, title: 'My Quotes' }} />
