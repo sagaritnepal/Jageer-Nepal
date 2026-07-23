@@ -7,6 +7,7 @@ import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { OrderCard } from '../../lib/components/OrderCard';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
+import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import type { RequestStatus, ServiceRequest, Order, OrderStatus } from '../../types/database.types';
 
 type ViewMode = 'active' | 'history';
@@ -37,15 +38,20 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
       className="mb-3 rounded-lg border border-gray-200 bg-white p-4"
     >
       <Text className="mb-1 text-xs text-gray-400">Request #{item.id.slice(0, 8).toUpperCase()}</Text>
-      <View className="flex-row items-start justify-between gap-2">
-        <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
-        <StatusPill status={item.status} />
+      <View className="flex-row items-start gap-3">
+        <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
+        <View className="flex-1">
+          <View className="flex-row items-start justify-between gap-2">
+            <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
+            <StatusPill status={item.status} />
+          </View>
+          {item.description && (
+            <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
+              {item.description}
+            </Text>
+          )}
+        </View>
       </View>
-      {item.description && (
-        <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
-          {item.description}
-        </Text>
-      )}
 
       {item.status === 'resolved' && (
         <View className="mt-2 flex-row items-center gap-2">

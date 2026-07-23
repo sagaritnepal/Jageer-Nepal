@@ -9,6 +9,7 @@ import { distanceKm } from '../../lib/utils/distance';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { getCategoryVisual } from '../../lib/constants/categoryIcons';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
+import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import type { RequestStatus, ServiceRequest } from '../../types/database.types';
 
 type ViewMode = 'incoming' | 'mine';
@@ -39,7 +40,10 @@ function IncomingRequestCard({ item }: { item: ServiceRequest }) {
   return (
     <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
       <Pressable onPress={() => router.push(`/(reseller)/request/${item.id}`)} className="flex-row items-start gap-3">
-        <CategoryBadge category={item.issue_type} />
+        <View className="items-center gap-1.5">
+          <CategoryBadge category={item.issue_type} />
+          <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
+        </View>
         <View className="flex-1">
           <View className="flex-row items-start justify-between gap-2">
             <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
@@ -109,7 +113,10 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
       onPress={() => router.push(`/(reseller)/request/${item.id}`)}
       className="mb-3 flex-row items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4"
     >
-      <CategoryBadge category={item.issue_type} />
+      <View className="items-center gap-1.5">
+        <CategoryBadge category={item.issue_type} />
+        <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
+      </View>
       <View className="flex-1">
         <View className="flex-row items-start justify-between gap-2">
           <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
