@@ -1,11 +1,12 @@
 // app/(technician)/job/[id].tsx
 import { useState } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
+import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { getCategoryVisual } from '../../../lib/constants/categoryIcons';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { RequestStatus } from '../../../types/database.types';
@@ -35,7 +36,9 @@ export default function JobCard() {
     enabled: !!id,
   });
   const jobCard = jobCards?.[0] ?? null;
-  const { data: customer } = useSupabaseRow('profiles', request?.client_id);
+  const hasAccepted = !!request && request.status !== 'assigned';
+  const { data: customer } = useSupabaseRow('profiles', hasAccepted ? request?.client_id : undefined);
+  const { data: reseller } = useSupabaseRow('profiles', hasAccepted ? request?.reseller_id ?? undefined : undefined);
 
   const updateRequest = useSupabaseUpdate('service_requests');
   const insertJobCard = useSupabaseInsert('job_cards');
@@ -105,8 +108,13 @@ export default function JobCard() {
   const isSaving = updateRequest.isPending || insertJobCard.isPending || updateJobCard.isPending;
   const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(request.issue_type);
 
+  const resellerName = reseller?.full_name;
+  const resellerPhone = reseller?.phone;
+  const hasResellerContact = hasAccepted && !!(resellerName || resellerPhone);
+
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      <Text className="mb-1 text-xs text-gray-400">Job #{request.id.slice(0, 8).toUpperCase()}</Text>
       <View className="mb-4 flex-row items-center gap-3">
         <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
           <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />
@@ -127,13 +135,53 @@ export default function JobCard() {
         )}
       </View>
 
+      {hasResellerContact && (
+        <View className="mb-6 rounded-xl bg-white p-5">
+          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Reseller</Text>
+          <View className="flex-row items-center gap-3">
+            <PersonAvatar name={resellerName} photoUrl={reseller?.avatar_url} size={40} bg="bg-orange-500" />
+            <View className="flex-1">
+              {resellerName && <Text className="text-sm font-semibold text-gray-900">{resellerName}</Text>}
+              {resellerPhone && <Text className="mt-0.5 text-sm text-gray-500">{resellerPhone}</Text>}
+            </View>
+          </View>
+          {resellerPhone && (
+            <View className="mt-3 flex-row gap-2">
+              <Pressable
+                onPress={() => Linking.openURL(`sms:${resellerPhone}`)}
+                className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-teal-50 py-2.5"
+              >
+                <Ionicons name="chatbubble-outline" size={15} color="#0F766E" />
+                <Text className="text-sm font-semibold text-teal-700">Message</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => Linking.openURL(`tel:${resellerPhone}`)}
+                className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-orange-50 py-2.5"
+              >
+                <Ionicons name="call-outline" size={15} color="#C2410C" />
+                <Text className="text-sm font-semibold text-orange-700">Call Reseller</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      )}
+
+      {!hasAccepted && (
+        <View className="mb-6 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white p-4">
+          <Ionicons name="lock-closed-outline" size={16} color="#9CA3AF" />
+          <Text className="flex-1 text-xs text-gray-400">
+            Reseller and customer contact details unlock once you start this job.
+          </Text>
+        </View>
+      )}
+
       <RequestDetailsExtras
         scheduledDate={request.scheduled_date}
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
-        customerName={request.customer_name ?? customer?.full_name}
-        customerPhone={request.customer_phone ?? customer?.phone}
+        customerName={hasAccepted ? request.customer_name ?? customer?.full_name : undefined}
+        customerPhone={hasAccepted ? request.customer_phone ?? customer?.phone : undefined}
       />
 
       {request.remark && (

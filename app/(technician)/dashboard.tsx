@@ -1,6 +1,6 @@
 // app/(technician)/dashboard.tsx
 import { useMemo } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -171,7 +171,7 @@ export default function TechnicianDashboard() {
   const totalActive = newJobs.length + activeJobs.length;
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">
         Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
       </Text>
@@ -211,6 +211,6 @@ export default function TechnicianDashboard() {
           ))}
         </>
       )}
-    </View>
+    </ScrollView>
   );
 }
