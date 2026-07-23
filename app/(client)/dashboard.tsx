@@ -8,7 +8,6 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
-import { getCategoryVisual } from '../../lib/constants/categoryIcons';
 import type { Profile, ServiceCategory, ServiceRequest, RequestStatus } from '../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
@@ -112,45 +111,24 @@ export default function ClientDashboard() {
           {recentlyHiredResellers.length > 0 && (
             <>
               <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Recently Hired Reseller</Text>
-              {recentlyHiredResellers.map(({ reseller, lastRequest, count }) => {
-                const { bg, icon } = getCategoryVisual(lastRequest.issue_type);
-                return (
-                  <View key={reseller.id} className="mb-2.5 rounded-2xl border border-gray-200 bg-white p-3.5">
-                    <View className="flex-row items-center gap-3">
-                      <View className="h-11 w-11 items-center justify-center rounded-full bg-teal-600">
-                        <Text className="text-xs font-bold text-white">{initialsOf(reseller.full_name)}</Text>
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-[13.5px] font-bold text-gray-900">
-                          {reseller.full_name ?? 'Reseller'}
-                        </Text>
-                        <Text className="mt-0.5 text-[11.5px] text-gray-400" numberOfLines={1}>
-                          {reseller.city ?? 'Nepal'}
-                          {reseller.phone ? ` · ${reseller.phone}` : ''} · {count} job{count === 1 ? '' : 's'} together
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Pressable
-                      onPress={() => router.push(`/(client)/request/${lastRequest.id}`)}
-                      className="mt-3 flex-row items-center gap-2.5 rounded-xl bg-gray-50 p-2.5"
-                    >
-                      <View className={`h-8 w-8 items-center justify-center rounded-lg ${bg}`}>
-                        <Ionicons name={icon ?? 'construct'} size={16} color="white" />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-xs font-semibold text-gray-800" numberOfLines={1}>
-                          {lastRequest.issue_type}
-                        </Text>
-                        <Text className="mt-0.5 text-[10.5px] text-gray-400">
-                          Last task · {new Date(lastRequest.created_at).toLocaleDateString()}
-                        </Text>
-                      </View>
-                      <StatusPill status={lastRequest.status} />
-                    </Pressable>
+              {recentlyHiredResellers.map(({ reseller, lastRequest }) => (
+                <Pressable
+                  key={reseller.id}
+                  onPress={() => router.push(`/(client)/reseller/${reseller.id}`)}
+                  className="mb-2.5 flex-row items-center gap-2.5 rounded-2xl border border-gray-200 bg-white p-3"
+                >
+                  <View className="h-9 w-9 items-center justify-center rounded-full bg-teal-600">
+                    <Text className="text-[11px] font-bold text-white">{initialsOf(reseller.full_name)}</Text>
                   </View>
-                );
-              })}
+                  <Text className="flex-1 text-[13px] text-gray-900" numberOfLines={1}>
+                    <Text className="font-bold">{reseller.full_name ?? 'Reseller'}</Text>
+                    <Text className="text-gray-400"> · {lastRequest.issue_type} · </Text>
+                    <Text className="text-gray-400">{new Date(lastRequest.created_at).toLocaleDateString()}</Text>
+                  </Text>
+                  <StatusPill status={lastRequest.status} />
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </Pressable>
+              ))}
             </>
           )}
         </View>

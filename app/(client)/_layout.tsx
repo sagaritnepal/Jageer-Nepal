@@ -44,6 +44,7 @@ export default function ClientLayout() {
         <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Product' }} />
         <Tabs.Screen name="quotes" options={{ href: null, title: 'My Quotes' }} />
         <Tabs.Screen name="quote/[id]" options={{ href: null, title: 'Quote' }} />
+        <Tabs.Screen name="reseller/[id]" options={{ href: null, title: 'Reseller' }} />
       </Tabs>
     </RoleGuard>
   );
