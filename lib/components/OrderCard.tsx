@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useSupabaseQuery, useSupabaseRow } from '../hooks/useSupabase';
 import { useAdvanceOrder } from '../hooks/useAdvanceOrder';
 import { NEXT_STATUS, STATUS_ACTION_LABEL, STATUS_BADGE_STYLE } from '../utils/orderStatus';
+import { PersonAvatar } from './PersonAvatar';
 import type { Order, Product } from '../../types/database.types';
 
 export function OrderCard({
@@ -32,38 +33,44 @@ export function OrderCard({
   const badgeClass = STATUS_BADGE_STYLE[order.status];
 
   return (
-    <View className="mb-3 rounded-xl border border-gray-200 bg-white p-4">
-      <View className="mb-3 flex-row items-start justify-between">
-        <View className="flex-1">
-          {roleLabel && (
-            <Text className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{roleLabel}</Text>
-          )}
-          <Text className="text-xs text-gray-400">
-            Order #{order.id.slice(0, 8)} · {counterpartyRole} {counterparty?.full_name ?? '…'}
-          </Text>
+    <View className="mb-3 rounded-xl border border-gray-200 bg-white">
+      <Pressable onPress={() => router.push(`${basePath}/order/${order.id}`)} className="p-4">
+        <View className="mb-3 flex-row items-start justify-between gap-2">
+          <View className="flex-1 flex-row items-center gap-2.5">
+            <PersonAvatar name={counterparty?.full_name} photoUrl={counterparty?.avatar_url} size={32} />
+            <View className="flex-1">
+              {roleLabel && (
+                <Text className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{roleLabel}</Text>
+              )}
+              <Text className="text-xs text-gray-400">Order #{order.id.slice(0, 8)}</Text>
+              <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
+                {counterpartyRole} {counterparty?.full_name ?? '…'}
+              </Text>
+            </View>
+          </View>
+          <View className={`rounded-full px-2.5 py-1 ${badgeClass}`}>
+            <Text className={`text-xs font-semibold capitalize ${badgeClass}`}>{order.status}</Text>
+          </View>
         </View>
-        <View className={`rounded-full px-2.5 py-1 ${badgeClass}`}>
-          <Text className={`text-xs font-semibold capitalize ${badgeClass}`}>{order.status}</Text>
+
+        {orderItems?.map((item) => (
+          <View key={item.id} className="mb-1 flex-row justify-between">
+            <Text className="mr-2 flex-1 text-sm text-gray-700" numberOfLines={1}>
+              {productMap.get(item.product_id)?.name ?? 'Product'} × {item.quantity}
+            </Text>
+            <Text className="text-sm text-gray-700">
+              NPR {(Number(item.unit_price) * item.quantity).toLocaleString()}
+            </Text>
+          </View>
+        ))}
+
+        <View className="mt-2 flex-row justify-between border-t border-gray-100 pt-2">
+          <Text className="font-semibold text-gray-900">Total</Text>
+          <Text className="font-semibold text-gray-900">NPR {Number(order.total_amount).toLocaleString()}</Text>
         </View>
-      </View>
+      </Pressable>
 
-      {orderItems?.map((item) => (
-        <View key={item.id} className="mb-1 flex-row justify-between">
-          <Text className="mr-2 flex-1 text-sm text-gray-700" numberOfLines={1}>
-            {productMap.get(item.product_id)?.name ?? 'Product'} × {item.quantity}
-          </Text>
-          <Text className="text-sm text-gray-700">
-            NPR {(Number(item.unit_price) * item.quantity).toLocaleString()}
-          </Text>
-        </View>
-      ))}
-
-      <View className="mt-2 flex-row justify-between border-t border-gray-100 pt-2">
-        <Text className="font-semibold text-gray-900">Total</Text>
-        <Text className="font-semibold text-gray-900">NPR {Number(order.total_amount).toLocaleString()}</Text>
-      </View>
-
-      <View className="mt-3 flex-row gap-2">
+      <View className="flex-row gap-2 px-4 pb-4">
         {isOwner && nextStatus && (
           <Pressable
             onPress={() => advance(order, orderItems, productMap)}

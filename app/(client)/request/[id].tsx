@@ -5,6 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSupabaseRow, useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useRealtimeSync } from '../../../lib/hooks/useSupabase';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
+import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { JobCard, ServiceRequest } from '../../../types/database.types';
 
@@ -168,6 +169,8 @@ export default function RequestDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: request, isLoading } = useSupabaseRow('service_requests', id);
+  const { data: reseller } = useSupabaseRow('profiles', request?.reseller_id ?? undefined);
+  const { data: technician } = useSupabaseRow('profiles', request?.technician_id ?? undefined);
   const { data: jobCards } = useSupabaseQuery('job_cards', {
     filters: id ? { service_request_id: id } : {},
     enabled: !!id && request?.status === 'resolved',
@@ -194,8 +197,34 @@ export default function RequestDetail() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      <Text className="mb-1 text-xs text-gray-400">Request #{request.id.slice(0, 8).toUpperCase()}</Text>
       <Text className="mb-2 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-6 text-gray-600">{request.description}</Text>
+
+      {(reseller || technician) && (
+        <View className="mb-4 flex-row flex-wrap gap-4 rounded-xl bg-white p-5">
+          {reseller && (
+            <View className="flex-row items-center gap-3">
+              <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={40} bg="bg-orange-500" />
+              <View>
+                <Text className="text-[11px] uppercase tracking-wide text-gray-400">Reseller</Text>
+                <Text className="text-sm font-semibold text-gray-800">{reseller.full_name ?? 'Unnamed'}</Text>
+                {reseller.phone && <Text className="text-xs text-gray-500">{reseller.phone}</Text>}
+              </View>
+            </View>
+          )}
+          {technician && (
+            <View className="flex-row items-center gap-3">
+              <PersonAvatar name={technician.full_name} photoUrl={technician.avatar_url} size={40} bg="bg-blue-600" />
+              <View>
+                <Text className="text-[11px] uppercase tracking-wide text-gray-400">Technician</Text>
+                <Text className="text-sm font-semibold text-gray-800">{technician.full_name ?? 'Unnamed'}</Text>
+                {technician.phone && <Text className="text-xs text-gray-500">{technician.phone}</Text>}
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       <View className="rounded-xl bg-white p-5">
         <Text className="text-sm uppercase tracking-wide text-gray-400">Status</Text>

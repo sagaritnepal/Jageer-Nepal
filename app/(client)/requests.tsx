@@ -6,6 +6,7 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { OrderCard } from '../../lib/components/OrderCard';
+import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import type { RequestStatus, ServiceRequest, Order, OrderStatus } from '../../types/database.types';
 
 type ViewMode = 'active' | 'history';
@@ -28,12 +29,14 @@ function StatusPill({ status }: { status: RequestStatus }) {
 
 function ClientRequestCard({ item }: { item: ServiceRequest }) {
   const { data: technician } = useSupabaseRow('profiles', item.technician_id ?? undefined);
+  const { data: reseller } = useSupabaseRow('profiles', item.reseller_id ?? undefined);
 
   return (
     <Pressable
       onPress={() => router.push(`/(client)/request/${item.id}`)}
       className="mb-3 rounded-lg border border-gray-200 bg-white p-4"
     >
+      <Text className="mb-1 text-xs text-gray-400">Request #{item.id.slice(0, 8).toUpperCase()}</Text>
       <View className="flex-row items-start justify-between gap-2">
         <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
         <StatusPill status={item.status} />
@@ -58,6 +61,33 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
         </View>
       )}
 
+      {(reseller || technician) && (
+        <View className="mt-3 flex-row flex-wrap gap-4 border-t border-gray-100 pt-3">
+          {reseller && (
+            <View className="flex-row items-center gap-2">
+              <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={28} bg="bg-orange-500" />
+              <View>
+                <Text className="text-[9.5px] font-semibold uppercase tracking-wide text-gray-400">Reseller</Text>
+                <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
+                  {reseller.full_name ?? 'Unnamed'}
+                </Text>
+              </View>
+            </View>
+          )}
+          {technician && (
+            <View className="flex-row items-center gap-2">
+              <PersonAvatar name={technician.full_name} photoUrl={technician.avatar_url} size={28} bg="bg-blue-600" />
+              <View>
+                <Text className="text-[9.5px] font-semibold uppercase tracking-wide text-gray-400">Technician</Text>
+                <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
+                  {technician.full_name ?? 'Unnamed'}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+
       <View className="mt-3 gap-1">
         {(item.scheduled_date || item.scheduled_time) && (
           <Text className="text-xs text-gray-500">
@@ -75,13 +105,6 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
           <Text className="text-xs text-gray-500">
             <Text className="font-medium text-gray-600">Price: </Text>
             NPR {Number(item.quoted_price).toLocaleString()}
-          </Text>
-        )}
-        {technician && (
-          <Text className="text-xs text-gray-500">
-            <Text className="font-medium text-gray-600">Technician: </Text>
-            {technician.full_name ?? 'Unnamed'}
-            {technician.phone ? ` · ${technician.phone}` : ''}
           </Text>
         )}
         {item.remark && (
