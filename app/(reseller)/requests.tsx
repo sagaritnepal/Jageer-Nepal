@@ -1,5 +1,5 @@
 // app/(reseller)/requests.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, ScrollView, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -288,6 +288,18 @@ export default function ResellerRequestQueue() {
   const activeStage = jobStage ?? STAGE_ORDER.find((stage) => (myByStage.get(stage)?.length ?? 0) > 0) ?? 'action';
   const stageJobs = myByStage.get(activeStage) ?? [];
 
+  // Keep the chip strip and the job list below it in sync: whichever stage
+  // becomes active, scroll its chip into view at the same time the list swaps.
+  const chipScrollRef = useRef<ScrollView>(null);
+  const chipLayouts = useRef<Partial<Record<Stage, { x: number; width: number }>>>({});
+
+  useEffect(() => {
+    const layout = chipLayouts.current[activeStage];
+    if (layout) {
+      chipScrollRef.current?.scrollTo({ x: Math.max(0, layout.x - 24), animated: true });
+    }
+  }, [activeStage]);
+
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-4 flex-row rounded-full bg-gray-100 p-1">
@@ -311,6 +323,7 @@ export default function ResellerRequestQueue() {
 
       {viewMode === 'mine' && (
         <ScrollView
+          ref={chipScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={{ flexGrow: 0, flexShrink: 0 }}
@@ -325,6 +338,9 @@ export default function ResellerRequestQueue() {
               <Pressable
                 key={stage}
                 onPress={() => setJobStage(stage)}
+                onLayout={(e) => {
+                  chipLayouts.current[stage] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
+                }}
                 className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
                 style={{
                   backgroundColor: active ? meta.color : '#FFFFFF',
