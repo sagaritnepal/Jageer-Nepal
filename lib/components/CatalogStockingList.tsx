@@ -11,12 +11,33 @@ import { SearchSuggestions } from './SearchSuggestions';
 import { SearchFilterSheet } from './SearchFilterSheet';
 import type { CatalogProduct, Product } from '../../types/database.types';
 
+const LOW_STOCK_THRESHOLD = 5;
+
+function StockBadge({ stockLevel }: { stockLevel: number }) {
+  if (stockLevel <= 0) {
+    return (
+      <View className="shrink-0 rounded-full bg-gray-900 px-2 py-0.5">
+        <Text className="text-[9px] font-bold uppercase tracking-wide text-white">Out of stock</Text>
+      </View>
+    );
+  }
+  if (stockLevel < LOW_STOCK_THRESHOLD) {
+    return (
+      <View className="shrink-0 rounded-full bg-amber-500 px-2 py-0.5">
+        <Text className="text-[9px] font-bold uppercase tracking-wide text-white">Low stock</Text>
+      </View>
+    );
+  }
+  return null;
+}
+
 function StockRow({
   item,
   existing,
   priceLabel,
   userId,
   capToPurchasedStock,
+  showStockBadge,
   basePath,
 }: {
   item: CatalogProduct;
@@ -24,6 +45,7 @@ function StockRow({
   priceLabel: string;
   userId: string;
   capToPurchasedStock: boolean;
+  showStockBadge?: boolean;
   basePath: string;
 }) {
   const upsertProduct = useSupabaseUpsert('products', 'seller_id,catalog_id');
@@ -119,9 +141,12 @@ function StockRow({
             )}
           </View>
           <View className="flex-1">
-            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-              {item.name}
-            </Text>
+            <View className="flex-row items-center gap-1.5">
+              <Text className="flex-1 text-sm font-semibold text-gray-900" numberOfLines={1}>
+                {item.name}
+              </Text>
+              {showStockBadge && isStocked && <StockBadge stockLevel={effectiveQty} />}
+            </View>
             <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
               {item.category && <Text className="text-orange-600">{item.category}</Text>}
               {item.category && metaText && '  ·  '}
@@ -190,12 +215,14 @@ export function CatalogStockingList({
   capToPurchasedStock = false,
   onlyStocked = false,
   useFilterSheet = false,
+  showStockBadge = false,
   basePath,
 }: {
   priceLabel: string;
   capToPurchasedStock?: boolean;
   onlyStocked?: boolean;
   useFilterSheet?: boolean;
+  showStockBadge?: boolean;
   basePath: string;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -318,6 +345,7 @@ export function CatalogStockingList({
           priceLabel={priceLabel}
           userId={userId}
           capToPurchasedStock={capToPurchasedStock}
+          showStockBadge={showStockBadge}
           basePath={basePath}
         />
       ))}

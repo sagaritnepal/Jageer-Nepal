@@ -9,8 +9,6 @@ import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import type { Profile, ServiceCategory } from '../../types/database.types';
 
-const LOW_STOCK_THRESHOLD = 5;
-
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
   return name
@@ -90,10 +88,6 @@ export default function ResellerDashboard() {
     [orders]
   );
   const deadStock = useMemo(() => (products ?? []).filter((p) => p.is_dead_stock), [products]);
-  const lowStock = useMemo(
-    () => (products ?? []).filter((p) => p.stock_level < LOW_STOCK_THRESHOLD),
-    [products]
-  );
 
   return (
     <>
@@ -175,31 +169,13 @@ export default function ResellerDashboard() {
           )}
 
           <Text className="mb-3 mt-5 text-[15px] font-bold text-gray-900">Shop performance</Text>
-          <View className="mb-2.5 flex-row gap-3">
-            <View className="flex-1 rounded-xl bg-white p-5">
-              <Text className="text-2xl font-bold text-orange-600">NPR {revenue.toLocaleString()}</Text>
-              <Text className="text-sm text-gray-500">Revenue</Text>
-            </View>
-            <View className="flex-1 rounded-xl bg-white p-5">
-              <Text className="text-2xl font-bold text-orange-600">{lowStock.length}</Text>
-              <Text className="text-sm text-gray-500">Low stock items</Text>
-            </View>
+          <View className="mb-2.5 rounded-xl bg-white p-5">
+            <Text className="text-2xl font-bold text-orange-600">NPR {revenue.toLocaleString()}</Text>
+            <Text className="text-sm text-gray-500">Revenue</Text>
           </View>
 
           {deadStock.length > 0 && (
             <Text className="mb-2.5 text-sm text-gray-500">{deadStock.length} item(s) flagged as dead stock</Text>
-          )}
-
-          {lowStock.length > 0 && (
-            <View className="rounded-xl bg-white p-5">
-              <Text className="mb-3 text-sm font-semibold text-gray-900">Low stock</Text>
-              {lowStock.map((p) => (
-                <View key={p.id} className="mb-1 flex-row justify-between">
-                  <Text className="text-sm text-gray-700">{p.name}</Text>
-                  <Text className="text-sm text-amber-600">{p.stock_level} left</Text>
-                </View>
-              ))}
-            </View>
           )}
         </View>
       </ScrollView>
