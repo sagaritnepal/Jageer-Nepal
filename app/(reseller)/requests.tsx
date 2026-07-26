@@ -18,11 +18,12 @@ import type { Order, RequestStatus, ServiceRequest } from '../../types/database.
 // instead - what the reseller should be doing right now for that job - with
 // a plain-language hint per card, rather than making them decode raw status
 // strings across the whole list.
-type Stage = 'action' | 'waiting_customer' | 'in_progress' | 'awaiting_payment' | 'completed' | 'cancelled';
+type Stage = 'requests' | 'action' | 'waiting_customer' | 'in_progress' | 'awaiting_payment' | 'completed' | 'cancelled';
 
-const STAGE_ORDER: Stage[] = ['action', 'waiting_customer', 'in_progress', 'awaiting_payment', 'completed', 'cancelled'];
+const STAGE_ORDER: Stage[] = ['requests', 'action', 'waiting_customer', 'in_progress', 'awaiting_payment', 'completed', 'cancelled'];
 
 const STAGE_META: Record<Stage, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
+  requests: { label: 'Requests', icon: 'download-outline', color: '#EA580C', bg: 'bg-orange-50' },
   action: { label: 'Needs your action', icon: 'alert-circle', color: '#4338CA', bg: 'bg-orange-50' },
   waiting_customer: { label: 'Waiting on customer', icon: 'time-outline', color: '#D97706', bg: 'bg-amber-50' },
   in_progress: { label: 'Job in progress', icon: 'build', color: '#2563EB', bg: 'bg-blue-50' },
@@ -48,14 +49,17 @@ function stageOf(item: ServiceRequest): Stage {
   }
 }
 
-// A pending order needs confirming, a confirmed one still needs shipping,
-// and a shipped one still needs a delivery confirmation - all "you need to
-// do something next", the same idea "action" already covers for service
-// requests. Once delivered there's nothing left to do, same as a paid,
-// resolved service request.
+// A pending order hasn't been looked at yet - same as a brand new,
+// unclaimed service request, it belongs in "Requests" until the reseller
+// confirms it. From there a confirmed order still needs shipping, and a
+// shipped one still needs a delivery confirmation - both "you need to do
+// something next", the same idea "action" covers for an already-claimed
+// service request. Once delivered there's nothing left to do, same as a
+// paid, resolved service request.
 function orderStageOf(order: Order): Stage {
   switch (order.status) {
     case 'pending':
+      return 'requests';
     case 'confirmed':
       return 'action';
     case 'shipped':
@@ -65,7 +69,7 @@ function orderStageOf(order: Order): Stage {
     case 'cancelled':
       return 'cancelled';
     default:
-      return 'action';
+      return 'requests';
   }
 }
 
@@ -321,12 +325,15 @@ export default function ResellerRequestQueue() {
   const isLoading = loadingIncoming || loadingMine;
 
   // Everything - unclaimed requests, claimed jobs, and orders at every status
-  // - lives in one stage-grouped list now. A reseller can jump straight to
-  // e.g. "Awaiting payment" instead of scrolling past every other stage.
+  // - lives in one stage-grouped list now. "Requests" is anything brand new
+  // that hasn't been accepted/confirmed yet; "Needs your action" is only for
+  // jobs already claimed that still need a quote, assignment, or shipment.
+  // A reseller can jump straight to e.g. "Awaiting payment" instead of
+  // scrolling past every other stage.
   const myByStage = useMemo(() => {
     const groups = new Map<Stage, JobItem[]>();
     STAGE_ORDER.forEach((stage) => groups.set(stage, []));
-    incoming.forEach((item) => groups.get(stageOf(item))!.push({ kind: 'request', id: item.id, request: item }));
+    incoming.forEach((item) => groups.get('requests')!.push({ kind: 'request', id: item.id, request: item }));
     (mine ?? []).forEach((item) => groups.get(stageOf(item))!.push({ kind: 'request', id: item.id, request: item }));
     (sellingOrders ?? []).forEach((order) =>
       groups.get(orderStageOf(order))!.push({ kind: 'order', id: order.id, order })
@@ -334,7 +341,7 @@ export default function ResellerRequestQueue() {
     return groups;
   }, [incoming, mine, sellingOrders]);
 
-  const activeStage = jobStage ?? STAGE_ORDER.find((stage) => (myByStage.get(stage)?.length ?? 0) > 0) ?? 'action';
+  const activeStage = jobStage ?? STAGE_ORDER.find((stage) => (myByStage.get(stage)?.length ?? 0) > 0) ?? 'requests';
   const stageJobs = myByStage.get(activeStage) ?? [];
 
   // Keep the chip strip and the job list below it in sync: whichever stage
