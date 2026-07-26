@@ -79,7 +79,7 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
         />
       )}
       {showPicker && Platform.OS === 'ios' && (
-        <Pressable onPress={() => setShowPicker(false)} className="mt-2 items-center rounded-lg bg-blue-700 py-2">
+        <Pressable onPress={() => setShowPicker(false)} className="mt-2 items-center rounded-lg bg-orange-500 py-2">
           <Text className="text-sm font-semibold text-white">Done</Text>
         </Pressable>
       )}

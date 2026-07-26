@@ -63,7 +63,7 @@ export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
         renderItem={({ item }) => (
           <View
             className={`mb-2 max-w-[85%] rounded-lg px-3 py-2 ${
-              item.sender_id === userId ? 'self-end bg-blue-700' : 'self-start bg-gray-100'
+              item.sender_id === userId ? 'self-end bg-orange-500' : 'self-start bg-gray-100'
             }`}
           >
             <Text className={item.sender_id === userId ? 'text-sm text-white' : 'text-sm text-gray-800'}>
@@ -80,7 +80,7 @@ export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
           placeholder="Type a message…"
           className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
-        <Pressable onPress={handleSend} className="rounded-lg bg-blue-700 px-4 py-2">
+        <Pressable onPress={handleSend} className="rounded-lg bg-orange-500 px-4 py-2">
           <Text className="text-sm font-semibold text-white">Send</Text>
         </Pressable>
       </View>

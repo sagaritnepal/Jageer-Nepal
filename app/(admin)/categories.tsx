@@ -80,7 +80,7 @@ export default function AdminCategories() {
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-4 flex-row items-center justify-end">
-        <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-blue-700 px-4 py-2">
+        <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-orange-500 px-4 py-2">
           <Text className="font-semibold text-white">{showForm ? 'Cancel' : '+ Add'}</Text>
         </Pressable>
       </View>
@@ -111,7 +111,7 @@ export default function AdminCategories() {
           <Pressable
             onPress={handleAdd}
             disabled={insertCategory.isPending}
-            className="items-center rounded-lg bg-blue-700 py-2.5 disabled:opacity-50"
+            className="items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
           >
             <Text className="text-sm font-semibold text-white">
               {insertCategory.isPending ? 'Adding…' : 'Add category'}

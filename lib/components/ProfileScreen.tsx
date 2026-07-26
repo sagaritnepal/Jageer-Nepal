@@ -119,7 +119,7 @@ function ProfileDetails({ profile }: { profile: Profile }) {
         <View className="mb-3 flex-row items-center justify-between">
           <Text className="text-sm font-semibold text-gray-900">Your details</Text>
           <Pressable onPress={startEditing} className="flex-row items-center gap-1">
-            <Ionicons name="pencil" size={13} color="#EA580C" />
+            <Ionicons name="pencil" size={13} color="#4338CA" />
             <Text className="text-xs font-bold text-orange-600">Edit</Text>
           </Pressable>
         </View>
@@ -248,8 +248,8 @@ function TechnicianAvailability({ profile }: { profile: Profile }) {
           value={profile.is_available}
           onValueChange={toggleAvailable}
           disabled={updateProfile.isPending}
-          trackColor={{ false: '#D1D5DB', true: '#FDBA74' }}
-          thumbColor={profile.is_available ? '#F97316' : '#F3F4F6'}
+          trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
+          thumbColor={profile.is_available ? '#4F46E5' : '#F3F4F6'}
         />
       </View>
 
@@ -311,7 +311,7 @@ function SkillsPicker({ profile }: { profile: Profile }) {
         className="mb-4 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5"
       >
         <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-50">
-          <Ionicons name="construct-outline" size={18} color="#EA580C" />
+          <Ionicons name="construct-outline" size={18} color="#4338CA" />
         </View>
         <View className="flex-1">
           <Text className="font-semibold text-gray-900">My Skills</Text>
@@ -400,7 +400,7 @@ function ReportIssue({ userId }: { userId: string }) {
         className="mb-4 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5"
       >
         <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-50">
-          <Ionicons name="help-buoy-outline" size={18} color="#EA580C" />
+          <Ionicons name="help-buoy-outline" size={18} color="#4338CA" />
         </View>
         <View className="flex-1">
           <Text className="font-semibold text-gray-900">Report an Issue / Support</Text>

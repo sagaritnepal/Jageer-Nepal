@@ -216,7 +216,7 @@ export default function RequestDetails() {
       <Pressable
         onPress={handleSubmit}
         disabled={submitting}
-        className="items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
+        className="items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
       >
         <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
       </Pressable>

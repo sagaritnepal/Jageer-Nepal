@@ -83,7 +83,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
             <Pressable
               onPress={handleMarkPaid}
               disabled={updateRequest.isPending}
-              className="rounded-lg bg-blue-700 px-4 py-2 disabled:opacity-50"
+              className="rounded-lg bg-orange-500 px-4 py-2 disabled:opacity-50"
             >
               <Text className="text-sm font-semibold text-white">
                 {updateRequest.isPending ? 'Updating…' : 'Mark as paid'}
@@ -293,7 +293,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
       <Pressable
         onPress={handleSendQuote}
         disabled={updateRequest.isPending}
-        className="items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
+        className="items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
       >
         <Text className="text-base font-semibold text-white">
           {updateRequest.isPending ? 'Sending…' : 'Send quote to customer'}

@@ -162,7 +162,7 @@ export default function ClientRequests() {
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-4 flex-row items-center justify-end">
-        <Pressable onPress={() => router.push('/(client)/new-request')} className="rounded-lg bg-blue-700 px-4 py-2">
+        <Pressable onPress={() => router.push('/(client)/new-request')} className="rounded-lg bg-orange-500 px-4 py-2">
           <Text className="font-semibold text-white">+ New</Text>
         </Pressable>
       </View>
@@ -170,7 +170,7 @@ export default function ClientRequests() {
       <View className="mb-4 flex-row rounded-lg border border-gray-300 bg-white p-1">
         <Pressable
           onPress={() => setViewMode('active')}
-          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'active' ? 'bg-blue-700' : ''}`}
+          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'active' ? 'bg-orange-500' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'active' ? 'text-white' : 'text-gray-600'}`}>
             Active
@@ -178,7 +178,7 @@ export default function ClientRequests() {
         </Pressable>
         <Pressable
           onPress={() => setViewMode('history')}
-          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'history' ? 'bg-blue-700' : ''}`}
+          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'history' ? 'bg-orange-500' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'history' ? 'text-white' : 'text-gray-600'}`}>
             History

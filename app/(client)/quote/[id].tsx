@@ -75,7 +75,7 @@ export default function ClientQuoteDetail() {
             <Pressable
               onPress={handleAccept}
               disabled={updateQuote.isPending}
-              className="flex-1 items-center rounded-lg bg-blue-700 py-2.5 disabled:opacity-50"
+              className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
             >
               <Text className="text-sm font-semibold text-white">
                 {updateQuote.isPending ? 'Updating…' : 'Accept quote'}

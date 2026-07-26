@@ -1,5 +1,5 @@
 // lib/components/CatalogProductDetail.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
@@ -28,6 +28,16 @@ export function CatalogProductDetail({
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
   const [saving, setSaving] = useState(false);
 
+  // `existing` comes from a second, separately-loading query - it's almost
+  // never ready by the time these useState initializers run, so re-sync once
+  // it (or a different stocked item) actually arrives.
+  useEffect(() => {
+    if (existing) {
+      setQty(existing.stock_level);
+      setPrice(String(existing.price));
+    }
+  }, [existing?.id]);
+
   if (isLoading || !item) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-50">
@@ -42,6 +52,13 @@ export function CatalogProductDetail({
   const purchasePrice = existing?.purchase_price ?? null;
   const atPurchasedCap = capToPurchasedStock && qty >= purchasedStock;
   const nothingPurchased = capToPurchasedStock && purchasedStock <= 0;
+
+  const typedPrice = parseFloat(price);
+  const resalePrice = Number.isNaN(typedPrice) ? null : typedPrice;
+  const margin =
+    purchasePrice != null && resalePrice != null
+      ? { amount: resalePrice - purchasePrice, pct: purchasePrice > 0 ? ((resalePrice - purchasePrice) / purchasePrice) * 100 : 0 }
+      : null;
 
   async function handleSave() {
     if (!userId) return;
@@ -100,14 +117,39 @@ export function CatalogProductDetail({
           {isStocked ? 'Update your listing' : 'Stock this item'}
         </Text>
 
-        {capToPurchasedStock && (
+        {capToPurchasedStock && purchasedStock <= 0 && (
           <Text className="mb-3 text-xs font-medium text-gray-500">
-            {purchasedStock > 0
-              ? `Purchased from wholesale: ${purchasedStock} units${
-                  purchasePrice != null ? ` @ NPR ${Number(purchasePrice).toLocaleString()}` : ''
-                }`
-              : 'Buy this from Wholesale first to list it here.'}
+            Buy this from Wholesale first to list it here.
           </Text>
+        )}
+
+        {capToPurchasedStock && purchasePrice != null && (
+          <>
+            <Text className="mb-3 text-xs font-medium text-gray-500">
+              Purchased from wholesale: {purchasedStock} unit{purchasedStock === 1 ? '' : 's'}
+            </Text>
+            <View className="mb-3 flex-row gap-3">
+              <View className="flex-1 rounded-xl border border-gray-200 bg-gray-50 p-3.5">
+                <Text className="text-[11px] text-gray-500">Wholesale price</Text>
+                <Text className="mt-1 text-lg font-extrabold text-gray-900">
+                  NPR {Number(purchasePrice).toLocaleString()}
+                </Text>
+              </View>
+              <View className="flex-1 rounded-xl bg-emerald-50 p-3.5">
+                <Text className="text-[11px] text-emerald-700">Your resale price</Text>
+                <Text className="mt-1 text-lg font-extrabold text-emerald-700">
+                  {resalePrice != null ? `NPR ${resalePrice.toLocaleString()}` : '—'}
+                </Text>
+              </View>
+            </View>
+            {margin && (
+              <View className="mb-3 self-start rounded-full bg-orange-50 px-3 py-1.5">
+                <Text className="text-xs font-bold text-orange-600">
+                  Margin: NPR {margin.amount.toLocaleString()} ({margin.pct.toFixed(1)}%)
+                </Text>
+              </View>
+            )}
+          </>
         )}
 
         <View className="mb-5 flex-row items-center gap-3">

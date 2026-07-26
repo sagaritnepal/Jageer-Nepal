@@ -124,7 +124,7 @@ export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
       <Pressable
         onPress={handlePlaceOrder}
         disabled={submitting}
-        className="items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
+        className="items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
       >
         <Text className="text-base font-semibold text-white">{submitting ? 'Placing order…' : 'Place order'}</Text>
       </Pressable>

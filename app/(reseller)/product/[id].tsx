@@ -85,7 +85,7 @@ export default function ResellerProductDetail() {
         <Pressable
           onPress={handleAddToCart}
           disabled={outOfStock}
-          className="items-center rounded-xl bg-blue-700 py-3.5 disabled:opacity-40"
+          className="items-center rounded-xl bg-orange-500 py-3.5 disabled:opacity-40"
         >
           <Text className="text-base font-semibold text-white">
             {outOfStock ? 'Out of stock' : 'Add to cart'}

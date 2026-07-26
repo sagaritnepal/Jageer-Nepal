@@ -155,7 +155,7 @@ function RatingForm({
       <Pressable
         onPress={handleSubmit}
         disabled={insertReview.isPending}
-        className="items-center rounded-lg bg-blue-700 py-2.5 disabled:opacity-50"
+        className="items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
       >
         <Text className="text-sm font-semibold text-white">
           {insertReview.isPending ? 'Submitting…' : 'Submit rating'}

@@ -69,7 +69,7 @@ export default function ClientQuotes() {
       <View className="mb-4 flex-row rounded-lg border border-gray-300 bg-white p-1">
         <Pressable
           onPress={() => setViewMode('active')}
-          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'active' ? 'bg-blue-700' : ''}`}
+          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'active' ? 'bg-orange-500' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'active' ? 'text-white' : 'text-gray-600'}`}>
             Active
@@ -77,7 +77,7 @@ export default function ClientQuotes() {
         </Pressable>
         <Pressable
           onPress={() => setViewMode('history')}
-          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'history' ? 'bg-blue-700' : ''}`}
+          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'history' ? 'bg-orange-500' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'history' ? 'text-white' : 'text-gray-600'}`}>
             History

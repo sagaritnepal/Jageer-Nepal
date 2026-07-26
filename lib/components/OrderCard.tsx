@@ -75,7 +75,7 @@ export function OrderCard({
           <Pressable
             onPress={() => advance(order, orderItems, productMap)}
             disabled={isBusy}
-            className="flex-1 items-center rounded-lg bg-blue-700 py-2 disabled:opacity-50"
+            className="flex-1 items-center rounded-lg bg-orange-500 py-2 disabled:opacity-50"
           >
             <Text className="text-sm font-semibold text-white">
               {isBusy ? 'Updating…' : STATUS_ACTION_LABEL[order.status]}

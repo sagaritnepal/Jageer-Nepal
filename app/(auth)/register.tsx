@@ -1,16 +1,18 @@
 // app/(auth)/register.tsx
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { AppLogo } from '../../lib/components/AppLogo';
 import { showAlert } from '../../lib/utils/alert';
 import type { UserRole } from '../../types/database.types';
 
-const ROLES: { label: string; value: UserRole }[] = [
-  { label: 'Client', value: 'client' },
-  { label: 'Technician', value: 'technician' },
-  { label: 'Reseller', value: 'reseller' },
-  { label: 'Wholesaler', value: 'wholesaler' },
+const ROLES: { label: string; value: UserRole; desc: string; color: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { label: 'Wholesaler', value: 'wholesaler', desc: 'Supply products in bulk to resellers', color: '#4F46E5', icon: 'cube' },
+  { label: 'Reseller', value: 'reseller', desc: 'Buy wholesale, sell to customers', color: '#7C3AED', icon: 'storefront' },
+  { label: 'Technician', value: 'technician', desc: 'Get assigned service & install jobs', color: '#D97706', icon: 'construct' },
+  { label: 'Client', value: 'client', desc: 'Order products & book services', color: '#059669', icon: 'person' },
 ];
 
 export default function Register() {
@@ -18,7 +20,6 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('client');
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedRole = ROLES.find((r) => r.value === role)!;
@@ -41,78 +42,84 @@ export default function Register() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}>
-      <Text className="mb-1 text-3xl font-bold text-blue-700">Create account</Text>
-      <Text className="mb-8 text-gray-500">Join Jageer Nepal</Text>
+    <ScrollView className="flex-1 bg-white" contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: 64 }}>
+      <AppLogo size={40} />
+      <Text className="mb-1.5 mt-5 text-2xl font-extrabold text-gray-900">Choose how you'll use Jageer</Text>
+      <Text className="mb-5 text-sm text-gray-500">You can add more roles later from Settings.</Text>
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Full name</Text>
+      <View className="mb-6 gap-2.5">
+        {ROLES.map((r) => {
+          const selected = r.value === role;
+          return (
+            <Pressable
+              key={r.value}
+              onPress={() => setRole(r.value)}
+              className="flex-row items-center gap-3.5 rounded-2xl border-[1.5px] bg-white p-4"
+              style={{
+                borderColor: selected ? r.color : '#E5E7EB',
+                shadowColor: selected ? r.color : undefined,
+                shadowOpacity: selected ? 0.15 : 0,
+                shadowRadius: selected ? 6 : 0,
+              }}
+            >
+              <View
+                className="h-10 w-10 items-center justify-center rounded-xl"
+                style={{ backgroundColor: `${r.color}1A` }}
+              >
+                <Ionicons name={r.icon} size={19} color={r.color} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[15px] font-bold text-gray-900">{r.label}</Text>
+                <Text className="mt-0.5 text-xs text-gray-500">{r.desc}</Text>
+              </View>
+              {selected && <Ionicons name="checkmark-circle" size={20} color={r.color} />}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text className="mb-1.5 text-xs font-semibold text-gray-500">Full name</Text>
       <TextInput
         value={fullName}
         onChangeText={setFullName}
         placeholder="Your name"
-        className="mb-4 rounded-lg border border-gray-300 px-4 py-3 text-base"
+        placeholderTextColor="#9CA3AF"
+        className="mb-3.5 rounded-xl border-[1.5px] border-gray-200 px-4 py-3.5 text-sm text-gray-900"
       />
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Email</Text>
+      <Text className="mb-1.5 text-xs font-semibold text-gray-500">Email</Text>
       <TextInput
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
         placeholder="you@example.com"
-        className="mb-4 rounded-lg border border-gray-300 px-4 py-3 text-base"
+        placeholderTextColor="#9CA3AF"
+        className="mb-3.5 rounded-xl border-[1.5px] border-gray-200 px-4 py-3.5 text-sm text-gray-900"
       />
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Password</Text>
+      <Text className="mb-1.5 text-xs font-semibold text-gray-500">Password</Text>
       <TextInput
         value={password}
         onChangeText={setPassword}
         secureTextEntry
         placeholder="••••••••"
-        className="mb-4 rounded-lg border border-gray-300 px-4 py-3 text-base"
+        placeholderTextColor="#9CA3AF"
+        className="mb-6 rounded-xl border-[1.5px] border-gray-200 px-4 py-3.5 text-sm text-gray-900"
       />
-
-      <Text className="mb-1 text-sm font-medium text-gray-700">I am a…</Text>
-      <View className="mb-6">
-        <Pressable
-          onPress={() => setShowRoleMenu((v) => !v)}
-          className="flex-row items-center justify-between rounded-lg border border-gray-300 px-4 py-3"
-        >
-          <Text className="text-base text-gray-900">{selectedRole.label}</Text>
-          <Text className="text-gray-400">{showRoleMenu ? '▲' : '▼'}</Text>
-        </Pressable>
-        {showRoleMenu && (
-          <View className="mt-1 rounded-lg border border-gray-200 bg-white">
-            {ROLES.map((r) => (
-              <Pressable
-                key={r.value}
-                onPress={() => {
-                  setRole(r.value);
-                  setShowRoleMenu(false);
-                }}
-                className="px-4 py-2.5"
-              >
-                <Text className={r.value === role ? 'font-semibold text-blue-700' : 'text-gray-700'}>
-                  {r.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </View>
 
       <Pressable
         onPress={handleRegister}
         disabled={isSubmitting}
-        className="mb-4 items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
+        className="mb-4 items-center rounded-xl bg-orange-500 py-3.5 disabled:opacity-50"
       >
-        <Text className="text-base font-semibold text-white">
-          {isSubmitting ? 'Creating account…' : 'Register'}
+        <Text className="text-[15px] font-bold text-white">
+          {isSubmitting ? 'Creating account…' : `Continue as ${selectedRole.label}`}
         </Text>
       </Pressable>
 
-      <Link href="/(auth)/login" className="text-center text-blue-700">
-        Already have an account? Sign in
+      <Link href="/(auth)/login" className="text-center text-[12.5px] text-gray-500">
+        Already have an account? <Text className="font-bold text-orange-600">Sign in</Text>
       </Link>
     </ScrollView>
   );

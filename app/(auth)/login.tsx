@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable } from 'react-native';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { AppLogo } from '../../lib/components/AppLogo';
 import { showAlert } from '../../lib/utils/alert';
 
 export default function Login() {
@@ -24,40 +25,41 @@ export default function Login() {
 
   return (
     <View className="flex-1 justify-center bg-white px-6">
-      <Text className="mb-1 text-3xl font-bold text-blue-700">Jageer Nepal</Text>
-      <Text className="mb-8 text-gray-500">Sign in to continue</Text>
+      <AppLogo size={44} />
+      <Text className="mt-5 text-2xl font-extrabold text-gray-900">Welcome back</Text>
+      <Text className="mb-7 mt-1.5 text-sm text-gray-500">Sign in to your Jageer account</Text>
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Email</Text>
+      <Text className="mb-1.5 text-xs font-semibold text-gray-500">Email</Text>
       <TextInput
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
         placeholder="you@example.com"
-        className="mb-4 rounded-lg border border-gray-300 px-4 py-3 text-base"
+        placeholderTextColor="#9CA3AF"
+        className="mb-3.5 rounded-xl border-[1.5px] border-gray-200 px-4 py-3.5 text-sm text-gray-900"
       />
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Password</Text>
+      <Text className="mb-1.5 text-xs font-semibold text-gray-500">Password</Text>
       <TextInput
         value={password}
         onChangeText={setPassword}
         secureTextEntry
         placeholder="••••••••"
-        className="mb-6 rounded-lg border border-gray-300 px-4 py-3 text-base"
+        placeholderTextColor="#9CA3AF"
+        className="mb-6 rounded-xl border-[1.5px] border-gray-200 px-4 py-3.5 text-sm text-gray-900"
       />
 
       <Pressable
         onPress={handleLogin}
         disabled={isSubmitting}
-        className="mb-4 items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
+        className="mb-4 items-center rounded-xl bg-orange-500 py-3.5 disabled:opacity-50"
       >
-        <Text className="text-base font-semibold text-white">
-          {isSubmitting ? 'Signing in…' : 'Sign In'}
-        </Text>
+        <Text className="text-[15px] font-bold text-white">{isSubmitting ? 'Signing in…' : 'Sign in'}</Text>
       </Pressable>
 
-      <Link href="/(auth)/register" className="text-center text-blue-700">
-        Don't have an account? Register
+      <Link href="/(auth)/register" className="text-center text-[12.5px] text-gray-500">
+        New to Jageer? <Text className="font-bold text-orange-600">Create account</Text>
       </Link>
     </View>
   );

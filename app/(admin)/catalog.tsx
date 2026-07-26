@@ -166,7 +166,7 @@ export default function AdminCatalog() {
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <View className="mb-4 flex-row items-center justify-end">
-        <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-blue-700 px-4 py-2">
+        <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-orange-500 px-4 py-2">
           <Text className="font-semibold text-white">{showForm ? 'Cancel' : '+ Add'}</Text>
         </Pressable>
       </View>
@@ -214,7 +214,7 @@ export default function AdminCatalog() {
           <Pressable
             onPress={handleAdd}
             disabled={insertItem.isPending}
-            className="items-center rounded-lg bg-blue-700 py-2.5 disabled:opacity-50"
+            className="items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
           >
             <Text className="text-sm font-semibold text-white">
               {insertItem.isPending ? 'Adding…' : 'Add to catalog'}

@@ -8,6 +8,50 @@ import { useAdvanceOrder } from '../hooks/useAdvanceOrder';
 import { ChatThread } from './ChatThread';
 import { PersonAvatar } from './PersonAvatar';
 import { NEXT_STATUS, STATUS_ACTION_LABEL } from '../utils/orderStatus';
+import type { OrderStatus } from '../../types/database.types';
+
+const ORDER_STEPS: { status: OrderStatus; label: string }[] = [
+  { status: 'pending', label: 'Order placed' },
+  { status: 'confirmed', label: 'Confirmed' },
+  { status: 'shipped', label: 'Shipped' },
+  { status: 'delivered', label: 'Delivered' },
+];
+
+function OrderStatusStepper({ status }: { status: OrderStatus }) {
+  if (status === 'cancelled') {
+    return (
+      <View className="mb-6 rounded-xl border border-red-200 bg-red-50 p-5">
+        <Text className="text-sm font-semibold text-red-700">This order was cancelled.</Text>
+      </View>
+    );
+  }
+
+  const currentIndex = ORDER_STEPS.findIndex((s) => s.status === status);
+
+  return (
+    <View className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+      {ORDER_STEPS.map((step, i) => {
+        const done = i < currentIndex || (i === currentIndex && status === 'delivered');
+        const active = i === currentIndex && status !== 'delivered';
+        return (
+          <View
+            key={step.status}
+            className="flex-row items-center gap-3"
+            style={{ paddingBottom: i < ORDER_STEPS.length - 1 ? 14 : 0 }}
+          >
+            <View
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: done ? '#059669' : active ? '#4F46E5' : '#E2E8F0' }}
+            />
+            <Text className={`text-[12.5px] ${done || active ? 'font-semibold text-gray-900' : 'text-gray-400'}`}>
+              {step.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 export function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -43,6 +87,8 @@ export function OrderDetailScreen() {
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">Order #{order.id.slice(0, 8)}</Text>
 
+      <OrderStatusStepper status={order.status} />
+
       <View className="mb-6 flex-row items-center gap-3">
         <PersonAvatar name={counterparty?.full_name} photoUrl={counterparty?.avatar_url} size={40} />
         <View>
@@ -52,7 +98,7 @@ export function OrderDetailScreen() {
         </View>
       </View>
 
-      <View className="mb-4 rounded-xl bg-white p-5">
+      <View className="mb-6 rounded-xl bg-white p-5">
         {orderItems?.map((item) => (
           <View key={item.id} className="mb-1 flex-row justify-between">
             <Text className="text-sm text-gray-700">
@@ -69,16 +115,11 @@ export function OrderDetailScreen() {
         </View>
       </View>
 
-      <View className="mb-6 rounded-xl bg-white p-5">
-        <Text className="text-sm uppercase tracking-wide text-gray-400">Status</Text>
-        <Text className="mt-1 text-lg font-semibold capitalize text-blue-700">{order.status}</Text>
-      </View>
-
       {isOwner && nextStatus && (
         <Pressable
           onPress={() => advance(order, orderItems, productMap)}
           disabled={isBusy}
-          className="mb-4 items-center rounded-lg bg-blue-700 py-3 disabled:opacity-50"
+          className="mb-4 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
         >
           <Text className="text-base font-semibold text-white">
             {isBusy ? 'Updating…' : STATUS_ACTION_LABEL[order.status]}

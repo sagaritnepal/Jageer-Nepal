@@ -81,7 +81,7 @@ function RequestQuote({ productId, sellerId }: { productId: string; sellerId: st
         <Pressable
           onPress={handleSend}
           disabled={insertQuote.isPending}
-          className="flex-1 items-center rounded-lg bg-blue-700 py-2.5 disabled:opacity-50"
+          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
         >
           <Text className="text-sm font-semibold text-white">{insertQuote.isPending ? 'Sending…' : 'Send request'}</Text>
         </Pressable>
@@ -178,7 +178,7 @@ export default function ClientProductDetail() {
         <Pressable
           onPress={handleAddToCart}
           disabled={outOfStock}
-          className="items-center rounded-xl bg-blue-700 py-3.5 disabled:opacity-40"
+          className="items-center rounded-xl bg-orange-500 py-3.5 disabled:opacity-40"
         >
           <Text className="text-base font-semibold text-white">
             {outOfStock ? 'Out of stock' : 'Add to cart'}

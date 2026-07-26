@@ -34,7 +34,7 @@ export const CATEGORY_BG_COLORS = [
   'bg-teal-500',
   'bg-fuchsia-500',
   'bg-green-500',
-  'bg-orange-500',
+  'bg-rose-500',
   'bg-yellow-500',
   'bg-cyan-500',
 ];

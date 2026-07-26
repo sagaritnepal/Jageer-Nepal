@@ -5,7 +5,7 @@ import { View, Text, Pressable } from 'react-native';
 export function BarChart({
   data,
   color = '#0D9488',
-  selectedColor = '#F97316',
+  selectedColor = '#4F46E5',
   height = 110,
   formatValue,
   formatLabel,

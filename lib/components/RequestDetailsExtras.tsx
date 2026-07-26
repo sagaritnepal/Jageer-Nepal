@@ -83,7 +83,7 @@ export function RequestDetailsExtras({
                   onPress={() => Linking.openURL(`tel:${customerPhone}`)}
                   className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-orange-50 py-2.5"
                 >
-                  <Ionicons name="call-outline" size={15} color="#C2410C" />
+                  <Ionicons name="call-outline" size={15} color="#3730A3" />
                   <Text className="text-sm font-semibold text-orange-700">Call Customer</Text>
                 </Pressable>
               </View>

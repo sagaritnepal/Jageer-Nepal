@@ -1,5 +1,5 @@
 // lib/components/CatalogStockingList.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -35,6 +35,16 @@ function StockRow({
   const [qty, setQty] = useState(existing?.stock_level ?? 0);
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
   const [saving, setSaving] = useState(false);
+
+  // `existing` arrives from a query that can resolve after this row already
+  // mounted with it undefined - re-sync once the real stocked values show up,
+  // otherwise a stray "Update" tap could save 0/blank over a real listing.
+  useEffect(() => {
+    if (existing) {
+      setQty(existing.stock_level);
+      setPrice(String(existing.price));
+    }
+  }, [existing?.id]);
 
   const isStocked = !!existing;
   const effectiveQty = capToPurchasedStock ? (existing?.stock_level ?? purchasedStock) : qty;
@@ -87,6 +97,13 @@ function StockRow({
       ? 'Stocked'
       : null;
 
+  // Live listing margin vs. wholesale cost - only meaningful once the
+  // reseller has both bought stock and set a resale price.
+  const savedMargin =
+    capToPurchasedStock && purchasePrice != null && purchasePrice > 0 && existing && Number(existing.price) > 0
+      ? ((Number(existing.price) - purchasePrice) / purchasePrice) * 100
+      : null;
+
   return (
     <View className="mb-2 rounded-xl border border-gray-200 bg-white p-2.5">
       <View className="flex-row items-center gap-2.5">
@@ -109,6 +126,13 @@ function StockRow({
               {item.category && <Text className="text-orange-600">{item.category}</Text>}
               {item.category && metaText && '  ·  '}
               {metaText}
+              {savedMargin != null && (
+                <Text className="font-semibold text-emerald-600">
+                  {'  ·  '}
+                  {savedMargin >= 0 ? '+' : ''}
+                  {savedMargin.toFixed(1)}%
+                </Text>
+              )}
             </Text>
           </View>
         </Pressable>
@@ -117,8 +141,8 @@ function StockRow({
             value={existing?.is_listed ?? true}
             onValueChange={handleToggleListed}
             disabled={updateProduct.isPending}
-            trackColor={{ false: '#D1D5DB', true: '#FDBA74' }}
-            thumbColor={(existing?.is_listed ?? true) ? '#F97316' : '#F3F4F6'}
+            trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
+            thumbColor={(existing?.is_listed ?? true) ? '#4F46E5' : '#F3F4F6'}
           />
         )}
       </View>
