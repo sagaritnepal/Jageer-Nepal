@@ -6,8 +6,6 @@ type IoniconName = keyof typeof Ionicons.glyphMap;
 // Known categories get a real vector icon; anything an admin adds later
 // without a mapping here just falls back to its emoji from the DB.
 export const CATEGORY_ICON_MAP: Record<string, IoniconName> = {
-  'Hardware & Installation': 'construct',
-  'Network Issues': 'wifi',
   'Website & App Design': 'code-slash',
   'Digital Marketing': 'megaphone',
   Cybersecurity: 'shield-checkmark',
@@ -20,6 +18,26 @@ export const CATEGORY_ICON_MAP: Record<string, IoniconName> = {
   'AC Service & Repair': 'snow',
   'Electrical Work': 'flash',
   'UPS & Inverter': 'battery-charging',
+  'Server Maintenance': 'server-outline',
+  'Printer Repair': 'print',
+  'Scanner Repair': 'scan-outline',
+  'Washing Machine Repair': 'sync-circle',
+  'Geyser & Water Heater': 'flame',
+  'Refrigerator Repair': 'snow',
+  'TV Repair': 'tv',
+  'Speaker & Sound System': 'volume-high',
+  'Attendance & Biometric Systems': 'finger-print',
+  'Microwave Oven Repair': 'thermometer',
+  'Fan Repair': 'sync-circle',
+  'Walkie Talkie Repair': 'radio',
+  'WiFi Router Setup': 'wifi',
+  'Network Switches & Cabling': 'git-network-outline',
+  'Water Purifier & RO Repair': 'water',
+  'Vacuum Cleaner Repair': 'construct',
+  'Induction Stove Repair': 'flame',
+  'Iron Repair': 'construct',
+  'Water Pump Repair': 'water',
+  'Projector Repair': 'construct',
 };
 
 export const CATEGORY_BG_COLORS = [
