@@ -7,6 +7,7 @@ import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery } from '../hooks/useSupabase';
 import { SearchFilterSheet } from './SearchFilterSheet';
 import { filterBySearch } from '../utils/search';
+import { LOW_STOCK_THRESHOLD } from '../constants/stock';
 import type { Product, UserRole } from '../../types/database.types';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'name';
@@ -18,8 +19,15 @@ const SORT_LABELS: Record<SortOption, string> = {
   name: 'Name',
 };
 
+function stockBadge(stockLevel: number) {
+  if (stockLevel <= 0) return { label: 'Out of stock', bg: 'bg-gray-900/80' };
+  if (stockLevel < LOW_STOCK_THRESHOLD) return { label: 'Low stock', bg: 'bg-amber-500/90' };
+  return { label: 'In stock', bg: 'bg-emerald-600/90' };
+}
+
 function StorefrontCard({ item, basePath }: { item: Product; basePath: string }) {
   const outOfStock = item.stock_level <= 0;
+  const badge = stockBadge(item.stock_level);
   const detailHref = item.catalog_id ? `${basePath}/catalog/${item.catalog_id}` : null;
 
   const content = (
@@ -30,14 +38,8 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
         ) : (
           <Text className="text-3xl">🖥️</Text>
         )}
-        <View
-          className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 ${
-            outOfStock ? 'bg-gray-900/70' : 'bg-emerald-600/90'
-          }`}
-        >
-          <Text className="text-[9px] font-bold uppercase tracking-wide text-white">
-            {outOfStock ? 'Out of stock' : 'In stock'}
-          </Text>
+        <View className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 ${badge.bg}`}>
+          <Text className="text-[9px] font-bold uppercase tracking-wide text-white">{badge.label}</Text>
         </View>
       </View>
 
@@ -67,6 +69,35 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
   );
 }
 
+// Auto-credited from a delivered wholesale purchase but never priced yet -
+// invisible to real customers (MyStorefront's `listed` filter excludes it),
+// so without a nudge here a reseller would have no way to discover or price
+// a fresh purchase now that My Inventory no longer exists as a separate tab.
+function NeedsPriceRow({ item, basePath }: { item: Product; basePath: string }) {
+  const detailHref = item.catalog_id ? `${basePath}/catalog/${item.catalog_id}` : null;
+  return (
+    <Pressable
+      onPress={() => detailHref && router.push(detailHref)}
+      className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-2.5"
+    >
+      <View className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white">
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+        ) : (
+          <Text className="text-base">📦</Text>
+        )}
+      </View>
+      <View className="flex-1">
+        <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text className="mt-0.5 text-[11px] text-amber-700">{item.stock_level} purchased · tap to set a price</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color="#D97706" />
+    </Pressable>
+  );
+}
+
 export function MyStorefront({
   sellerRole,
   note,
@@ -90,12 +121,16 @@ export function MyStorefront({
     enabled: !!userId,
   });
 
-  // A row with no price was never actually priced for sale (e.g. "Add" was
-  // tapped without setting a price/qty) - it isn't a real listing yet, so
-  // don't show it as one. is_listed is the seller's explicit market on/off
-  // switch, independent of price/stock.
+  // A row with no price was never actually priced for sale (e.g. auto-credited
+  // from a wholesale purchase, or "Add" was tapped without setting a price) -
+  // it isn't a real listing yet, so don't show it as one. is_listed is the
+  // seller's explicit market on/off switch, independent of price/stock.
   const listed = useMemo(
     () => (products ?? []).filter((p) => Number(p.price) > 0 && p.is_listed !== false),
+    [products]
+  );
+  const needsPrice = useMemo(
+    () => (products ?? []).filter((p) => Number(p.price) <= 0 && p.is_listed !== false),
     [products]
   );
 
@@ -129,7 +164,7 @@ export function MyStorefront({
     return sorted;
   }, [listed, search, category, sortBy]);
 
-  if (!isLoading && listed.length === 0) {
+  if (!isLoading && listed.length === 0 && needsPrice.length === 0) {
     return (
       <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-12">
         <Ionicons name="storefront-outline" size={36} color="#D1D5DB" />
@@ -144,6 +179,17 @@ export function MyStorefront({
   return (
     <>
       <Text className="mb-3 text-xs text-gray-400">{note}</Text>
+
+      {needsPrice.length > 0 && (
+        <View className="mb-4">
+          <Text className="mb-2 text-sm font-semibold text-gray-900">
+            Needs a price ({needsPrice.length})
+          </Text>
+          {needsPrice.map((item) => (
+            <NeedsPriceRow key={item.id} item={item} basePath={basePath} />
+          ))}
+        </View>
+      )}
 
       <Pressable
         onPress={() => setSheetOpen(true)}
@@ -197,7 +243,11 @@ export function MyStorefront({
       </View>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && filtered.length === 0 && <Text className="text-gray-500">No products match your search.</Text>}
+      {!isLoading && filtered.length === 0 && (
+        <Text className="text-gray-500">
+          {listed.length === 0 ? 'Nothing live in the marketplace yet.' : 'No products match your search.'}
+        </Text>
+      )}
 
       <View className="flex-row flex-wrap justify-between">
         {filtered.map((item) => (

@@ -2,7 +2,7 @@
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { CatalogStockingList } from '../../lib/components/CatalogStockingList';
+import { MyStorefront } from '../../lib/components/MyStorefront';
 
 export default function Shop() {
   return (
@@ -18,19 +18,11 @@ export default function Shop() {
         <Ionicons name="chevron-forward" size={18} color="white" />
       </Pressable>
 
-      <Text className="mb-4 text-sm text-gray-500">
-        This is your shop, exactly as customers see it in the Marketplace. Only items you've bought from
-        Wholesale show up here — the quantity you can set is capped by your purchases. Flip a switch to pull
-        something off the market without losing your stock count.
-      </Text>
-
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
-        <CatalogStockingList
-          priceLabel="Your price to customers"
-          capToPurchasedStock
-          onlyStocked
-          useFilterSheet
-          showStockBadge
+        <MyStorefront
+          sellerRole="reseller"
+          note="This is exactly what customers see when they browse your shop in the Marketplace — including anything low or out of stock."
+          emptyText="Buy stock from a wholesaler and set a price to appear here."
           basePath="/(reseller)"
         />
       </ScrollView>
