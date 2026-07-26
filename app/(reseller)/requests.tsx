@@ -7,9 +7,9 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { distanceKm } from '../../lib/utils/distance';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
-import { getCategoryVisual } from '../../lib/constants/categoryIcons';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
+import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import type { RequestStatus, ServiceRequest } from '../../types/database.types';
 
 type ViewMode = 'incoming' | 'mine';
@@ -79,18 +79,6 @@ function StatusPill({ status }: { status: RequestStatus }) {
   );
 }
 
-function CategoryBadge({ category }: { category: string | null }) {
-  const { bg, icon } = getCategoryVisual(category);
-  return (
-    <View className={`h-11 w-11 items-center justify-center rounded-2xl ${bg}`}>
-      {icon ? (
-        <Ionicons name={icon} size={20} color="white" />
-      ) : (
-        <Ionicons name="construct" size={20} color="white" />
-      )}
-    </View>
-  );
-}
 
 function IncomingRequestCard({ item }: { item: ServiceRequest }) {
   return (

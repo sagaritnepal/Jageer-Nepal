@@ -1,9 +1,8 @@
 // app/(client)/new-request.tsx
 import { View, Text, Pressable, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
-import { getCategoryVisual } from '../../lib/constants/categoryIcons';
+import { CategoryBadge } from '../../lib/components/CategoryBadge';
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
@@ -28,7 +27,6 @@ export default function NewRequest() {
       <View className="mb-6 flex-row flex-wrap justify-between">
         {(categories ?? []).map((c) => {
           const isPreset = presetCategory === c.label;
-          const { bg, icon } = getCategoryVisual(c.label);
           return (
             <View
               key={c.id}
@@ -36,9 +34,7 @@ export default function NewRequest() {
                 isPreset ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'
               }`}
             >
-              <View className={`h-11 w-11 items-center justify-center rounded-2xl ${bg}`}>
-                {icon ? <Ionicons name={icon} size={20} color="white" /> : <Text className="text-lg">{c.icon}</Text>}
-              </View>
+              <CategoryBadge category={c.label} emoji={c.icon} />
               <Text
                 className={`mt-2 text-[13px] font-bold leading-[1.25] ${
                   isPreset ? 'text-orange-600' : 'text-gray-900'

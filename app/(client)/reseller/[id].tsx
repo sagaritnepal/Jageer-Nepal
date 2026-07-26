@@ -1,11 +1,10 @@
 // app/(client)/reseller/[id].tsx
 import { View, Text, ScrollView, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../../lib/constants/requestStatus';
-import { getCategoryVisual } from '../../../lib/constants/categoryIcons';
+import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import type { RequestStatus } from '../../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
@@ -67,16 +66,13 @@ export default function ResellerDetail() {
       )}
 
       {(history ?? []).map((item) => {
-        const { bg, icon } = getCategoryVisual(item.issue_type);
         return (
           <Pressable
             key={item.id}
             onPress={() => router.push(`/(client)/request/${item.id}`)}
             className="mb-3 flex-row items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4"
           >
-            <View className={`h-11 w-11 items-center justify-center rounded-2xl ${bg}`}>
-              <Ionicons name={icon ?? 'construct'} size={20} color="white" />
-            </View>
+            <CategoryBadge category={item.issue_type} />
             <View className="flex-1">
               <View className="flex-row items-start justify-between gap-2">
                 <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>

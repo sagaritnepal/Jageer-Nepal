@@ -6,9 +6,9 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
-import { getCategoryVisual } from '../../lib/constants/categoryIcons';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
+import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import type { ServiceRequest } from '../../types/database.types';
 
 function StatusPill({ status }: { status: ServiceRequest['status'] }) {
@@ -16,15 +16,6 @@ function StatusPill({ status }: { status: ServiceRequest['status'] }) {
   return (
     <View className={`rounded-full px-2 py-0.5 ${style.bg}`}>
       <Text className={`text-[10px] font-semibold uppercase ${style.text}`}>{style.label}</Text>
-    </View>
-  );
-}
-
-function CategoryBadge({ category }: { category: string | null }) {
-  const { bg, icon } = getCategoryVisual(category);
-  return (
-    <View className={`h-11 w-11 items-center justify-center rounded-2xl ${bg}`}>
-      <Ionicons name={icon ?? 'construct'} size={20} color="white" />
     </View>
   );
 }

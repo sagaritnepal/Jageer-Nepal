@@ -1,12 +1,11 @@
 // app/(technician)/jobs.tsx
 import { View, Text, FlatList, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
-import { getCategoryVisual } from '../../lib/constants/categoryIcons';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
+import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import type { ServiceRequest } from '../../types/database.types';
 
 function StatusPill({ status }: { status: ServiceRequest['status'] }) {
@@ -23,7 +22,6 @@ function JobListCard({ item }: { item: ServiceRequest }) {
   const { data: customer } = useSupabaseRow('profiles', needsCustomerLookup ? item.client_id : undefined);
   const customerName = item.customer_name ?? customer?.full_name;
   const customerPhone = item.customer_phone ?? customer?.phone;
-  const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(item.issue_type);
 
   return (
     <Pressable
@@ -31,9 +29,7 @@ function JobListCard({ item }: { item: ServiceRequest }) {
       className="mb-3 flex-row items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4"
     >
       <View className="items-center gap-1.5">
-        <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
-          <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />
-        </View>
+        <CategoryBadge category={item.issue_type} />
         <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
       </View>
       <View className="flex-1">

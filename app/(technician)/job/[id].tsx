@@ -7,7 +7,7 @@ import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
-import { getCategoryVisual } from '../../../lib/constants/categoryIcons';
+import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { RequestStatus } from '../../../types/database.types';
 
@@ -106,7 +106,6 @@ export default function JobCard() {
   }
 
   const isSaving = updateRequest.isPending || insertJobCard.isPending || updateJobCard.isPending;
-  const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(request.issue_type);
 
   const resellerName = reseller?.full_name;
   const resellerPhone = reseller?.phone;
@@ -116,9 +115,7 @@ export default function JobCard() {
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-xs text-gray-400">Job #{request.id.slice(0, 8).toUpperCase()}</Text>
       <View className="mb-4 flex-row items-center gap-3">
-        <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
-          <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />
-        </View>
+        <CategoryBadge category={request.issue_type} />
         <Text className="flex-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       </View>
       <Text className="mb-6 text-gray-600">{request.description}</Text>

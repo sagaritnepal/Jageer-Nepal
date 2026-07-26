@@ -8,7 +8,7 @@ import { useSupabaseRow, useSupabaseUpdate } from '../../../lib/hooks/useSupabas
 import { useRankedTechnicians } from '../../../lib/hooks/useTechnicianRanking';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { TechnicianPicker } from '../../../lib/components/TechnicianPicker';
-import { getCategoryVisual } from '../../../lib/constants/categoryIcons';
+import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { ServiceRequest } from '../../../types/database.types';
 
@@ -169,7 +169,6 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
 // Jobs tab and drop it out of everyone else's Incoming queue.
 function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; userId: string }) {
   const updateRequest = useSupabaseUpdate('service_requests');
-  const { bg: categoryBg, icon: categoryIcon } = getCategoryVisual(request.issue_type);
 
   async function handleAccept() {
     try {
@@ -182,9 +181,7 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <View className="mb-4 flex-row items-center gap-3">
-        <View className={`h-11 w-11 items-center justify-center rounded-2xl ${categoryBg}`}>
-          <Ionicons name={categoryIcon ?? 'construct'} size={20} color="white" />
-        </View>
+        <CategoryBadge category={request.issue_type} />
         <Text className="flex-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       </View>
       <Text className="mb-6 text-gray-600">{request.description}</Text>

@@ -1,7 +1,50 @@
 // lib/constants/categoryIcons.ts
 import { Ionicons } from '@expo/vector-icons';
+import type { ImageSourcePropType } from 'react-native';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
+
+// Custom illustrated icon set (one PNG per category) - takes priority over
+// the vector icon fallback below wherever a category has one.
+export const CATEGORY_IMAGE_MAP: Partial<Record<string, ImageSourcePropType>> = {
+  'Website & App Design': require('../../assets/categories/website-app-design.png'),
+  'Digital Marketing': require('../../assets/categories/digital-marketing.png'),
+  Cybersecurity: require('../../assets/categories/cybersecurity.png'),
+  'Cloud Solutions': require('../../assets/categories/cloud-solutions.png'),
+  'CCTV & Surveillance': require('../../assets/categories/cctv-surveillance.png'),
+  'Computer Repair': require('../../assets/categories/computer-repair.png'),
+  'Laptop Repair': require('../../assets/categories/laptop-repair.png'),
+  'Door Lock & Access': require('../../assets/categories/door-lock-access.png'),
+  'Intercom Systems': require('../../assets/categories/intercom-systems.png'),
+  'AC Service & Repair': require('../../assets/categories/ac-service-repair.png'),
+  'Electrical Work': require('../../assets/categories/electrical-work.png'),
+  'UPS & Inverter': require('../../assets/categories/ups-inverter.png'),
+  'Server Maintenance': require('../../assets/categories/server-maintenance.png'),
+  'Printer Repair': require('../../assets/categories/printer-scanner.png'),
+  'Scanner Repair': require('../../assets/categories/printer-scanner.png'),
+  'Washing Machine Repair': require('../../assets/categories/washing-machine-repair.png'),
+  'Geyser & Water Heater': require('../../assets/categories/geyser-water-heater.png'),
+  'Refrigerator Repair': require('../../assets/categories/refrigerator-repair.png'),
+  'TV Repair': require('../../assets/categories/tv-repair.png'),
+  'Speaker & Sound System': require('../../assets/categories/speaker-sound-system.png'),
+  'Attendance & Biometric Systems': require('../../assets/categories/attendance-biometric-systems.png'),
+  'Microwave Oven Repair': require('../../assets/categories/microwave-oven-repair.png'),
+  'Fan Repair': require('../../assets/categories/fan-repair.png'),
+  'Walkie Talkie Repair': require('../../assets/categories/walkie-talkie-repair.png'),
+  'WiFi Router Setup': require('../../assets/categories/wifi-router-setup.png'),
+  'Network Switches & Cabling': require('../../assets/categories/network-switches-cabling.png'),
+  'Water Purifier & RO Repair': require('../../assets/categories/water-purifier-ro-repair.png'),
+  'Vacuum Cleaner Repair': require('../../assets/categories/vacuum-cleaner-repair.png'),
+  'Induction Stove Repair': require('../../assets/categories/induction-stove-repair.png'),
+  'Iron Repair': require('../../assets/categories/iron-repair.png'),
+  'Water Pump Repair': require('../../assets/categories/water-pump-repair.png'),
+  'Projector Repair': require('../../assets/categories/projector-repair.png'),
+  'Data Recovery': require('../../assets/categories/data-recovery.png'),
+  'Smart Home Setup': require('../../assets/categories/smart-home-setup.png'),
+  'PABX & Telephone': require('../../assets/categories/pabx-telephone.png'),
+  'Solar Panel Installation': require('../../assets/categories/solar-panel-installation.png'),
+  'Plumbing Services': require('../../assets/categories/plumbing-services.png'),
+};
 
 // Known categories get a real vector icon; anything an admin adds later
 // without a mapping here just falls back to its emoji from the DB.
@@ -38,6 +81,11 @@ export const CATEGORY_ICON_MAP: Record<string, IoniconName> = {
   'Iron Repair': 'construct',
   'Water Pump Repair': 'water',
   'Projector Repair': 'construct',
+  'Data Recovery': 'save',
+  'Smart Home Setup': 'home',
+  'PABX & Telephone': 'call',
+  'Solar Panel Installation': 'sunny',
+  'Plumbing Services': 'water',
 };
 
 export const CATEGORY_BG_COLORS = [
@@ -61,8 +109,12 @@ export const CATEGORY_BG_COLORS = [
 // show one category badge at a time rather than a whole grid. Accepts either
 // a bare category label or a request's `issue_type` (built as
 // "{category} - {action}" in request-details.tsx), matching by prefix.
-export function getCategoryVisual(rawLabel: string | null | undefined): { bg: string; icon: IoniconName | null } {
-  if (!rawLabel) return { bg: 'bg-gray-400', icon: null };
+export function getCategoryVisual(rawLabel: string | null | undefined): {
+  bg: string;
+  icon: IoniconName | null;
+  image: ImageSourcePropType | null;
+} {
+  if (!rawLabel) return { bg: 'bg-gray-400', icon: null, image: null };
   const matchedLabel = Object.keys(CATEGORY_ICON_MAP).find((label) => rawLabel.startsWith(label));
   const hashSource = matchedLabel ?? rawLabel;
   let hash = 0;
@@ -70,5 +122,6 @@ export function getCategoryVisual(rawLabel: string | null | undefined): { bg: st
   return {
     bg: CATEGORY_BG_COLORS[hash % CATEGORY_BG_COLORS.length],
     icon: matchedLabel ? CATEGORY_ICON_MAP[matchedLabel] : null,
+    image: matchedLabel ? (CATEGORY_IMAGE_MAP[matchedLabel] ?? null) : null,
   };
 }
