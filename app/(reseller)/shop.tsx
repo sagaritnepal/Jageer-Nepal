@@ -6,10 +6,12 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { MyStorefront } from '../../lib/components/MyStorefront';
-import type { Order } from '../../types/database.types';
+import { OrderCard } from '../../lib/components/OrderCard';
+import type { Order, Product } from '../../types/database.types';
 
 type Tab = 'marketplace' | 'overview';
 type Period = 'day' | 'week' | 'month';
+type Drill = 'sold' | 'purchased' | null;
 
 const PERIOD_LABELS: Record<Period, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 const BUCKET_COUNT = 7;
@@ -30,39 +32,72 @@ function fmtShort(n: number) {
   return String(rounded);
 }
 
-function StatTile({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
+function StatTile({
+  label,
+  value,
+  compact = false,
+  active = false,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+  active?: boolean;
+  onPress?: () => void;
+}) {
   return (
-    <View className="flex-1 rounded-xl bg-white p-3.5">
+    <Pressable
+      onPress={onPress}
+      className={`flex-1 rounded-xl border p-3.5 ${active ? 'border-orange-500 bg-orange-50' : 'border-transparent bg-white'}`}
+    >
       <Text className={`font-bold text-gray-900 ${compact ? 'text-[13px]' : 'text-lg'}`}>{value}</Text>
       <Text className="mt-0.5 text-xs text-gray-500">{label}</Text>
-    </View>
+    </Pressable>
   );
 }
 
-function ShopStats({ orders, purchaseAmount, itemTypes, totalUnits, stockValue }: {
-  orders: Order[];
+function ShopStats({
+  soldAmount,
+  purchaseAmount,
+  itemTypes,
+  totalUnits,
+  stockValue,
+  drill,
+  onSelectStock,
+  onSelectSold,
+  onSelectPurchased,
+}: {
+  soldAmount: number;
   purchaseAmount: number;
   itemTypes: number;
   totalUnits: number;
   stockValue: number;
+  drill: Drill;
+  onSelectStock: () => void;
+  onSelectSold: () => void;
+  onSelectPurchased: () => void;
 }) {
-  const soldAmount = useMemo(
-    () => orders.filter((o) => o.status !== 'cancelled').reduce((sum, o) => sum + Number(o.total_amount), 0),
-    [orders]
-  );
-
   return (
     <View className="mb-4">
       <Text className="mb-2 text-sm font-semibold text-gray-900">Shop overview</Text>
       <View className="mb-2.5 flex-row gap-2.5">
-        <StatTile label="Item types" value={String(itemTypes)} />
-        <StatTile label="Units in stock" value={String(totalUnits)} />
+        <StatTile label="Item types" value={String(itemTypes)} onPress={onSelectStock} />
+        <StatTile label="Units in stock" value={String(totalUnits)} onPress={onSelectStock} />
       </View>
       <View className="flex-row gap-2.5">
-        <StatTile compact label="Stock value" value={fmtAmount(stockValue)} />
-        <StatTile compact label="Sold" value={fmtAmount(soldAmount)} />
-        <StatTile compact label="Purchased" value={fmtAmount(purchaseAmount)} />
+        <StatTile compact label="Stock value" value={fmtAmount(stockValue)} onPress={onSelectStock} />
+        <StatTile compact label="Sold" value={fmtAmount(soldAmount)} active={drill === 'sold'} onPress={onSelectSold} />
+        <StatTile
+          compact
+          label="Purchased"
+          value={fmtAmount(purchaseAmount)}
+          active={drill === 'purchased'}
+          onPress={onSelectPurchased}
+        />
       </View>
+      <Text className="mt-2 text-xs text-gray-400">
+        Tap Item types, Units, or Stock value to browse the Marketplace tab. Tap Sold or Purchased to see the orders behind that number.
+      </Text>
     </View>
   );
 }
@@ -160,18 +195,57 @@ function SalesChart({ orders }: { orders: Order[] }) {
   );
 }
 
+function OrderDrilldown({
+  title,
+  emptyText,
+  orders,
+  productMap,
+  viewerId,
+  roleLabel,
+}: {
+  title: string;
+  emptyText: string;
+  orders: Order[];
+  productMap: Map<string, Product>;
+  viewerId: string;
+  roleLabel: string;
+}) {
+  return (
+    <View className="mb-4">
+      <Text className="mb-3 text-sm font-semibold text-gray-900">{title}</Text>
+      {orders.length === 0 && <Text className="text-sm text-gray-500">{emptyText}</Text>}
+      {orders.map((o) => (
+        <OrderCard key={o.id} order={o} productMap={productMap} viewerId={viewerId} basePath="/(reseller)" roleLabel={roleLabel} />
+      ))}
+    </View>
+  );
+}
+
 export default function Shop() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [tab, setTab] = useState<Tab>('marketplace');
+  const [drill, setDrill] = useState<Drill>(null);
 
   const { data: products } = useSupabaseQuery('products', {
     filters: userId ? { seller_id: userId, seller_role: 'reseller' } : {},
     enabled: !!userId,
   });
-  const { data: orders } = useSupabaseQuery('orders', {
+  // Sales (this reseller as seller) and purchases (this reseller as buyer,
+  // from a wholesaler) are the same `orders` table read from opposite sides -
+  // both queried here so the Sold/Purchased tiles can drill into the real
+  // order list instead of just showing a total.
+  const { data: salesOrders } = useSupabaseQuery('orders', {
     filters: userId ? { seller_id: userId } : {},
+    orderBy: { column: 'created_at', ascending: false },
     enabled: !!userId,
   });
+  const { data: purchaseOrders } = useSupabaseQuery('orders', {
+    filters: userId ? { buyer_id: userId } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    enabled: !!userId,
+  });
+  const { data: allProducts } = useSupabaseQuery('products', {});
+  const productMap = useMemo(() => new Map((allProducts ?? []).map((p) => [p.id, p])), [allProducts]);
 
   const { itemTypes, totalUnits, stockValue, purchaseAmount } = useMemo(() => {
     const list = products ?? [];
@@ -182,6 +256,11 @@ export default function Shop() {
       purchaseAmount: list.reduce((sum, p) => sum + p.purchased_stock * Number(p.purchase_price ?? 0), 0),
     };
   }, [products]);
+
+  const soldAmount = useMemo(
+    () => (salesOrders ?? []).filter((o) => o.status !== 'cancelled').reduce((sum, o) => sum + Number(o.total_amount), 0),
+    [salesOrders]
+  );
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
@@ -226,13 +305,38 @@ export default function Shop() {
         ) : (
           <>
             <ShopStats
-              orders={orders ?? []}
+              soldAmount={soldAmount}
               purchaseAmount={purchaseAmount}
               itemTypes={itemTypes}
               totalUnits={totalUnits}
               stockValue={stockValue}
+              drill={drill}
+              onSelectStock={() => setTab('marketplace')}
+              onSelectSold={() => setDrill((d) => (d === 'sold' ? null : 'sold'))}
+              onSelectPurchased={() => setDrill((d) => (d === 'purchased' ? null : 'purchased'))}
             />
-            <SalesChart orders={orders ?? []} />
+            <SalesChart orders={salesOrders ?? []} />
+
+            {drill === 'sold' && userId && (
+              <OrderDrilldown
+                title="Sales orders"
+                emptyText="No sales yet."
+                orders={salesOrders ?? []}
+                productMap={productMap}
+                viewerId={userId}
+                roleLabel="Selling"
+              />
+            )}
+            {drill === 'purchased' && userId && (
+              <OrderDrilldown
+                title="Purchase stock"
+                emptyText="No wholesale purchases yet."
+                orders={purchaseOrders ?? []}
+                productMap={productMap}
+                viewerId={userId}
+                roleLabel="Buying"
+              />
+            )}
           </>
         )}
       </ScrollView>

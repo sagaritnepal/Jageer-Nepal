@@ -33,10 +33,6 @@ export default function ResellerLayout() {
           options={{ title: 'Quotes', tabBarIcon: ({ color, focused }) => <TabIcon name="pricetag" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
-          name="orders"
-          options={{ title: 'Orders', tabBarIcon: ({ color, focused }) => <TabIcon name="time" color={color} focused={focused} /> }}
-        />
-        <Tabs.Screen
           name="profile"
           options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
         />

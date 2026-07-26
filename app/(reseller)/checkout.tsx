@@ -2,5 +2,5 @@
 import { CheckoutScreen } from '../../lib/components/CheckoutScreen';
 
 export default function Checkout() {
-  return <CheckoutScreen redirectTo="/(reseller)/orders" />;
+  return <CheckoutScreen redirectTo="/(reseller)/shop" />;
 }

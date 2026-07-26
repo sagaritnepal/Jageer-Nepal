@@ -10,6 +10,7 @@ import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { OrderCard } from '../../lib/components/OrderCard';
 import type { RequestStatus, ServiceRequest } from '../../types/database.types';
 
 type ViewMode = 'incoming' | 'mine';
@@ -261,6 +262,20 @@ export default function ResellerRequestQueue() {
     enabled: !!userId,
   });
 
+  // Product orders from customers (Shop no longer has its own Orders tab -
+  // a new order needs the same "act on this now" attention as a new service
+  // request, so it surfaces here instead). Only the still-pending ones need
+  // action; anything already confirmed/shipped/delivered is reporting, not a
+  // queue item, and lives in Shop Overview's "Sold" drilldown instead.
+  const { data: sellingOrders } = useSupabaseQuery('orders', {
+    filters: userId ? { seller_id: userId } : {},
+    orderBy: { column: 'created_at', ascending: true },
+    enabled: !!userId,
+  });
+  const pendingOrders = useMemo(() => (sellingOrders ?? []).filter((o) => o.status === 'pending'), [sellingOrders]);
+  const { data: allProducts } = useSupabaseQuery('products', {});
+  const productMap = useMemo(() => new Map((allProducts ?? []).map((p) => [p.id, p])), [allProducts]);
+
   const isLoading = viewMode === 'incoming' ? loadingIncoming : loadingMine;
 
   // My Jobs gets its own stage tabs, one level below Incoming/My Jobs, so a
@@ -296,7 +311,7 @@ export default function ResellerRequestQueue() {
           className={`flex-1 items-center rounded-full py-2.5 ${viewMode === 'incoming' ? 'bg-white shadow-sm' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'incoming' ? 'text-orange-600' : 'text-gray-500'}`}>
-            Incoming ({incoming?.length ?? 0})
+            Incoming ({(incoming?.length ?? 0) + pendingOrders.length})
           </Text>
         </Pressable>
         <Pressable
@@ -351,7 +366,7 @@ export default function ResellerRequestQueue() {
       </Text>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && viewMode === 'incoming' && incoming.length === 0 && (
+      {!isLoading && viewMode === 'incoming' && incoming.length === 0 && pendingOrders.length === 0 && (
         <Text className="text-gray-500">No pending requests right now.</Text>
       )}
       {!isLoading && viewMode === 'mine' && stageJobs.length === 0 && (
@@ -363,6 +378,26 @@ export default function ResellerRequestQueue() {
           data={incoming}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <IncomingRequestCard item={item} />}
+          ListHeaderComponent={
+            pendingOrders.length > 0 && userId ? (
+              <View className="mb-5">
+                <Text className="mb-3 text-sm font-semibold text-gray-900">New Orders ({pendingOrders.length})</Text>
+                {pendingOrders.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    productMap={productMap}
+                    viewerId={userId}
+                    basePath="/(reseller)"
+                    roleLabel="Selling"
+                  />
+                ))}
+                {incoming.length > 0 && (
+                  <Text className="mb-3 mt-2 text-sm font-semibold text-gray-900">Service Requests</Text>
+                )}
+              </View>
+            ) : null
+          }
         />
       ) : (
         <FlatList
