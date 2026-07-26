@@ -7,7 +7,7 @@ export default function WholesaleMarketplace() {
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <MyStorefront
         sellerRole="wholesaler"
-        note="This is exactly what resellers see when they browse your shop, with your actual stock on hand and price for each item. Go to Products to change what's listed here."
+        note="This is what resellers see when they browse your shop. Flip Available off to pull an item off the market, and tap a price to change it any time."
         emptyText="Nothing listed yet — add items from the Products tab to appear here."
         basePath="/(wholesaler)"
       />

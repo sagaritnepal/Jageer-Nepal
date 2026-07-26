@@ -21,8 +21,8 @@ export default function Shop() {
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
         <MyStorefront
           sellerRole="reseller"
-          note="This is exactly what customers see when they browse your shop in the Marketplace — including anything low or out of stock."
-          emptyText="Buy stock from a wholesaler and set a price to appear here."
+          note="Everything you've bought from Wholesale shows up here. Flip Available off to pull an item off the market, and tap a price to change it any time."
+          emptyText="Buy stock from a wholesaler and it'll show up here."
           basePath="/(reseller)"
         />
       </ScrollView>
