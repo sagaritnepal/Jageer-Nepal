@@ -13,7 +13,6 @@ import type { OrderStatus } from '../../types/database.types';
 const ORDER_STEPS: { status: OrderStatus; label: string }[] = [
   { status: 'pending', label: 'Order placed' },
   { status: 'confirmed', label: 'Confirmed' },
-  { status: 'shipped', label: 'Shipped' },
   { status: 'delivered', label: 'Delivered' },
 ];
 
@@ -83,6 +82,13 @@ export function OrderDetailScreen() {
   const nextStatus = NEXT_STATUS[order.status];
   const isOwner = order.seller_id === userId;
 
+  // Same privacy rule as the order card in the list: photo, name, and
+  // delivery address are always visible, but the contact number stays
+  // hidden until the order has actually been accepted (confirmed onward).
+  const isAccepted = order.status !== 'pending';
+  const shipping = order.shipping_address as { address?: string; city?: string } | null;
+  const shippingAddress = shipping ? [shipping.address, shipping.city].filter(Boolean).join(', ') : null;
+
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">Order #{order.id.slice(0, 8)}</Text>
@@ -94,7 +100,8 @@ export function OrderDetailScreen() {
         <View>
           <Text className="text-[11px] uppercase tracking-wide text-gray-400">{counterpartyRole}</Text>
           <Text className="text-sm font-semibold text-gray-800">{counterparty?.full_name ?? 'Unknown'}</Text>
-          {counterparty?.phone && <Text className="text-xs text-gray-500">{counterparty.phone}</Text>}
+          {shippingAddress && <Text className="text-xs text-gray-500">{shippingAddress}</Text>}
+          {isAccepted && counterparty?.phone && <Text className="text-xs text-gray-500">{counterparty.phone}</Text>}
         </View>
       </View>
 

@@ -3,10 +3,18 @@ import { View, Text, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery, useSupabaseRow } from '../hooks/useSupabase';
-import { useAdvanceOrder } from '../hooks/useAdvanceOrder';
-import { NEXT_STATUS, STATUS_ACTION_LABEL, STATUS_BADGE_STYLE } from '../utils/orderStatus';
+import { STATUS_BADGE_STYLE } from '../utils/orderStatus';
 import { PersonAvatar } from './PersonAvatar';
 import type { Order, Product } from '../../types/database.types';
+
+// The card itself only navigates to the order's task page - just like a
+// service request's "View & Accept" - so confirming/completing an order
+// always happens on that page, never from a list-row button.
+function cardActionLabel(order: Order, isOwner: boolean): string {
+  if (isOwner && order.status === 'pending') return 'View & Accept';
+  if (isOwner && order.status === 'confirmed') return 'View & Complete';
+  return 'View Order';
+}
 
 export function OrderCard({
   order,
@@ -29,8 +37,6 @@ export function OrderCard({
     filters: { order_id: order.id },
   });
 
-  const { advance, isBusy } = useAdvanceOrder();
-  const nextStatus = NEXT_STATUS[order.status];
   const badgeClass = STATUS_BADGE_STYLE[order.status];
 
   // The buyer's contact number stays hidden until the seller has actually
@@ -90,25 +96,13 @@ export function OrderCard({
         </View>
       </Pressable>
 
-      <View className="flex-row gap-2 px-4 pb-4">
-        {isOwner && nextStatus && (
-          <Pressable
-            onPress={() => advance(order, orderItems, productMap)}
-            disabled={isBusy}
-            className="flex-1 items-center rounded-lg bg-orange-500 py-2 disabled:opacity-50"
-          >
-            <Text className="text-sm font-semibold text-white">
-              {isBusy ? 'Updating…' : STATUS_ACTION_LABEL[order.status]}
-            </Text>
-          </Pressable>
-        )}
-        <Pressable
-          onPress={() => router.push(`${basePath}/order/${order.id}`)}
-          className="items-center rounded-lg border border-gray-300 px-4 py-2"
-        >
-          <Text className="text-sm font-semibold text-gray-700">Message</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        onPress={() => router.push(`${basePath}/order/${order.id}`)}
+        className="mx-4 mb-4 flex-row items-center justify-center gap-1.5 rounded-xl bg-orange-500 py-2.5"
+      >
+        <Ionicons name="checkmark-circle" size={16} color="white" />
+        <Text className="text-sm font-semibold text-white">{cardActionLabel(order, isOwner)}</Text>
+      </Pressable>
     </View>
   );
 }
