@@ -20,9 +20,10 @@ const SORT_LABELS: Record<SortOption, string> = {
   name: 'Name',
 };
 
-function stockBadge(stockLevel: number) {
-  if (stockLevel <= 0) return { label: 'Out of stock', bg: 'bg-red-600' };
-  if (stockLevel < LOW_STOCK_THRESHOLD) return { label: 'Low stock', bg: 'bg-amber-500/90' };
+function stockBadge(item: Product) {
+  if (item.is_listed === false) return { label: 'Unavailable', bg: 'bg-gray-500' };
+  if (item.stock_level <= 0) return { label: 'Out of stock', bg: 'bg-red-600' };
+  if (item.stock_level < LOW_STOCK_THRESHOLD) return { label: 'Low stock', bg: 'bg-amber-500/90' };
   return { label: 'In stock', bg: 'bg-emerald-600/90' };
 }
 
@@ -87,8 +88,9 @@ function EditablePrice({ item }: { item: Product }) {
 
 function StorefrontCard({ item, basePath }: { item: Product; basePath: string }) {
   const updateProduct = useSupabaseUpdate('products');
+  const isAvailable = item.is_listed ?? true;
   const outOfStock = item.stock_level <= 0;
-  const badge = stockBadge(item.stock_level);
+  const badge = stockBadge(item);
   const detailHref = item.catalog_id ? `${basePath}/catalog/${item.catalog_id}` : null;
 
   async function handleToggleAvailable(next: boolean) {
@@ -99,12 +101,18 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
     }
   }
 
+  // Unavailable (paused by the seller) takes priority over the out-of-stock
+  // look - either way the card stays visible and editable to the seller,
+  // only real customers ever have it filtered out (see (client)/market.tsx).
+  const faded = !isAvailable || outOfStock;
+  const cardTone = !isAvailable
+    ? 'border-gray-300 bg-gray-50'
+    : outOfStock
+      ? 'border-red-200 bg-red-50'
+      : 'border-gray-200 bg-white';
+
   return (
-    <View
-      className={`mb-3 flex-row gap-3 rounded-xl border p-3 ${
-        outOfStock ? 'border-red-200 bg-red-50 opacity-60' : 'border-gray-200 bg-white'
-      }`}
-    >
+    <View className={`mb-3 flex-row gap-3 rounded-xl border p-3 ${cardTone} ${faded ? 'opacity-60' : ''}`}>
       <Pressable
         onPress={() => detailHref && router.push(detailHref)}
         className="h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100"
@@ -127,10 +135,10 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
             </Text>
           </Pressable>
           <Switch
-            value={item.is_listed ?? true}
+            value={isAvailable}
             onValueChange={handleToggleAvailable}
             trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
-            thumbColor={(item.is_listed ?? true) ? '#4F46E5' : '#F3F4F6'}
+            thumbColor={isAvailable ? '#4F46E5' : '#F3F4F6'}
           />
         </View>
 
@@ -172,11 +180,12 @@ export function MyStorefront({
     enabled: !!userId,
   });
 
-  // Available (is_listed) is the seller's explicit on/off switch - turn it
-  // off and the item drops out of the marketplace entirely, whether or not
-  // it's priced yet. Price is editable right on the card now, so there's no
-  // separate "needs a price" gate anymore.
-  const visible = useMemo(() => (products ?? []).filter((p) => p.is_listed !== false), [products]);
+  // This screen is the seller's own view of everything they've stocked, so
+  // it always shows every product regardless of is_listed or stock level -
+  // turning Available off never removes anything here, only from the real
+  // customer-facing marketplace query in (client)/market.tsx, which already
+  // filters on is_listed and stock_level independently of this component.
+  const visible = useMemo(() => products ?? [], [products]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
