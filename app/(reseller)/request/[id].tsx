@@ -23,6 +23,10 @@ function RemarkBlock({ remark }: { remark: string | null }) {
 }
 
 function JobTracking({ request }: { request: ServiceRequest }) {
+  // A "reseller" origin request's client_id is just the reseller's own id
+  // (there's no real customer profile behind it), so only look up a photo
+  // for real app customers.
+  const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
   const updateRequest = useSupabaseUpdate('service_requests');
 
   async function handleMarkPaid() {
@@ -58,8 +62,9 @@ function JobTracking({ request }: { request: ServiceRequest }) {
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
-        customerName={request.customer_name}
-        customerPhone={request.customer_phone}
+        customerName={request.customer_name ?? customer?.full_name}
+        customerPhone={request.customer_phone ?? customer?.phone}
+        customerPhotoUrl={customer?.avatar_url}
       />
 
       <RemarkBlock remark={request.remark} />
@@ -168,6 +173,10 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
 // stamps reseller_id, which is enough to pull it into that reseller's My
 // Jobs tab and drop it out of everyone else's Incoming queue.
 function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; userId: string }) {
+  // Every request here is unclaimed and app-origin (see the Incoming query
+  // in requests.tsx), so client_id always points at a real customer profile
+  // - safe to look up their photo and name before this reseller accepts it.
+  const { data: customer } = useSupabaseRow('profiles', request.client_id);
   const updateRequest = useSupabaseUpdate('service_requests');
 
   async function handleAccept() {
@@ -189,7 +198,7 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
       <View className="mb-6 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white p-4">
         <Ionicons name="lock-closed-outline" size={16} color="#9CA3AF" />
         <Text className="flex-1 text-xs text-gray-400">
-          Customer contact details unlock once you accept this job.
+          Customer phone number unlocks once you accept this job.
         </Text>
       </View>
 
@@ -198,6 +207,8 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
+        customerName={request.customer_name ?? customer?.full_name}
+        customerPhotoUrl={customer?.avatar_url}
       />
 
       <Pressable
@@ -258,6 +269,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
         photoUrls={request.photo_urls}
         customerName={customer?.full_name}
         customerPhone={customer?.phone}
+        customerPhotoUrl={customer?.avatar_url}
       />
 
       <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Remark</Text>
@@ -301,6 +313,11 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
 }
 
 function WaitingForApproval({ request }: { request: ServiceRequest }) {
+  // A "reseller" origin request's client_id is just the reseller's own id
+  // (there's no real customer profile behind it), so only look up a photo
+  // for real app customers.
+  const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
+
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
@@ -321,8 +338,9 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
-        customerName={request.customer_name}
-        customerPhone={request.customer_phone}
+        customerName={request.customer_name ?? customer?.full_name}
+        customerPhone={request.customer_phone ?? customer?.phone}
+        customerPhotoUrl={customer?.avatar_url}
       />
 
       <RemarkBlock remark={request.remark} />
@@ -331,6 +349,10 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
 }
 
 function ChooseTechnician({ request }: { request: ServiceRequest }) {
+  // A "reseller" origin request's client_id is just the reseller's own id
+  // (there's no real customer profile behind it), so only look up a photo
+  // for real app customers.
+  const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
   const { rankedTechnicians, isLoading: loadingTechs } = useRankedTechnicians(request.location_data);
   const updateRequest = useSupabaseUpdate('service_requests');
 
@@ -363,8 +385,9 @@ function ChooseTechnician({ request }: { request: ServiceRequest }) {
         scheduledTime={request.scheduled_time}
         location={request.location_data}
         photoUrls={request.photo_urls}
-        customerName={request.customer_name}
-        customerPhone={request.customer_phone}
+        customerName={request.customer_name ?? customer?.full_name}
+        customerPhone={request.customer_phone ?? customer?.phone}
+        customerPhotoUrl={customer?.avatar_url}
       />
 
       <RemarkBlock remark={request.remark} />

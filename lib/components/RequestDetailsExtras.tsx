@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, Image, Pressable, Linking, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
+import { PersonAvatar } from './PersonAvatar';
 import type { RequestLocation } from '../../types/database.types';
 
 function RequestPhotos({ photoUrls }: { photoUrls: string[] }) {
@@ -48,6 +49,7 @@ export function RequestDetailsExtras({
   photoUrls,
   customerName,
   customerPhone,
+  customerPhotoUrl,
 }: {
   scheduledDate: string | null;
   scheduledTime: string | null;
@@ -55,6 +57,7 @@ export function RequestDetailsExtras({
   photoUrls: string[];
   customerName?: string | null;
   customerPhone?: string | null;
+  customerPhotoUrl?: string | null;
 }) {
   const hasSchedule = !!(scheduledDate || scheduledTime);
   const hasLocation = !!(location?.address || (location?.latitude != null && location?.longitude != null));
@@ -67,10 +70,13 @@ export function RequestDetailsExtras({
       {hasCustomerContact && (
         <View className="mb-4">
           <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Customer</Text>
-          {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
+          <View className="flex-row items-center gap-2.5">
+            <PersonAvatar name={customerName} photoUrl={customerPhotoUrl} size={36} bg="bg-orange-500" />
+            {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
+          </View>
           {customerPhone && (
             <>
-              <Text className="mt-0.5 text-sm text-gray-500">{customerPhone}</Text>
+              <Text className="mt-2 text-sm text-gray-500">{customerPhone}</Text>
               <View className="mt-2.5 flex-row gap-2">
                 <Pressable
                   onPress={() => Linking.openURL(`sms:${customerPhone}`)}
