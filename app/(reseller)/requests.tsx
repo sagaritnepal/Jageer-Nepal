@@ -103,12 +103,19 @@ function StatusPill({ status }: { status: RequestStatus }) {
 
 
 function IncomingRequestCard({ item }: { item: ServiceRequest }) {
+  // Incoming is pre-acceptance - the customer's identity (photo, name,
+  // address) helps a reseller decide whether to take the job, but their
+  // contact number stays hidden until the reseller actually accepts it.
+  const { data: customerProfile } = useSupabaseRow('profiles', item.client_id);
+  const customerName = item.customer_name ?? customerProfile?.full_name;
+
   return (
     <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
       <Pressable onPress={() => router.push(`/(reseller)/request/${item.id}`)} className="flex-row items-start gap-3">
         <View className="items-center gap-1.5">
           <CategoryBadge category={item.issue_type} />
           <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
+          <PersonAvatar name={customerName} photoUrl={customerProfile?.avatar_url} size={32} bg="bg-orange-500" />
         </View>
         <View className="flex-1">
           <View className="flex-row items-start justify-between gap-2">
@@ -123,6 +130,12 @@ function IncomingRequestCard({ item }: { item: ServiceRequest }) {
             </Text>
           )}
           <View className="mt-2 gap-1">
+            {customerName && (
+              <Text className="text-xs text-gray-500">
+                <Text className="font-medium text-gray-600">Customer: </Text>
+                {customerName}
+              </Text>
+            )}
             {(item.scheduled_date || item.scheduled_time) && (
               <Text className="text-xs text-gray-500">
                 {item.scheduled_date ?? 'Date TBD'} · {item.scheduled_time ?? 'Time TBD'}
@@ -179,6 +192,15 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
       <View className="items-center gap-1.5">
         <CategoryBadge category={item.issue_type} />
         <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
+        <PersonAvatar
+          name={customerName}
+          photoUrl={item.origin === 'app' ? customerProfile?.avatar_url : null}
+          size={32}
+          bg="bg-orange-500"
+        />
+        {technicianProfile && (
+          <PersonAvatar name={technicianProfile.full_name} photoUrl={technicianProfile.avatar_url} size={32} bg="bg-blue-600" />
+        )}
       </View>
       <View className="flex-1">
         <View className="flex-row items-start justify-between gap-2">
@@ -218,32 +240,21 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
           </View>
         </View>
 
-        {(customerName || customerPhone) && (
-          <View className="mt-2.5 flex-row items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
-            <PersonAvatar
-              name={customerName}
-              photoUrl={item.origin === 'app' ? customerProfile?.avatar_url : null}
-              size={22}
-              bg="bg-orange-500"
-            />
-            <Text className="flex-1 text-xs text-gray-600" numberOfLines={1}>
+        <View className="mt-2.5 gap-1">
+          {(customerName || customerPhone) && (
+            <Text className="text-xs text-gray-500">
+              <Text className="font-medium text-gray-600">Customer: </Text>
               {customerName ?? 'Unknown'}
               {customerPhone ? ` · ${customerPhone}` : ''}
             </Text>
-          </View>
-        )}
-
-        {technicianProfile && (
-          <View className="mt-2 flex-row items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
-            <PersonAvatar name={technicianProfile.full_name} photoUrl={technicianProfile.avatar_url} size={22} bg="bg-blue-600" />
-            <Text className="flex-1 text-xs text-gray-600" numberOfLines={1}>
-              Assigned to {technicianProfile.full_name ?? 'Unnamed'}
+          )}
+          {technicianProfile && (
+            <Text className="text-xs text-gray-500">
+              <Text className="font-medium text-gray-600">Assigned to: </Text>
+              {technicianProfile.full_name ?? 'Unnamed'}
               {distance != null ? ` · ${distance.toFixed(1)} km away` : ''}
             </Text>
-          </View>
-        )}
-
-        <View className="mt-2.5 gap-1">
+          )}
           {(item.scheduled_date || item.scheduled_time) && (
             <Text className="text-xs text-gray-500">
               <Text className="font-medium text-gray-600">When: </Text>

@@ -32,6 +32,14 @@ export function OrderCard({
   const nextStatus = NEXT_STATUS[order.status];
   const badgeClass = STATUS_BADGE_STYLE[order.status];
 
+  // The buyer's contact number stays hidden until the seller has actually
+  // accepted (confirmed) the order - same privacy rule as a service request
+  // waiting in Incoming. Address is shown either way since the seller needs
+  // it to decide whether they can even fulfil the order.
+  const isAccepted = order.status !== 'pending';
+  const shipping = order.shipping_address as { address?: string; city?: string } | null;
+  const shippingAddress = shipping ? [shipping.address, shipping.city].filter(Boolean).join(', ') : null;
+
   return (
     <View className="mb-3 rounded-xl border border-gray-200 bg-white">
       <Pressable onPress={() => router.push(`${basePath}/order/${order.id}`)} className="p-4">
@@ -46,6 +54,12 @@ export function OrderCard({
               <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
                 {counterpartyRole} {counterparty?.full_name ?? '…'}
               </Text>
+              {shippingAddress && (
+                <Text className="text-xs text-gray-500" numberOfLines={1}>
+                  {shippingAddress}
+                </Text>
+              )}
+              {isAccepted && counterparty?.phone && <Text className="text-xs text-gray-500">{counterparty.phone}</Text>}
             </View>
           </View>
           <View className={`rounded-full px-2.5 py-1 ${badgeClass}`}>
