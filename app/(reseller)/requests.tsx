@@ -11,7 +11,7 @@ import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { OrderCard } from '../../lib/components/OrderCard';
-import type { RequestStatus, ServiceRequest } from '../../types/database.types';
+import type { Order, RequestStatus, ServiceRequest } from '../../types/database.types';
 
 type ViewMode = 'incoming' | 'mine';
 
@@ -49,6 +49,27 @@ function stageOf(item: ServiceRequest): Stage {
       return item.payment_status === 'paid' ? 'completed' : 'awaiting_payment';
   }
 }
+
+// A confirmed order still needs shipping, and a shipped one still needs a
+// delivery confirmation - both are "you need to do something next", the
+// same idea "action" already covers for service requests. Once delivered
+// there's nothing left to do, same as a paid, resolved service request.
+function orderStageOf(order: Order): Stage {
+  switch (order.status) {
+    case 'confirmed':
+      return 'action';
+    case 'shipped':
+      return 'in_progress';
+    case 'delivered':
+      return 'completed';
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return 'action';
+  }
+}
+
+type JobItem = { kind: 'request'; id: string; request: ServiceRequest } | { kind: 'order'; id: string; order: Order };
 
 function nextStepHint(item: ServiceRequest): string | null {
   switch (item.status) {
@@ -264,15 +285,17 @@ export default function ResellerRequestQueue() {
 
   // Product orders from customers (Shop no longer has its own Orders tab -
   // a new order needs the same "act on this now" attention as a new service
-  // request, so it surfaces here instead). Only the still-pending ones need
-  // action; anything already confirmed/shipped/delivered is reporting, not a
-  // queue item, and lives in Shop Overview's "Sold" drilldown instead.
+  // request, so it surfaces here instead). Still-pending ones need a first
+  // look and stay in Incoming; once confirmed they move into My Jobs and
+  // follow the exact same stage pipeline as a service job, not Shop
+  // Overview - that tab is for the running numbers, not the work queue.
   const { data: sellingOrders } = useSupabaseQuery('orders', {
     filters: userId ? { seller_id: userId } : {},
     orderBy: { column: 'created_at', ascending: true },
     enabled: !!userId,
   });
   const pendingOrders = useMemo(() => (sellingOrders ?? []).filter((o) => o.status === 'pending'), [sellingOrders]);
+  const myOrders = useMemo(() => (sellingOrders ?? []).filter((o) => o.status !== 'pending'), [sellingOrders]);
   const { data: allProducts } = useSupabaseQuery('products', {});
   const productMap = useMemo(() => new Map((allProducts ?? []).map((p) => [p.id, p])), [allProducts]);
 
@@ -280,13 +303,17 @@ export default function ResellerRequestQueue() {
 
   // My Jobs gets its own stage tabs, one level below Incoming/My Jobs, so a
   // reseller can jump straight to e.g. "Awaiting payment" instead of
-  // scrolling past every other stage to find it.
+  // scrolling past every other stage to find it. Service jobs and product
+  // orders share the same stage buckets here.
   const myByStage = useMemo(() => {
-    const groups = new Map<Stage, ServiceRequest[]>();
+    const groups = new Map<Stage, JobItem[]>();
     STAGE_ORDER.forEach((stage) => groups.set(stage, []));
-    (mine ?? []).forEach((item) => groups.get(stageOf(item))!.push(item));
+    (mine ?? []).forEach((item) => groups.get(stageOf(item))!.push({ kind: 'request', id: item.id, request: item }));
+    myOrders.forEach((order) =>
+      groups.get(orderStageOf(order))!.push({ kind: 'order', id: order.id, order })
+    );
     return groups;
-  }, [mine]);
+  }, [mine, myOrders]);
 
   const activeStage = jobStage ?? STAGE_ORDER.find((stage) => (myByStage.get(stage)?.length ?? 0) > 0) ?? 'action';
   const stageJobs = myByStage.get(activeStage) ?? [];
@@ -319,7 +346,7 @@ export default function ResellerRequestQueue() {
           className={`flex-1 items-center rounded-full py-2.5 ${viewMode === 'mine' ? 'bg-white shadow-sm' : ''}`}
         >
           <Text className={`text-sm font-semibold ${viewMode === 'mine' ? 'text-orange-600' : 'text-gray-500'}`}>
-            My Jobs ({mine?.length ?? 0})
+            My Jobs ({(mine?.length ?? 0) + myOrders.length})
           </Text>
         </Pressable>
       </View>
@@ -402,8 +429,20 @@ export default function ResellerRequestQueue() {
       ) : (
         <FlatList
           data={stageJobs}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <MyRequestCard item={item} />}
+          keyExtractor={(item) => `${item.kind}-${item.id}`}
+          renderItem={({ item }) =>
+            item.kind === 'request' ? (
+              <MyRequestCard item={item.request} />
+            ) : userId ? (
+              <OrderCard
+                order={item.order}
+                productMap={productMap}
+                viewerId={userId}
+                basePath="/(reseller)"
+                roleLabel="Selling"
+              />
+            ) : null
+          }
         />
       )}
     </View>

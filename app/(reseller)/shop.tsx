@@ -11,7 +11,7 @@ import type { Order, Product } from '../../types/database.types';
 
 type Tab = 'marketplace' | 'overview';
 type Period = 'day' | 'week' | 'month';
-type Drill = 'sold' | 'purchased' | null;
+type Drill = 'purchased' | null;
 
 const PERIOD_LABELS: Record<Period, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 const BUCKET_COUNT = 7;
@@ -64,7 +64,6 @@ function ShopStats({
   stockValue,
   drill,
   onSelectStock,
-  onSelectSold,
   onSelectPurchased,
 }: {
   soldAmount: number;
@@ -74,7 +73,6 @@ function ShopStats({
   stockValue: number;
   drill: Drill;
   onSelectStock: () => void;
-  onSelectSold: () => void;
   onSelectPurchased: () => void;
 }) {
   return (
@@ -86,7 +84,7 @@ function ShopStats({
       </View>
       <View className="flex-row gap-2.5">
         <StatTile compact label="Stock value" value={fmtAmount(stockValue)} onPress={onSelectStock} />
-        <StatTile compact label="Sold" value={fmtAmount(soldAmount)} active={drill === 'sold'} onPress={onSelectSold} />
+        <StatTile compact label="Sold" value={fmtAmount(soldAmount)} />
         <StatTile
           compact
           label="Purchased"
@@ -96,7 +94,8 @@ function ShopStats({
         />
       </View>
       <Text className="mt-2 text-xs text-gray-400">
-        Tap Item types, Units, or Stock value to browse the Marketplace tab. Tap Sold or Purchased to see the orders behind that number.
+        Tap Item types, Units, or Stock value to browse the Marketplace tab. Tap Purchased to see your wholesale
+        purchase orders — confirmed sales orders now live in Requests &gt; My Jobs instead.
       </Text>
     </View>
   );
@@ -312,21 +311,10 @@ export default function Shop() {
               stockValue={stockValue}
               drill={drill}
               onSelectStock={() => setTab('marketplace')}
-              onSelectSold={() => setDrill((d) => (d === 'sold' ? null : 'sold'))}
               onSelectPurchased={() => setDrill((d) => (d === 'purchased' ? null : 'purchased'))}
             />
             <SalesChart orders={salesOrders ?? []} />
 
-            {drill === 'sold' && userId && (
-              <OrderDrilldown
-                title="Sales orders"
-                emptyText="No sales yet."
-                orders={salesOrders ?? []}
-                productMap={productMap}
-                viewerId={userId}
-                roleLabel="Selling"
-              />
-            )}
             {drill === 'purchased' && userId && (
               <OrderDrilldown
                 title="Purchase stock"
