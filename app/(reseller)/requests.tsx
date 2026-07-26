@@ -149,8 +149,10 @@ function IncomingRequestCard({ item }: { item: ServiceRequest }) {
 }
 
 function MyRequestCard({ item }: { item: ServiceRequest }) {
-  const needsCustomerLookup = item.origin === 'app' && !item.customer_name;
-  const { data: customerProfile } = useSupabaseRow('profiles', needsCustomerLookup ? item.client_id : undefined);
+  // A "reseller" origin request's client_id is just the reseller's own id
+  // (there's no real customer profile behind it), so only look up a photo
+  // for real app customers.
+  const { data: customerProfile } = useSupabaseRow('profiles', item.origin === 'app' ? item.client_id : undefined);
   const { data: technicianProfile } = useSupabaseRow('profiles', item.technician_id ?? undefined);
 
   const customerName = item.customer_name ?? customerProfile?.full_name;
@@ -216,8 +218,23 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
           </View>
         </View>
 
-        {technicianProfile && (
+        {(customerName || customerPhone) && (
           <View className="mt-2.5 flex-row items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
+            <PersonAvatar
+              name={customerName}
+              photoUrl={item.origin === 'app' ? customerProfile?.avatar_url : null}
+              size={22}
+              bg="bg-orange-500"
+            />
+            <Text className="flex-1 text-xs text-gray-600" numberOfLines={1}>
+              {customerName ?? 'Unknown'}
+              {customerPhone ? ` · ${customerPhone}` : ''}
+            </Text>
+          </View>
+        )}
+
+        {technicianProfile && (
+          <View className="mt-2 flex-row items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
             <PersonAvatar name={technicianProfile.full_name} photoUrl={technicianProfile.avatar_url} size={22} bg="bg-blue-600" />
             <Text className="flex-1 text-xs text-gray-600" numberOfLines={1}>
               Assigned to {technicianProfile.full_name ?? 'Unnamed'}
@@ -227,13 +244,6 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
         )}
 
         <View className="mt-2.5 gap-1">
-          {(customerName || customerPhone) && (
-            <Text className="text-xs text-gray-500">
-              <Text className="font-medium text-gray-600">Customer: </Text>
-              {customerName ?? 'Unknown'}
-              {customerPhone ? ` · ${customerPhone}` : ''}
-            </Text>
-          )}
           {(item.scheduled_date || item.scheduled_time) && (
             <Text className="text-xs text-gray-500">
               <Text className="font-medium text-gray-600">When: </Text>
