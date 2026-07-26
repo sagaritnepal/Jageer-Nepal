@@ -13,8 +13,6 @@ import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { OrderCard } from '../../lib/components/OrderCard';
 import type { Order, RequestStatus, ServiceRequest } from '../../types/database.types';
 
-type ViewMode = 'incoming' | 'mine';
-
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
 // was hard to tell what actually needed attention. Group by pipeline stage
 // instead - what the reseller should be doing right now for that job - with
@@ -50,12 +48,14 @@ function stageOf(item: ServiceRequest): Stage {
   }
 }
 
-// A confirmed order still needs shipping, and a shipped one still needs a
-// delivery confirmation - both are "you need to do something next", the
-// same idea "action" already covers for service requests. Once delivered
-// there's nothing left to do, same as a paid, resolved service request.
+// A pending order needs confirming, a confirmed one still needs shipping,
+// and a shipped one still needs a delivery confirmation - all "you need to
+// do something next", the same idea "action" already covers for service
+// requests. Once delivered there's nothing left to do, same as a paid,
+// resolved service request.
 function orderStageOf(order: Order): Stage {
   switch (order.status) {
+    case 'pending':
     case 'confirmed':
       return 'action';
     case 'shipped':
@@ -286,7 +286,6 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
 
 export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
-  const [viewMode, setViewMode] = useState<ViewMode>('incoming');
   const [jobStage, setJobStage] = useState<Stage | null>(null);
 
   const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
@@ -295,7 +294,9 @@ export default function ResellerRequestQueue() {
   });
   // Any reseller can see a pending app request until someone claims it -
   // once reseller_id is stamped (see AcceptIncomingRequest), it belongs to
-  // that reseller's My Jobs tab and drops out of everyone's Incoming queue.
+  // that reseller and drops out of everyone else's unclaimed pool. Unclaimed
+  // and claimed requests both land in the same "Needs your action" bucket
+  // below - accepting one is just as much an action as quoting or assigning.
   const incoming = useMemo(() => (incomingRaw ?? []).filter((r) => !r.reseller_id), [incomingRaw]);
 
   const { data: mine, isLoading: loadingMine } = useSupabaseQuery('service_requests', {
@@ -306,35 +307,32 @@ export default function ResellerRequestQueue() {
 
   // Product orders from customers (Shop no longer has its own Orders tab -
   // a new order needs the same "act on this now" attention as a new service
-  // request, so it surfaces here instead). Still-pending ones need a first
-  // look and stay in Incoming; once confirmed they move into My Jobs and
-  // follow the exact same stage pipeline as a service job, not Shop
-  // Overview - that tab is for the running numbers, not the work queue.
+  // request, so it surfaces here instead) and follow the exact same stage
+  // pipeline as a service job, not Shop Overview - that tab is for the
+  // running numbers, not the work queue.
   const { data: sellingOrders } = useSupabaseQuery('orders', {
     filters: userId ? { seller_id: userId } : {},
     orderBy: { column: 'created_at', ascending: true },
     enabled: !!userId,
   });
-  const pendingOrders = useMemo(() => (sellingOrders ?? []).filter((o) => o.status === 'pending'), [sellingOrders]);
-  const myOrders = useMemo(() => (sellingOrders ?? []).filter((o) => o.status !== 'pending'), [sellingOrders]);
   const { data: allProducts } = useSupabaseQuery('products', {});
   const productMap = useMemo(() => new Map((allProducts ?? []).map((p) => [p.id, p])), [allProducts]);
 
-  const isLoading = viewMode === 'incoming' ? loadingIncoming : loadingMine;
+  const isLoading = loadingIncoming || loadingMine;
 
-  // My Jobs gets its own stage tabs, one level below Incoming/My Jobs, so a
-  // reseller can jump straight to e.g. "Awaiting payment" instead of
-  // scrolling past every other stage to find it. Service jobs and product
-  // orders share the same stage buckets here.
+  // Everything - unclaimed requests, claimed jobs, and orders at every status
+  // - lives in one stage-grouped list now. A reseller can jump straight to
+  // e.g. "Awaiting payment" instead of scrolling past every other stage.
   const myByStage = useMemo(() => {
     const groups = new Map<Stage, JobItem[]>();
     STAGE_ORDER.forEach((stage) => groups.set(stage, []));
+    incoming.forEach((item) => groups.get(stageOf(item))!.push({ kind: 'request', id: item.id, request: item }));
     (mine ?? []).forEach((item) => groups.get(stageOf(item))!.push({ kind: 'request', id: item.id, request: item }));
-    myOrders.forEach((order) =>
+    (sellingOrders ?? []).forEach((order) =>
       groups.get(orderStageOf(order))!.push({ kind: 'order', id: order.id, order })
     );
     return groups;
-  }, [mine, myOrders]);
+  }, [incoming, mine, sellingOrders]);
 
   const activeStage = jobStage ?? STAGE_ORDER.find((stage) => (myByStage.get(stage)?.length ?? 0) > 0) ?? 'action';
   const stageJobs = myByStage.get(activeStage) ?? [];
@@ -353,119 +351,67 @@ export default function ResellerRequestQueue() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-4 flex-row rounded-full bg-gray-100 p-1">
-        <Pressable
-          onPress={() => setViewMode('incoming')}
-          className={`flex-1 items-center rounded-full py-2.5 ${viewMode === 'incoming' ? 'bg-white shadow-sm' : ''}`}
-        >
-          <Text className={`text-sm font-semibold ${viewMode === 'incoming' ? 'text-orange-600' : 'text-gray-500'}`}>
-            Incoming ({(incoming?.length ?? 0) + pendingOrders.length})
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setViewMode('mine')}
-          className={`flex-1 items-center rounded-full py-2.5 ${viewMode === 'mine' ? 'bg-white shadow-sm' : ''}`}
-        >
-          <Text className={`text-sm font-semibold ${viewMode === 'mine' ? 'text-orange-600' : 'text-gray-500'}`}>
-            My Jobs ({(mine?.length ?? 0) + myOrders.length})
-          </Text>
-        </Pressable>
-      </View>
+      <ScrollView
+        ref={chipScrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0, flexShrink: 0 }}
+        className="mb-4"
+        contentContainerStyle={{ alignItems: 'center', gap: 8, paddingRight: 8 }}
+      >
+        {STAGE_ORDER.map((stage) => {
+          const meta = STAGE_META[stage];
+          const count = myByStage.get(stage)?.length ?? 0;
+          const active = activeStage === stage;
+          return (
+            <Pressable
+              key={stage}
+              onPress={() => setJobStage(stage)}
+              onLayout={(e) => {
+                chipLayouts.current[stage] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
+              }}
+              className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
+              style={{
+                backgroundColor: active ? meta.color : '#FFFFFF',
+                borderWidth: active ? 0 : 1,
+                borderColor: '#E5E7EB',
+              }}
+            >
+              <Ionicons name={meta.icon} size={13} color={active ? 'white' : meta.color} />
+              <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
+                {meta.label} ({count})
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
-      {viewMode === 'mine' && (
-        <ScrollView
-          ref={chipScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0, flexShrink: 0 }}
-          className="mb-4"
-          contentContainerStyle={{ alignItems: 'center', gap: 8, paddingRight: 8 }}
-        >
-          {STAGE_ORDER.map((stage) => {
-            const meta = STAGE_META[stage];
-            const count = myByStage.get(stage)?.length ?? 0;
-            const active = activeStage === stage;
-            return (
-              <Pressable
-                key={stage}
-                onPress={() => setJobStage(stage)}
-                onLayout={(e) => {
-                  chipLayouts.current[stage] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
-                }}
-                className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
-                style={{
-                  backgroundColor: active ? meta.color : '#FFFFFF',
-                  borderWidth: active ? 0 : 1,
-                  borderColor: '#E5E7EB',
-                }}
-              >
-                <Ionicons name={meta.icon} size={13} color={active ? 'white' : meta.color} />
-                <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
-                  {meta.label} ({count})
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      )}
-
-      <Text className="mb-3 text-base font-bold text-gray-900">
-        {viewMode === 'incoming' ? 'Incoming Requests' : STAGE_META[activeStage].label}
-      </Text>
+      <Text className="mb-3 text-base font-bold text-gray-900">{STAGE_META[activeStage].label}</Text>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && viewMode === 'incoming' && incoming.length === 0 && pendingOrders.length === 0 && (
-        <Text className="text-gray-500">No pending requests right now.</Text>
-      )}
-      {!isLoading && viewMode === 'mine' && stageJobs.length === 0 && (
-        <Text className="text-gray-500">Nothing here right now.</Text>
-      )}
+      {!isLoading && stageJobs.length === 0 && <Text className="text-gray-500">Nothing here right now.</Text>}
 
-      {viewMode === 'incoming' ? (
-        <FlatList
-          data={incoming}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <IncomingRequestCard item={item} />}
-          ListHeaderComponent={
-            pendingOrders.length > 0 && userId ? (
-              <View className="mb-5">
-                <Text className="mb-3 text-sm font-semibold text-gray-900">New Orders ({pendingOrders.length})</Text>
-                {pendingOrders.map((order) => (
-                  <OrderCard
-                    key={order.id}
-                    order={order}
-                    productMap={productMap}
-                    viewerId={userId}
-                    basePath="/(reseller)"
-                    roleLabel="Selling"
-                  />
-                ))}
-                {incoming.length > 0 && (
-                  <Text className="mb-3 mt-2 text-sm font-semibold text-gray-900">Service Requests</Text>
-                )}
-              </View>
-            ) : null
-          }
-        />
-      ) : (
-        <FlatList
-          data={stageJobs}
-          keyExtractor={(item) => `${item.kind}-${item.id}`}
-          renderItem={({ item }) =>
-            item.kind === 'request' ? (
+      <FlatList
+        data={stageJobs}
+        keyExtractor={(item) => `${item.kind}-${item.id}`}
+        renderItem={({ item }) =>
+          item.kind === 'request' ? (
+            item.request.reseller_id ? (
               <MyRequestCard item={item.request} />
-            ) : userId ? (
-              <OrderCard
-                order={item.order}
-                productMap={productMap}
-                viewerId={userId}
-                basePath="/(reseller)"
-                roleLabel="Selling"
-              />
-            ) : null
-          }
-        />
-      )}
+            ) : (
+              <IncomingRequestCard item={item.request} />
+            )
+          ) : userId ? (
+            <OrderCard
+              order={item.order}
+              productMap={productMap}
+              viewerId={userId}
+              basePath="/(reseller)"
+              roleLabel="Selling"
+            />
+          ) : null
+        }
+      />
     </View>
   );
 }

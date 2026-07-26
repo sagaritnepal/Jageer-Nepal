@@ -1,5 +1,6 @@
 // lib/components/OrderCard.tsx
 import { View, Text, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery, useSupabaseRow } from '../hooks/useSupabase';
 import { useAdvanceOrder } from '../hooks/useAdvanceOrder';
@@ -45,7 +46,12 @@ export function OrderCard({
       <Pressable onPress={() => router.push(`${basePath}/order/${order.id}`)} className="p-4">
         <View className="mb-3 flex-row items-start justify-between gap-2">
           <View className="flex-1 flex-row items-center gap-2.5">
-            <PersonAvatar name={counterparty?.full_name} photoUrl={counterparty?.avatar_url} size={32} />
+            <View className="items-center gap-1.5">
+              <View className="items-center justify-center rounded-2xl bg-emerald-500" style={{ width: 44, height: 44 }}>
+                <Ionicons name="gift" size={20} color="white" />
+              </View>
+              <PersonAvatar name={counterparty?.full_name} photoUrl={counterparty?.avatar_url} size={32} />
+            </View>
             <View className="flex-1">
               {roleLabel && (
                 <Text className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{roleLabel}</Text>
