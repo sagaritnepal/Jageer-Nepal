@@ -20,8 +20,8 @@ const SORT_LABELS: Record<SortOption, string> = {
   name: 'Name',
 };
 
-function stockBadge(item: Product) {
-  if (item.is_listed === false) return { label: 'Unavailable', bg: 'bg-gray-500' };
+function stockBadge(item: Product, effectiveAvailable: boolean) {
+  if (!effectiveAvailable) return { label: 'Unavailable', bg: 'bg-gray-500' };
   if (item.stock_level <= 0) return { label: 'Out of stock', bg: 'bg-red-600' };
   if (item.stock_level < LOW_STOCK_THRESHOLD) return { label: 'Low stock', bg: 'bg-amber-500/90' };
   return { label: 'In stock', bg: 'bg-emerald-600/90' };
@@ -47,7 +47,15 @@ function EditablePrice({ item }: { item: Product }) {
     }
     setSaving(true);
     try {
-      await updateProduct.mutateAsync({ id: item.id, values: { price: priceNum } });
+      // Pricing an item for the first time is what makes it sellable at all
+      // (see the disabled Available switch below), so treat it as the
+      // seller's intent to go live rather than leaving them to flip a
+      // second switch right after.
+      const wasUnpriced = Number(item.price) <= 0;
+      await updateProduct.mutateAsync({
+        id: item.id,
+        values: wasUnpriced ? { price: priceNum, is_listed: true } : { price: priceNum },
+      });
       setEditing(false);
     } catch (err) {
       showAlert('Could not update price', getErrorMessage(err));
@@ -81,7 +89,7 @@ function EditablePrice({ item }: { item: Product }) {
   return (
     <Pressable onPress={() => setEditing(true)} className="flex-row items-center gap-1.5">
       <Text className="text-base font-bold text-gray-900">NPR {Number(item.price).toLocaleString()}</Text>
-      <Ionicons name="pencil" size={13} color="#9CA3AF" />
+      <Ionicons name="create-outline" size={15} color="#6B7280" />
     </Pressable>
   );
 }
@@ -89,9 +97,16 @@ function EditablePrice({ item }: { item: Product }) {
 function StorefrontCard({ item, basePath }: { item: Product; basePath: string }) {
   const updateProduct = useSupabaseUpdate('products');
   const isAvailable = item.is_listed ?? true;
+  const hasPrice = Number(item.price) > 0;
+  // Can't actually be available to buy without a selling price, no matter
+  // what the switch is set to underneath (e.g. a fresh wholesale purchase
+  // defaults to listed but starts unpriced) - so the switch reflects and
+  // only accepts changes to this effective state, not the raw column.
+  const effectiveAvailable = isAvailable && hasPrice;
   const outOfStock = item.stock_level <= 0;
-  const badge = stockBadge(item);
+  const badge = stockBadge(item, effectiveAvailable);
   const detailHref = item.catalog_id ? `${basePath}/catalog/${item.catalog_id}` : null;
+  const purchasePrice = item.purchase_price ?? null;
 
   async function handleToggleAvailable(next: boolean) {
     try {
@@ -101,11 +116,12 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
     }
   }
 
-  // Unavailable (paused by the seller) takes priority over the out-of-stock
-  // look - either way the card stays visible and editable to the seller,
-  // only real customers ever have it filtered out (see (client)/market.tsx).
-  const faded = !isAvailable || outOfStock;
-  const cardTone = !isAvailable
+  // Unavailable (paused, or simply unpriced) takes priority over the
+  // out-of-stock look - either way the card stays visible and editable to
+  // the seller, only real customers ever have it filtered out (see
+  // (client)/market.tsx and (reseller)/wholesale.tsx).
+  const faded = !effectiveAvailable || outOfStock;
+  const cardTone = !effectiveAvailable
     ? 'border-gray-300 bg-gray-50'
     : outOfStock
       ? 'border-red-200 bg-red-50'
@@ -135,10 +151,11 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
             </Text>
           </Pressable>
           <Switch
-            value={isAvailable}
+            value={effectiveAvailable}
             onValueChange={handleToggleAvailable}
+            disabled={!hasPrice}
             trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
-            thumbColor={isAvailable ? '#4F46E5' : '#F3F4F6'}
+            thumbColor={effectiveAvailable ? '#4F46E5' : '#F3F4F6'}
           />
         </View>
 
@@ -149,7 +166,13 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
           </View>
         </View>
 
-        <Text className={`mt-1 text-[11px] ${outOfStock ? 'text-red-500' : 'text-gray-400'}`}>
+        {purchasePrice != null && (
+          <Text className="mt-1 text-[11px] text-gray-500">
+            Bought at NPR {Number(purchasePrice).toLocaleString()}
+          </Text>
+        )}
+
+        <Text className={`mt-0.5 text-[11px] ${outOfStock ? 'text-red-500' : 'text-gray-400'}`}>
           {outOfStock ? 'Restock to sell' : `${item.stock_level} in stock`}
         </Text>
       </View>

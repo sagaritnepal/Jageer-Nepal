@@ -65,7 +65,7 @@ export default function ClientMarket() {
   });
 
   const inStockProducts = useMemo(
-    () => (products ?? []).filter((p) => p.stock_level > 0 && p.is_listed !== false),
+    () => (products ?? []).filter((p) => p.stock_level > 0 && p.is_listed !== false && Number(p.price) > 0),
     [products]
   );
 
