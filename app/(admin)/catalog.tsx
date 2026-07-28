@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { SearchBar } from '../../lib/components/SearchBar';
 import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
@@ -223,29 +224,24 @@ export default function AdminCatalog() {
         </View>
       )}
 
-      <Pressable
-        onPress={() => setSheetOpen(true)}
-        className="mb-4 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
-      >
-        <Ionicons name="search" size={18} color="#9CA3AF" />
-        <Text
-          className={`ml-2 flex-1 text-sm ${[search, filterCategory].filter(Boolean).length ? 'text-gray-900' : 'text-gray-400'}`}
-          numberOfLines={1}
-        >
-          {[search, filterCategory].filter(Boolean).join(' · ') || 'Search by name or model…'}
-        </Text>
-        <Ionicons name="options-outline" size={18} color="#9CA3AF" />
-      </Pressable>
+      <View className="mb-4">
+        <SearchBar
+          value={search}
+          onChangeText={(text) => {
+            setSearch(text);
+            if (sheetOpen) setSheetOpen(false);
+          }}
+          onOpenFilters={() => setSheetOpen(true)}
+          filterActive={!!filterCategory}
+          placeholder="Search by name or model…"
+        />
+      </View>
 
       <SearchFilterSheet
         visible={sheetOpen}
-        initialSearch={search}
-        initialCategory={filterCategory}
+        category={filterCategory}
         categories={categories}
-        onApply={({ search: nextSearch, category: nextCategory }) => {
-          setSearch(nextSearch);
-          setFilterCategory(nextCategory);
-        }}
+        onSelect={setFilterCategory}
         onClose={() => setSheetOpen(false)}
       />
 

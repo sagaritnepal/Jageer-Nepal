@@ -1,24 +1,15 @@
 // app/(reseller)/wholesale.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
+import { SearchBar } from '../../lib/components/SearchBar';
 import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { CartBar } from '../../lib/components/CartBar';
 import { showAlert } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
 import type { Product } from '../../types/database.types';
-
-type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'name';
-
-const SORT_LABELS: Record<SortOption, string> = {
-  newest: 'Newest',
-  price_asc: 'Price: Low to High',
-  price_desc: 'Price: High to Low',
-  name: 'Name',
-};
 
 function ProductCard({
   item,
@@ -86,8 +77,6 @@ export default function BuyFromWholesaler() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [showSortMenu, setShowSortMenu] = useState(false);
 
   const cartItems = useCartStore((state) => state.items);
   const cartSellerId = useCartStore((state) => state.sellerId);
@@ -121,24 +110,8 @@ export default function BuyFromWholesaler() {
     if (category) {
       list = list.filter((p) => p.category === category);
     }
-
-    const sorted = [...list];
-    switch (sortBy) {
-      case 'price_asc':
-        sorted.sort((a, b) => Number(a.price) - Number(b.price));
-        break;
-      case 'price_desc':
-        sorted.sort((a, b) => Number(b.price) - Number(a.price));
-        break;
-      case 'name':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'newest':
-      default:
-        sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
-    return sorted;
-  }, [marketplaceProducts, search, category, sortBy, sellerNameById]);
+    return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [marketplaceProducts, search, category, sellerNameById]);
 
   function handleAdd(product: Product) {
     const added = addToCart(product);
@@ -161,9 +134,13 @@ export default function BuyFromWholesaler() {
     }
   }
 
+  function handleSearchChange(text: string) {
+    setSearch(text);
+    if (sheetOpen) setSheetOpen(false);
+  }
+
   const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
-  const searchSummary = [search, category].filter(Boolean).join(' · ');
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
@@ -179,56 +156,23 @@ export default function BuyFromWholesaler() {
       )}
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: cartCount > 0 ? 100 : 40 }} showsVerticalScrollIndicator={false}>
-        <Pressable
-          onPress={() => setSheetOpen(true)}
-          className="mb-3 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
-        >
-          <Ionicons name="search" size={18} color="#9CA3AF" />
-          <Text className={`ml-2 flex-1 text-sm ${searchSummary ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-            {searchSummary || 'Search by name, model, or wholesaler…'}
-          </Text>
-          <Ionicons name="options-outline" size={18} color="#9CA3AF" />
-        </Pressable>
+        <View className="mb-4">
+          <SearchBar
+            value={search}
+            onChangeText={handleSearchChange}
+            onOpenFilters={() => setSheetOpen(true)}
+            filterActive={!!category}
+            placeholder="Search by name, model, or wholesaler…"
+          />
+        </View>
 
         <SearchFilterSheet
           visible={sheetOpen}
-          initialSearch={search}
-          initialCategory={category}
+          category={category}
           categories={categories}
-          onApply={({ search: nextSearch, category: nextCategory }) => {
-            setSearch(nextSearch);
-            setCategory(nextCategory);
-          }}
+          onSelect={setCategory}
           onClose={() => setSheetOpen(false)}
         />
-
-        <View className="mb-4">
-          <Pressable
-            onPress={() => setShowSortMenu((v) => !v)}
-            className="flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-2"
-          >
-            <Text className="text-sm text-gray-700">Sort: {SORT_LABELS[sortBy]}</Text>
-            <Text className="text-gray-400">{showSortMenu ? '▲' : '▼'}</Text>
-          </Pressable>
-          {showSortMenu && (
-            <View className="mt-1 rounded-lg border border-gray-200 bg-white">
-              {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={() => {
-                    setSortBy(option);
-                    setShowSortMenu(false);
-                  }}
-                  className="px-4 py-2.5"
-                >
-                  <Text className={option === sortBy ? 'font-semibold text-orange-600' : 'text-gray-700'}>
-                    {SORT_LABELS[option]}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
 
         {isLoading && <Text className="text-gray-500">Loading…</Text>}
         {!isLoading && filtered.length === 0 && (

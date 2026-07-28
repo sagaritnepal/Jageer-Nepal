@@ -5,20 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate } from '../hooks/useSupabase';
+import { SearchBar } from './SearchBar';
 import { SearchFilterSheet } from './SearchFilterSheet';
 import { filterBySearch } from '../utils/search';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { LOW_STOCK_THRESHOLD } from '../constants/stock';
 import type { Product, UserRole } from '../../types/database.types';
-
-type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'name';
-
-const SORT_LABELS: Record<SortOption, string> = {
-  newest: 'Newest',
-  price_asc: 'Price: Low to High',
-  price_desc: 'Price: High to Low',
-  name: 'Name',
-};
 
 function stockBadge(item: Product, effectiveAvailable: boolean) {
   if (!effectiveAvailable) return { label: 'Unavailable', bg: 'bg-gray-500' };
@@ -195,8 +187,6 @@ export function MyStorefront({
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [showSortMenu, setShowSortMenu] = useState(false);
 
   const { data: products, isLoading } = useSupabaseQuery('products', {
     filters: { seller_id: userId ?? '', seller_role: sellerRole },
@@ -221,24 +211,8 @@ export function MyStorefront({
     if (category) {
       list = list.filter((p) => p.category === category);
     }
-
-    const sorted = [...list];
-    switch (sortBy) {
-      case 'price_asc':
-        sorted.sort((a, b) => Number(a.price) - Number(b.price));
-        break;
-      case 'price_desc':
-        sorted.sort((a, b) => Number(b.price) - Number(a.price));
-        break;
-      case 'name':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'newest':
-      default:
-        sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
-    return sorted;
-  }, [visible, search, category, sortBy]);
+    return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [visible, search, category]);
 
   if (!isLoading && visible.length === 0) {
     return (
@@ -250,62 +224,32 @@ export function MyStorefront({
     );
   }
 
-  const searchSummary = [search, category].filter(Boolean).join(' · ');
+  function handleSearchChange(text: string) {
+    setSearch(text);
+    if (sheetOpen) setSheetOpen(false);
+  }
 
   return (
     <>
       <Text className="mb-3 text-xs text-gray-400">{note}</Text>
 
-      <Pressable
-        onPress={() => setSheetOpen(true)}
-        className="mb-3 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
-      >
-        <Ionicons name="search" size={18} color="#9CA3AF" />
-        <Text className={`ml-2 flex-1 text-sm ${searchSummary ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-          {searchSummary || 'Search by name or model…'}
-        </Text>
-        <Ionicons name="options-outline" size={18} color="#9CA3AF" />
-      </Pressable>
+      <View className="mb-4">
+        <SearchBar
+          value={search}
+          onChangeText={handleSearchChange}
+          onOpenFilters={() => setSheetOpen(true)}
+          filterActive={!!category}
+          placeholder="Search by name or model…"
+        />
+      </View>
 
       <SearchFilterSheet
         visible={sheetOpen}
-        initialSearch={search}
-        initialCategory={category}
+        category={category}
         categories={categories}
-        onApply={({ search: nextSearch, category: nextCategory }) => {
-          setSearch(nextSearch);
-          setCategory(nextCategory);
-        }}
+        onSelect={setCategory}
         onClose={() => setSheetOpen(false)}
       />
-
-      <View className="mb-4">
-        <Pressable
-          onPress={() => setShowSortMenu((v) => !v)}
-          className="flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-2"
-        >
-          <Text className="text-sm text-gray-700">Sort: {SORT_LABELS[sortBy]}</Text>
-          <Text className="text-gray-400">{showSortMenu ? '▲' : '▼'}</Text>
-        </Pressable>
-        {showSortMenu && (
-          <View className="mt-1 rounded-lg border border-gray-200 bg-white">
-            {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
-              <Pressable
-                key={option}
-                onPress={() => {
-                  setSortBy(option);
-                  setShowSortMenu(false);
-                }}
-                className="px-4 py-2.5"
-              >
-                <Text className={option === sortBy ? 'font-semibold text-orange-600' : 'text-gray-700'}>
-                  {SORT_LABELS[option]}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </View>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && filtered.length === 0 && <Text className="text-gray-500">No products match your search.</Text>}
