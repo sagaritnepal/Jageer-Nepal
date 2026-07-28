@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
 import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
+import { AddedToCartSheet } from '../../lib/components/AddedToCartSheet';
 import { showAlert } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
 import type { Product } from '../../types/database.types';
@@ -92,6 +93,7 @@ export default function BuyFromWholesaler() {
   const cartSellerId = useCartStore((state) => state.sellerId);
   const addToCart = useCartStore((state) => state.addItem);
   const clearCart = useCartStore((state) => state.clearCart);
+  const [addedProduct, setAddedProduct] = useState<Product | null>(null);
 
   const { data: products, isLoading } = useSupabaseQuery('products', {});
   const { data: wholesalers } = useSupabaseQuery('profiles', { filters: { role: 'wholesaler' } });
@@ -153,13 +155,17 @@ export default function BuyFromWholesaler() {
             onPress: () => {
               clearCart();
               addToCart(product);
+              setAddedProduct(product);
             },
           },
         ]
       );
+      return;
     }
+    setAddedProduct(product);
   }
 
+  const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
   const searchSummary = [search, category].filter(Boolean).join(' · ');
 
@@ -244,6 +250,18 @@ export default function BuyFromWholesaler() {
           ))}
         </View>
       </ScrollView>
+
+      <AddedToCartSheet
+        visible={!!addedProduct}
+        productName={addedProduct?.name ?? ''}
+        stockLeft={addedProduct?.stock_level ?? 0}
+        total={cartTotal}
+        onCheckout={() => {
+          setAddedProduct(null);
+          router.push('/(reseller)/checkout');
+        }}
+        onClose={() => setAddedProduct(null)}
+      />
     </View>
   );
 }

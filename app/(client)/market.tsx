@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
 import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
+import { AddedToCartSheet } from '../../lib/components/AddedToCartSheet';
 import { showAlert } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
 import type { Product } from '../../types/database.types';
@@ -59,6 +60,7 @@ export default function ClientMarket() {
   const cartSellerId = useCartStore((state) => state.sellerId);
   const addToCart = useCartStore((state) => state.addItem);
   const clearCart = useCartStore((state) => state.clearCart);
+  const [addedProduct, setAddedProduct] = useState<Product | null>(null);
 
   const { data: products, isLoading } = useSupabaseQuery('products', {
     filters: { seller_role: 'reseller' },
@@ -113,13 +115,17 @@ export default function ClientMarket() {
             onPress: () => {
               clearCart();
               addToCart(product);
+              setAddedProduct(product);
             },
           },
         ]
       );
+      return;
     }
+    setAddedProduct(product);
   }
 
+  const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
   const searchSummary = [search, category].filter(Boolean).join(' · ');
 
@@ -212,6 +218,18 @@ export default function ClientMarket() {
           <ProductCard key={item.id} item={item} onAdd={handleAdd} />
         ))}
       </View>
+
+      <AddedToCartSheet
+        visible={!!addedProduct}
+        productName={addedProduct?.name ?? ''}
+        stockLeft={addedProduct?.stock_level ?? 0}
+        total={cartTotal}
+        onCheckout={() => {
+          setAddedProduct(null);
+          router.push('/(client)/checkout');
+        }}
+        onClose={() => setAddedProduct(null)}
+      />
     </ScrollView>
   );
 }
