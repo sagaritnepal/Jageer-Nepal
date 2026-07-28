@@ -141,8 +141,8 @@ function StockRow({
             value={existing?.is_listed ?? true}
             onValueChange={handleToggleListed}
             disabled={updateProduct.isPending}
-            trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
-            thumbColor={(existing?.is_listed ?? true) ? '#4F46E5' : '#F3F4F6'}
+            trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
+            thumbColor={(existing?.is_listed ?? true) ? '#3b82f6' : '#F3F4F6'}
           />
         )}
       </View>

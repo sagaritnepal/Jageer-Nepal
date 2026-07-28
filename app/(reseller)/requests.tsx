@@ -24,7 +24,7 @@ const STAGE_ORDER: Stage[] = ['requests', 'action', 'waiting_customer', 'in_prog
 
 const STAGE_META: Record<Stage, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
   requests: { label: 'Requests', icon: 'download-outline', color: '#EA580C', bg: 'bg-orange-50' },
-  action: { label: 'Needs your action', icon: 'alert-circle', color: '#4338CA', bg: 'bg-orange-50' },
+  action: { label: 'Needs your action', icon: 'alert-circle', color: '#2563eb', bg: 'bg-orange-50' },
   waiting_customer: { label: 'Waiting on customer', icon: 'time-outline', color: '#D97706', bg: 'bg-amber-50' },
   in_progress: { label: 'Job in progress', icon: 'build', color: '#2563EB', bg: 'bg-blue-50' },
   awaiting_payment: { label: 'Awaiting payment', icon: 'cash-outline', color: '#DC2626', bg: 'bg-red-50' },

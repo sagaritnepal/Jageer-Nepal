@@ -9,7 +9,7 @@ import { showAlert } from '../../lib/utils/alert';
 import type { UserRole } from '../../types/database.types';
 
 const ROLES: { label: string; value: UserRole; desc: string; color: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { label: 'Wholesaler', value: 'wholesaler', desc: 'Supply products in bulk to resellers', color: '#4F46E5', icon: 'cube' },
+  { label: 'Wholesaler', value: 'wholesaler', desc: 'Supply products in bulk to resellers', color: '#3b82f6', icon: 'cube' },
   { label: 'Reseller', value: 'reseller', desc: 'Buy wholesale, sell to customers', color: '#7C3AED', icon: 'storefront' },
   { label: 'Technician', value: 'technician', desc: 'Get assigned service & install jobs', color: '#D97706', icon: 'construct' },
   { label: 'Client', value: 'client', desc: 'Order products & book services', color: '#059669', icon: 'person' },

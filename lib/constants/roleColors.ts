@@ -2,14 +2,14 @@
 import type { UserRole } from '../../types/database.types';
 
 // One shared brand color across every role (Tailwind's orange-500, which is
-// overridden to this same indigo in tailwind.config.js), so the whole app
+// overridden to this same blue in tailwind.config.js), so the whole app
 // reads as a single consistent brand.
-const BRAND_INDIGO = '#4F46E5';
+const BRAND_BLUE = '#3b82f6';
 
 export const ROLE_ACCENT: Record<UserRole, string> = {
-  client: BRAND_INDIGO,
-  technician: BRAND_INDIGO,
-  reseller: BRAND_INDIGO,
-  wholesaler: BRAND_INDIGO,
-  admin: BRAND_INDIGO,
+  client: BRAND_BLUE,
+  technician: BRAND_BLUE,
+  reseller: BRAND_BLUE,
+  wholesaler: BRAND_BLUE,
+  admin: BRAND_BLUE,
 };

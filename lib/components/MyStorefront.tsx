@@ -146,8 +146,8 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
             value={effectiveAvailable}
             onValueChange={handleToggleAvailable}
             disabled={!hasPrice}
-            trackColor={{ false: '#D1D5DB', true: '#A5B4FC' }}
-            thumbColor={effectiveAvailable ? '#4F46E5' : '#F3F4F6'}
+            trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
+            thumbColor={effectiveAvailable ? '#3b82f6' : '#F3F4F6'}
           />
         </View>
 

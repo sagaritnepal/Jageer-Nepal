@@ -182,7 +182,7 @@ export default function TechnicianDashboard() {
       {newJobs.length > 0 && (
         <>
           <View className="mb-2.5 flex-row items-center gap-1.5">
-            <Ionicons name="alert-circle" size={15} color="#4F46E5" />
+            <Ionicons name="alert-circle" size={15} color="#3b82f6" />
             <Text className="text-[15px] font-bold text-gray-900">New assignment{newJobs.length === 1 ? '' : 's'}</Text>
           </View>
           {newJobs.map((job) => (

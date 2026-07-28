@@ -40,7 +40,7 @@ function OrderStatusStepper({ status }: { status: OrderStatus }) {
           >
             <View
               className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: done ? '#059669' : active ? '#4F46E5' : '#E2E8F0' }}
+              style={{ backgroundColor: done ? '#059669' : active ? '#3b82f6' : '#E2E8F0' }}
             />
             <Text className={`text-[12.5px] ${done || active ? 'font-semibold text-gray-900' : 'text-gray-400'}`}>
               {step.label}
