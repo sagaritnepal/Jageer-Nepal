@@ -1,8 +1,10 @@
 // app/(reseller)/product/[id].tsx
+import { useState } from 'react';
 import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSupabaseRow } from '../../../lib/hooks/useSupabase';
 import { useCartStore } from '../../../lib/hooks/useCart';
+import { AddedToCartSheet } from '../../../lib/components/AddedToCartSheet';
 import { showAlert } from '../../../lib/utils/alert';
 
 export default function ResellerProductDetail() {
@@ -11,6 +13,9 @@ export default function ResellerProductDetail() {
 
   const addToCart = useCartStore((state) => state.addItem);
   const clearCart = useCartStore((state) => state.clearCart);
+  const cartItems = useCartStore((state) => state.items);
+  const [showAdded, setShowAdded] = useState(false);
+  const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
 
   if (isLoading || !product) {
     return (
@@ -36,21 +41,14 @@ export default function ResellerProductDetail() {
             onPress: () => {
               clearCart();
               addToCart(product!);
-              promptCheckout();
+              setShowAdded(true);
             },
           },
         ]
       );
       return;
     }
-    promptCheckout();
-  }
-
-  function promptCheckout() {
-    showAlert('Added to cart', 'What would you like to do next?', [
-      { text: 'Keep browsing', style: 'cancel' },
-      { text: 'Go to cart', onPress: () => router.push('/(reseller)/checkout') },
-    ]);
+    setShowAdded(true);
   }
 
   return (
@@ -92,6 +90,18 @@ export default function ResellerProductDetail() {
           </Text>
         </Pressable>
       </View>
+
+      <AddedToCartSheet
+        visible={showAdded}
+        productName={product.name}
+        stockLeft={product.stock_level}
+        total={cartTotal}
+        onCheckout={() => {
+          setShowAdded(false);
+          router.push('/(reseller)/checkout');
+        }}
+        onClose={() => setShowAdded(false)}
+      />
     </ScrollView>
   );
 }
