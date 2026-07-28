@@ -132,24 +132,16 @@ export default function ClientMarket() {
         contentContainerStyle={{ paddingBottom: cartCount > 0 ? 100 : 40 }}
         showsVerticalScrollIndicator={false}
       >
-      <View className="mb-4 flex-row items-center justify-end">
-        <View className="flex-row items-center gap-2">
-          <Pressable onPress={() => router.push('/(client)/quotes')}>
-            <Text className="text-sm font-semibold text-orange-600">My Quotes</Text>
+      {cartCount > 0 && (
+        <View className="mb-4 flex-row items-center justify-end">
+          <Pressable
+            onPress={() => router.push('/(client)/checkout')}
+            className="rounded-full bg-orange-500 px-4 py-2"
+          >
+            <Text className="text-sm font-semibold text-white">Cart ({cartCount})</Text>
           </Pressable>
-          <Pressable onPress={() => router.push('/(client)/requests')}>
-            <Text className="text-sm font-semibold text-orange-600">My Orders</Text>
-          </Pressable>
-          {cartCount > 0 && (
-            <Pressable
-              onPress={() => router.push('/(client)/checkout')}
-              className="rounded-full bg-orange-500 px-4 py-2"
-            >
-              <Text className="text-sm font-semibold text-white">Cart ({cartCount})</Text>
-            </Pressable>
-          )}
         </View>
-      </View>
+      )}
 
       <Pressable
         onPress={() => setSheetOpen(true)}
