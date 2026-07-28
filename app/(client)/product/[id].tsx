@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSupabaseRow, useSupabaseInsert } from '../../../lib/hooks/useSupabase';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useCartStore } from '../../../lib/hooks/useCart';
-import { AddedToCartSheet } from '../../../lib/components/AddedToCartSheet';
+import { CartBar } from '../../../lib/components/CartBar';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 
 function RequestQuote({ productId, sellerId }: { productId: string; sellerId: string }) {
@@ -98,8 +98,8 @@ export default function ClientProductDetail() {
   const addToCart = useCartStore((state) => state.addItem);
   const clearCart = useCartStore((state) => state.clearCart);
   const cartItems = useCartStore((state) => state.items);
-  const [showAdded, setShowAdded] = useState(false);
   const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
+  const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
 
   if (isError) {
     return (
@@ -133,18 +133,17 @@ export default function ClientProductDetail() {
             onPress: () => {
               clearCart();
               addToCart(product!);
-              setShowAdded(true);
             },
           },
         ]
       );
       return;
     }
-    setShowAdded(true);
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
+    <View className="flex-1">
+    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: cartCount > 0 ? 100 : 40 }}>
       <View className="px-6 pt-4">
         <View className="mb-4 aspect-square items-center justify-center overflow-hidden rounded-2xl bg-blue-50">
           {product.image_url ? (
@@ -184,18 +183,14 @@ export default function ClientProductDetail() {
 
         <RequestQuote productId={product.id} sellerId={product.seller_id} />
       </View>
+      </ScrollView>
 
-      <AddedToCartSheet
-        visible={showAdded}
-        productName={product.name}
+      <CartBar
+        visible={cartCount > 0}
         stockLeft={product.stock_level}
         total={cartTotal}
-        onCheckout={() => {
-          setShowAdded(false);
-          router.push('/(client)/checkout');
-        }}
-        onClose={() => setShowAdded(false)}
+        onCheckout={() => router.push('/(client)/checkout')}
       />
-    </ScrollView>
+    </View>
   );
 }

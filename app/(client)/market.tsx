@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
 import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
-import { AddedToCartSheet } from '../../lib/components/AddedToCartSheet';
+import { CartBar } from '../../lib/components/CartBar';
 import { showAlert } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
 import type { Product } from '../../types/database.types';
@@ -127,14 +127,16 @@ export default function ClientMarket() {
 
   const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+  const barStock = addedProduct?.stock_level ?? cartItems[cartItems.length - 1]?.product.stock_level ?? 0;
   const searchSummary = [search, category].filter(Boolean).join(' · ');
 
   return (
-    <ScrollView
-      className="flex-1 bg-gray-50 px-6 pt-4"
-      contentContainerStyle={{ paddingBottom: 40 }}
-      showsVerticalScrollIndicator={false}
-    >
+    <View className="flex-1">
+      <ScrollView
+        className="flex-1 bg-gray-50 px-6 pt-4"
+        contentContainerStyle={{ paddingBottom: cartCount > 0 ? 100 : 40 }}
+        showsVerticalScrollIndicator={false}
+      >
       <View className="mb-4 flex-row items-center justify-end">
         <View className="flex-row items-center gap-2">
           <Pressable onPress={() => router.push('/(client)/quotes')}>
@@ -218,18 +220,14 @@ export default function ClientMarket() {
           <ProductCard key={item.id} item={item} onAdd={handleAdd} />
         ))}
       </View>
+      </ScrollView>
 
-      <AddedToCartSheet
-        visible={!!addedProduct}
-        productName={addedProduct?.name ?? ''}
-        stockLeft={addedProduct?.stock_level ?? 0}
+      <CartBar
+        visible={cartCount > 0}
+        stockLeft={barStock}
         total={cartTotal}
-        onCheckout={() => {
-          setAddedProduct(null);
-          router.push('/(client)/checkout');
-        }}
-        onClose={() => setAddedProduct(null)}
+        onCheckout={() => router.push('/(client)/checkout')}
       />
-    </ScrollView>
+    </View>
   );
 }
