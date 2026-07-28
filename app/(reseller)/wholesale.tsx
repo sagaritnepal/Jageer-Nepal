@@ -93,7 +93,6 @@ export default function BuyFromWholesaler() {
   const cartSellerId = useCartStore((state) => state.sellerId);
   const addToCart = useCartStore((state) => state.addItem);
   const clearCart = useCartStore((state) => state.clearCart);
-  const [addedProduct, setAddedProduct] = useState<Product | null>(null);
 
   const { data: products, isLoading } = useSupabaseQuery('products', {});
   const { data: wholesalers } = useSupabaseQuery('profiles', { filters: { role: 'wholesaler' } });
@@ -155,19 +154,15 @@ export default function BuyFromWholesaler() {
             onPress: () => {
               clearCart();
               addToCart(product);
-              setAddedProduct(product);
             },
           },
         ]
       );
-      return;
     }
-    setAddedProduct(product);
   }
 
   const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
-  const barStock = addedProduct?.stock_level ?? cartItems[cartItems.length - 1]?.product.stock_level ?? 0;
   const searchSummary = [search, category].filter(Boolean).join(' · ');
 
   return (
@@ -254,7 +249,7 @@ export default function BuyFromWholesaler() {
 
       <CartBar
         visible={cartCount > 0}
-        stockLeft={barStock}
+        itemCount={cartCount}
         total={cartTotal}
         onCheckout={() => router.push('/(reseller)/checkout')}
       />

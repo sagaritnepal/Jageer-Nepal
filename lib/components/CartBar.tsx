@@ -2,16 +2,18 @@
 import { View, Text, Pressable } from 'react-native';
 
 // A persistent bottom bar (not a modal) so a buyer can keep browsing and
-// adding more items - stock left, Checkout, and the cart total all update
-// live underneath whatever they're doing, nothing to dismiss.
+// adding more items - item count, Checkout, and the cart total all update
+// live underneath whatever they're doing, nothing to dismiss. Item count is
+// the running total quantity across the cart, so it climbs the same way
+// the total price does as more gets added.
 export function CartBar({
   visible,
-  stockLeft,
+  itemCount,
   total,
   onCheckout,
 }: {
   visible: boolean;
-  stockLeft: number;
+  itemCount: number;
   total: number;
   onCheckout: () => void;
 }) {
@@ -29,8 +31,8 @@ export function CartBar({
       }}
     >
       <View className="items-start">
-        <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">In stock</Text>
-        <Text className="text-base font-extrabold text-gray-900">{stockLeft}</Text>
+        <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">In cart</Text>
+        <Text className="text-base font-extrabold text-gray-900">{itemCount}</Text>
       </View>
 
       <Pressable onPress={onCheckout} className="items-center rounded-full bg-orange-500 px-7 py-3">

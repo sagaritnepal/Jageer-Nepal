@@ -60,7 +60,6 @@ export default function ClientMarket() {
   const cartSellerId = useCartStore((state) => state.sellerId);
   const addToCart = useCartStore((state) => state.addItem);
   const clearCart = useCartStore((state) => state.clearCart);
-  const [addedProduct, setAddedProduct] = useState<Product | null>(null);
 
   const { data: products, isLoading } = useSupabaseQuery('products', {
     filters: { seller_role: 'reseller' },
@@ -115,19 +114,15 @@ export default function ClientMarket() {
             onPress: () => {
               clearCart();
               addToCart(product);
-              setAddedProduct(product);
             },
           },
         ]
       );
-      return;
     }
-    setAddedProduct(product);
   }
 
   const cartTotal = cartItems.reduce((sum, i) => sum + Number(i.product.price) * i.quantity, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
-  const barStock = addedProduct?.stock_level ?? cartItems[cartItems.length - 1]?.product.stock_level ?? 0;
   const searchSummary = [search, category].filter(Boolean).join(' · ');
 
   return (
@@ -224,7 +219,7 @@ export default function ClientMarket() {
 
       <CartBar
         visible={cartCount > 0}
-        stockLeft={barStock}
+        itemCount={cartCount}
         total={cartTotal}
         onCheckout={() => router.push('/(client)/checkout')}
       />

@@ -92,7 +92,7 @@ export default function ResellerProductDetail() {
 
       <CartBar
         visible={cartCount > 0}
-        stockLeft={product.stock_level}
+        itemCount={cartCount}
         total={cartTotal}
         onCheckout={() => router.push('/(reseller)/checkout')}
       />

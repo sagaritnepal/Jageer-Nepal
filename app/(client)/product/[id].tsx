@@ -187,7 +187,7 @@ export default function ClientProductDetail() {
 
       <CartBar
         visible={cartCount > 0}
-        stockLeft={product.stock_level}
+        itemCount={cartCount}
         total={cartTotal}
         onCheckout={() => router.push('/(client)/checkout')}
       />
