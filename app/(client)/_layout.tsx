@@ -31,10 +31,7 @@ export default function ClientLayout() {
             tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} />,
           }}
         />
-        <Tabs.Screen
-          name="profile"
-          options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
-        />
+        <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a repair' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service details' }} />

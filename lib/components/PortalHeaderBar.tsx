@@ -1,5 +1,6 @@
 // lib/components/PortalHeaderBar.tsx
-import { View, Text, Image } from 'react-native';
+import { View, Text, Image, Pressable } from 'react-native';
+import { router } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
 
 function initialsOf(name: string | null | undefined) {
@@ -12,26 +13,39 @@ function initialsOf(name: string | null | undefined) {
     .join('');
 }
 
+const PROFILE_ROUTE: Record<string, string> = {
+  client: '/(client)/profile',
+  technician: '/(technician)/profile',
+  reseller: '/(reseller)/profile',
+  wholesaler: '/(wholesaler)/profile',
+  admin: '/(admin)/profile',
+};
+
 export function PortalHeaderBar({ title }: { title?: string }) {
   const profile = useAuthStore((state) => state.profile);
+  const profileRoute = profile?.role ? PROFILE_ROUTE[profile.role] : undefined;
 
   return (
     <View className="flex-row items-center justify-between gap-2 border-b border-gray-100 bg-white px-6 pb-2.5 pt-4">
       <Text className="flex-1 text-xl font-bold text-gray-900" numberOfLines={1}>
         {title ?? ''}
       </Text>
-      <View className="flex-row items-center gap-2">
+      <Pressable
+        onPress={() => profileRoute && router.push(profileRoute as never)}
+        hitSlop={8}
+        className="flex-row items-center gap-2"
+      >
         <Text className="max-w-[140px] text-sm font-medium text-gray-600" numberOfLines={1}>
           {profile?.full_name ?? ''}
         </Text>
-        <View className="h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-orange-100">
+        <View className="h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-orange-100">
           {profile?.avatar_url ? (
             <Image source={{ uri: profile.avatar_url }} className="h-full w-full" resizeMode="cover" />
           ) : (
             <Text className="text-xs font-bold text-orange-700">{initialsOf(profile?.full_name)}</Text>
           )}
         </View>
-      </View>
+      </Pressable>
     </View>
   );
 }

@@ -39,10 +39,7 @@ export default function WholesalerLayout() {
           name="finance"
           options={{ title: 'Finance', tabBarIcon: ({ color, focused }) => <TabIcon name="wallet" color={color} focused={focused} /> }}
         />
-        <Tabs.Screen
-          name="profile"
-          options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
-        />
+        <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
         <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Bulk Pricing' }} />
         <Tabs.Screen name="catalog/[id]" options={{ href: null, title: 'Product Details' }} />
         <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />

@@ -72,10 +72,7 @@ export default function AdminLayout() {
             tabBarIcon: ({ color, focused }) => <TabIcon name="headset" color={color} focused={focused} />,
           }}
         />
-        <Tabs.Screen
-          name="profile"
-          options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <TabIcon name="person" color={color} focused={focused} /> }}
-        />
+        <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
       </Tabs>
     </RoleGuard>
   );
