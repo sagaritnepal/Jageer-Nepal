@@ -43,9 +43,11 @@ export default function Register() {
 
   return (
     <ScrollView className="flex-1 bg-white" contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: 64 }}>
-      <AppLogo size={40} />
-      <Text className="mb-1.5 mt-5 text-2xl font-extrabold text-gray-900">Choose how you'll use Jageer</Text>
-      <Text className="mb-5 text-sm text-gray-500">You can add more roles later from Settings.</Text>
+      <View className="mb-5 items-center">
+        <AppLogo size={100} />
+      </View>
+      <Text className="mb-1.5 text-center text-2xl font-extrabold text-gray-900">Choose how you'll use Jageer</Text>
+      <Text className="mb-5 text-center text-sm text-gray-500">You can add more roles later from Settings.</Text>
 
       <View className="mb-6 gap-2.5">
         {ROLES.map((r) => {

@@ -25,9 +25,11 @@ export default function Login() {
 
   return (
     <View className="flex-1 justify-center bg-white px-6">
-      <AppLogo size={44} />
-      <Text className="mt-5 text-2xl font-extrabold text-gray-900">Welcome back</Text>
-      <Text className="mb-7 mt-1.5 text-sm text-gray-500">Sign in to your Jageer account</Text>
+      <View className="mb-5 items-center">
+        <AppLogo size={140} />
+      </View>
+      <Text className="text-center text-2xl font-extrabold text-gray-900">Welcome back</Text>
+      <Text className="mb-7 mt-1.5 text-center text-sm text-gray-500">Sign in to your Jageer account</Text>
 
       <Text className="mb-1.5 text-xs font-semibold text-gray-500">Email</Text>
       <TextInput
