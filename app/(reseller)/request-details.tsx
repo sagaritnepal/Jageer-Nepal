@@ -1,25 +1,97 @@
 // app/(reseller)/request-details.tsx
-import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform, Modal, FlatList } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as Contacts from 'expo-contacts';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
+import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
+import type { Customer } from '../../types/database.types';
 
 const PHOTO_SLOTS = 3;
+
+function CustomerPickerModal({
+  visible,
+  onClose,
+  customers,
+  onSelect,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  customers: Customer[];
+  onSelect: (customer: Customer) => void;
+}) {
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter((c) => c.name.toLowerCase().includes(q) || (c.phone ?? '').includes(q));
+  }, [customers, search]);
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View className="flex-1 bg-white px-5 pt-16">
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text className="text-lg font-bold text-gray-900">My Customers</Text>
+          <Pressable onPress={onClose} hitSlop={10}>
+            <Ionicons name="close" size={24} color="#374151" />
+          </Pressable>
+        </View>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search by name or phone"
+          autoFocus
+          className="mb-3 rounded-lg border border-gray-300 px-4 py-3 text-base"
+        />
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => {
+                onSelect(item);
+                onClose();
+              }}
+              className="border-b border-gray-100 py-3"
+            >
+              <Text className="font-semibold text-gray-900">{item.name}</Text>
+              {!!item.phone && <Text className="text-xs text-gray-500">{item.phone}</Text>}
+            </Pressable>
+          )}
+          ListEmptyComponent={
+            <Text className="mt-6 text-center text-sm text-gray-400">
+              {customers.length === 0 ? 'No saved customers yet.' : 'No matches.'}
+            </Text>
+          }
+        />
+      </View>
+    </Modal>
+  );
+}
 
 export default function ResellerRequestDetails() {
   const { category, action } = useLocalSearchParams<{ category: string; action: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const createRequest = useSupabaseInsert('service_requests');
+  const createCustomer = useSupabaseInsert('customers');
+  const updateCustomer = useSupabaseUpdate('customers');
+  const { data: myCustomers } = useSupabaseQuery('customers', {
+    filters: userId ? { reseller_id: userId } : {},
+    orderBy: { column: 'name' },
+    enabled: !!userId,
+  });
 
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [date, setDate] = useState('');
@@ -75,6 +147,7 @@ export default function ResellerRequestDetails() {
       if (!contact) return;
 
       const [fullName, phones] = await Promise.all([contact.getFullName(), contact.getPhones()]);
+      setCustomerId(null);
       if (fullName) setCustomerName(fullName);
       const phone = phones[0]?.number;
       if (phone) setCustomerPhone(phone.replace(/[^\d+]/g, ''));
@@ -83,6 +156,16 @@ export default function ResellerRequestDetails() {
       }
     } catch (err) {
       showAlert('Could not read contact', getErrorMessage(err));
+    }
+  }
+
+  function handleSelectCustomer(customer: Customer) {
+    setCustomerId(customer.id);
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone ?? '');
+    if (customer.address) setAddress(customer.address);
+    if (customer.latitude != null && customer.longitude != null) {
+      setCoords({ latitude: customer.latitude, longitude: customer.longitude });
     }
   }
 
@@ -148,9 +231,32 @@ export default function ResellerRequestDetails() {
         if (uri) photoUrls.push(await uploadPhoto(uri, i));
       }
 
+      // Keep the customer directory in sync: update the saved record if one
+      // was picked (and possibly edited here), or save a brand new one so
+      // it's ready to reuse next time. Never blocks the booking if it fails.
+      let linkedCustomerId: string | null = customerId;
+      try {
+        const customerValues = {
+          name: customerName.trim(),
+          phone: customerPhone.trim(),
+          address: address.trim() || null,
+          latitude: coords?.latitude ?? null,
+          longitude: coords?.longitude ?? null,
+        };
+        if (linkedCustomerId) {
+          await updateCustomer.mutateAsync({ id: linkedCustomerId, values: customerValues });
+        } else {
+          const created = await createCustomer.mutateAsync({ reseller_id: userId, ...customerValues });
+          linkedCustomerId = created.id;
+        }
+      } catch {
+        linkedCustomerId = null;
+      }
+
       await createRequest.mutateAsync({
         client_id: userId,
         reseller_id: userId,
+        customer_id: linkedCustomerId,
         origin: 'reseller',
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
@@ -181,14 +287,40 @@ export default function ResellerRequestDetails() {
         </Text>
       </View>
 
-      {Platform.OS !== 'web' && (
+      <View className="mb-4 flex-row gap-2">
         <Pressable
-          onPress={handlePickContact}
-          className="mb-4 flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
+          onPress={() => setShowCustomerPicker(true)}
+          className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
         >
-          <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
-          <Text className="text-sm font-semibold text-blue-700">Pick from contacts</Text>
+          <Ionicons name="people-outline" size={16} color="#1d4ed8" />
+          <Text className="text-sm font-semibold text-blue-700">My Customers</Text>
         </Pressable>
+        {Platform.OS !== 'web' && (
+          <Pressable
+            onPress={handlePickContact}
+            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
+          >
+            <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
+            <Text className="text-sm font-semibold text-blue-700">Contacts</Text>
+          </Pressable>
+        )}
+      </View>
+
+      <CustomerPickerModal
+        visible={showCustomerPicker}
+        onClose={() => setShowCustomerPicker(false)}
+        customers={myCustomers ?? []}
+        onSelect={handleSelectCustomer}
+      />
+
+      {customerId && (
+        <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">
+          <Ionicons name="checkmark-circle" size={14} color="#0d9488" />
+          <Text className="flex-1 text-xs font-medium text-teal-700">Using saved customer — edits here will update their record.</Text>
+          <Pressable onPress={() => setCustomerId(null)}>
+            <Text className="text-xs font-bold text-teal-700">Unlink</Text>
+          </Pressable>
+        </View>
       )}
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>

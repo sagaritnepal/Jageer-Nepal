@@ -41,6 +41,7 @@ export interface ServiceRequest {
   client_id: string;
   technician_id: string | null;
   reseller_id: string | null;
+  customer_id: string | null;
   issue_type: string;
   description: string | null;
   status: RequestStatus;
@@ -106,6 +107,33 @@ export interface ProductQuote {
   status: QuoteStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface Customer {
+  id: string;
+  reseller_id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type LedgerEntryType = 'debit' | 'credit';
+
+export interface CustomerLedgerEntry {
+  id: string;
+  customer_id: string;
+  reseller_id: string;
+  entry_type: LedgerEntryType;
+  amount: number;
+  note: string | null;
+  source: 'manual' | 'booking';
+  source_type: string | null;
+  source_id: string | null;
+  created_at: string;
 }
 
 export interface Order {
@@ -227,6 +255,13 @@ export interface Database {
         Row: ProductQuote;
         Insert: Partial<ProductQuote>;
         Update: Partial<ProductQuote>;
+        Relationships: [];
+      };
+      customers: { Row: Customer; Insert: Partial<Customer>; Update: Partial<Customer>; Relationships: [] };
+      customer_ledger_entries: {
+        Row: CustomerLedgerEntry;
+        Insert: Partial<CustomerLedgerEntry>;
+        Update: Partial<CustomerLedgerEntry>;
         Relationships: [];
       };
     };
