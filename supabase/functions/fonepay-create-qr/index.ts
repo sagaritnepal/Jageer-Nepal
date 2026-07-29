@@ -62,11 +62,11 @@ Deno.serve(async (req) => {
       .limit(1);
 
     const jobCard = jobCards?.[0];
-    const amount = jobCard
-      ? Number(jobCard.labor_cost) + Number(jobCard.parts_cost)
-      : request.quoted_price != null
-        ? Number(request.quoted_price)
-        : null;
+    // A job_card total of 0 means the technician never filled in real costs
+    // (defaults to 0) - fall back to the quoted price rather than trying to
+    // charge NPR 0.
+    const jobTotal = jobCard ? Number(jobCard.labor_cost) + Number(jobCard.parts_cost) : 0;
+    const amount = jobTotal > 0 ? jobTotal : request.quoted_price != null ? Number(request.quoted_price) : null;
 
     if (!amount || amount <= 0) {
       return new Response(JSON.stringify({ error: 'No payable amount is set on this job yet' }), {

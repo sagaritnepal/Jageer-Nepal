@@ -39,14 +39,25 @@ function addToHourBuckets(buckets: number[], startedAt: string, completedAt: str
   }
 }
 
+type JobCardWithQuote = JobCard & { service_requests: { quoted_price: number | null } | null };
+
+// A job_card total of 0 means the technician never filled in real costs
+// (defaults to 0 on resolve) - fall back to the request's quoted price
+// rather than showing what looks like an unpaid/zero-value job.
+function jobCardAmount(c: JobCardWithQuote) {
+  const jobTotal = Number(c.labor_cost) + Number(c.parts_cost);
+  return jobTotal > 0 ? jobTotal : Number(c.service_requests?.quoted_price ?? 0);
+}
+
 export default function TechnicianEarnings() {
   const userId = useAuthStore((state) => state.session?.user.id);
 
   const { data: jobCards, isLoading } = useSupabaseQuery('job_cards', {
     filters: userId ? { technician_id: userId } : {},
     orderBy: { column: 'created_at', ascending: false },
+    columns: '*, service_requests(quoted_price)',
     enabled: !!userId,
-  });
+  }) as { data: JobCardWithQuote[] | undefined; isLoading: boolean };
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -54,7 +65,7 @@ export default function TechnicianEarnings() {
     const weekStart = new Date(todayStart);
     weekStart.setDate(weekStart.getDate() - 7);
 
-    const completed = (jobCards ?? []).filter((c): c is JobCard & { completed_at: string } => !!c.completed_at);
+    const completed = (jobCards ?? []).filter((c): c is JobCardWithQuote & { completed_at: string } => !!c.completed_at);
 
     let today = 0;
     let weekTotal = 0;
@@ -64,7 +75,7 @@ export default function TechnicianEarnings() {
     const hourBuckets = new Array(24).fill(0);
 
     const payoutHistory = completed.map((c) => {
-      const amount = Number(c.labor_cost) + Number(c.parts_cost);
+      const amount = jobCardAmount(c);
       const completedDate = new Date(c.completed_at);
       const durationHours = c.started_at
         ? (completedDate.getTime() - new Date(c.started_at).getTime()) / 3600000
@@ -97,7 +108,7 @@ export default function TechnicianEarnings() {
       dayEnd.setDate(dayEnd.getDate() + 1);
       const total = completed.reduce((sum, c) => {
         const d = new Date(c.completed_at);
-        return d >= dayStart && d < dayEnd ? sum + Number(c.labor_cost) + Number(c.parts_cost) : sum;
+        return d >= dayStart && d < dayEnd ? sum + jobCardAmount(c) : sum;
       }, 0);
       dailyBuckets.push({
         label: i === 0 ? 'Today' : dayStart.toLocaleDateString(undefined, { weekday: 'short' }),
