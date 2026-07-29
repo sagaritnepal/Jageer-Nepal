@@ -47,6 +47,8 @@ export default function WholesalerLayout() {
         <Tabs.Screen name="customer/[id]" options={{ href: null, title: 'Customer' }} />
         <Tabs.Screen name="transactions" options={{ href: null, title: 'Transactions' }} />
         <Tabs.Screen name="quick-payment" options={{ href: null, title: 'Quick Payment' }} />
+        <Tabs.Screen name="received" options={{ href: null, title: 'Total Received' }} />
+        <Tabs.Screen name="paid" options={{ href: null, title: 'Total Paid' }} />
       </Tabs>
     </RoleGuard>
   );

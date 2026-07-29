@@ -63,6 +63,8 @@ function shortcuts(basePath: string): {
     { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale` },
     { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase` },
     { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense` },
+    { key: 'received', label: 'Total Received', icon: 'trending-up-outline', href: `${basePath}/received` },
+    { key: 'paid', label: 'Total Paid', icon: 'trending-down-outline', href: `${basePath}/paid` },
   ];
 }
 
@@ -197,6 +199,28 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
   const netBalance = totals.sale - totals.purchase - totals.expense;
 
+  // Matches TotalsReportScreen's definitions: "received" is every real cash
+  // inflow (sales + any payment actually collected from a customer);
+  // "paid" is every real cash outflow (purchases, expenses, and manual
+  // Payment Out entries) - booking-sourced debit entries are excluded since
+  // those represent a customer owing money, not the business paying it out.
+  const { yearReceived, yearPaid } = useMemo(() => {
+    const year = new Date().getFullYear();
+    let received = 0;
+    let paid = 0;
+    for (const t of transactions ?? []) {
+      if (new Date(t.created_at).getFullYear() !== year) continue;
+      if (t.type === 'sale') received += t.amount;
+      if (t.type === 'purchase' || t.type === 'expense') paid += t.amount;
+    }
+    for (const e of allEntries ?? []) {
+      if (new Date(e.created_at).getFullYear() !== year) continue;
+      if (e.entry_type === 'credit') received += e.amount;
+      if (e.entry_type === 'debit' && e.source === 'manual') paid += e.amount;
+    }
+    return { yearReceived: received, yearPaid: paid };
+  }, [transactions, allEntries]);
+
   const profileCompletion = useMemo(() => {
     const fields = [profile?.full_name, profile?.phone, profile?.avatar_url, profile?.city];
     const filled = fields.filter(Boolean).length;
@@ -279,6 +303,29 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
+        </Pressable>
+      </View>
+
+      <View className="mb-3 flex-row gap-3">
+        <Pressable
+          onPress={() => router.push(`${basePath}/received` as any)}
+          className="flex-1 flex-row items-center justify-between rounded-2xl bg-emerald-50 p-3.5"
+        >
+          <View>
+            <Text className="text-xs font-semibold text-emerald-700">Total Received</Text>
+            <Text className="mt-1 text-base font-extrabold text-emerald-700">NPR {yearReceived.toLocaleString()}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#6EE7B7" />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`${basePath}/paid` as any)}
+          className="flex-1 flex-row items-center justify-between rounded-2xl bg-red-50 p-3.5"
+        >
+          <View>
+            <Text className="text-xs font-semibold text-red-600">Total Paid</Text>
+            <Text className="mt-1 text-base font-extrabold text-red-600">NPR {yearPaid.toLocaleString()}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#FCA5A5" />
         </Pressable>
       </View>
 
