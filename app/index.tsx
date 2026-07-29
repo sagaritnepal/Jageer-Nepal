@@ -18,7 +18,7 @@ function Splash({ onGetStarted }: { onGetStarted: () => void }) {
     <View className="flex-1 items-center justify-center gap-6 bg-slate-50 px-8">
       <Image
         source={require('../assets/jageer-logo.png')}
-        style={{ width: 260, height: 260 * (1238 / 900) }}
+        style={{ width: 260, height: 260 * (1650 / 1354) }}
         resizeMode="contain"
       />
       <View className="items-center">
