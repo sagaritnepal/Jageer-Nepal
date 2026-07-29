@@ -1,6 +1,6 @@
 // app/(reseller)/request-details.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,6 +30,12 @@ export default function ResellerRequestDetails() {
 
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [newCustName, setNewCustName] = useState('');
+  const [newCustPhone, setNewCustPhone] = useState('');
+  const [newCustAddress, setNewCustAddress] = useState('');
+  const [savingNewCustomer, setSavingNewCustomer] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [date, setDate] = useState('');
@@ -135,11 +141,62 @@ export default function ResellerRequestDetails() {
   }
 
   const customerSuggestions = useMemo(() => {
-    const q = customerName.trim().toLowerCase();
+    const q = customerSearch.trim().toLowerCase();
     const list = myCustomers ?? [];
     if (!q) return list;
     return list.filter((c) => c.name.toLowerCase().includes(q));
-  }, [myCustomers, customerName]);
+  }, [myCustomers, customerSearch]);
+
+  // Live matches shown right under the name field as the reseller types,
+  // so picking a saved customer doesn't require opening the book-icon modal.
+  const inlineSuggestions = useMemo(() => {
+    if (customerId) return [];
+    const q = customerName.trim().toLowerCase();
+    if (!q) return [];
+    return (myCustomers ?? []).filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5);
+  }, [myCustomers, customerName, customerId]);
+
+  function openCustomerPicker() {
+    setCustomerSearch('');
+    setShowCustomerSuggestions(true);
+  }
+
+  function openNewCustomerModal() {
+    setNewCustName(customerName.trim());
+    setNewCustPhone(customerPhone.trim());
+    setNewCustAddress(address.trim());
+    setShowCustomerSuggestions(false);
+    setShowNewCustomerModal(true);
+  }
+
+  function closeNewCustomerModal() {
+    setShowNewCustomerModal(false);
+  }
+
+  async function handleSaveNewCustomer() {
+    if (!userId || !newCustName.trim()) {
+      showAlert('Add a name', "Enter the customer's name to save them.");
+      return;
+    }
+    setSavingNewCustomer(true);
+    try {
+      const created = await createCustomer.mutateAsync({
+        owner_id: userId,
+        name: newCustName.trim(),
+        phone: newCustPhone.trim() || null,
+        address: newCustAddress.trim() || null,
+        latitude: null,
+        longitude: null,
+      });
+      handleSelectCustomer(created);
+      setShowNewCustomerModal(false);
+      showAlert('Customer added', `${newCustName.trim()} has been saved to My Customers.`);
+    } catch (err) {
+      showAlert('Could not add customer', getErrorMessage(err));
+    } finally {
+      setSavingNewCustomer(false);
+    }
+  }
 
   async function handlePickPhoto(index: number) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -270,39 +327,79 @@ export default function ResellerRequestDetails() {
       )}
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>
-      <View className="z-10 mb-1">
-        <View className="flex-row items-center rounded-lg border border-gray-300 bg-white">
-          <TextInput
-            value={customerName}
-            onChangeText={(text) => {
-              setCustomerName(text);
-              setCustomerId(null);
-            }}
-            placeholder="Who is this request for?"
-            className="flex-1 px-4 py-3 text-base"
-          />
-          <Pressable
-            onPress={() => setShowCustomerSuggestions((v) => !v)}
-            hitSlop={8}
-            className="px-3"
-          >
-            <Ionicons name="book-outline" size={20} color="#1d4ed8" />
-          </Pressable>
+      <View className="mb-1 flex-row items-center rounded-lg border border-gray-300 bg-white">
+        <TextInput
+          value={customerName}
+          onChangeText={(text) => {
+            setCustomerName(text);
+            setCustomerId(null);
+          }}
+          placeholder="Who is this request for?"
+          className="flex-1 px-4 py-3 text-base"
+        />
+        <Pressable onPress={openCustomerPicker} hitSlop={8} className="px-3">
+          <Ionicons name="book-outline" size={20} color="#1d4ed8" />
+        </Pressable>
+      </View>
+
+      {inlineSuggestions.length > 0 && (
+        <View className="mb-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
+          {inlineSuggestions.map((c, idx) => (
+            <Pressable
+              key={c.id}
+              onPress={() => handleSelectCustomer(c)}
+              className={`px-4 py-2.5 ${idx !== inlineSuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
+            >
+              <Text className="text-sm font-semibold text-gray-900">{c.name}</Text>
+              {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
+            </Pressable>
+          ))}
         </View>
-        {showCustomerSuggestions && (
-          <View
-            className="absolute left-0 right-0 top-[52px] z-20 max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-white"
-            style={{ shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 8 }}
-          >
+      )}
+      <Text className="mb-4 text-xs text-gray-400">
+        Matches from your saved customers appear as you type. Tap the book icon to browse all or add a new customer.
+      </Text>
+
+      <Modal
+        visible={showCustomerSuggestions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCustomerSuggestions(false)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-center bg-black/40 px-6"
+          onPress={() => setShowCustomerSuggestions(false)}
+        >
+          <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-3" style={{ maxHeight: '70%' }}>
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-gray-900">My Customers</Text>
+              <Pressable onPress={() => setShowCustomerSuggestions(false)} className="px-2 py-1">
+                <Text className="text-sm font-semibold text-blue-700">Close</Text>
+              </Pressable>
+            </View>
+            <TextInput
+              value={customerSearch}
+              onChangeText={setCustomerSearch}
+              placeholder="Search by name"
+              autoFocus
+              className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+            />
+            <Pressable
+              onPress={openNewCustomerModal}
+              className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-orange-400 bg-orange-50 py-2"
+            >
+              <Ionicons name="person-add-outline" size={16} color="#c2410c" />
+              <Text className="text-sm font-semibold text-orange-700">+ Add new customer</Text>
+            </Pressable>
             <ScrollView keyboardShouldPersistTaps="handled">
               {customerSuggestions.length === 0 ? (
-                <Text className="px-4 py-3 text-center text-sm text-gray-400">No saved customers match.</Text>
+                <Text className="px-2 py-3 text-center text-sm text-gray-400">No saved customers match.</Text>
               ) : (
-                customerSuggestions.slice(0, 30).map((c) => (
+                customerSuggestions.map((c) => (
                   <Pressable
                     key={c.id}
                     onPress={() => handleSelectCustomer(c)}
-                    className="border-b border-gray-100 px-4 py-2.5"
+                    className="border-b border-gray-100 px-2 py-2.5"
                   >
                     <Text className="text-sm font-semibold text-gray-900">{c.name}</Text>
                     {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
@@ -310,10 +407,58 @@ export default function ResellerRequestDetails() {
                 ))
               )}
             </ScrollView>
-          </View>
-        )}
-      </View>
-      <Text className="mb-4 text-xs text-gray-400">Tap the book icon to pick a saved customer, or just type a new name.</Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showNewCustomerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeNewCustomerModal}
+      >
+        <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={closeNewCustomerModal}>
+          <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-4">
+            <Text className="mb-3 text-base font-semibold text-gray-900">New customer</Text>
+            <Text className="mb-1 text-xs font-medium text-gray-600">Name</Text>
+            <TextInput
+              value={newCustName}
+              onChangeText={setNewCustName}
+              placeholder="Customer name"
+              className="mb-3 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+            />
+            <Text className="mb-1 text-xs font-medium text-gray-600">Contact no.</Text>
+            <TextInput
+              value={newCustPhone}
+              onChangeText={setNewCustPhone}
+              placeholder="98XXXXXXXX"
+              keyboardType="phone-pad"
+              className="mb-3 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+            />
+            <Text className="mb-1 text-xs font-medium text-gray-600">Location</Text>
+            <TextInput
+              value={newCustAddress}
+              onChangeText={setNewCustAddress}
+              placeholder="House/street, city, area"
+              multiline
+              className="mb-4 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+              style={{ minHeight: 50, textAlignVertical: 'top' }}
+            />
+            <View className="flex-row justify-end gap-3">
+              <Pressable onPress={closeNewCustomerModal} className="px-3 py-2">
+                <Text className="text-sm font-semibold text-gray-500">Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSaveNewCustomer}
+                disabled={savingNewCustomer}
+                className="rounded-lg bg-orange-500 px-4 py-2 disabled:opacity-50"
+              >
+                <Text className="text-sm font-semibold text-white">{savingNewCustomer ? 'Saving…' : 'Save'}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer phone</Text>
       <TextInput
