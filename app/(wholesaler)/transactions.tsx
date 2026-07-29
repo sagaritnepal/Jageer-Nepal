@@ -1,4 +1,6 @@
 // app/(wholesaler)/transactions.tsx
 import { TransactionsScreen } from '../../lib/components/finance/TransactionsScreen';
 
-export default TransactionsScreen;
+export default function TransactionsRoute() {
+  return <TransactionsScreen basePath="/(wholesaler)" />;
+}

@@ -1,12 +1,12 @@
 // lib/components/finance/TransactionsScreen.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
-import type { BusinessTransaction, BusinessTransactionType } from '../../../types/database.types';
+import type { BusinessTransaction, BusinessTransactionType, CustomerLedgerEntry } from '../../../types/database.types';
 
 const TYPE_META: Record<BusinessTransactionType, { label: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
   sale: { label: 'Sale', color: '#059669', bg: 'bg-emerald-50', icon: 'trending-up' },
@@ -159,7 +159,35 @@ function TransactionRow({
   );
 }
 
-export function TransactionsScreen() {
+type FeedItem =
+  | { kind: 'business'; id: string; created_at: string; tx: BusinessTransaction }
+  | { kind: 'ledger'; id: string; created_at: string; entry: CustomerLedgerEntry; customerName: string | null };
+
+function LedgerRow({ item, basePath }: { item: CustomerLedgerEntry; customerName: string | null; basePath?: string }) {
+  const isDebit = item.entry_type === 'debit';
+  return (
+    <Pressable
+      onPress={() => basePath && router.push(`${basePath}/customer/${item.customer_id}` as any)}
+      className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4"
+    >
+      <View className={`h-9 w-9 items-center justify-center rounded-full ${isDebit ? 'bg-red-50' : 'bg-emerald-50'}`}>
+        <Ionicons name={isDebit ? 'arrow-up' : 'arrow-down'} size={16} color={isDebit ? '#DC2626' : '#059669'} />
+      </View>
+      <View className="flex-1">
+        <Text className="text-sm font-semibold text-gray-900">{isDebit ? 'Customer owes' : 'Received from customer'}</Text>
+        <Text className="text-xs text-gray-400" numberOfLines={1}>
+          {item.note ?? (item.source === 'booking' ? 'From a booked job' : 'Manual entry')} ·{' '}
+          {new Date(item.created_at).toLocaleDateString()}
+        </Text>
+      </View>
+      <Text className="text-sm font-extrabold" style={{ color: isDebit ? '#DC2626' : '#059669' }}>
+        NPR {item.amount.toLocaleString()}
+      </Text>
+    </Pressable>
+  );
+}
+
+export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const { type: typeParam } = useLocalSearchParams<{ type?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: transactions } = useSupabaseQuery('business_transactions', {
@@ -167,7 +195,22 @@ export function TransactionsScreen() {
     orderBy: { column: 'created_at', ascending: false },
     enabled: !!userId,
   });
+  const { data: ledgerEntries } = useSupabaseQuery('customer_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    enabled: !!userId,
+  });
+  const { data: customers } = useSupabaseQuery('customers', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
   const deleteTx = useSupabaseDelete('business_transactions');
+
+  const customerNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    (customers ?? []).forEach((c) => map.set(c.id, c.name));
+    return map;
+  }, [customers]);
 
   const initialFilter = (typeParam as BusinessTransactionType) && ['sale', 'purchase', 'expense'].includes(typeParam ?? '')
     ? (typeParam as BusinessTransactionType)
@@ -176,10 +219,33 @@ export function TransactionsScreen() {
   const [showForm, setShowForm] = useState(!!typeParam);
   const [editingTx, setEditingTx] = useState<BusinessTransaction | null>(null);
 
-  const filtered = useMemo(() => {
-    const list = transactions ?? [];
-    return filter === 'all' ? list : list.filter((t) => t.type === filter);
-  }, [transactions, filter]);
+  // "All" is a full daily feed across every money-moving table (general
+  // sales/purchase/expense entries plus per-customer debit/credit entries),
+  // newest first. The type filters stay business_transactions-only, since
+  // ledger entries don't have a sale/purchase/expense dimension.
+  const feed = useMemo((): FeedItem[] => {
+    if (filter !== 'all') {
+      return (transactions ?? [])
+        .filter((t) => t.type === filter)
+        .map((tx) => ({ kind: 'business' as const, id: tx.id, created_at: tx.created_at, tx }));
+    }
+    const businessItems: FeedItem[] = (transactions ?? []).map((tx) => ({
+      kind: 'business',
+      id: tx.id,
+      created_at: tx.created_at,
+      tx,
+    }));
+    const ledgerItems: FeedItem[] = (ledgerEntries ?? []).map((entry) => ({
+      kind: 'ledger',
+      id: entry.id,
+      created_at: entry.created_at,
+      entry,
+      customerName: customerNameById.get(entry.customer_id) ?? null,
+    }));
+    return [...businessItems, ...ledgerItems].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [transactions, ledgerEntries, customerNameById, filter]);
 
   function handleDelete(tx: BusinessTransaction) {
     showAlert('Delete this transaction?', undefined, [
@@ -233,18 +299,22 @@ export function TransactionsScreen() {
       )}
 
       <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TransactionRow
-            tx={item}
-            onEdit={() => {
-              setEditingTx(item);
-              setShowForm(true);
-            }}
-            onDelete={() => handleDelete(item)}
-          />
-        )}
+        data={feed}
+        keyExtractor={(item) => `${item.kind}-${item.id}`}
+        renderItem={({ item }) =>
+          item.kind === 'business' ? (
+            <TransactionRow
+              tx={item.tx}
+              onEdit={() => {
+                setEditingTx(item.tx);
+                setShowForm(true);
+              }}
+              onDelete={() => handleDelete(item.tx)}
+            />
+          ) : (
+            <LedgerRow item={item.entry} customerName={item.customerName} basePath={basePath} />
+          )
+        }
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">

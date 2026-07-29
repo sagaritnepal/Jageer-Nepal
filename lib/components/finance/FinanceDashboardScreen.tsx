@@ -18,6 +18,7 @@ function shortcuts(basePath: string): {
     { key: 'customers', label: 'Customers', icon: 'people', href: `${basePath}/customers` },
     { key: 'payment-in', label: 'Payment In', icon: 'arrow-down-circle', href: `${basePath}/quick-payment?type=in` },
     { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', href: `${basePath}/quick-payment?type=out` },
+    { key: 'transactions', label: 'Transactions', icon: 'list', href: `${basePath}/transactions` },
     { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale` },
     { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase` },
     { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense` },

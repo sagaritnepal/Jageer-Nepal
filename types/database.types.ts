@@ -134,6 +134,8 @@ export interface BusinessTransaction {
   amount: number;
   note: string | null;
   party_name: string | null;
+  source_type: string | null;
+  source_id: string | null;
   created_at: string;
   updated_at: string;
 }
