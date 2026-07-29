@@ -245,38 +245,49 @@ export default function ResellerRequestDetails() {
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>
       <View className="z-10 mb-1">
-        <TextInput
-          value={customerName}
-          onChangeText={(text) => {
-            setCustomerName(text);
-            setCustomerId(null);
-          }}
-          onFocus={() => setShowCustomerSuggestions(true)}
-          onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
-          placeholder="Who is this request for?"
-          className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-        />
-        {showCustomerSuggestions && customerSuggestions.length > 0 && (
+        <View className="flex-row items-center rounded-lg border border-gray-300 bg-white">
+          <TextInput
+            value={customerName}
+            onChangeText={(text) => {
+              setCustomerName(text);
+              setCustomerId(null);
+            }}
+            placeholder="Who is this request for?"
+            className="flex-1 px-4 py-3 text-base"
+          />
+          <Pressable
+            onPress={() => setShowCustomerSuggestions((v) => !v)}
+            hitSlop={8}
+            className="px-3"
+          >
+            <Ionicons name="book-outline" size={20} color="#1d4ed8" />
+          </Pressable>
+        </View>
+        {showCustomerSuggestions && (
           <View
             className="absolute left-0 right-0 top-[52px] z-20 max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-white"
             style={{ shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 8 }}
           >
             <ScrollView keyboardShouldPersistTaps="handled">
-              {customerSuggestions.slice(0, 30).map((c) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => handleSelectCustomer(c)}
-                  className="border-b border-gray-100 px-4 py-2.5"
-                >
-                  <Text className="text-sm font-semibold text-gray-900">{c.name}</Text>
-                  {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
-                </Pressable>
-              ))}
+              {customerSuggestions.length === 0 ? (
+                <Text className="px-4 py-3 text-center text-sm text-gray-400">No saved customers match.</Text>
+              ) : (
+                customerSuggestions.slice(0, 30).map((c) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => handleSelectCustomer(c)}
+                    className="border-b border-gray-100 px-4 py-2.5"
+                  >
+                    <Text className="text-sm font-semibold text-gray-900">{c.name}</Text>
+                    {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
+                  </Pressable>
+                ))
+              )}
             </ScrollView>
           </View>
         )}
       </View>
-      <Text className="mb-4 text-xs text-gray-400">Start typing to pick from your saved customers, or enter a new one.</Text>
+      <Text className="mb-4 text-xs text-gray-400">Tap the book icon to pick a saved customer, or just type a new name.</Text>
 
       {customerId && (
         <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">
