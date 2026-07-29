@@ -8,6 +8,20 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const SHORTCUTS: {
+  key: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  href: string;
+}[] = [
+  { key: 'customers', label: 'Customers', icon: 'people', href: '/(reseller)/customers' },
+  { key: 'payment-in', label: 'Payment In', icon: 'arrow-down-circle', href: '/(reseller)/quick-payment?type=in' },
+  { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', href: '/(reseller)/quick-payment?type=out' },
+  { key: 'sales', label: 'Sales', icon: 'trending-up', href: '/(reseller)/transactions?type=sale' },
+  { key: 'purchase', label: 'Purchase', icon: 'cart', href: '/(reseller)/transactions?type=purchase' },
+  { key: 'expenses', label: 'Expenses', icon: 'receipt', href: '/(reseller)/transactions?type=expense' },
+];
+
 function startOfDay(date: Date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -93,6 +107,22 @@ export default function FinanceScreen() {
     filters: userId ? { reseller_id: userId } : {},
     enabled: !!userId,
   });
+  const { data: transactions } = useSupabaseQuery('business_transactions', {
+    filters: userId ? { reseller_id: userId } : {},
+    enabled: !!userId,
+  });
+
+  const monthTotals = useMemo(() => {
+    const now = new Date();
+    const totals = { sale: 0, purchase: 0, expense: 0 };
+    for (const t of transactions ?? []) {
+      const created = new Date(t.created_at);
+      if (created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth()) {
+        totals[t.type] += t.amount;
+      }
+    }
+    return totals;
+  }, [transactions]);
 
   const { toReceive, toGive } = useMemo(() => {
     const perCustomer: Record<string, number> = {};
@@ -137,26 +167,36 @@ export default function FinanceScreen() {
         </View>
       </View>
 
-      <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
       <View className="mb-4 flex-row gap-3">
-        <Pressable
-          onPress={() => router.push('/(reseller)/customers')}
-          className="flex-1 items-center rounded-2xl border border-gray-200 bg-white py-4"
-        >
-          <View className="mb-1.5 h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-            <Ionicons name="people" size={20} color="#2563eb" />
-          </View>
-          <Text className="text-xs font-semibold text-gray-700">Customers</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/(reseller)/customers?add=1')}
-          className="flex-1 items-center rounded-2xl border border-gray-200 bg-white py-4"
-        >
-          <View className="mb-1.5 h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-            <Ionicons name="person-add" size={20} color="#2563eb" />
-          </View>
-          <Text className="text-xs font-semibold text-gray-700">Add Customer</Text>
-        </Pressable>
+        <View className="flex-1 rounded-2xl bg-white p-3.5">
+          <Text className="text-xs font-semibold text-gray-500">Sales (this month)</Text>
+          <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {monthTotals.sale.toLocaleString()}</Text>
+        </View>
+        <View className="flex-1 rounded-2xl bg-white p-3.5">
+          <Text className="text-xs font-semibold text-gray-500">Purchase (this month)</Text>
+          <Text className="mt-1 text-base font-extrabold text-blue-600">NPR {monthTotals.purchase.toLocaleString()}</Text>
+        </View>
+        <View className="flex-1 rounded-2xl bg-white p-3.5">
+          <Text className="text-xs font-semibold text-gray-500">Expense (this month)</Text>
+          <Text className="mt-1 text-base font-extrabold text-red-600">NPR {monthTotals.expense.toLocaleString()}</Text>
+        </View>
+      </View>
+
+      <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
+      <View className="mb-4 flex-row flex-wrap gap-3">
+        {SHORTCUTS.map((s) => (
+          <Pressable
+            key={s.key}
+            onPress={() => router.push(s.href as any)}
+            className="items-center rounded-2xl border border-gray-200 bg-white py-4"
+            style={{ width: '31%' }}
+          >
+            <View className="mb-1.5 h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+              <Ionicons name={s.icon} size={20} color="#2563eb" />
+            </View>
+            <Text className="text-center text-xs font-semibold text-gray-700">{s.label}</Text>
+          </Pressable>
+        ))}
       </View>
 
       <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">

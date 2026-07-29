@@ -122,6 +122,19 @@ export interface CustomerLedgerEntry {
   created_at: string;
 }
 
+export type BusinessTransactionType = 'sale' | 'purchase' | 'expense';
+
+export interface BusinessTransaction {
+  id: string;
+  reseller_id: string;
+  type: BusinessTransactionType;
+  amount: number;
+  note: string | null;
+  party_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Order {
   id: string;
   buyer_id: string;
@@ -242,6 +255,12 @@ export interface Database {
         Row: CustomerLedgerEntry;
         Insert: Partial<CustomerLedgerEntry>;
         Update: Partial<CustomerLedgerEntry>;
+        Relationships: [];
+      };
+      business_transactions: {
+        Row: BusinessTransaction;
+        Insert: Partial<BusinessTransaction>;
+        Update: Partial<BusinessTransaction>;
         Relationships: [];
       };
     };
