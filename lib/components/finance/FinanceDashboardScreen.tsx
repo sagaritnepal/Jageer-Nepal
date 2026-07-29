@@ -3,10 +3,51 @@ import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BLUE = '#2563EB';
+
+function CircularProgress({
+  percent,
+  size = 44,
+  strokeWidth = 4,
+}: {
+  percent: number;
+  size?: number;
+  strokeWidth?: number;
+}) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - percent / 100);
+  return (
+    <Svg width={size} height={size}>
+      <Circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        stroke="rgba(255,255,255,0.3)"
+        strokeWidth={strokeWidth}
+        fill="none"
+      />
+      <Circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        stroke="white"
+        strokeWidth={strokeWidth}
+        fill="none"
+        strokeDasharray={`${circumference} ${circumference}`}
+        strokeDashoffset={strokeDashoffset}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+    </Svg>
+  );
+}
 
 function shortcuts(basePath: string): {
   key: string;
@@ -102,6 +143,7 @@ function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
 
 export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
+  const profile = useAuthStore((state) => state.profile);
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
@@ -153,42 +195,117 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     });
   }, [allEntries]);
 
+  const netBalance = totals.sale - totals.purchase - totals.expense;
+
+  const profileCompletion = useMemo(() => {
+    const fields = [profile?.full_name, profile?.phone, profile?.avatar_url, profile?.city];
+    const filled = fields.filter(Boolean).length;
+    return Math.round((filled / fields.length) * 100);
+  }, [profile]);
+
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="mb-4 flex-row gap-3">
+      <View className="mb-3 flex-row gap-3">
         <View className="flex-1 rounded-2xl bg-emerald-50 p-4">
-          <Text className="text-xs font-semibold text-emerald-700">To Receive ↓</Text>
+          <View className="mb-2 flex-row items-center justify-between">
+            <View className="h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
+              <Ionicons name="arrow-down" size={15} color="#059669" />
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#6EE7B7" />
+          </View>
+          <Text className="text-xs font-semibold text-emerald-700">To Receive</Text>
           <Text className="mt-1 text-xl font-extrabold text-emerald-700">NPR {toReceive.toLocaleString()}</Text>
         </View>
         <View className="flex-1 rounded-2xl bg-red-50 p-4">
-          <Text className="text-xs font-semibold text-red-600">To Give ↑</Text>
+          <View className="mb-2 flex-row items-center justify-between">
+            <View className="h-8 w-8 items-center justify-center rounded-full bg-red-100">
+              <Ionicons name="arrow-up" size={15} color="#DC2626" />
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#FCA5A5" />
+          </View>
+          <Text className="text-xs font-semibold text-red-600">To Give</Text>
           <Text className="mt-1 text-xl font-extrabold text-red-600">NPR {toGive.toLocaleString()}</Text>
         </View>
       </View>
 
-      <View className="mb-4 flex-row gap-3">
+      <View className="mb-3 flex-row flex-wrap gap-3">
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=sale` as any)}
-          className="flex-1 rounded-2xl bg-white p-3.5"
+          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
+          style={{ width: '48%' }}
         >
-          <Text className="text-xs font-semibold text-gray-500">Sales</Text>
-          <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
+          <View>
+            <Text className="text-xs font-semibold text-gray-500">Sales</Text>
+            <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=purchase` as any)}
-          className="flex-1 rounded-2xl bg-white p-3.5"
+          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
+          style={{ width: '48%' }}
         >
-          <Text className="text-xs font-semibold text-gray-500">Purchase</Text>
-          <Text className="mt-1 text-base font-extrabold text-blue-600">NPR {totals.purchase.toLocaleString()}</Text>
+          <View>
+            <Text className="text-xs font-semibold text-gray-500">Purchase</Text>
+            <Text className="mt-1 text-base font-extrabold" style={{ color: BLUE }}>
+              NPR {totals.purchase.toLocaleString()}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=expense` as any)}
-          className="flex-1 rounded-2xl bg-white p-3.5"
+          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
+          style={{ width: '48%' }}
         >
-          <Text className="text-xs font-semibold text-gray-500">Expense</Text>
-          <Text className="mt-1 text-base font-extrabold text-red-600">NPR {totals.expense.toLocaleString()}</Text>
+          <View>
+            <Text className="text-xs font-semibold text-gray-500">Expense</Text>
+            <Text className="mt-1 text-base font-extrabold text-red-600">NPR {totals.expense.toLocaleString()}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`${basePath}/transactions` as any)}
+          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
+          style={{ width: '48%' }}
+        >
+          <View>
+            <Text className="text-xs font-semibold text-gray-500">Net Balance</Text>
+            <Text
+              className="mt-1 text-base font-extrabold"
+              style={{ color: netBalance >= 0 ? BLUE : '#DC2626' }}
+            >
+              NPR {netBalance.toLocaleString()}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
         </Pressable>
       </View>
+
+      {profileCompletion < 100 && (
+        <Pressable onPress={() => router.push(`${basePath}/profile` as any)} className="mb-4 overflow-hidden rounded-2xl">
+          <LinearGradient
+            colors={['#2563EB', '#1D4ED8']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}
+          >
+            <View style={{ width: 44, height: 44 }} className="items-center justify-center">
+              <View style={{ position: 'absolute' }}>
+                <CircularProgress percent={profileCompletion} />
+              </View>
+              <Text className="text-xs font-extrabold text-white">{profileCompletion}%</Text>
+            </View>
+            <View className="flex-1">
+              <Text className="text-sm font-bold text-white">Complete your profile</Text>
+              <Text className="mt-0.5 text-xs text-white/80">
+                Add your remaining details so customers and technicians trust your business.
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward" size={18} color="white" />
+          </LinearGradient>
+        </Pressable>
+      )}
 
       <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
       <View className="mb-4 flex-row flex-wrap gap-3">
@@ -199,8 +316,8 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
             className="items-center rounded-2xl border border-gray-200 bg-white py-4"
             style={{ width: '31%' }}
           >
-            <View className="mb-1.5 h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-              <Ionicons name={s.icon} size={20} color="#2563eb" />
+            <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+              <Ionicons name={s.icon} size={22} color={BLUE} />
             </View>
             <Text className="text-center text-xs font-semibold text-gray-700">{s.label}</Text>
           </Pressable>
