@@ -1,6 +1,6 @@
-// app/(reseller)/customer/[id].tsx
+// app/(wholesaler)/customer/[id].tsx
 import { CustomerDetailScreen } from '../../../lib/components/finance/CustomerDetailScreen';
 
 export default function CustomerDetail() {
-  return <CustomerDetailScreen basePath="/(reseller)" />;
+  return <CustomerDetailScreen basePath="/(wholesaler)" />;
 }

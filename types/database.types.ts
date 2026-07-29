@@ -97,7 +97,7 @@ export interface CatalogProduct {
 
 export interface Customer {
   id: string;
-  reseller_id: string;
+  owner_id: string;
   name: string;
   phone: string | null;
   address: string | null;
@@ -112,7 +112,7 @@ export type LedgerEntryType = 'debit' | 'credit';
 export interface CustomerLedgerEntry {
   id: string;
   customer_id: string;
-  reseller_id: string;
+  owner_id: string;
   entry_type: LedgerEntryType;
   amount: number;
   note: string | null;
@@ -126,7 +126,7 @@ export type BusinessTransactionType = 'sale' | 'purchase' | 'expense';
 
 export interface BusinessTransaction {
   id: string;
-  reseller_id: string;
+  owner_id: string;
   type: BusinessTransactionType;
   amount: number;
   note: string | null;

@@ -1,6 +1,6 @@
-// app/(reseller)/customers.tsx
+// app/(wholesaler)/customers.tsx
 import { CustomersListScreen } from '../../lib/components/finance/CustomersListScreen';
 
 export default function CustomersScreen() {
-  return <CustomersListScreen basePath="/(reseller)" />;
+  return <CustomersListScreen basePath="/(wholesaler)" />;
 }

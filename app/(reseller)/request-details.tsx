@@ -23,7 +23,7 @@ export default function ResellerRequestDetails() {
   const createCustomer = useSupabaseInsert('customers');
   const updateCustomer = useSupabaseUpdate('customers');
   const { data: myCustomers } = useSupabaseQuery('customers', {
-    filters: userId ? { reseller_id: userId } : {},
+    filters: userId ? { owner_id: userId } : {},
     orderBy: { column: 'name' },
     enabled: !!userId,
   });
@@ -118,7 +118,7 @@ export default function ResellerRequestDetails() {
     setRegisteringCustomer(true);
     try {
       const created = await createCustomer.mutateAsync({
-        reseller_id: userId,
+        owner_id: userId,
         name: customerName.trim(),
         phone: customerPhone.trim() || null,
         address: address.trim() || null,
@@ -218,7 +218,7 @@ export default function ResellerRequestDetails() {
         if (linkedCustomerId) {
           await updateCustomer.mutateAsync({ id: linkedCustomerId, values: customerValues });
         } else {
-          const created = await createCustomer.mutateAsync({ reseller_id: userId, ...customerValues });
+          const created = await createCustomer.mutateAsync({ owner_id: userId, ...customerValues });
           linkedCustomerId = created.id;
         }
       } catch {
