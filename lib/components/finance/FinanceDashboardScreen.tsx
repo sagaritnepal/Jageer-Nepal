@@ -115,16 +115,12 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     enabled: !!userId,
   });
 
-  const monthTotals = useMemo(() => {
-    const now = new Date();
-    const totals = { sale: 0, purchase: 0, expense: 0 };
+  const totals = useMemo(() => {
+    const result = { sale: 0, purchase: 0, expense: 0 };
     for (const t of transactions ?? []) {
-      const created = new Date(t.created_at);
-      if (created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth()) {
-        totals[t.type] += t.amount;
-      }
+      result[t.type] += t.amount;
     }
-    return totals;
+    return result;
   }, [transactions]);
 
   const { toReceive, toGive } = useMemo(() => {
@@ -171,18 +167,27 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
       </View>
 
       <View className="mb-4 flex-row gap-3">
-        <View className="flex-1 rounded-2xl bg-white p-3.5">
-          <Text className="text-xs font-semibold text-gray-500">Sales (this month)</Text>
-          <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {monthTotals.sale.toLocaleString()}</Text>
-        </View>
-        <View className="flex-1 rounded-2xl bg-white p-3.5">
-          <Text className="text-xs font-semibold text-gray-500">Purchase (this month)</Text>
-          <Text className="mt-1 text-base font-extrabold text-blue-600">NPR {monthTotals.purchase.toLocaleString()}</Text>
-        </View>
-        <View className="flex-1 rounded-2xl bg-white p-3.5">
-          <Text className="text-xs font-semibold text-gray-500">Expense (this month)</Text>
-          <Text className="mt-1 text-base font-extrabold text-red-600">NPR {monthTotals.expense.toLocaleString()}</Text>
-        </View>
+        <Pressable
+          onPress={() => router.push(`${basePath}/transactions?type=sale` as any)}
+          className="flex-1 rounded-2xl bg-white p-3.5"
+        >
+          <Text className="text-xs font-semibold text-gray-500">Sales</Text>
+          <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`${basePath}/transactions?type=purchase` as any)}
+          className="flex-1 rounded-2xl bg-white p-3.5"
+        >
+          <Text className="text-xs font-semibold text-gray-500">Purchase</Text>
+          <Text className="mt-1 text-base font-extrabold text-blue-600">NPR {totals.purchase.toLocaleString()}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`${basePath}/transactions?type=expense` as any)}
+          className="flex-1 rounded-2xl bg-white p-3.5"
+        >
+          <Text className="text-xs font-semibold text-gray-500">Expense</Text>
+          <Text className="mt-1 text-base font-extrabold text-red-600">NPR {totals.expense.toLocaleString()}</Text>
+        </Pressable>
       </View>
 
       <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>

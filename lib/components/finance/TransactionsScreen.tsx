@@ -1,6 +1,6 @@
 // lib/components/finance/TransactionsScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
+import { View, Text, TextInput, Pressable, SectionList } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -163,6 +163,20 @@ type FeedItem =
   | { kind: 'business'; id: string; created_at: string; tx: BusinessTransaction }
   | { kind: 'ledger'; id: string; created_at: string; entry: CustomerLedgerEntry; customerName: string | null };
 
+// "Today" / "Yesterday" / "N days ago" for anything in the past; falls back
+// to a plain date for anything future-dated (shouldn't normally happen).
+function dayLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const diffDays = Math.round((todayStart - dayStart) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays > 1) return `${diffDays} days ago`;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function LedgerRow({ item, basePath }: { item: CustomerLedgerEntry; customerName: string | null; basePath?: string }) {
   const isDebit = item.entry_type === 'debit';
   return (
@@ -247,6 +261,22 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     );
   }, [transactions, ledgerEntries, customerNameById, filter]);
 
+  // feed is already newest-first, so grouping by day label as we walk it
+  // naturally keeps each day's items together in one contiguous section.
+  const sections = useMemo(() => {
+    const groups: { title: string; data: FeedItem[] }[] = [];
+    for (const item of feed) {
+      const title = dayLabel(item.created_at);
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.title === title) {
+        lastGroup.data.push(item);
+      } else {
+        groups.push({ title, data: [item] });
+      }
+    }
+    return groups;
+  }, [feed]);
+
   function handleDelete(tx: BusinessTransaction) {
     showAlert('Delete this transaction?', undefined, [
       { text: 'Cancel', style: 'cancel' },
@@ -298,9 +328,12 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         />
       )}
 
-      <FlatList
-        data={feed}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => `${item.kind}-${item.id}`}
+        renderSectionHeader={({ section }) => (
+          <Text className="mb-2 mt-3 text-xs font-bold uppercase tracking-wide text-gray-400">{section.title}</Text>
+        )}
         renderItem={({ item }) =>
           item.kind === 'business' ? (
             <TransactionRow
@@ -315,6 +348,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             <LedgerRow item={item.entry} customerName={item.customerName} basePath={basePath} />
           )
         }
+        stickySectionHeadersEnabled={false}
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
