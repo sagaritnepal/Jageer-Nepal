@@ -5,8 +5,71 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
+import { DateField } from '../DateTimeFields';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import type { BusinessTransaction, BusinessTransactionType, CustomerLedgerEntry } from '../../../types/database.types';
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+interface ItemRowState {
+  description: string;
+  qty: string;
+  rate: string;
+}
+
+function lineTotal(row: ItemRowState) {
+  return (Number(row.qty) || 0) * (Number(row.rate) || 0);
+}
+
+function ItemRowInput({
+  index,
+  item,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  index: number;
+  item: ItemRowState;
+  onChange: (next: ItemRowState) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  return (
+    <View className="mb-2 flex-row items-center gap-1.5">
+      <Text className="w-5 text-xs text-gray-400">{index + 1}</Text>
+      <TextInput
+        value={item.description}
+        onChangeText={(v) => onChange({ ...item, description: v })}
+        placeholder="Item"
+        className="flex-1 rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-900"
+      />
+      <TextInput
+        value={item.qty}
+        onChangeText={(v) => onChange({ ...item, qty: v })}
+        placeholder="Qty"
+        keyboardType="numeric"
+        className="w-12 rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-900"
+      />
+      <TextInput
+        value={item.rate}
+        onChangeText={(v) => onChange({ ...item, rate: v })}
+        placeholder="Rate"
+        keyboardType="numeric"
+        className="w-16 rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-900"
+      />
+      <Text className="w-16 text-right text-xs font-semibold text-gray-700">{lineTotal(item).toLocaleString()}</Text>
+      {canRemove ? (
+        <Pressable onPress={onRemove} hitSlop={8}>
+          <Ionicons name="close" size={14} color="#9CA3AF" />
+        </Pressable>
+      ) : (
+        <View style={{ width: 14 }} />
+      )}
+    </View>
+  );
+}
 
 const TYPE_META: Record<BusinessTransactionType, { label: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
   sale: { label: 'Sale', color: '#059669', bg: 'bg-emerald-50', icon: 'trending-up' },
@@ -37,12 +100,86 @@ function TransactionForm({
   const createTx = useSupabaseInsert('business_transactions');
   const updateTx = useSupabaseUpdate('business_transactions');
   const [type, setType] = useState<BusinessTransactionType>(initial?.type ?? defaultType);
-  const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
+
+  // Expense: a plain lump amount, unchanged from before.
+  const [amount, setAmount] = useState(initial && initial.type === 'expense' ? String(initial.amount) : '');
+
+  // Sale/Purchase: entered as a proper itemized bill.
+  const [billNo, setBillNo] = useState(initial?.bill_no ?? '');
+  const [billDate, setBillDate] = useState(initial?.bill_date ?? todayIso());
+  const [partyAddress, setPartyAddress] = useState(initial?.party_address ?? '');
+  const [vatPanNo, setVatPanNo] = useState(initial?.vat_pan_no ?? '');
+  const [items, setItems] = useState<ItemRowState[]>(
+    initial && initial.items.length > 0
+      ? initial.items.map((i) => ({ description: i.description, qty: String(i.qty), rate: String(i.rate) }))
+      : [{ description: '', qty: '1', rate: '' }]
+  );
+  const [discount, setDiscount] = useState(initial ? String(initial.discount_amount) : '0');
+  const [vat, setVat] = useState(initial ? String(initial.vat_amount) : '0');
+
   const [partyName, setPartyName] = useState(initial?.party_name ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [saving, setSaving] = useState(false);
 
+  const isBill = type !== 'expense';
+  const subtotal = items.reduce((sum, row) => sum + lineTotal(row), 0);
+  const grandTotal = subtotal - (Number(discount) || 0) + (Number(vat) || 0);
+
+  function updateItem(index: number, next: ItemRowState) {
+    setItems((prev) => prev.map((row, i) => (i === index ? next : row)));
+  }
+  function addItem() {
+    setItems((prev) => [...prev, { description: '', qty: '1', rate: '' }]);
+  }
+  function removeItem(index: number) {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleSave() {
+    if (isBill) {
+      const validItems = items.filter((r) => r.description.trim() && Number(r.qty) > 0 && Number(r.rate) >= 0);
+      if (validItems.length === 0) {
+        showAlert('Add at least one item', 'Enter a description, quantity, and rate for at least one item.');
+        return;
+      }
+      if (grandTotal <= 0) {
+        showAlert('Check the total', 'The grand total must be more than zero — check item amounts and discount/VAT.');
+        return;
+      }
+      setSaving(true);
+      try {
+        const values = {
+          type,
+          amount: grandTotal,
+          party_name: partyName.trim() || null,
+          note: note.trim() || null,
+          bill_no: billNo.trim() || null,
+          bill_date: billDate || null,
+          party_address: partyAddress.trim() || null,
+          vat_pan_no: vatPanNo.trim() || null,
+          items: validItems.map((r) => ({
+            description: r.description.trim(),
+            qty: Number(r.qty),
+            rate: Number(r.rate),
+            amount: Number(r.qty) * Number(r.rate),
+          })),
+          discount_amount: Number(discount) || 0,
+          vat_amount: Number(vat) || 0,
+        };
+        if (initial) {
+          await updateTx.mutateAsync({ id: initial.id, values });
+        } else {
+          await createTx.mutateAsync({ owner_id: userId, ...values });
+        }
+        onDone();
+      } catch (err) {
+        showAlert('Could not save', getErrorMessage(err));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     const value = Number(amount);
     if (!amount.trim() || Number.isNaN(value) || value <= 0) {
       showAlert('Enter an amount', 'Add a valid amount in NPR.');
@@ -90,25 +227,122 @@ function TransactionForm({
           );
         })}
       </View>
-      <TextInput
-        value={amount}
-        onChangeText={setAmount}
-        placeholder="Amount (NPR)"
-        keyboardType="numeric"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      <TextInput
-        value={partyName}
-        onChangeText={setPartyName}
-        placeholder={type === 'purchase' ? 'Vendor/supplier name (optional)' : 'Party name (optional)'}
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      <TextInput
-        value={note}
-        onChangeText={setNote}
-        placeholder="Note (optional)"
-        className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
+      {isBill ? (
+        <>
+          <View className="mb-2.5 flex-row gap-2">
+            <View className="flex-1">
+              <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
+              <DateField value={billDate} onChange={setBillDate} />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-1 text-xs font-medium text-gray-500">Bill No.</Text>
+              <TextInput
+                value={billNo}
+                onChangeText={setBillNo}
+                placeholder="e.g. 0234"
+                className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+              />
+            </View>
+          </View>
+          <TextInput
+            value={partyName}
+            onChangeText={setPartyName}
+            placeholder={type === 'purchase' ? 'Vendor/supplier name' : 'Party name'}
+            className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+          <TextInput
+            value={partyAddress}
+            onChangeText={setPartyAddress}
+            placeholder="Address (optional)"
+            className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+          <TextInput
+            value={vatPanNo}
+            onChangeText={setVatPanNo}
+            placeholder="VAT/PAN No. (optional)"
+            className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+
+          <View className="mb-1.5 flex-row items-center gap-1.5">
+            <Text className="w-5 text-[10px] font-semibold uppercase text-gray-400">SN</Text>
+            <Text className="flex-1 text-[10px] font-semibold uppercase text-gray-400">Item</Text>
+            <Text className="w-12 text-[10px] font-semibold uppercase text-gray-400">Qty</Text>
+            <Text className="w-16 text-[10px] font-semibold uppercase text-gray-400">Rate</Text>
+            <Text className="w-16 text-right text-[10px] font-semibold uppercase text-gray-400">Amount</Text>
+            <View style={{ width: 14 }} />
+          </View>
+          {items.map((item, index) => (
+            <ItemRowInput
+              key={index}
+              index={index}
+              item={item}
+              onChange={(next) => updateItem(index, next)}
+              onRemove={() => removeItem(index)}
+              canRemove={items.length > 1}
+            />
+          ))}
+          <Pressable onPress={addItem} className="mb-3 mt-0.5 self-start">
+            <Text className="text-xs font-semibold text-orange-600">+ Add item</Text>
+          </Pressable>
+
+          <View className="mb-2.5 flex-row justify-between border-t border-gray-100 pt-2.5">
+            <Text className="text-xs text-gray-500">Subtotal</Text>
+            <Text className="text-xs font-semibold text-gray-700">NPR {subtotal.toLocaleString()}</Text>
+          </View>
+          <View className="mb-2.5 flex-row gap-2">
+            <View className="flex-1">
+              <Text className="mb-1 text-xs font-medium text-gray-500">Discount (optional)</Text>
+              <TextInput
+                value={discount}
+                onChangeText={setDiscount}
+                keyboardType="numeric"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-1 text-xs font-medium text-gray-500">VAT (optional)</Text>
+              <TextInput
+                value={vat}
+                onChangeText={setVat}
+                keyboardType="numeric"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              />
+            </View>
+          </View>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="Note (optional)"
+            className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+          <View className="mb-3 flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
+            <Text className="text-sm font-bold text-gray-900">G. Total</Text>
+            <Text className="text-base font-extrabold text-gray-900">NPR {grandTotal.toLocaleString()}</Text>
+          </View>
+        </>
+      ) : (
+        <>
+          <TextInput
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="Amount (NPR)"
+            keyboardType="numeric"
+            className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+          <TextInput
+            value={partyName}
+            onChangeText={setPartyName}
+            placeholder="Party name (optional)"
+            className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="Note (optional)"
+            className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+        </>
+      )}
       <View className="flex-row gap-2">
         <Pressable onPress={onCancel} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
           <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
@@ -144,9 +378,12 @@ function TransactionRow({
         <Text className="text-sm font-semibold text-gray-900">
           {meta.label}
           {tx.party_name ? ` · ${tx.party_name}` : ''}
+          {tx.bill_no ? ` · Bill #${tx.bill_no}` : ''}
         </Text>
         <Text className="text-xs text-gray-400" numberOfLines={1}>
-          {tx.note ?? new Date(tx.created_at).toLocaleDateString()}
+          {tx.items.length > 0
+            ? `${tx.items.length} item${tx.items.length === 1 ? '' : 's'}`
+            : (tx.note ?? new Date(tx.created_at).toLocaleDateString())}
         </Text>
       </View>
       <Text className="text-sm font-extrabold" style={{ color: meta.color }}>

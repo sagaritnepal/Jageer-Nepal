@@ -127,6 +127,13 @@ export interface CustomerLedgerEntry {
 
 export type BusinessTransactionType = 'sale' | 'purchase' | 'expense';
 
+export interface BillItem {
+  description: string;
+  qty: number;
+  rate: number;
+  amount: number;
+}
+
 export interface BusinessTransaction {
   id: string;
   owner_id: string;
@@ -136,6 +143,13 @@ export interface BusinessTransaction {
   party_name: string | null;
   source_type: string | null;
   source_id: string | null;
+  bill_no: string | null;
+  bill_date: string | null;
+  party_address: string | null;
+  vat_pan_no: string | null;
+  items: BillItem[];
+  discount_amount: number;
+  vat_amount: number;
   created_at: string;
   updated_at: string;
 }
