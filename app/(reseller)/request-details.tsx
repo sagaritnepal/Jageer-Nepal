@@ -1,9 +1,11 @@
 // app/(reseller)/request-details.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Image, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import * as Contacts from 'expo-contacts';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
@@ -59,6 +61,28 @@ export default function ResellerRequestDetails() {
       showAlert('Could not get location', getErrorMessage(err));
     } finally {
       setLocatingMe(false);
+    }
+  }
+
+  async function handlePickContact() {
+    try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Contacts access needed', 'Allow contacts access to pick a customer from your phone.');
+        return;
+      }
+      const contact = await Contacts.Contact.presentPicker();
+      if (!contact) return;
+
+      const [fullName, phones] = await Promise.all([contact.getFullName(), contact.getPhones()]);
+      if (fullName) setCustomerName(fullName);
+      const phone = phones[0]?.number;
+      if (phone) setCustomerPhone(phone.replace(/[^\d+]/g, ''));
+      if (!phone) {
+        showAlert('No phone number', 'That contact has no phone number saved — add one manually.');
+      }
+    } catch (err) {
+      showAlert('Could not read contact', getErrorMessage(err));
     }
   }
 
@@ -156,6 +180,16 @@ export default function ResellerRequestDetails() {
           {category} · {action}
         </Text>
       </View>
+
+      {Platform.OS !== 'web' && (
+        <Pressable
+          onPress={handlePickContact}
+          className="mb-4 flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
+        >
+          <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
+          <Text className="text-sm font-semibold text-blue-700">Pick from contacts</Text>
+        </Pressable>
+      )}
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>
       <TextInput

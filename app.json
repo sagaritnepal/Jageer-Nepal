@@ -15,6 +15,12 @@
           "locationAlwaysAndWhenInUsePermission": "Jageer needs your location to attach it to a service request so a technician can find you."
         }
       ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Jageer needs access to your contacts so you can quickly fill in a customer's name and phone number when creating a job."
+        }
+      ],
       "@react-native-community/datetimepicker"
     ],
     "name": "jageer-app",
