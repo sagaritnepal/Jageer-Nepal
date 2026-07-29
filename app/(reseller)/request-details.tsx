@@ -344,16 +344,6 @@ export default function ResellerRequestDetails() {
         )
       )}
 
-      <Text className="mb-2 text-sm font-medium text-gray-700">Date</Text>
-      <View className="mb-4">
-        <DateField value={date} onChange={setDate} />
-      </View>
-
-      <Text className="mb-2 text-sm font-medium text-gray-700">Time</Text>
-      <View className="mb-4">
-        <TimeField value={time} onChange={setTime} />
-      </View>
-
       <Text className="mb-2 text-sm font-medium text-gray-700">Location</Text>
       <Pressable
         onPress={handleUseMyLocation}
@@ -387,6 +377,16 @@ export default function ResellerRequestDetails() {
         className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
         style={{ minHeight: 60, textAlignVertical: 'top' }}
       />
+
+      <Text className="mb-2 text-sm font-medium text-gray-700">Date</Text>
+      <View className="mb-4">
+        <DateField value={date} onChange={setDate} />
+      </View>
+
+      <Text className="mb-2 text-sm font-medium text-gray-700">Time</Text>
+      <View className="mb-4">
+        <TimeField value={time} onChange={setTime} />
+      </View>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Photos (optional, up to {PHOTO_SLOTS})</Text>
       <View className="mb-4 flex-row gap-2">
