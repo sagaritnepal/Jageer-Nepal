@@ -42,36 +42,49 @@ function ItemRowInput({
   canRemove: boolean;
 }) {
   return (
-    <View className="mb-2 flex-row items-center gap-1.5">
-      <Text className="w-5 text-xs text-gray-400">{index + 1}</Text>
+    <View className="mb-2.5 rounded-xl border border-gray-200 bg-gray-50 p-3">
+      <View className="mb-2 flex-row items-center justify-between">
+        <Text className="text-xs font-semibold text-gray-400">Item {index + 1}</Text>
+        {canRemove && (
+          <Pressable onPress={onRemove} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </Pressable>
+        )}
+      </View>
       <TextInput
         value={item.description}
         onChangeText={(v) => onChange({ ...item, description: v })}
-        placeholder="Item"
-        className="flex-1 rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-900"
+        placeholder="Item description"
+        className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
       />
-      <TextInput
-        value={item.qty}
-        onChangeText={(v) => onChange({ ...item, qty: v })}
-        placeholder="Qty"
-        keyboardType="numeric"
-        className="w-12 rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-900"
-      />
-      <TextInput
-        value={item.rate}
-        onChangeText={(v) => onChange({ ...item, rate: v })}
-        placeholder="Rate"
-        keyboardType="numeric"
-        className="w-16 rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-900"
-      />
-      <Text className="w-16 text-right text-xs font-semibold text-gray-700">{lineTotal(item).toLocaleString()}</Text>
-      {canRemove ? (
-        <Pressable onPress={onRemove} hitSlop={8}>
-          <Ionicons name="close" size={14} color="#9CA3AF" />
-        </Pressable>
-      ) : (
-        <View style={{ width: 14 }} />
-      )}
+      <View className="flex-row gap-2">
+        <View className="flex-1">
+          <Text className="mb-1 text-[11px] font-medium text-gray-500">Qty</Text>
+          <TextInput
+            value={item.qty}
+            onChangeText={(v) => onChange({ ...item, qty: v })}
+            keyboardType="numeric"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
+          />
+        </View>
+        <View className="flex-1">
+          <Text className="mb-1 text-[11px] font-medium text-gray-500">Rate</Text>
+          <TextInput
+            value={item.rate}
+            onChangeText={(v) => onChange({ ...item, rate: v })}
+            keyboardType="numeric"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
+          />
+        </View>
+        <View className="flex-1">
+          <Text className="mb-1 text-[11px] font-medium text-gray-500">Amount</Text>
+          <View className="justify-center rounded-lg bg-gray-100 px-3 py-2.5">
+            <Text className="text-sm font-semibold text-gray-700" numberOfLines={1}>
+              {lineTotal(item).toLocaleString()}
+            </Text>
+          </View>
+        </View>
+      </View>
     </View>
   );
 }
@@ -232,14 +245,14 @@ function CategoryPickerModal({
 function TransactionForm({
   userId,
   initial,
-  defaultType,
+  type,
   existingNames,
   onDone,
   onCancel,
 }: {
   userId: string;
   initial?: BusinessTransaction;
-  defaultType: BusinessTransactionType;
+  type: BusinessTransactionType;
   existingNames: string[];
   onDone: () => void;
   onCancel: () => void;
@@ -253,8 +266,6 @@ function TransactionForm({
   const createCategory = useSupabaseInsert('expense_categories');
   const updateCategory = useSupabaseUpdate('expense_categories');
   const deleteCategory = useSupabaseDelete('expense_categories');
-
-  const [type, setType] = useState<BusinessTransactionType>(initial?.type ?? defaultType);
 
   // Expense: date + addable name + a managed category + amount + remark.
   const [amount, setAmount] = useState(initial && initial.type === 'expense' ? String(initial.amount) : '');
@@ -388,25 +399,6 @@ function TransactionForm({
 
   return (
     <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="mb-3 text-sm font-semibold text-gray-900">{initial ? 'Edit transaction' : 'Add transaction'}</Text>
-      <View className="mb-3 flex-row gap-2">
-        {(Object.keys(TYPE_META) as BusinessTransactionType[]).map((t) => {
-          const meta = TYPE_META[t];
-          const selected = type === t;
-          return (
-            <Pressable
-              key={t}
-              onPress={() => setType(t)}
-              className="flex-1 items-center rounded-lg border py-2"
-              style={{ borderColor: selected ? meta.color : '#D1D5DB', backgroundColor: selected ? `${meta.color}1A` : 'white' }}
-            >
-              <Text className="text-xs font-bold" style={{ color: selected ? meta.color : '#6B7280' }}>
-                {meta.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
       {isBill ? (
         <>
           <View className="mb-2.5 flex-row gap-2">
@@ -443,14 +435,6 @@ function TransactionForm({
             className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
           />
 
-          <View className="mb-1.5 flex-row items-center gap-1.5">
-            <Text className="w-5 text-[10px] font-semibold uppercase text-gray-400">SN</Text>
-            <Text className="flex-1 text-[10px] font-semibold uppercase text-gray-400">Item</Text>
-            <Text className="w-12 text-[10px] font-semibold uppercase text-gray-400">Qty</Text>
-            <Text className="w-16 text-[10px] font-semibold uppercase text-gray-400">Rate</Text>
-            <Text className="w-16 text-right text-[10px] font-semibold uppercase text-gray-400">Amount</Text>
-            <View style={{ width: 14 }} />
-          </View>
           {items.map((item, index) => (
             <ItemRowInput
               key={index}
@@ -824,7 +808,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         <TransactionForm
           userId={userId}
           initial={editingTx ?? undefined}
-          defaultType={initialFilter === 'all' ? 'sale' : initialFilter}
+          type={editingTx?.type ?? (filter === 'all' ? 'sale' : filter)}
           existingNames={existingExpenseNames}
           onDone={() => {
             setShowForm(false);
