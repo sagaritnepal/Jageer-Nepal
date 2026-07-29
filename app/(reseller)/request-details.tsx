@@ -1,6 +1,6 @@
 // app/(reseller)/request-details.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform, Modal, FlatList } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,68 +16,6 @@ import type { Customer } from '../../types/database.types';
 
 const PHOTO_SLOTS = 3;
 
-function CustomerPickerModal({
-  visible,
-  onClose,
-  customers,
-  onSelect,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  customers: Customer[];
-  onSelect: (customer: Customer) => void;
-}) {
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter((c) => c.name.toLowerCase().includes(q) || (c.phone ?? '').includes(q));
-  }, [customers, search]);
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-white px-5 pt-16">
-        <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-lg font-bold text-gray-900">My Customers</Text>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Ionicons name="close" size={24} color="#374151" />
-          </Pressable>
-        </View>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search by name or phone"
-          autoFocus
-          className="mb-3 rounded-lg border border-gray-300 px-4 py-3 text-base"
-        />
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => {
-                onSelect(item);
-                onClose();
-              }}
-              className="border-b border-gray-100 py-3"
-            >
-              <Text className="font-semibold text-gray-900">{item.name}</Text>
-              {!!item.phone && <Text className="text-xs text-gray-500">{item.phone}</Text>}
-            </Pressable>
-          )}
-          ListEmptyComponent={
-            <Text className="mt-6 text-center text-sm text-gray-400">
-              {customers.length === 0 ? 'No saved customers yet.' : 'No matches.'}
-            </Text>
-          }
-        />
-      </View>
-    </Modal>
-  );
-}
-
 export default function ResellerRequestDetails() {
   const { category, action } = useLocalSearchParams<{ category: string; action: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -91,7 +29,7 @@ export default function ResellerRequestDetails() {
   });
 
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [date, setDate] = useState('');
@@ -167,7 +105,15 @@ export default function ResellerRequestDetails() {
     if (customer.latitude != null && customer.longitude != null) {
       setCoords({ latitude: customer.latitude, longitude: customer.longitude });
     }
+    setShowCustomerSuggestions(false);
   }
+
+  const customerSuggestions = useMemo(() => {
+    const q = customerName.trim().toLowerCase();
+    const list = myCustomers ?? [];
+    if (!q) return list;
+    return list.filter((c) => c.name.toLowerCase().includes(q));
+  }, [myCustomers, customerName]);
 
   async function handlePickPhoto(index: number) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -287,31 +233,50 @@ export default function ResellerRequestDetails() {
         </Text>
       </View>
 
-      <View className="mb-4 flex-row gap-2">
+      {Platform.OS !== 'web' && (
         <Pressable
-          onPress={() => setShowCustomerPicker(true)}
-          className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
+          onPress={handlePickContact}
+          className="mb-4 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
         >
-          <Ionicons name="people-outline" size={16} color="#1d4ed8" />
-          <Text className="text-sm font-semibold text-blue-700">My Customers</Text>
+          <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
+          <Text className="text-sm font-semibold text-blue-700">Pick from phone contacts</Text>
         </Pressable>
-        {Platform.OS !== 'web' && (
-          <Pressable
-            onPress={handlePickContact}
-            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
+      )}
+
+      <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>
+      <View className="z-10 mb-1">
+        <TextInput
+          value={customerName}
+          onChangeText={(text) => {
+            setCustomerName(text);
+            setCustomerId(null);
+          }}
+          onFocus={() => setShowCustomerSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
+          placeholder="Who is this request for?"
+          className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+        />
+        {showCustomerSuggestions && customerSuggestions.length > 0 && (
+          <View
+            className="absolute left-0 right-0 top-[52px] z-20 max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-white"
+            style={{ shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 8 }}
           >
-            <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
-            <Text className="text-sm font-semibold text-blue-700">Contacts</Text>
-          </Pressable>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {customerSuggestions.slice(0, 30).map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() => handleSelectCustomer(c)}
+                  className="border-b border-gray-100 px-4 py-2.5"
+                >
+                  <Text className="text-sm font-semibold text-gray-900">{c.name}</Text>
+                  {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
         )}
       </View>
-
-      <CustomerPickerModal
-        visible={showCustomerPicker}
-        onClose={() => setShowCustomerPicker(false)}
-        customers={myCustomers ?? []}
-        onSelect={handleSelectCustomer}
-      />
+      <Text className="mb-4 text-xs text-gray-400">Start typing to pick from your saved customers, or enter a new one.</Text>
 
       {customerId && (
         <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">
@@ -322,14 +287,6 @@ export default function ResellerRequestDetails() {
           </Pressable>
         </View>
       )}
-
-      <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>
-      <TextInput
-        value={customerName}
-        onChangeText={setCustomerName}
-        placeholder="Who is this request for?"
-        className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-      />
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer phone</Text>
       <TextInput

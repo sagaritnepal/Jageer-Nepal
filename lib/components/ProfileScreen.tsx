@@ -2,7 +2,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../hooks/useAuth';
@@ -377,24 +376,6 @@ function SkillsPicker({ profile }: { profile: Profile }) {
   );
 }
 
-function FinancePortalLink() {
-  return (
-    <Pressable
-      onPress={() => router.push('/(reseller)/customers')}
-      className="mb-4 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5"
-    >
-      <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-50">
-        <Ionicons name="wallet-outline" size={18} color="#2563eb" />
-      </View>
-      <View className="flex-1">
-        <Text className="font-semibold text-gray-900">My Customers · Finance</Text>
-        <Text className="mt-0.5 text-xs text-gray-400">Saved customer list, contact info, and ledger/dues</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-    </Pressable>
-  );
-}
-
 function ReportIssue({ userId }: { userId: string }) {
   const [open, setOpen] = useState(false);
   const [subject, setSubject] = useState('');
@@ -502,8 +483,6 @@ export function ProfileScreen() {
         {profile && (profile.role === 'technician' || profile.role === 'reseller') && (
           <SkillsPicker profile={profile} />
         )}
-
-        {profile?.role === 'reseller' && <FinancePortalLink />}
 
         {profile && <ReportIssue userId={profile.id} />}
 

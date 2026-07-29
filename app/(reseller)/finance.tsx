@@ -1,4 +1,4 @@
-// app/(reseller)/customers.tsx
+// app/(reseller)/finance.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { router } from 'expo-router';
@@ -127,15 +127,23 @@ function CustomerRow({ customer }: { customer: Customer }) {
   );
 }
 
-export default function CustomersScreen() {
+export default function FinanceScreen() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { reseller_id: userId } : {},
     orderBy: { column: 'name' },
     enabled: !!userId,
   });
+  const { data: allEntries } = useSupabaseQuery('customer_ledger_entries', {
+    filters: userId ? { reseller_id: userId } : {},
+    enabled: !!userId,
+  });
   const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+
+  const totalOutstanding = useMemo(() => {
+    return (allEntries ?? []).reduce((sum, e) => sum + (e.entry_type === 'debit' ? e.amount : -e.amount), 0);
+  }, [allEntries]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -146,6 +154,18 @@ export default function CustomersScreen() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
+      <View className="mb-4 rounded-2xl bg-gray-900 p-5">
+        <Text className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          {totalOutstanding >= 0 ? 'Total outstanding (owed to you)' : 'Total you owe customers'}
+        </Text>
+        <Text className={`mt-1 text-2xl font-extrabold ${totalOutstanding > 0 ? 'text-red-400' : totalOutstanding < 0 ? 'text-emerald-400' : 'text-white'}`}>
+          NPR {Math.abs(totalOutstanding).toLocaleString()}
+        </Text>
+        <Text className="mt-1 text-xs text-gray-400">
+          Across {customers?.length ?? 0} customer{(customers?.length ?? 0) === 1 ? '' : 's'}
+        </Text>
+      </View>
+
       <View className="mb-3 flex-row items-center gap-2">
         <View className="flex-1">
           <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
