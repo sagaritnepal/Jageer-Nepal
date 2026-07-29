@@ -1,13 +1,18 @@
 // lib/components/finance/TransactionsScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, SectionList } from 'react-native';
+import { View, Text, TextInput, Pressable, SectionList, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { DateField } from '../DateTimeFields';
 import { showAlert, getErrorMessage } from '../../utils/alert';
-import type { BusinessTransaction, BusinessTransactionType, CustomerLedgerEntry } from '../../../types/database.types';
+import type {
+  BusinessTransaction,
+  BusinessTransactionType,
+  CustomerLedgerEntry,
+  ExpenseCategory,
+} from '../../../types/database.types';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -84,25 +89,179 @@ const FILTERS: { key: 'all' | BusinessTransactionType; label: string }[] = [
   { key: 'expense', label: 'Expense' },
 ];
 
+function CategoryPickerModal({
+  visible,
+  categories,
+  selectedId,
+  onSelect,
+  onClose,
+  onCreate,
+  onRename,
+  onDelete,
+}: {
+  visible: boolean;
+  categories: ExpenseCategory[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+  onCreate: (name: string) => Promise<void>;
+  onRename: (id: string, name: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [newName, setNewName] = useState('');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleCreate() {
+    if (!newName.trim()) return;
+    setSaving(true);
+    try {
+      await onCreate(newName.trim());
+      setNewName('');
+    } catch (err) {
+      showAlert('Could not add category', getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRename(id: string) {
+    if (!renameValue.trim()) return;
+    setSaving(true);
+    try {
+      await onRename(id, renameValue.trim());
+      setRenamingId(null);
+    } catch (err) {
+      showAlert('Could not rename category', getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={onClose}>
+        <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-3" style={{ maxHeight: '75%' }}>
+          <View className="mb-2 flex-row items-center justify-between">
+            <Text className="text-base font-semibold text-gray-900">Expense categories</Text>
+            <Pressable onPress={onClose} className="px-2 py-1">
+              <Text className="text-sm font-semibold text-blue-700">Close</Text>
+            </Pressable>
+          </View>
+
+          <View className="mb-3 flex-row gap-2">
+            <TextInput
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="New category name"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+            />
+            <Pressable
+              onPress={handleCreate}
+              disabled={saving || !newName.trim()}
+              className="items-center justify-center rounded-lg bg-orange-500 px-3 disabled:opacity-50"
+            >
+              <Ionicons name="add" size={18} color="white" />
+            </Pressable>
+          </View>
+
+          {categories.length === 0 ? (
+            <Text className="px-2 py-3 text-center text-sm text-gray-400">No categories yet — add one above.</Text>
+          ) : (
+            categories.map((cat) => (
+              <View key={cat.id} className="mb-1.5 flex-row items-center gap-2 rounded-lg border border-gray-100 px-2 py-1.5">
+                {renamingId === cat.id ? (
+                  <>
+                    <TextInput
+                      value={renameValue}
+                      onChangeText={setRenameValue}
+                      autoFocus
+                      className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+                    />
+                    <Pressable onPress={() => handleRename(cat.id)} hitSlop={8} disabled={saving}>
+                      <Ionicons name="checkmark" size={18} color="#059669" />
+                    </Pressable>
+                    <Pressable onPress={() => setRenamingId(null)} hitSlop={8}>
+                      <Ionicons name="close" size={18} color="#9CA3AF" />
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={() => {
+                        onSelect(cat.id);
+                        onClose();
+                      }}
+                      className="flex-1 flex-row items-center gap-2 py-1"
+                    >
+                      {selectedId === cat.id && <Ionicons name="checkmark-circle" size={16} color="#EA580C" />}
+                      <Text className="text-sm font-medium text-gray-900">{cat.name}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        setRenamingId(cat.id);
+                        setRenameValue(cat.name);
+                      }}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="pencil-outline" size={15} color="#9CA3AF" />
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        showAlert('Remove this category?', undefined, [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Remove', style: 'destructive', onPress: () => onDelete(cat.id) },
+                        ])
+                      }
+                      hitSlop={8}
+                    >
+                      <Ionicons name="trash-outline" size={15} color="#9CA3AF" />
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            ))
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function TransactionForm({
   userId,
   initial,
   defaultType,
+  existingNames,
   onDone,
   onCancel,
 }: {
   userId: string;
   initial?: BusinessTransaction;
   defaultType: BusinessTransactionType;
+  existingNames: string[];
   onDone: () => void;
   onCancel: () => void;
 }) {
   const createTx = useSupabaseInsert('business_transactions');
   const updateTx = useSupabaseUpdate('business_transactions');
+  const { data: categories } = useSupabaseQuery('expense_categories', {
+    filters: { owner_id: userId },
+    orderBy: { column: 'name' },
+  });
+  const createCategory = useSupabaseInsert('expense_categories');
+  const updateCategory = useSupabaseUpdate('expense_categories');
+  const deleteCategory = useSupabaseDelete('expense_categories');
+
   const [type, setType] = useState<BusinessTransactionType>(initial?.type ?? defaultType);
 
-  // Expense: a plain lump amount, unchanged from before.
+  // Expense: date + addable name + a managed category + amount + remark.
   const [amount, setAmount] = useState(initial && initial.type === 'expense' ? String(initial.amount) : '');
+  const [expenseDate, setExpenseDate] = useState(initial?.bill_date ?? todayIso());
+  const [categoryId, setCategoryId] = useState<string | null>(initial?.expense_category_id ?? null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
 
   // Sale/Purchase: entered as a proper itemized bill.
   const [billNo, setBillNo] = useState(initial?.bill_no ?? '');
@@ -124,6 +283,25 @@ function TransactionForm({
   const isBill = type !== 'expense';
   const subtotal = items.reduce((sum, row) => sum + lineTotal(row), 0);
   const grandTotal = subtotal - (Number(discount) || 0) + (Number(vat) || 0);
+  const selectedCategory = (categories ?? []).find((c) => c.id === categoryId) ?? null;
+
+  const nameSuggestions = useMemo(() => {
+    const q = partyName.trim().toLowerCase();
+    if (!q) return [];
+    return existingNames.filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q).slice(0, 5);
+  }, [existingNames, partyName]);
+
+  async function handleCreateCategory(name: string) {
+    const created = await createCategory.mutateAsync({ owner_id: userId, name });
+    setCategoryId(created.id);
+  }
+  async function handleRenameCategory(id: string, name: string) {
+    await updateCategory.mutateAsync({ id, values: { name } });
+  }
+  async function handleDeleteCategory(id: string) {
+    await deleteCategory.mutateAsync(id);
+    if (categoryId === id) setCategoryId(null);
+  }
 
   function updateItem(index: number, next: ItemRowState) {
     setItems((prev) => prev.map((row, i) => (i === index ? next : row)));
@@ -192,6 +370,8 @@ function TransactionForm({
         amount: value,
         party_name: partyName.trim() || null,
         note: note.trim() || null,
+        bill_date: expenseDate || null,
+        expense_category_id: categoryId,
       };
       if (initial) {
         await updateTx.mutateAsync({ id: initial.id, values });
@@ -322,6 +502,53 @@ function TransactionForm({
         </>
       ) : (
         <>
+          <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
+          <View className="mb-2.5">
+            <DateField value={expenseDate} onChange={setExpenseDate} />
+          </View>
+
+          <Text className="mb-1 text-xs font-medium text-gray-500">Name</Text>
+          <TextInput
+            value={partyName}
+            onChangeText={(v) => {
+              setPartyName(v);
+              setShowNameSuggestions(true);
+            }}
+            onFocus={() => setShowNameSuggestions(true)}
+            placeholder="Who was this paid to?"
+            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+          {showNameSuggestions && nameSuggestions.length > 0 && (
+            <View className="mb-1 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
+              {nameSuggestions.map((n, idx) => (
+                <Pressable
+                  key={n}
+                  onPress={() => {
+                    setPartyName(n);
+                    setShowNameSuggestions(false);
+                  }}
+                  className={`px-3 py-2 ${idx !== nameSuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                >
+                  <Text className="text-sm text-gray-900">{n}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          <Text className="mb-2.5 mt-1 text-[11px] text-gray-400">
+            Pick a name already used before, or type a new one — it'll be remembered next time.
+          </Text>
+
+          <Text className="mb-1 text-xs font-medium text-gray-500">Expense category</Text>
+          <Pressable
+            onPress={() => setShowCategoryPicker(true)}
+            className="mb-2.5 flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
+          >
+            <Text className={`text-sm ${selectedCategory ? 'text-gray-900' : 'text-gray-400'}`}>
+              {selectedCategory?.name ?? 'Select a category'}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+          </Pressable>
+
           <TextInput
             value={amount}
             onChangeText={setAmount}
@@ -330,16 +557,21 @@ function TransactionForm({
             className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
           />
           <TextInput
-            value={partyName}
-            onChangeText={setPartyName}
-            placeholder="Party name (optional)"
-            className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-          />
-          <TextInput
             value={note}
             onChangeText={setNote}
-            placeholder="Note (optional)"
+            placeholder="Remark (optional)"
             className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+
+          <CategoryPickerModal
+            visible={showCategoryPicker}
+            categories={categories ?? []}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+            onClose={() => setShowCategoryPicker(false)}
+            onCreate={handleCreateCategory}
+            onRename={handleRenameCategory}
+            onDelete={handleDeleteCategory}
           />
         </>
       )}
@@ -361,10 +593,12 @@ function TransactionForm({
 
 function TransactionRow({
   tx,
+  categoryName,
   onEdit,
   onDelete,
 }: {
   tx: BusinessTransaction;
+  categoryName: string | null;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -379,6 +613,7 @@ function TransactionRow({
           {meta.label}
           {tx.party_name ? ` · ${tx.party_name}` : ''}
           {tx.bill_no ? ` · Bill #${tx.bill_no}` : ''}
+          {categoryName ? ` · ${categoryName}` : ''}
         </Text>
         <Text className="text-xs text-gray-400" numberOfLines={1}>
           {tx.items.length > 0
@@ -455,6 +690,10 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
+  const { data: categories } = useSupabaseQuery('expense_categories', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
   const deleteTx = useSupabaseDelete('business_transactions');
 
   const customerNameById = useMemo(() => {
@@ -462,6 +701,22 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     (customers ?? []).forEach((c) => map.set(c.id, c.name));
     return map;
   }, [customers]);
+
+  const categoryNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    (categories ?? []).forEach((c) => map.set(c.id, c.name));
+    return map;
+  }, [categories]);
+
+  // Previously used expense payee names, so the Name field can suggest one
+  // instead of always starting from scratch.
+  const existingExpenseNames = useMemo(() => {
+    const names = new Set<string>();
+    (transactions ?? []).forEach((t) => {
+      if (t.type === 'expense' && t.party_name) names.add(t.party_name);
+    });
+    return Array.from(names);
+  }, [transactions]);
 
   const initialFilter = (typeParam as BusinessTransactionType) && ['sale', 'purchase', 'expense'].includes(typeParam ?? '')
     ? (typeParam as BusinessTransactionType)
@@ -554,6 +809,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           userId={userId}
           initial={editingTx ?? undefined}
           defaultType={initialFilter === 'all' ? 'sale' : initialFilter}
+          existingNames={existingExpenseNames}
           onDone={() => {
             setShowForm(false);
             setEditingTx(null);
@@ -575,6 +831,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           item.kind === 'business' ? (
             <TransactionRow
               tx={item.tx}
+              categoryName={item.tx.expense_category_id ? categoryNameById.get(item.tx.expense_category_id) ?? null : null}
               onEdit={() => {
                 setEditingTx(item.tx);
                 setShowForm(true);

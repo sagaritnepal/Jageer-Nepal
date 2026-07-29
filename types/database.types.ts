@@ -134,6 +134,14 @@ export interface BillItem {
   amount: number;
 }
 
+export interface ExpenseCategory {
+  id: string;
+  owner_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface BusinessTransaction {
   id: string;
   owner_id: string;
@@ -150,6 +158,7 @@ export interface BusinessTransaction {
   items: BillItem[];
   discount_amount: number;
   vat_amount: number;
+  expense_category_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -280,6 +289,12 @@ export interface Database {
         Row: BusinessTransaction;
         Insert: Partial<BusinessTransaction>;
         Update: Partial<BusinessTransaction>;
+        Relationships: [];
+      };
+      expense_categories: {
+        Row: ExpenseCategory;
+        Insert: Partial<ExpenseCategory>;
+        Update: Partial<ExpenseCategory>;
         Relationships: [];
       };
     };
