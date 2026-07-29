@@ -217,14 +217,6 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
           </Text>
         )}
 
-        {hint && (
-          <View className={`mt-2.5 rounded-lg px-3 py-2 ${stageMeta.bg}`}>
-            <Text className="text-xs font-medium" style={{ color: stageMeta.color }}>
-              {hint}
-            </Text>
-          </View>
-        )}
-
         <View className="mt-2 flex-row flex-wrap items-center gap-2">
           <View className={`rounded-full px-2 py-0.5 ${item.origin === 'app' ? 'bg-blue-50' : 'bg-purple-50'}`}>
             <Text
@@ -271,10 +263,9 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
               {item.location_data.address}
             </Text>
           )}
-          {item.quoted_price != null && (
-            <Text className="text-xs text-gray-500">
-              <Text className="font-medium text-gray-600">Price: </Text>
-              NPR {Number(item.quoted_price).toLocaleString()}
+          {hint && (
+            <Text className="text-xs font-medium" style={{ color: stageMeta.color }}>
+              {hint}
             </Text>
           )}
           {item.remark && (
@@ -283,6 +274,14 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
             </Text>
           )}
         </View>
+
+        {item.quoted_price != null && (
+          <View className="mt-2 flex-row justify-end">
+            <Text className="text-2xl font-extrabold text-gray-900">
+              NPR {Number(item.quoted_price).toLocaleString()}
+            </Text>
+          </View>
+        )}
       </View>
     </Pressable>
   );
