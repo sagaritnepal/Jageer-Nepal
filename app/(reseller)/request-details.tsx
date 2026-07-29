@@ -41,6 +41,7 @@ export default function ResellerRequestDetails() {
   const [notes, setNotes] = useState('');
   const [quotedPrice, setQuotedPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [registeringCustomer, setRegisteringCustomer] = useState(false);
 
   async function handleUseMyLocation() {
     setLocatingMe(true);
@@ -106,6 +107,27 @@ export default function ResellerRequestDetails() {
       setCoords({ latitude: customer.latitude, longitude: customer.longitude });
     }
     setShowCustomerSuggestions(false);
+  }
+
+  async function handleRegisterNow() {
+    if (!userId || !customerName.trim()) return;
+    setRegisteringCustomer(true);
+    try {
+      const created = await createCustomer.mutateAsync({
+        reseller_id: userId,
+        name: customerName.trim(),
+        phone: customerPhone.trim() || null,
+        address: address.trim() || null,
+        latitude: coords?.latitude ?? null,
+        longitude: coords?.longitude ?? null,
+      });
+      setCustomerId(created.id);
+      showAlert('Customer added', `${customerName.trim()} has been saved to My Customers.`);
+    } catch (err) {
+      showAlert('Could not register customer', getErrorMessage(err));
+    } finally {
+      setRegisteringCustomer(false);
+    }
   }
 
   const customerSuggestions = useMemo(() => {
@@ -289,7 +311,16 @@ export default function ResellerRequestDetails() {
       </View>
       <Text className="mb-4 text-xs text-gray-400">Tap the book icon to pick a saved customer, or just type a new name.</Text>
 
-      {customerId && (
+      <Text className="mb-2 text-sm font-medium text-gray-700">Customer phone</Text>
+      <TextInput
+        value={customerPhone}
+        onChangeText={setCustomerPhone}
+        placeholder="98XXXXXXXX"
+        keyboardType="phone-pad"
+        className="mb-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+      />
+
+      {customerId ? (
         <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">
           <Ionicons name="checkmark-circle" size={14} color="#0d9488" />
           <Text className="flex-1 text-xs font-medium text-teal-700">Using saved customer — edits here will update their record.</Text>
@@ -297,16 +328,21 @@ export default function ResellerRequestDetails() {
             <Text className="text-xs font-bold text-teal-700">Unlink</Text>
           </Pressable>
         </View>
+      ) : (
+        customerName.trim().length > 0 && (
+          <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2">
+            <Ionicons name="person-add-outline" size={14} color="#B45309" />
+            <Text className="flex-1 text-xs font-medium text-amber-700">
+              New customer — not in your saved list yet.
+            </Text>
+            <Pressable onPress={handleRegisterNow} disabled={registeringCustomer} hitSlop={8}>
+              <Text className="text-xs font-bold text-amber-700">
+                {registeringCustomer ? 'Adding…' : 'Register now'}
+              </Text>
+            </Pressable>
+          </View>
+        )
       )}
-
-      <Text className="mb-2 text-sm font-medium text-gray-700">Customer phone</Text>
-      <TextInput
-        value={customerPhone}
-        onChangeText={setCustomerPhone}
-        placeholder="98XXXXXXXX"
-        keyboardType="phone-pad"
-        className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-      />
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Date</Text>
       <View className="mb-4">
