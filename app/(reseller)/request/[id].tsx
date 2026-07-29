@@ -9,6 +9,7 @@ import { useRankedTechnicians } from '../../../lib/hooks/useTechnicianRanking';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { TechnicianPicker } from '../../../lib/components/TechnicianPicker';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
+import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { ServiceRequest } from '../../../types/database.types';
 
@@ -27,7 +28,9 @@ function JobTracking({ request }: { request: ServiceRequest }) {
   // (there's no real customer profile behind it), so only look up a photo
   // for real app customers.
   const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
+  const { refetch } = useSupabaseRow('service_requests', request.id);
   const updateRequest = useSupabaseUpdate('service_requests');
+  const [showQr, setShowQr] = useState(false);
 
   async function handleMarkPaid() {
     try {
@@ -38,6 +41,12 @@ function JobTracking({ request }: { request: ServiceRequest }) {
     } catch (err) {
       showAlert('Could not update', getErrorMessage(err));
     }
+  }
+
+  function handlePaid() {
+    setShowQr(false);
+    showAlert('Payment received', 'Fonepay confirmed the payment — this job is now fully paid.');
+    refetch();
   }
 
   return (
@@ -71,11 +80,13 @@ function JobTracking({ request }: { request: ServiceRequest }) {
 
       <View className="mt-4 rounded-xl bg-white p-5">
         <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Payment</Text>
-        <Text className="mb-3 text-sm text-gray-600">
-          The client pays you directly — mark this paid once you've collected it.
-        </Text>
-        <View className="flex-row items-center justify-between">
-          <View className={`rounded-full px-3 py-1.5 ${request.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
+        <View className="mb-3 flex-row items-center justify-between">
+          <Text className="text-sm text-gray-600">
+            {request.payment_method === 'online'
+              ? "Waiting for the customer's online payment."
+              : "The client pays you directly — mark this paid once you've collected it."}
+          </Text>
+          <View className={`ml-2 rounded-full px-3 py-1.5 ${request.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
             <Text
               className={`text-xs font-bold ${
                 request.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'
@@ -84,24 +95,49 @@ function JobTracking({ request }: { request: ServiceRequest }) {
               {request.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
             </Text>
           </View>
-          {request.payment_status !== 'paid' && request.status === 'resolved' && (
-            <Pressable
-              onPress={handleMarkPaid}
-              disabled={updateRequest.isPending}
-              className="rounded-lg bg-orange-500 px-4 py-2 disabled:opacity-50"
-            >
-              <Text className="text-sm font-semibold text-white">
-                {updateRequest.isPending ? 'Updating…' : 'Mark as paid'}
-              </Text>
-            </Pressable>
-          )}
         </View>
+
+        {request.payment_status !== 'paid' && request.status === 'resolved' && (
+          <View className="gap-2">
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={handleMarkPaid}
+                disabled={updateRequest.isPending}
+                className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
+              >
+                <Text className="text-sm font-semibold text-white">
+                  {updateRequest.isPending ? 'Updating…' : 'Mark cash as paid'}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setShowQr(true)}
+                className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-orange-400 bg-orange-50 py-2.5"
+              >
+                <Ionicons name="qr-code-outline" size={16} color="#c2410c" />
+                <Text className="text-sm font-semibold text-orange-700">Show QR to pay online</Text>
+              </Pressable>
+            </View>
+            {request.payment_method === 'online' && (
+              <Text className="text-center text-xs text-gray-400">
+                This updates on its own once Fonepay confirms payment — no need to tap "Mark cash as paid" unless
+                they end up paying you in person instead.
+              </Text>
+            )}
+          </View>
+        )}
         {request.payment_status !== 'paid' && request.status !== 'resolved' && (
           <Text className="mt-2 text-xs text-gray-400">
-            You can mark this as paid once the technician resolves the job.
+            You can collect payment once the technician resolves the job.
           </Text>
         )}
       </View>
+
+      <PaymentQrModal
+        visible={showQr}
+        serviceRequestId={request.id}
+        onClose={() => setShowQr(false)}
+        onPaid={handlePaid}
+      />
     </ScrollView>
   );
 }

@@ -34,6 +34,7 @@ export interface RequestLocation {
 }
 
 export type PaymentStatus = 'unpaid' | 'paid';
+export type PaymentMethod = 'cash' | 'online';
 
 export interface ServiceRequest {
   id: string;
@@ -50,6 +51,8 @@ export interface ServiceRequest {
   scheduled_time: string | null;
   photo_urls: string[];
   payment_status: PaymentStatus;
+  payment_method: PaymentMethod | null;
+  fonepay_prn: string | null;
   paid_at: string | null;
   customer_name: string | null;
   customer_phone: string | null;

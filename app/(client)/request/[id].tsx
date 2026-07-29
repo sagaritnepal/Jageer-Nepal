@@ -6,6 +6,7 @@ import { useSupabaseRow, useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate,
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
+import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { JobCard, ServiceRequest } from '../../../types/database.types';
 
@@ -102,6 +103,70 @@ function JobCardBreakdown({ jobCard }: { jobCard: JobCard }) {
   );
 }
 
+function PayNow({ request, onPaid }: { request: ServiceRequest; onPaid: () => void }) {
+  const updateRequest = useSupabaseUpdate('service_requests');
+  const [showQr, setShowQr] = useState(false);
+
+  async function handleChooseCash() {
+    try {
+      await updateRequest.mutateAsync({ id: request.id, values: { payment_method: 'cash' } });
+    } catch (err) {
+      showAlert('Could not update', getErrorMessage(err));
+    }
+  }
+
+  function handlePaid() {
+    setShowQr(false);
+    showAlert('Payment received', 'Thanks! Your payment has been confirmed.');
+    onPaid();
+  }
+
+  if (request.payment_method === 'cash') {
+    return (
+      <View className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <Text className="text-sm font-semibold text-amber-800">Paying by cash</Text>
+        <Text className="mt-1 text-sm text-amber-700">
+          Let the reseller know — they'll mark this paid once they collect it in person.
+        </Text>
+        <Pressable onPress={() => setShowQr(true)} className="mt-3 self-start">
+          <Text className="text-xs font-semibold text-blue-700">Pay online instead</Text>
+        </Pressable>
+        <PaymentQrModal
+          visible={showQr}
+          serviceRequestId={request.id}
+          onClose={() => setShowQr(false)}
+          onPaid={handlePaid}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-5">
+      <Text className="mb-1 text-sm uppercase tracking-wide text-orange-600">Payment due</Text>
+      <Text className="mb-3 text-sm text-orange-800">Choose how you'd like to pay for this job.</Text>
+      <View className="flex-row gap-2">
+        <Pressable
+          onPress={handleChooseCash}
+          disabled={updateRequest.isPending}
+          className="flex-1 items-center rounded-lg border border-orange-400 bg-white py-2.5 disabled:opacity-50"
+        >
+          <Text className="text-sm font-semibold text-orange-700">Pay with cash</Text>
+        </Pressable>
+        <Pressable onPress={() => setShowQr(true)} className="flex-1 items-center rounded-lg bg-orange-500 py-2.5">
+          <Text className="text-sm font-semibold text-white">Pay online (QR)</Text>
+        </Pressable>
+      </View>
+      <PaymentQrModal
+        visible={showQr}
+        serviceRequestId={request.id}
+        onClose={() => setShowQr(false)}
+        onPaid={handlePaid}
+      />
+    </View>
+  );
+}
+
 function RatingForm({
   serviceRequestId,
   technicianId,
@@ -168,7 +233,7 @@ function RatingForm({
 export default function RequestDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
-  const { data: request, isLoading } = useSupabaseRow('service_requests', id);
+  const { data: request, isLoading, refetch } = useSupabaseRow('service_requests', id);
   const { data: reseller } = useSupabaseRow('profiles', request?.reseller_id ?? undefined);
   const { data: technician } = useSupabaseRow('profiles', request?.technician_id ?? undefined);
   const { data: jobCards } = useSupabaseQuery('job_cards', {
@@ -262,6 +327,10 @@ export default function RequestDetail() {
       )}
 
       {request.status === 'resolved' && jobCards?.[0] && <JobCardBreakdown jobCard={jobCards[0]} />}
+
+      {request.status === 'resolved' && request.payment_status !== 'paid' && (
+        <PayNow request={request} onPaid={refetch} />
+      )}
 
       {request.status === 'resolved' &&
         request.technician_id &&
