@@ -776,23 +776,39 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     ]);
   }
 
+  // Arriving with a specific ?type= (from the Sales/Purchase/Expense
+  // shortcuts or dashboard cards) means "show me only this" - lock the view
+  // to that one type instead of dropping the reseller into the shared
+  // All/Sales/Purchase/Expense hub they'd then have to filter themselves.
+  // The Transactions shortcut (no type param) still opens that full hub.
+  const isLockedToType = !!typeParam && initialFilter !== 'all';
+
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-3 flex-row items-center justify-between">
-        <View className="flex-row gap-2">
-          {FILTERS.map((f) => {
-            const selected = filter === f.key;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                className={`rounded-full px-3 py-1.5 ${selected ? 'bg-orange-500' : 'bg-white border border-gray-200'}`}
-              >
-                <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-gray-600'}`}>{f.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {isLockedToType ? (
+          <View className="flex-row items-center gap-2">
+            <Pressable onPress={() => router.back()} hitSlop={8} className="p-1">
+              <Ionicons name="chevron-back" size={20} color="#374151" />
+            </Pressable>
+            <Text className="text-base font-bold text-gray-900">{TYPE_META[initialFilter].label}</Text>
+          </View>
+        ) : (
+          <View className="flex-row gap-2">
+            {FILTERS.map((f) => {
+              const selected = filter === f.key;
+              return (
+                <Pressable
+                  key={f.key}
+                  onPress={() => setFilter(f.key)}
+                  className={`rounded-full px-3 py-1.5 ${selected ? 'bg-orange-500' : 'bg-white border border-gray-200'}`}
+                >
+                  <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-gray-600'}`}>{f.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
         <Pressable
           onPress={() => {
             setEditingTx(null);
