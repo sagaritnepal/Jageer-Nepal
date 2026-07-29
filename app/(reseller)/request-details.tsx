@@ -111,6 +111,10 @@ export default function ResellerRequestDetails() {
 
   async function handleRegisterNow() {
     if (!userId || !customerName.trim()) return;
+    if (!address.trim() && !coords) {
+      showAlert('Add a location first', "Add the customer's location before registering them.");
+      return;
+    }
     setRegisteringCustomer(true);
     try {
       const created = await createCustomer.mutateAsync({
@@ -320,30 +324,6 @@ export default function ResellerRequestDetails() {
         className="mb-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
       />
 
-      {customerId ? (
-        <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">
-          <Ionicons name="checkmark-circle" size={14} color="#0d9488" />
-          <Text className="flex-1 text-xs font-medium text-teal-700">Using saved customer — edits here will update their record.</Text>
-          <Pressable onPress={() => setCustomerId(null)}>
-            <Text className="text-xs font-bold text-teal-700">Unlink</Text>
-          </Pressable>
-        </View>
-      ) : (
-        customerName.trim().length > 0 && (
-          <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2">
-            <Ionicons name="person-add-outline" size={14} color="#B45309" />
-            <Text className="flex-1 text-xs font-medium text-amber-700">
-              New customer — not in your saved list yet.
-            </Text>
-            <Pressable onPress={handleRegisterNow} disabled={registeringCustomer} hitSlop={8}>
-              <Text className="text-xs font-bold text-amber-700">
-                {registeringCustomer ? 'Adding…' : 'Register now'}
-              </Text>
-            </Pressable>
-          </View>
-        )
-      )}
-
       <Text className="mb-2 text-sm font-medium text-gray-700">Location</Text>
       <Pressable
         onPress={handleUseMyLocation}
@@ -377,6 +357,31 @@ export default function ResellerRequestDetails() {
         className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
         style={{ minHeight: 60, textAlignVertical: 'top' }}
       />
+
+      {customerId ? (
+        <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">
+          <Ionicons name="checkmark-circle" size={14} color="#0d9488" />
+          <Text className="flex-1 text-xs font-medium text-teal-700">Using saved customer — edits here will update their record.</Text>
+          <Pressable onPress={() => setCustomerId(null)}>
+            <Text className="text-xs font-bold text-teal-700">Unlink</Text>
+          </Pressable>
+        </View>
+      ) : (
+        customerName.trim().length > 0 &&
+        (address.trim().length > 0 || coords) && (
+          <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2">
+            <Ionicons name="person-add-outline" size={14} color="#B45309" />
+            <Text className="flex-1 text-xs font-medium text-amber-700">
+              New customer — not in your saved list yet.
+            </Text>
+            <Pressable onPress={handleRegisterNow} disabled={registeringCustomer} hitSlop={8}>
+              <Text className="text-xs font-bold text-amber-700">
+                {registeringCustomer ? 'Adding…' : 'Register now'}
+              </Text>
+            </Pressable>
+          </View>
+        )
+      )}
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Date</Text>
       <View className="mb-4">
