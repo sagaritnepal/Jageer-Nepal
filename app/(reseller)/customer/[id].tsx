@@ -61,7 +61,7 @@ function EditableDetails({ customerId }: { customerId: string }) {
         onPress: async () => {
           try {
             await deleteCustomer.mutateAsync(customerId);
-            router.replace('/(reseller)/finance');
+            router.replace('/(reseller)/customers');
           } catch (err) {
             showAlert('Could not delete', getErrorMessage(err));
           }

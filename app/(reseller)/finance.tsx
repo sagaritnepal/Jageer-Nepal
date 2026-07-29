@@ -1,129 +1,85 @@
 // app/(reseller)/finance.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseInsert, useSupabaseQuery } from '../../lib/hooks/useSupabase';
-import { SearchBar } from '../../lib/components/SearchBar';
-import { showAlert, getErrorMessage } from '../../lib/utils/alert';
-import type { Customer } from '../../types/database.types';
+import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 
-function AddCustomerForm({ userId, onDone }: { userId: string; onDone: () => void }) {
-  const createCustomer = useSupabaseInsert('customers');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [saving, setSaving] = useState(false);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-  async function handleUseMyLocation() {
-    setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Location permission needed', 'Allow location access to attach a position.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({});
-      setCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-    } catch (err) {
-      showAlert('Could not get location', getErrorMessage(err));
-    } finally {
-      setLocating(false);
-    }
-  }
-
-  async function handleSave() {
-    if (!name.trim()) {
-      showAlert('Add a name', "Enter the customer's name.");
-      return;
-    }
-    setSaving(true);
-    try {
-      await createCustomer.mutateAsync({
-        reseller_id: userId,
-        name: name.trim(),
-        phone: phone.trim() || null,
-        address: address.trim() || null,
-        latitude: coords?.latitude ?? null,
-        longitude: coords?.longitude ?? null,
-      });
-      onDone();
-    } catch (err) {
-      showAlert('Could not save customer', getErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="mb-3 text-sm font-semibold text-gray-900">Add a customer</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Name"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      <TextInput
-        value={phone}
-        onChangeText={setPhone}
-        placeholder="Phone"
-        keyboardType="phone-pad"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      <TextInput
-        value={address}
-        onChangeText={setAddress}
-        placeholder="Address"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      <Pressable
-        onPress={handleUseMyLocation}
-        disabled={locating}
-        className="mb-3 items-center rounded-lg border border-blue-700 bg-blue-50 py-2 disabled:opacity-50"
-      >
-        <Text className="text-xs font-semibold text-blue-700">
-          {locating ? 'Locating…' : coords ? '📍 Location captured' : '📍 Attach current location'}
-        </Text>
-      </Pressable>
-      <View className="flex-row gap-2">
-        <Pressable onPress={onDone} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
-          <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
-        >
-          <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save'}</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
+function startOfDay(date: Date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-function CustomerRow({ customer }: { customer: Customer }) {
+function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
+  const [selected, setSelected] = useState<number | null>(null);
+  const half = 56;
+  const maxAbs = Math.max(1, ...data.map((d) => Math.abs(d.net)));
+
   return (
-    <Pressable
-      onPress={() => router.push(`/(reseller)/customer/${customer.id}`)}
-      className="mb-2.5 rounded-2xl border border-gray-200 bg-white p-4"
-    >
-      <Text className="font-semibold text-gray-900">{customer.name}</Text>
-      {!!customer.phone && (
-        <Text className="mt-0.5 text-xs text-gray-500">
-          <Ionicons name="call-outline" size={11} color="#9CA3AF" /> {customer.phone}
-        </Text>
+    <View>
+      <View className="relative flex-row" style={{ height: half * 2, gap: 6 }}>
+        <View className="absolute left-0 right-0 h-px bg-gray-200" style={{ top: half }} />
+        {data.map((d, i) => {
+          const barHeight = d.net === 0 ? 0 : Math.max(3, (Math.abs(d.net) / maxAbs) * half);
+          const isPositive = d.net >= 0;
+          const isSelected = selected === i;
+          return (
+            <Pressable
+              key={i}
+              onPress={() => setSelected(isSelected ? null : i)}
+              className="flex-1"
+              style={{ height: half * 2 }}
+            >
+              <View style={{ height: half, justifyContent: 'flex-end' }}>
+                {isPositive && barHeight > 0 && (
+                  <View
+                    style={{ height: barHeight, backgroundColor: isSelected ? '#059669' : '#6ee7b7' }}
+                    className="w-full rounded-t"
+                  />
+                )}
+              </View>
+              <View style={{ height: half, justifyContent: 'flex-start' }}>
+                {!isPositive && barHeight > 0 && (
+                  <View
+                    style={{ height: barHeight, backgroundColor: isSelected ? '#dc2626' : '#fca5a5' }}
+                    className="w-full rounded-b"
+                  />
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      <View className="mt-1.5 flex-row" style={{ gap: 6 }}>
+        {data.map((d, i) => (
+          <View key={i} className="flex-1 items-center">
+            <Text className="text-[9px] text-gray-400">{d.label}</Text>
+          </View>
+        ))}
+      </View>
+      {selected != null && (
+        <View className="mt-2.5 self-start rounded-lg bg-gray-900 px-3 py-1.5">
+          <Text className="text-xs font-semibold text-white">
+            {data[selected].label}: {data[selected].net >= 0 ? 'Net received ' : 'Net added '}
+            NPR {Math.abs(data[selected].net).toLocaleString()}
+          </Text>
+        </View>
       )}
-      {!!customer.address && (
-        <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
-          <Ionicons name="location-outline" size={11} color="#9CA3AF" /> {customer.address}
-        </Text>
-      )}
-    </Pressable>
+      <View className="mt-2.5 flex-row items-center gap-4">
+        <View className="flex-row items-center gap-1.5">
+          <View className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+          <Text className="text-[11px] text-gray-500">Net received</Text>
+        </View>
+        <View className="flex-row items-center gap-1.5">
+          <View className="h-2.5 w-2.5 rounded-full bg-red-300" />
+          <Text className="text-[11px] text-gray-500">Net added (dues)</Text>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -131,72 +87,86 @@ export default function FinanceScreen() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { reseller_id: userId } : {},
-    orderBy: { column: 'name' },
     enabled: !!userId,
   });
   const { data: allEntries } = useSupabaseQuery('customer_ledger_entries', {
     filters: userId ? { reseller_id: userId } : {},
     enabled: !!userId,
   });
-  const [search, setSearch] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
 
-  const totalOutstanding = useMemo(() => {
-    return (allEntries ?? []).reduce((sum, e) => sum + (e.entry_type === 'debit' ? e.amount : -e.amount), 0);
+  const { toReceive, toGive } = useMemo(() => {
+    const perCustomer: Record<string, number> = {};
+    for (const e of allEntries ?? []) {
+      perCustomer[e.customer_id] = (perCustomer[e.customer_id] ?? 0) + (e.entry_type === 'debit' ? e.amount : -e.amount);
+    }
+    let receive = 0;
+    let give = 0;
+    for (const balance of Object.values(perCustomer)) {
+      if (balance > 0) receive += balance;
+      else give += -balance;
+    }
+    return { toReceive: receive, toGive: give };
   }, [allEntries]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = customers ?? [];
-    if (!q) return list;
-    return list.filter((c) => c.name.toLowerCase().includes(q) || (c.phone ?? '').includes(q));
-  }, [customers, search]);
+  const cashflow = useMemo(() => {
+    const today = startOfDay(new Date());
+    const days = Array.from({ length: 7 }, (_, i) => new Date(today.getTime() - (6 - i) * DAY_MS));
+    return days.map((day) => {
+      const dayStart = day.getTime();
+      const dayEnd = dayStart + DAY_MS;
+      const net = (allEntries ?? [])
+        .filter((e) => {
+          const t = new Date(e.created_at).getTime();
+          return t >= dayStart && t < dayEnd;
+        })
+        .reduce((sum, e) => sum + (e.entry_type === 'credit' ? e.amount : -e.amount), 0);
+      return { label: day.toLocaleDateString('en-US', { weekday: 'short' }), net };
+    });
+  }, [allEntries]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-4 rounded-2xl bg-gray-900 p-5">
-        <Text className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-          {totalOutstanding >= 0 ? 'Total outstanding (owed to you)' : 'Total you owe customers'}
-        </Text>
-        <Text className={`mt-1 text-2xl font-extrabold ${totalOutstanding > 0 ? 'text-red-400' : totalOutstanding < 0 ? 'text-emerald-400' : 'text-white'}`}>
-          NPR {Math.abs(totalOutstanding).toLocaleString()}
-        </Text>
-        <Text className="mt-1 text-xs text-gray-400">
-          Across {customers?.length ?? 0} customer{(customers?.length ?? 0) === 1 ? '' : 's'}
-        </Text>
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      <View className="mb-4 flex-row gap-3">
+        <View className="flex-1 rounded-2xl bg-emerald-50 p-4">
+          <Text className="text-xs font-semibold text-emerald-700">To Receive ↓</Text>
+          <Text className="mt-1 text-xl font-extrabold text-emerald-700">NPR {toReceive.toLocaleString()}</Text>
+        </View>
+        <View className="flex-1 rounded-2xl bg-red-50 p-4">
+          <Text className="text-xs font-semibold text-red-600">To Give ↑</Text>
+          <Text className="mt-1 text-xl font-extrabold text-red-600">NPR {toGive.toLocaleString()}</Text>
+        </View>
       </View>
 
-      <View className="mb-3 flex-row items-center gap-2">
-        <View className="flex-1">
-          <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
-        </View>
+      <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
+      <View className="mb-4 flex-row gap-3">
         <Pressable
-          onPress={() => setShowAddForm((v) => !v)}
-          className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500"
+          onPress={() => router.push('/(reseller)/customers')}
+          className="flex-1 items-center rounded-2xl border border-gray-200 bg-white py-4"
         >
-          <Ionicons name={showAddForm ? 'close' : 'add'} size={22} color="white" />
+          <View className="mb-1.5 h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+            <Ionicons name="people" size={20} color="#2563eb" />
+          </View>
+          <Text className="text-xs font-semibold text-gray-700">Customers</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/(reseller)/customers?add=1')}
+          className="flex-1 items-center rounded-2xl border border-gray-200 bg-white py-4"
+        >
+          <View className="mb-1.5 h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+            <Ionicons name="person-add" size={20} color="#2563eb" />
+          </View>
+          <Text className="text-xs font-semibold text-gray-700">Add Customer</Text>
         </Pressable>
       </View>
 
-      {showAddForm && userId && <AddCustomerForm userId={userId} onDone={() => setShowAddForm(false)} />}
+      <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+        <Text className="mb-3 text-sm font-semibold text-gray-900">Cashflow (Last 7 Days)</Text>
+        <CashflowChart data={cashflow} />
+      </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <CustomerRow customer={item} />}
-        contentContainerStyle={{ paddingBottom: 40 }}
-        ListEmptyComponent={
-          <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
-            <Ionicons name="people-outline" size={28} color="#D1D5DB" />
-            <Text className="mt-2 text-gray-500">
-              {customers && customers.length > 0 ? 'No matches.' : 'No customers saved yet.'}
-            </Text>
-            <Text className="text-xs text-gray-400">
-              Add one above, or they'll be saved automatically when you book a job for them.
-            </Text>
-          </View>
-        }
-      />
-    </View>
+      <Text className="text-center text-xs text-gray-400">
+        Across {customers?.length ?? 0} customer{(customers?.length ?? 0) === 1 ? '' : 's'}
+      </Text>
+    </ScrollView>
   );
 }
