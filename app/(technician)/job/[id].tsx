@@ -179,6 +179,7 @@ export default function JobCard() {
         photoUrls={request.photo_urls}
         customerName={hasAccepted ? request.customer_name ?? customer?.full_name : undefined}
         customerPhone={hasAccepted ? request.customer_phone ?? customer?.phone : undefined}
+        contactPersonName={hasAccepted ? request.contact_person_name : undefined}
       />
 
       {request.remark && (

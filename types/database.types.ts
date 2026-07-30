@@ -56,6 +56,7 @@ export interface ServiceRequest {
   paid_at: string | null;
   customer_name: string | null;
   customer_phone: string | null;
+  contact_person_name: string | null;
   origin: RequestOrigin;
   remark: string | null;
   created_at: string;
@@ -104,6 +105,7 @@ export interface Customer {
   name: string;
   phone: string | null;
   address: string | null;
+  contact_person_name: string | null;
   latitude: number | null;
   longitude: number | null;
   created_at: string;

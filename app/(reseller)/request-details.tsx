@@ -35,9 +35,13 @@ export default function ResellerRequestDetails() {
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
+  const [newCustContactPerson, setNewCustContactPerson] = useState('');
+  const [newCustContactSame, setNewCustContactSame] = useState(true);
   const [savingNewCustomer, setSavingNewCustomer] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [contactPerson, setContactPerson] = useState('');
+  const [contactSameAsCustomer, setContactSameAsCustomer] = useState(true);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [address, setAddress] = useState('');
@@ -112,6 +116,14 @@ export default function ResellerRequestDetails() {
     if (customer.latitude != null && customer.longitude != null) {
       setCoords({ latitude: customer.latitude, longitude: customer.longitude });
     }
+    const savedContact = customer.contact_person_name?.trim();
+    if (savedContact && savedContact !== customer.name.trim()) {
+      setContactPerson(savedContact);
+      setContactSameAsCustomer(false);
+    } else {
+      setContactPerson('');
+      setContactSameAsCustomer(true);
+    }
     setShowCustomerSuggestions(false);
   }
 
@@ -128,6 +140,7 @@ export default function ResellerRequestDetails() {
         name: customerName.trim(),
         phone: customerPhone.trim() || null,
         address: address.trim() || null,
+        contact_person_name: contactSameAsCustomer ? null : contactPerson.trim() || null,
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
       });
@@ -165,6 +178,8 @@ export default function ResellerRequestDetails() {
     setNewCustName(customerName.trim());
     setNewCustPhone(customerPhone.trim());
     setNewCustAddress(address.trim());
+    setNewCustContactPerson(contactSameAsCustomer ? '' : contactPerson.trim());
+    setNewCustContactSame(contactSameAsCustomer);
     setShowCustomerSuggestions(false);
     setShowNewCustomerModal(true);
   }
@@ -185,6 +200,7 @@ export default function ResellerRequestDetails() {
         name: newCustName.trim(),
         phone: newCustPhone.trim() || null,
         address: newCustAddress.trim() || null,
+        contact_person_name: newCustContactSame ? null : newCustContactPerson.trim() || null,
         latitude: null,
         longitude: null,
       });
@@ -263,12 +279,15 @@ export default function ResellerRequestDetails() {
       // Keep the customer directory in sync: update the saved record if one
       // was picked (and possibly edited here), or save a brand new one so
       // it's ready to reuse next time. Never blocks the booking if it fails.
+      const resolvedContactPerson = contactSameAsCustomer ? null : contactPerson.trim() || null;
+
       let linkedCustomerId: string | null = customerId;
       try {
         const customerValues = {
           name: customerName.trim(),
           phone: customerPhone.trim(),
           address: address.trim() || null,
+          contact_person_name: resolvedContactPerson,
           latitude: coords?.latitude ?? null,
           longitude: coords?.longitude ?? null,
         };
@@ -289,6 +308,7 @@ export default function ResellerRequestDetails() {
         origin: 'reseller',
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
+        contact_person_name: resolvedContactPerson ?? customerName.trim(),
         issue_type: `${category} - ${action}`,
         description: notes.trim() || null,
         status: 'pending',
@@ -444,6 +464,23 @@ export default function ResellerRequestDetails() {
               className="mb-4 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
               style={{ minHeight: 50, textAlignVertical: 'top' }}
             />
+            <Text className="mb-1 text-xs font-medium text-gray-600">Contact person</Text>
+            <Pressable
+              onPress={() => setNewCustContactSame((v) => !v)}
+              className="mb-2 flex-row items-center gap-2"
+              hitSlop={4}
+            >
+              <Ionicons name={newCustContactSame ? 'checkbox' : 'square-outline'} size={18} color="#1d4ed8" />
+              <Text className="text-xs text-gray-600">Same as customer name</Text>
+            </Pressable>
+            {!newCustContactSame && (
+              <TextInput
+                value={newCustContactPerson}
+                onChangeText={setNewCustContactPerson}
+                placeholder="e.g. Office receptionist, site manager"
+                className="mb-4 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+              />
+            )}
             <View className="flex-row justify-end gap-3">
               <Pressable onPress={closeNewCustomerModal} className="px-3 py-2">
                 <Text className="text-sm font-semibold text-gray-500">Cancel</Text>
@@ -502,6 +539,24 @@ export default function ResellerRequestDetails() {
         className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
         style={{ minHeight: 60, textAlignVertical: 'top' }}
       />
+
+      <Text className="mb-2 text-sm font-medium text-gray-700">Contact person</Text>
+      <Pressable
+        onPress={() => setContactSameAsCustomer((v) => !v)}
+        className="mb-2 flex-row items-center gap-2"
+        hitSlop={4}
+      >
+        <Ionicons name={contactSameAsCustomer ? 'checkbox' : 'square-outline'} size={20} color="#1d4ed8" />
+        <Text className="text-sm text-gray-600">Same as customer name</Text>
+      </Pressable>
+      {!contactSameAsCustomer && (
+        <TextInput
+          value={contactPerson}
+          onChangeText={setContactPerson}
+          placeholder="e.g. Office receptionist, site manager"
+          className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+        />
+      )}
 
       {customerId ? (
         <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">

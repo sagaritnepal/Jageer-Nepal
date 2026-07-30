@@ -50,6 +50,7 @@ export function RequestDetailsExtras({
   customerName,
   customerPhone,
   customerPhotoUrl,
+  contactPersonName,
 }: {
   scheduledDate: string | null;
   scheduledTime: string | null;
@@ -58,10 +59,12 @@ export function RequestDetailsExtras({
   customerName?: string | null;
   customerPhone?: string | null;
   customerPhotoUrl?: string | null;
+  contactPersonName?: string | null;
 }) {
   const hasSchedule = !!(scheduledDate || scheduledTime);
   const hasLocation = !!(location?.address || (location?.latitude != null && location?.longitude != null));
   const hasCustomerContact = !!(customerName || customerPhone);
+  const showContactPerson = !!contactPersonName && contactPersonName.trim() !== (customerName ?? '').trim();
 
   if (!hasSchedule && !hasLocation && !hasCustomerContact && photoUrls.length === 0) return null;
 
@@ -74,6 +77,9 @@ export function RequestDetailsExtras({
             <PersonAvatar name={customerName} photoUrl={customerPhotoUrl} size={36} bg="bg-orange-500" />
             {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
           </View>
+          {showContactPerson && (
+            <Text className="mt-1 text-xs text-gray-500">Contact: {contactPersonName}</Text>
+          )}
           {customerPhone && (
             <>
               <Text className="mt-2 text-sm text-gray-500">{customerPhone}</Text>
