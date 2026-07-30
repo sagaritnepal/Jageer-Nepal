@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { ShopOverviewSection } from './ShopOverviewSection';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BLUE = '#2563EB';
@@ -144,6 +145,7 @@ function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
 }
 
 export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
+  const isReseller = basePath === '/(reseller)';
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
   const { data: customers } = useSupabaseQuery('customers', {
@@ -229,6 +231,20 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      {isReseller && (
+        <Pressable
+          onPress={() => router.push(`${basePath}/wholesale` as any)}
+          className="mb-3 flex-row items-center justify-between rounded-2xl px-4 py-3.5"
+          style={{ backgroundColor: BLUE }}
+        >
+          <View className="flex-row items-center gap-2.5">
+            <Ionicons name="cart-outline" size={18} color="white" />
+            <Text className="text-sm font-semibold text-white">Buy From Wholesaler</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="white" />
+        </Pressable>
+      )}
+
       <View className="mb-3 flex-row gap-3">
         <View className="flex-1 rounded-2xl bg-emerald-50 p-4">
           <View className="mb-2 flex-row items-center justify-between">
@@ -328,6 +344,8 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           <Ionicons name="chevron-forward" size={14} color="#FCA5A5" />
         </Pressable>
       </View>
+
+      {isReseller && <ShopOverviewSection basePath={basePath} />}
 
       {profileCompletion < 100 && (
         <Pressable onPress={() => router.push(`${basePath}/profile` as any)} className="mb-4 overflow-hidden rounded-2xl">
