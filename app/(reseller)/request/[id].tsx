@@ -75,6 +75,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
         customerPhone={request.customer_phone ?? customer?.phone}
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
+        contactPersonPhone={request.contact_person_phone}
       />
 
       <RemarkBlock remark={request.remark} />
@@ -184,6 +185,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
         customerName={request.customer_name}
         customerPhone={request.customer_phone}
         contactPersonName={request.contact_person_name}
+        contactPersonPhone={request.contact_person_phone}
       />
 
       <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Quoted price (NPR, optional)</Text>
@@ -248,6 +250,7 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
         customerName={request.customer_name ?? customer?.full_name}
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
+        contactPersonPhone={request.contact_person_phone}
       />
 
       <Pressable
@@ -310,6 +313,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
         customerPhone={customer?.phone}
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
+        contactPersonPhone={request.contact_person_phone}
       />
 
       <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Remark</Text>
@@ -382,6 +386,7 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
         customerPhone={request.customer_phone ?? customer?.phone}
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
+        contactPersonPhone={request.contact_person_phone}
       />
 
       <RemarkBlock remark={request.remark} />
@@ -430,6 +435,7 @@ function ChooseTechnician({ request }: { request: ServiceRequest }) {
         customerPhone={request.customer_phone ?? customer?.phone}
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
+        contactPersonPhone={request.contact_person_phone}
       />
 
       <RemarkBlock remark={request.remark} />

@@ -180,6 +180,7 @@ export default function JobCard() {
         customerName={hasAccepted ? request.customer_name ?? customer?.full_name : undefined}
         customerPhone={hasAccepted ? request.customer_phone ?? customer?.phone : undefined}
         contactPersonName={hasAccepted ? request.contact_person_name : undefined}
+        contactPersonPhone={hasAccepted ? request.contact_person_phone : undefined}
       />
 
       {request.remark && (

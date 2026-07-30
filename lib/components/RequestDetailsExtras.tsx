@@ -51,6 +51,7 @@ export function RequestDetailsExtras({
   customerPhone,
   customerPhotoUrl,
   contactPersonName,
+  contactPersonPhone,
 }: {
   scheduledDate: string | null;
   scheduledTime: string | null;
@@ -60,6 +61,7 @@ export function RequestDetailsExtras({
   customerPhone?: string | null;
   customerPhotoUrl?: string | null;
   contactPersonName?: string | null;
+  contactPersonPhone?: string | null;
 }) {
   const hasSchedule = !!(scheduledDate || scheduledTime);
   const hasLocation = !!(location?.address || (location?.latitude != null && location?.longitude != null));
@@ -78,7 +80,17 @@ export function RequestDetailsExtras({
             {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
           </View>
           {showContactPerson && (
-            <Text className="mt-1 text-xs text-gray-500">Contact: {contactPersonName}</Text>
+            <View className="mt-1 flex-row items-center gap-1.5">
+              <Text className="text-xs text-gray-500">
+                Contact: {contactPersonName}
+                {contactPersonPhone ? ` · ${contactPersonPhone}` : ''}
+              </Text>
+              {contactPersonPhone && (
+                <Pressable onPress={() => Linking.openURL(`tel:${contactPersonPhone}`)} hitSlop={6}>
+                  <Ionicons name="call-outline" size={13} color="#1d4ed8" />
+                </Pressable>
+              )}
+            </View>
           )}
           {customerPhone && (
             <>

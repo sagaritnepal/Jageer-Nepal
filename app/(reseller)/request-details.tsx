@@ -36,11 +36,13 @@ export default function ResellerRequestDetails() {
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
   const [newCustContactPerson, setNewCustContactPerson] = useState('');
+  const [newCustContactPersonPhone, setNewCustContactPersonPhone] = useState('');
   const [newCustContactSame, setNewCustContactSame] = useState(true);
   const [savingNewCustomer, setSavingNewCustomer] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [contactPerson, setContactPerson] = useState('');
+  const [contactPersonPhone, setContactPersonPhone] = useState('');
   const [contactSameAsCustomer, setContactSameAsCustomer] = useState(true);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -85,27 +87,55 @@ export default function ResellerRequestDetails() {
     }
   }
 
-  async function handlePickContact() {
+  async function pickPhoneContact(): Promise<{ name: string; phone: string } | null> {
     try {
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== 'granted') {
-        showAlert('Contacts access needed', 'Allow contacts access to pick a customer from your phone.');
-        return;
+        showAlert('Contacts access needed', 'Allow contacts access to pick from your phone.');
+        return null;
       }
       const contact = await Contacts.Contact.presentPicker();
-      if (!contact) return;
+      if (!contact) return null;
 
       const [fullName, phones] = await Promise.all([contact.getFullName(), contact.getPhones()]);
-      setCustomerId(null);
-      if (fullName) setCustomerName(fullName);
-      const phone = phones[0]?.number;
-      if (phone) setCustomerPhone(phone.replace(/[^\d+]/g, ''));
+      const phone = phones[0]?.number?.replace(/[^\d+]/g, '') ?? '';
       if (!phone) {
         showAlert('No phone number', 'That contact has no phone number saved — add one manually.');
       }
+      return { name: fullName ?? '', phone };
     } catch (err) {
       showAlert('Could not read contact', getErrorMessage(err));
+      return null;
     }
+  }
+
+  async function handlePickContact() {
+    const picked = await pickPhoneContact();
+    if (!picked) return;
+    setCustomerId(null);
+    if (picked.name) setCustomerName(picked.name);
+    if (picked.phone) setCustomerPhone(picked.phone);
+  }
+
+  async function handlePickContactPerson() {
+    const picked = await pickPhoneContact();
+    if (!picked) return;
+    if (picked.name) setContactPerson(picked.name);
+    if (picked.phone) setContactPersonPhone(picked.phone);
+  }
+
+  async function handlePickNewCustFromContacts() {
+    const picked = await pickPhoneContact();
+    if (!picked) return;
+    if (picked.name) setNewCustName(picked.name);
+    if (picked.phone) setNewCustPhone(picked.phone);
+  }
+
+  async function handlePickNewCustContactPerson() {
+    const picked = await pickPhoneContact();
+    if (!picked) return;
+    if (picked.name) setNewCustContactPerson(picked.name);
+    if (picked.phone) setNewCustContactPersonPhone(picked.phone);
   }
 
   function handleSelectCustomer(customer: Customer) {
@@ -119,9 +149,11 @@ export default function ResellerRequestDetails() {
     const savedContact = customer.contact_person_name?.trim();
     if (savedContact && savedContact !== customer.name.trim()) {
       setContactPerson(savedContact);
+      setContactPersonPhone(customer.contact_person_phone ?? '');
       setContactSameAsCustomer(false);
     } else {
       setContactPerson('');
+      setContactPersonPhone('');
       setContactSameAsCustomer(true);
     }
     setShowCustomerSuggestions(false);
@@ -141,6 +173,7 @@ export default function ResellerRequestDetails() {
         phone: customerPhone.trim() || null,
         address: address.trim() || null,
         contact_person_name: contactSameAsCustomer ? null : contactPerson.trim() || null,
+        contact_person_phone: contactSameAsCustomer ? null : contactPersonPhone.trim() || null,
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
       });
@@ -179,6 +212,7 @@ export default function ResellerRequestDetails() {
     setNewCustPhone(customerPhone.trim());
     setNewCustAddress(address.trim());
     setNewCustContactPerson(contactSameAsCustomer ? '' : contactPerson.trim());
+    setNewCustContactPersonPhone(contactSameAsCustomer ? '' : contactPersonPhone.trim());
     setNewCustContactSame(contactSameAsCustomer);
     setShowCustomerSuggestions(false);
     setShowNewCustomerModal(true);
@@ -193,6 +227,10 @@ export default function ResellerRequestDetails() {
       showAlert('Add a name', "Enter the customer's name to save them.");
       return;
     }
+    if (!newCustContactSame && (!newCustContactPerson.trim() || !newCustContactPersonPhone.trim())) {
+      showAlert('Add contact person details', "Enter the contact person's name and phone number, or tick \"Same as customer name\".");
+      return;
+    }
     setSavingNewCustomer(true);
     try {
       const created = await createCustomer.mutateAsync({
@@ -201,6 +239,7 @@ export default function ResellerRequestDetails() {
         phone: newCustPhone.trim() || null,
         address: newCustAddress.trim() || null,
         contact_person_name: newCustContactSame ? null : newCustContactPerson.trim() || null,
+        contact_person_phone: newCustContactSame ? null : newCustContactPersonPhone.trim() || null,
         latitude: null,
         longitude: null,
       });
@@ -254,6 +293,13 @@ export default function ResellerRequestDetails() {
       showAlert('Add customer details', "Enter the customer's name and phone so the technician can reach them.");
       return;
     }
+    if (!contactSameAsCustomer && (!contactPerson.trim() || !contactPersonPhone.trim())) {
+      showAlert(
+        'Add contact person details',
+        "Enter the contact person's name and phone number, or tick \"Same as customer name\"."
+      );
+      return;
+    }
     if (!date.trim() || !time.trim()) {
       showAlert('Add date and time', 'Let us know when you need this service.');
       return;
@@ -280,6 +326,7 @@ export default function ResellerRequestDetails() {
       // was picked (and possibly edited here), or save a brand new one so
       // it's ready to reuse next time. Never blocks the booking if it fails.
       const resolvedContactPerson = contactSameAsCustomer ? null : contactPerson.trim() || null;
+      const resolvedContactPersonPhone = contactSameAsCustomer ? null : contactPersonPhone.trim() || null;
 
       let linkedCustomerId: string | null = customerId;
       try {
@@ -288,6 +335,7 @@ export default function ResellerRequestDetails() {
           phone: customerPhone.trim(),
           address: address.trim() || null,
           contact_person_name: resolvedContactPerson,
+          contact_person_phone: resolvedContactPersonPhone,
           latitude: coords?.latitude ?? null,
           longitude: coords?.longitude ?? null,
         };
@@ -309,6 +357,7 @@ export default function ResellerRequestDetails() {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         contact_person_name: resolvedContactPerson ?? customerName.trim(),
+        contact_person_phone: resolvedContactPersonPhone ?? customerPhone.trim(),
         issue_type: `${category} - ${action}`,
         description: notes.trim() || null,
         status: 'pending',
@@ -440,6 +489,15 @@ export default function ResellerRequestDetails() {
         <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={closeNewCustomerModal}>
           <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-4">
             <Text className="mb-3 text-base font-semibold text-gray-900">New customer</Text>
+            {Platform.OS !== 'web' && (
+              <Pressable
+                onPress={handlePickNewCustFromContacts}
+                className="mb-3 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2"
+              >
+                <Ionicons name="person-add-outline" size={14} color="#1d4ed8" />
+                <Text className="text-xs font-semibold text-blue-700">Pick from phone contacts</Text>
+              </Pressable>
+            )}
             <Text className="mb-1 text-xs font-medium text-gray-600">Name</Text>
             <TextInput
               value={newCustName}
@@ -474,12 +532,30 @@ export default function ResellerRequestDetails() {
               <Text className="text-xs text-gray-600">Same as customer name</Text>
             </Pressable>
             {!newCustContactSame && (
-              <TextInput
-                value={newCustContactPerson}
-                onChangeText={setNewCustContactPerson}
-                placeholder="e.g. Office receptionist, site manager"
-                className="mb-4 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
-              />
+              <>
+                {Platform.OS !== 'web' && (
+                  <Pressable
+                    onPress={handlePickNewCustContactPerson}
+                    className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2"
+                  >
+                    <Ionicons name="person-add-outline" size={14} color="#1d4ed8" />
+                    <Text className="text-xs font-semibold text-blue-700">Pick from phone contacts</Text>
+                  </Pressable>
+                )}
+                <TextInput
+                  value={newCustContactPerson}
+                  onChangeText={setNewCustContactPerson}
+                  placeholder="e.g. Office receptionist, site manager"
+                  className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                />
+                <TextInput
+                  value={newCustContactPersonPhone}
+                  onChangeText={setNewCustContactPersonPhone}
+                  placeholder="Contact person's phone"
+                  keyboardType="phone-pad"
+                  className="mb-4 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                />
+              </>
             )}
             <View className="flex-row justify-end gap-3">
               <Pressable onPress={closeNewCustomerModal} className="px-3 py-2">
@@ -550,12 +626,30 @@ export default function ResellerRequestDetails() {
         <Text className="text-sm text-gray-600">Same as customer name</Text>
       </Pressable>
       {!contactSameAsCustomer && (
-        <TextInput
-          value={contactPerson}
-          onChangeText={setContactPerson}
-          placeholder="e.g. Office receptionist, site manager"
-          className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-        />
+        <>
+          {Platform.OS !== 'web' && (
+            <Pressable
+              onPress={handlePickContactPerson}
+              className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
+            >
+              <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
+              <Text className="text-sm font-semibold text-blue-700">Pick from phone contacts</Text>
+            </Pressable>
+          )}
+          <TextInput
+            value={contactPerson}
+            onChangeText={setContactPerson}
+            placeholder="e.g. Office receptionist, site manager"
+            className="mb-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+          />
+          <TextInput
+            value={contactPersonPhone}
+            onChangeText={setContactPersonPhone}
+            placeholder="Contact person's phone"
+            keyboardType="phone-pad"
+            className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+          />
+        </>
       )}
 
       {customerId ? (
