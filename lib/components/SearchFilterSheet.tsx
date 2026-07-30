@@ -1,5 +1,6 @@
 // lib/components/SearchFilterSheet.tsx
 import { Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Search itself now lives directly in the search bar (real TextInput, live
 // filtering) - this sheet is just the category picker. Tapping a pill
@@ -17,6 +18,8 @@ export function SearchFilterSheet({
   onSelect: (category: string | null) => void;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   function choose(next: string | null) {
     onSelect(next);
     onClose();
@@ -25,7 +28,11 @@ export function SearchFilterSheet({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
-        <Pressable className="rounded-t-3xl bg-white p-6 pb-10" onPress={() => {}}>
+        <Pressable
+          className="rounded-t-3xl bg-white p-6"
+          style={{ paddingBottom: insets.bottom + 24 }}
+          onPress={() => {}}
+        >
           <Text className="mb-4 text-base font-bold text-gray-900">Filter by category</Text>
 
           <View className="flex-row flex-wrap gap-2">

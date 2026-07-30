@@ -1,5 +1,6 @@
 // lib/components/ServiceActionSheet.tsx
 import { Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ServiceCategory } from '../../types/database.types';
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
@@ -13,10 +14,16 @@ export function ServiceActionSheet({
   onSelect: (action: (typeof SERVICE_ACTIONS)[number]) => void;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal visible={!!category} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
-        <Pressable className="rounded-t-3xl bg-white p-6 pb-10" onPress={() => {}}>
+        <Pressable
+          className="rounded-t-3xl bg-white p-6"
+          style={{ paddingBottom: insets.bottom + 24 }}
+          onPress={() => {}}
+        >
           <Text className="mb-4 text-center text-base font-bold text-gray-900">{category?.label}</Text>
           <View className="flex-row gap-3">
             {SERVICE_ACTIONS.map((a) => (

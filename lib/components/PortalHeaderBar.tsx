@@ -1,6 +1,7 @@
 // lib/components/PortalHeaderBar.tsx
 import { View, Text, Image, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../hooks/useAuth';
 
 function initialsOf(name: string | null | undefined) {
@@ -24,9 +25,13 @@ const PROFILE_ROUTE: Record<string, string> = {
 export function PortalHeaderBar({ title }: { title?: string }) {
   const profile = useAuthStore((state) => state.profile);
   const profileRoute = profile?.role ? PROFILE_ROUTE[profile.role] : undefined;
+  const insets = useSafeAreaInsets();
 
   return (
-    <View className="flex-row items-center justify-between gap-2 border-b border-gray-100 bg-white px-6 pb-2.5 pt-4">
+    <View
+      className="flex-row items-center justify-between gap-2 border-b border-gray-100 bg-white px-6 pb-2.5"
+      style={{ paddingTop: insets.top + 16 }}
+    >
       <Text className="flex-1 text-xl font-bold text-gray-900" numberOfLines={1}>
         {title ?? ''}
       </Text>

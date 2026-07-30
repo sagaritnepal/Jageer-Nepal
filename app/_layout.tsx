@@ -1,6 +1,8 @@
 // app/_layout.tsx
 import { Stack } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryProvider } from '../lib/providers/QueryProvider';
 import { useAuthListener, useAuthStore } from '../lib/hooks/useAuth';
 import '../global.css';
@@ -22,18 +24,21 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
-    <QueryProvider>
-      <AuthGate>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(client)" />
-          <Stack.Screen name="(technician)" />
-          <Stack.Screen name="(reseller)" />
-          <Stack.Screen name="(wholesaler)" />
-          <Stack.Screen name="(admin)" />
-        </Stack>
-      </AuthGate>
-    </QueryProvider>
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <QueryProvider>
+        <AuthGate>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(client)" />
+            <Stack.Screen name="(technician)" />
+            <Stack.Screen name="(reseller)" />
+            <Stack.Screen name="(wholesaler)" />
+            <Stack.Screen name="(admin)" />
+          </Stack>
+        </AuthGate>
+      </QueryProvider>
+    </SafeAreaProvider>
   );
 }

@@ -1,5 +1,6 @@
 // lib/components/CartBar.tsx
 import { View, Text, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // A persistent bottom bar (not a modal) so a buyer can keep browsing and
 // adding more items - item count, Checkout, and the cart total all update
@@ -17,12 +18,15 @@ export function CartBar({
   total: number;
   onCheckout: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   if (!visible) return null;
 
   return (
     <View
-      className="absolute bottom-0 left-0 right-0 flex-row items-center justify-between border-t border-gray-200 bg-white px-5 py-3"
+      className="absolute bottom-0 left-0 right-0 flex-row items-center justify-between border-t border-gray-200 bg-white px-5 pt-3"
       style={{
+        paddingBottom: insets.bottom + 12,
         shadowColor: '#000',
         shadowOpacity: 0.08,
         shadowRadius: 10,
