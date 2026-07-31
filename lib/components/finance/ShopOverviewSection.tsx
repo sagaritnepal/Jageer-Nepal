@@ -7,7 +7,7 @@ import { OrderCard } from '../OrderCard';
 import type { Order, Product } from '../../../types/database.types';
 
 type Period = 'day' | 'week' | 'month';
-type Drill = 'purchased' | null;
+type Drill = 'stock' | 'sold' | 'purchased' | null;
 
 const PERIOD_LABELS: Record<Period, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 const BUCKET_COUNT = 7;
@@ -59,6 +59,8 @@ function ShopStats({
   totalUnits,
   stockValue,
   drill,
+  onSelectStock,
+  onSelectSold,
   onSelectPurchased,
 }: {
   soldAmount: number;
@@ -67,17 +69,20 @@ function ShopStats({
   totalUnits: number;
   stockValue: number;
   drill: Drill;
+  onSelectStock: () => void;
+  onSelectSold: () => void;
   onSelectPurchased: () => void;
 }) {
+  const stockActive = drill === 'stock';
   return (
     <View className="mb-4">
       <View className="mb-2.5 flex-row gap-2.5">
-        <StatTile label="Item types" value={String(itemTypes)} />
-        <StatTile label="Units in stock" value={String(totalUnits)} />
+        <StatTile label="Item types" value={String(itemTypes)} active={stockActive} onPress={onSelectStock} />
+        <StatTile label="Units in stock" value={String(totalUnits)} active={stockActive} onPress={onSelectStock} />
       </View>
       <View className="flex-row gap-2.5">
-        <StatTile compact label="Stock value" value={fmtAmount(stockValue)} />
-        <StatTile compact label="Sold" value={fmtAmount(soldAmount)} />
+        <StatTile compact label="Stock value" value={fmtAmount(stockValue)} active={stockActive} onPress={onSelectStock} />
+        <StatTile compact label="Sold" value={fmtAmount(soldAmount)} active={drill === 'sold'} onPress={onSelectSold} />
         <StatTile
           compact
           label="Purchased"
@@ -86,7 +91,7 @@ function ShopStats({
           onPress={onSelectPurchased}
         />
       </View>
-      <Text className="mt-2 text-xs text-gray-400">Tap Purchased to see your wholesale purchase orders.</Text>
+      <Text className="mt-2 text-xs text-gray-400">Tap any tile above to see the details.</Text>
     </View>
   );
 }
@@ -184,6 +189,28 @@ function SalesChart({ orders }: { orders: Order[] }) {
   );
 }
 
+function StockDrilldown({ products }: { products: Product[] }) {
+  return (
+    <View className="mb-4">
+      <Text className="mb-3 text-sm font-semibold text-gray-900">Your stock</Text>
+      {products.length === 0 && <Text className="text-sm text-gray-500">No products in stock yet.</Text>}
+      {products.map((p) => (
+        <View key={p.id} className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+              {p.name}
+            </Text>
+            <Text className="text-xs text-gray-400" numberOfLines={1}>
+              {p.category ?? 'Uncategorized'} · {p.stock_level} in stock
+            </Text>
+          </View>
+          <Text className="text-sm font-extrabold text-gray-900">NPR {Number(p.price).toLocaleString()}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function OrderDrilldown({
   title,
   emptyText,
@@ -262,9 +289,25 @@ export function ShopOverviewSection({ basePath }: { basePath: string }) {
         totalUnits={totalUnits}
         stockValue={stockValue}
         drill={drill}
+        onSelectStock={() => setDrill((d) => (d === 'stock' ? null : 'stock'))}
+        onSelectSold={() => setDrill((d) => (d === 'sold' ? null : 'sold'))}
         onSelectPurchased={() => setDrill((d) => (d === 'purchased' ? null : 'purchased'))}
       />
       <SalesChart orders={salesOrders ?? []} />
+
+      {drill === 'stock' && <StockDrilldown products={products ?? []} />}
+
+      {drill === 'sold' && userId && (
+        <OrderDrilldown
+          title="Sold orders"
+          emptyText="Nothing sold yet."
+          orders={(salesOrders ?? []).filter((o) => o.status !== 'cancelled')}
+          productMap={productMap}
+          viewerId={userId}
+          roleLabel="Selling"
+          basePath={basePath}
+        />
+      )}
 
       {drill === 'purchased' && userId && (
         <OrderDrilldown

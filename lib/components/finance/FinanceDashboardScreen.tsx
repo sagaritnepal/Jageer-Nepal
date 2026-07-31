@@ -60,7 +60,6 @@ function shortcuts(basePath: string): {
     { key: 'customers', label: 'Customers', icon: 'people', href: `${basePath}/customers` },
     { key: 'payment-in', label: 'Payment In', icon: 'arrow-down-circle', href: `${basePath}/quick-payment?type=in` },
     { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', href: `${basePath}/quick-payment?type=out` },
-    { key: 'transactions', label: 'Transactions', icon: 'list', href: `${basePath}/transactions` },
     { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale` },
     { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase` },
     { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense` },
@@ -245,6 +244,18 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           <Ionicons name="chevron-forward" size={18} color="white" />
         </Pressable>
       )}
+
+      <Pressable
+        onPress={() => router.push(`${basePath}/transactions` as any)}
+        className="mb-3 flex-row items-center justify-between rounded-2xl px-4 py-3.5"
+        style={{ backgroundColor: BLUE }}
+      >
+        <View className="flex-row items-center gap-2.5">
+          <Ionicons name="list-outline" size={18} color="white" />
+          <Text className="text-sm font-semibold text-white">Transactions</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="white" />
+      </Pressable>
 
       <View className="mb-3 flex-row gap-3">
         <View className="flex-1 rounded-2xl bg-emerald-50 p-4">
