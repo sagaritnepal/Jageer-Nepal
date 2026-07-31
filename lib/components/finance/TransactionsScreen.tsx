@@ -12,7 +12,13 @@ import type {
   BusinessTransactionType,
   CustomerLedgerEntry,
   ExpenseCategory,
+  PaymentMode,
 } from '../../../types/database.types';
+
+const PAYMENT_MODE_META: Record<PaymentMode, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  cash: { label: 'Cash', icon: 'cash-outline' },
+  bank: { label: 'Bank', icon: 'business-outline' },
+};
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -289,6 +295,7 @@ function TransactionForm({
 
   const [partyName, setPartyName] = useState(initial?.party_name ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>(initial?.payment_mode ?? 'cash');
   const [saving, setSaving] = useState(false);
 
   const isBill = type !== 'expense';
@@ -354,6 +361,7 @@ function TransactionForm({
           })),
           discount_amount: Number(discount) || 0,
           vat_amount: Number(vat) || 0,
+          payment_mode: paymentMode,
         };
         if (initial) {
           await updateTx.mutateAsync({ id: initial.id, values });
@@ -383,6 +391,7 @@ function TransactionForm({
         note: note.trim() || null,
         bill_date: expenseDate || null,
         expense_category_id: categoryId,
+        payment_mode: paymentMode,
       };
       if (initial) {
         await updateTx.mutateAsync({ id: initial.id, values });
@@ -559,6 +568,29 @@ function TransactionForm({
           />
         </>
       )}
+
+      <Text className="mb-1 text-xs font-medium text-gray-500">Payment mode</Text>
+      <View className="mb-3 flex-row gap-2">
+        {(Object.keys(PAYMENT_MODE_META) as PaymentMode[]).map((mode) => {
+          const meta = PAYMENT_MODE_META[mode];
+          const selected = paymentMode === mode;
+          return (
+            <Pressable
+              key={mode}
+              onPress={() => setPaymentMode(mode)}
+              className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border py-2.5 ${
+                selected ? 'border-orange-500 bg-orange-50' : 'border-gray-300 bg-white'
+              }`}
+            >
+              <Ionicons name={meta.icon} size={16} color={selected ? '#EA580C' : '#6B7280'} />
+              <Text className={`text-sm font-semibold ${selected ? 'text-orange-600' : 'text-gray-600'}`}>
+                {meta.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View className="flex-row gap-2">
         <Pressable onPress={onCancel} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
           <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
@@ -605,9 +637,15 @@ function TransactionRow({
             : (tx.note ?? new Date(tx.created_at).toLocaleDateString())}
         </Text>
       </View>
-      <Text className="text-sm font-extrabold" style={{ color: meta.color }}>
-        NPR {tx.amount.toLocaleString()}
-      </Text>
+      <View className="items-end">
+        <Text className="text-sm font-extrabold" style={{ color: meta.color }}>
+          NPR {tx.amount.toLocaleString()}
+        </Text>
+        <View className="mt-0.5 flex-row items-center gap-1">
+          <Ionicons name={PAYMENT_MODE_META[tx.payment_mode].icon} size={10} color="#9CA3AF" />
+          <Text className="text-[10px] text-gray-400">{PAYMENT_MODE_META[tx.payment_mode].label}</Text>
+        </View>
+      </View>
       <Pressable onPress={onDelete} hitSlop={8} className="ml-1">
         <Ionicons name="trash-outline" size={16} color="#9CA3AF" />
       </Pressable>
@@ -769,61 +807,66 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-3 flex-row items-center justify-between">
-        {isLockedToType ? (
-          <View className="flex-row items-center gap-2">
-            <Pressable onPress={() => router.back()} hitSlop={8} className="p-1">
-              <Ionicons name="chevron-back" size={20} color="#374151" />
-            </Pressable>
-            <Text className="text-base font-bold text-gray-900">{TYPE_META[initialFilter].label}</Text>
-          </View>
-        ) : (
-          <View className="flex-row gap-2">
-            {FILTERS.map((f) => {
-              const selected = filter === f.key;
-              return (
-                <Pressable
-                  key={f.key}
-                  onPress={() => setFilter(f.key)}
-                  className={`rounded-full px-3 py-1.5 ${selected ? 'bg-orange-500' : 'bg-white border border-gray-200'}`}
-                >
-                  <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-gray-600'}`}>{f.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-        <Pressable
-          onPress={() => {
-            setEditingTx(null);
-            setShowForm((v) => !v);
-          }}
-          className="h-10 w-10 items-center justify-center rounded-2xl bg-orange-500"
-        >
-          <Ionicons name={showForm ? 'close' : 'add'} size={20} color="white" />
-        </Pressable>
-      </View>
-
-      {showForm && userId && (
-        <TransactionForm
-          userId={userId}
-          initial={editingTx ?? undefined}
-          type={editingTx?.type ?? (filter === 'all' ? 'sale' : filter)}
-          existingNames={existingExpenseNames}
-          onDone={() => {
-            setShowForm(false);
-            setEditingTx(null);
-          }}
-          onCancel={() => {
-            setShowForm(false);
-            setEditingTx(null);
-          }}
-        />
-      )}
-
       <SectionList
         sections={sections}
         keyExtractor={(item) => `${item.kind}-${item.id}`}
+        ListHeaderComponent={
+          <>
+            <View className="mb-3 flex-row items-center justify-between">
+              {isLockedToType ? (
+                <View className="flex-row items-center gap-2">
+                  <Pressable onPress={() => router.back()} hitSlop={8} className="p-1">
+                    <Ionicons name="chevron-back" size={20} color="#374151" />
+                  </Pressable>
+                  <Text className="text-base font-bold text-gray-900">{TYPE_META[initialFilter].label}</Text>
+                </View>
+              ) : (
+                <View className="flex-row gap-2">
+                  {FILTERS.map((f) => {
+                    const selected = filter === f.key;
+                    return (
+                      <Pressable
+                        key={f.key}
+                        onPress={() => setFilter(f.key)}
+                        className={`rounded-full px-3 py-1.5 ${selected ? 'bg-orange-500' : 'bg-white border border-gray-200'}`}
+                      >
+                        <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-gray-600'}`}>
+                          {f.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+              <Pressable
+                onPress={() => {
+                  setEditingTx(null);
+                  setShowForm((v) => !v);
+                }}
+                className="h-10 w-10 items-center justify-center rounded-2xl bg-orange-500"
+              >
+                <Ionicons name={showForm ? 'close' : 'add'} size={20} color="white" />
+              </Pressable>
+            </View>
+
+            {showForm && userId && (
+              <TransactionForm
+                userId={userId}
+                initial={editingTx ?? undefined}
+                type={editingTx?.type ?? (filter === 'all' ? 'sale' : filter)}
+                existingNames={existingExpenseNames}
+                onDone={() => {
+                  setShowForm(false);
+                  setEditingTx(null);
+                }}
+                onCancel={() => {
+                  setShowForm(false);
+                  setEditingTx(null);
+                }}
+              />
+            )}
+          </>
+        }
         renderSectionHeader={({ section }) => (
           <Text className="mb-2 mt-3 text-xs font-bold uppercase tracking-wide text-gray-400">{section.title}</Text>
         )}
@@ -843,6 +886,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           )
         }
         stickySectionHeadersEnabled={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">

@@ -130,6 +130,7 @@ export interface CustomerLedgerEntry {
 }
 
 export type BusinessTransactionType = 'sale' | 'purchase' | 'expense';
+export type PaymentMode = 'cash' | 'bank';
 
 export interface BillItem {
   description: string;
@@ -163,6 +164,7 @@ export interface BusinessTransaction {
   discount_amount: number;
   vat_amount: number;
   expense_category_id: string | null;
+  payment_mode: PaymentMode;
   created_at: string;
   updated_at: string;
 }
