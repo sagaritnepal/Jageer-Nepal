@@ -1,5 +1,5 @@
 // lib/components/finance/TransactionsScreen.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, SectionList, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -761,6 +761,20 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const [filter, setFilter] = useState<'all' | BusinessTransactionType>(initialFilter);
   const [showForm, setShowForm] = useState(!!typeParam);
   const [editingTx, setEditingTx] = useState<BusinessTransaction | null>(null);
+
+  // Expo Router reuses this same screen instance when navigating between
+  // shortcuts that share this route (Sales/Purchase/Expense/Net
+  // Balance/Transactions all point here with a different or absent ?type=),
+  // so the state above - set from typeParam only on first mount - would
+  // otherwise go stale: the form would keep showing whatever type/filter was
+  // active before, no matter which shortcut was actually tapped. Re-sync
+  // whenever the param itself changes instead.
+  useEffect(() => {
+    setFilter(initialFilter);
+    setShowForm(!!typeParam);
+    setEditingTx(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeParam]);
 
   // "All" is a full daily feed across every money-moving table (general
   // sales/purchase/expense entries plus per-customer debit/credit entries),

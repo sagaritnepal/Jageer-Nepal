@@ -248,20 +248,14 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
       <View className="mb-3 flex-row gap-3">
         <View className="flex-1 rounded-2xl bg-emerald-50 p-4">
-          <View className="mb-2 flex-row items-center justify-between">
-            <View className="h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
-              <Ionicons name="arrow-down" size={15} color="#059669" />
-            </View>
+          <View className="mb-2 flex-row items-center justify-end">
             <Ionicons name="chevron-forward" size={16} color="#6EE7B7" />
           </View>
           <Text className="text-xs font-semibold text-emerald-700">To Receive</Text>
           <Text className="mt-1 text-xl font-extrabold text-emerald-700">NPR {toReceive.toLocaleString()}</Text>
         </View>
         <View className="flex-1 rounded-2xl bg-red-50 p-4">
-          <View className="mb-2 flex-row items-center justify-between">
-            <View className="h-8 w-8 items-center justify-center rounded-full bg-red-100">
-              <Ionicons name="arrow-up" size={15} color="#DC2626" />
-            </View>
+          <View className="mb-2 flex-row items-center justify-end">
             <Ionicons name="chevron-forward" size={16} color="#FCA5A5" />
           </View>
           <Text className="text-xs font-semibold text-red-600">To Give</Text>
