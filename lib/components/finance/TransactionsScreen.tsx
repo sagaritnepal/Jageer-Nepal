@@ -894,15 +894,17 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                   })}
                 </View>
               )}
-              <Pressable
-                onPress={() => {
-                  setEditingTx(null);
-                  setShowForm((v) => !v);
-                }}
-                className="h-10 w-10 items-center justify-center rounded-2xl bg-orange-500"
-              >
-                <Ionicons name={showForm ? 'close' : 'add'} size={20} color="white" />
-              </Pressable>
+              {!isLockedToType && (
+                <Pressable
+                  onPress={() => {
+                    setEditingTx(null);
+                    setShowForm((v) => !v);
+                  }}
+                  className="h-10 w-10 items-center justify-center rounded-2xl bg-orange-500"
+                >
+                  <Ionicons name={showForm ? 'close' : 'add'} size={20} color="white" />
+                </Pressable>
+              )}
             </View>
 
             {showForm && userId && (

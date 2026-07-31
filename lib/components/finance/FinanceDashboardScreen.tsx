@@ -197,7 +197,11 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     });
   }, [allEntries]);
 
-  const netBalance = totals.sale - totals.purchase - totals.expense;
+  // The combined cash-in-hand + bank balance across every account - every
+  // sale, purchase, and expense already carries a payment mode (cash or a
+  // specific bank account), so summing all of them together is exactly the
+  // money actually on hand, live-updating as each one is recorded.
+  const availableBalance = totals.sale - totals.purchase - totals.expense;
 
   // Matches TotalsReportScreen's definitions: "received" is every real cash
   // inflow (sales + any payment actually collected from a customer);
@@ -314,12 +318,12 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           style={{ width: '48%' }}
         >
           <View>
-            <Text className="text-xs font-semibold text-gray-500">Net Balance</Text>
+            <Text className="text-xs font-semibold text-gray-500">Available Balance</Text>
             <Text
               className="mt-1 text-base font-extrabold"
-              style={{ color: netBalance >= 0 ? BLUE : '#DC2626' }}
+              style={{ color: availableBalance >= 0 ? BLUE : '#DC2626' }}
             >
-              NPR {netBalance.toLocaleString()}
+              NPR {availableBalance.toLocaleString()}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
