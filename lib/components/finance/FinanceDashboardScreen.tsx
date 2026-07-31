@@ -63,8 +63,6 @@ function shortcuts(basePath: string): {
     { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale` },
     { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase` },
     { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense` },
-    { key: 'received', label: 'Total Received', icon: 'trending-up-outline', href: `${basePath}/received` },
-    { key: 'paid', label: 'Total Paid', icon: 'trending-down-outline', href: `${basePath}/paid` },
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
   ];
 }
@@ -351,7 +349,24 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         </Pressable>
       </View>
 
-      {isReseller && <ShopOverviewSection basePath={basePath} />}
+      <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
+      <View className="mb-4 flex-row flex-wrap gap-3">
+        {shortcuts(basePath).map((s) => (
+          <Pressable
+            key={s.key}
+            onPress={() => router.push(s.href as any)}
+            className="items-center rounded-2xl border border-gray-200 bg-white py-4"
+            style={{ width: '31%' }}
+          >
+            <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+              <Ionicons name={s.icon} size={22} color={BLUE} />
+            </View>
+            <Text className="text-center text-xs font-semibold text-gray-700">{s.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {isReseller && <ShopOverviewSection />}
 
       {profileCompletion < 100 && (
         <Pressable onPress={() => router.push(`${basePath}/profile` as any)} className="mb-4 overflow-hidden rounded-2xl">
@@ -377,23 +392,6 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           </LinearGradient>
         </Pressable>
       )}
-
-      <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
-      <View className="mb-4 flex-row flex-wrap gap-3">
-        {shortcuts(basePath).map((s) => (
-          <Pressable
-            key={s.key}
-            onPress={() => router.push(s.href as any)}
-            className="items-center rounded-2xl border border-gray-200 bg-white py-4"
-            style={{ width: '31%' }}
-          >
-            <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full bg-blue-50">
-              <Ionicons name={s.icon} size={22} color={BLUE} />
-            </View>
-            <Text className="text-center text-xs font-semibold text-gray-700">{s.label}</Text>
-          </Pressable>
-        ))}
-      </View>
 
       <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
         <Text className="mb-3 text-sm font-semibold text-gray-900">Cashflow (Last 7 Days)</Text>

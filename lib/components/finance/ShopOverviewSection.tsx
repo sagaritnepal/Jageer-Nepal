@@ -3,11 +3,10 @@ import { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { OrderCard } from '../OrderCard';
-import type { Order, Product } from '../../../types/database.types';
+import type { Order } from '../../../types/database.types';
 
 type Period = 'day' | 'week' | 'month';
-type Drill = 'stock' | 'sold' | 'purchased' | null;
+type Drill = 'stock' | null;
 
 const PERIOD_LABELS: Record<Period, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 const BUCKET_COUNT = 7;
@@ -31,13 +30,11 @@ function fmtShort(n: number) {
 function StatTile({
   label,
   value,
-  compact = false,
   active = false,
   onPress,
 }: {
   label: string;
   value: string;
-  compact?: boolean;
   active?: boolean;
   onPress?: () => void;
 }) {
@@ -46,52 +43,34 @@ function StatTile({
       onPress={onPress}
       className={`flex-1 rounded-xl border p-3.5 ${active ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-white'}`}
     >
-      <Text className={`font-bold text-gray-900 ${compact ? 'text-[13px]' : 'text-lg'}`}>{value}</Text>
+      <Text className="text-lg font-bold text-gray-900">{value}</Text>
       <Text className="mt-0.5 text-xs text-gray-500">{label}</Text>
     </Pressable>
   );
 }
 
 function ShopStats({
-  soldAmount,
-  purchaseAmount,
   itemTypes,
   totalUnits,
   stockValue,
   drill,
   onSelectStock,
-  onSelectSold,
-  onSelectPurchased,
 }: {
-  soldAmount: number;
-  purchaseAmount: number;
   itemTypes: number;
   totalUnits: number;
   stockValue: number;
   drill: Drill;
   onSelectStock: () => void;
-  onSelectSold: () => void;
-  onSelectPurchased: () => void;
 }) {
   const stockActive = drill === 'stock';
   return (
     <View className="mb-4">
-      <View className="mb-2.5 flex-row gap-2.5">
+      <View className="flex-row gap-2.5">
         <StatTile label="Item types" value={String(itemTypes)} active={stockActive} onPress={onSelectStock} />
         <StatTile label="Units in stock" value={String(totalUnits)} active={stockActive} onPress={onSelectStock} />
+        <StatTile label="Stock value" value={fmtAmount(stockValue)} active={stockActive} onPress={onSelectStock} />
       </View>
-      <View className="flex-row gap-2.5">
-        <StatTile compact label="Stock value" value={fmtAmount(stockValue)} active={stockActive} onPress={onSelectStock} />
-        <StatTile compact label="Sold" value={fmtAmount(soldAmount)} active={drill === 'sold'} onPress={onSelectSold} />
-        <StatTile
-          compact
-          label="Purchased"
-          value={fmtAmount(purchaseAmount)}
-          active={drill === 'purchased'}
-          onPress={onSelectPurchased}
-        />
-      </View>
-      <Text className="mt-2 text-xs text-gray-400">Tap any tile above to see the details.</Text>
+      <Text className="mt-2 text-xs text-gray-400">Tap any tile above to see your stock.</Text>
     </View>
   );
 }
@@ -189,7 +168,7 @@ function SalesChart({ orders }: { orders: Order[] }) {
   );
 }
 
-function StockDrilldown({ products }: { products: Product[] }) {
+function StockDrilldown({ products }: { products: { id: string; name: string; category: string | null; stock_level: number; price: number }[] }) {
   return (
     <View className="mb-4">
       <Text className="mb-3 text-sm font-semibold text-gray-900">Your stock</Text>
@@ -211,35 +190,7 @@ function StockDrilldown({ products }: { products: Product[] }) {
   );
 }
 
-function OrderDrilldown({
-  title,
-  emptyText,
-  orders,
-  productMap,
-  viewerId,
-  roleLabel,
-  basePath,
-}: {
-  title: string;
-  emptyText: string;
-  orders: Order[];
-  productMap: Map<string, Product>;
-  viewerId: string;
-  roleLabel: string;
-  basePath: string;
-}) {
-  return (
-    <View className="mb-4">
-      <Text className="mb-3 text-sm font-semibold text-gray-900">{title}</Text>
-      {orders.length === 0 && <Text className="text-sm text-gray-500">{emptyText}</Text>}
-      {orders.map((o) => (
-        <OrderCard key={o.id} order={o} productMap={productMap} viewerId={viewerId} basePath={basePath} roleLabel={roleLabel} />
-      ))}
-    </View>
-  );
-}
-
-export function ShopOverviewSection({ basePath }: { basePath: string }) {
+export function ShopOverviewSection() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [drill, setDrill] = useState<Drill>(null);
 
@@ -247,79 +198,34 @@ export function ShopOverviewSection({ basePath }: { basePath: string }) {
     filters: userId ? { seller_id: userId, seller_role: 'reseller' } : {},
     enabled: !!userId,
   });
-  // Sales (this reseller as seller) and purchases (this reseller as buyer,
-  // from a wholesaler) are the same `orders` table read from opposite sides -
-  // both queried here so the Sold/Purchased tiles can drill into the real
-  // order list instead of just showing a total.
   const { data: salesOrders } = useSupabaseQuery('orders', {
     filters: userId ? { seller_id: userId } : {},
     orderBy: { column: 'created_at', ascending: false },
     enabled: !!userId,
   });
-  const { data: purchaseOrders } = useSupabaseQuery('orders', {
-    filters: userId ? { buyer_id: userId } : {},
-    orderBy: { column: 'created_at', ascending: false },
-    enabled: !!userId,
-  });
-  const { data: allProducts } = useSupabaseQuery('products', {});
-  const productMap = useMemo(() => new Map((allProducts ?? []).map((p) => [p.id, p])), [allProducts]);
 
-  const { itemTypes, totalUnits, stockValue, purchaseAmount } = useMemo(() => {
+  const { itemTypes, totalUnits, stockValue } = useMemo(() => {
     const list = products ?? [];
     return {
       itemTypes: list.length,
       totalUnits: list.reduce((sum, p) => sum + p.stock_level, 0),
       stockValue: list.reduce((sum, p) => sum + p.stock_level * Number(p.price), 0),
-      purchaseAmount: list.reduce((sum, p) => sum + p.purchased_stock * Number(p.purchase_price ?? 0), 0),
     };
   }, [products]);
-
-  const soldAmount = useMemo(
-    () => (salesOrders ?? []).filter((o) => o.status !== 'cancelled').reduce((sum, o) => sum + Number(o.total_amount), 0),
-    [salesOrders]
-  );
 
   return (
     <View className="mb-4">
       <Text className="mb-2 text-sm font-semibold text-gray-900">Shop Overview</Text>
       <ShopStats
-        soldAmount={soldAmount}
-        purchaseAmount={purchaseAmount}
         itemTypes={itemTypes}
         totalUnits={totalUnits}
         stockValue={stockValue}
         drill={drill}
         onSelectStock={() => setDrill((d) => (d === 'stock' ? null : 'stock'))}
-        onSelectSold={() => setDrill((d) => (d === 'sold' ? null : 'sold'))}
-        onSelectPurchased={() => setDrill((d) => (d === 'purchased' ? null : 'purchased'))}
       />
       <SalesChart orders={salesOrders ?? []} />
 
       {drill === 'stock' && <StockDrilldown products={products ?? []} />}
-
-      {drill === 'sold' && userId && (
-        <OrderDrilldown
-          title="Sold orders"
-          emptyText="Nothing sold yet."
-          orders={(salesOrders ?? []).filter((o) => o.status !== 'cancelled')}
-          productMap={productMap}
-          viewerId={userId}
-          roleLabel="Selling"
-          basePath={basePath}
-        />
-      )}
-
-      {drill === 'purchased' && userId && (
-        <OrderDrilldown
-          title="Purchase stock"
-          emptyText="No wholesale purchases yet."
-          orders={purchaseOrders ?? []}
-          productMap={productMap}
-          viewerId={userId}
-          roleLabel="Buying"
-          basePath={basePath}
-        />
-      )}
     </View>
   );
 }
