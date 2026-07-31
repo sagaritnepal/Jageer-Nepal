@@ -7,13 +7,15 @@ import type { BankAccount } from '../../../types/database.types';
 
 // null selectedId/onSelect(null) means "Cash" - the one payment account that
 // always exists and isn't a row in bank_accounts (a business has exactly one).
+// New accounts are only ever added from the dedicated Bank Accounts screen
+// (Finance > Bank Accounts) - this picker is selection (plus rename/delete)
+// only, so mid-entry taps can't spawn accounts outside that one place.
 export function BankAccountPickerModal({
   visible,
   accounts,
   selectedId,
   onSelect,
   onClose,
-  onCreate,
   onRename,
   onDelete,
 }: {
@@ -22,27 +24,12 @@ export function BankAccountPickerModal({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onClose: () => void;
-  onCreate: (name: string) => Promise<void>;
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
-  const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [saving, setSaving] = useState(false);
-
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    setSaving(true);
-    try {
-      await onCreate(newName.trim());
-      setNewName('');
-    } catch (err) {
-      showAlert('Could not add bank account', getErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleRename(id: string) {
     if (!renameValue.trim()) return;
@@ -68,22 +55,6 @@ export function BankAccountPickerModal({
             </Pressable>
           </View>
 
-          <View className="mb-3 flex-row gap-2">
-            <TextInput
-              value={newName}
-              onChangeText={setNewName}
-              placeholder="New bank account name"
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-            />
-            <Pressable
-              onPress={handleCreate}
-              disabled={saving || !newName.trim()}
-              className="items-center justify-center rounded-lg bg-blue-600 px-3 disabled:opacity-50"
-            >
-              <Ionicons name="add" size={18} color="white" />
-            </Pressable>
-          </View>
-
           <ScrollView>
             <Pressable
               onPress={() => {
@@ -99,7 +70,7 @@ export function BankAccountPickerModal({
 
             {accounts.length === 0 ? (
               <Text className="px-2 py-3 text-center text-sm text-gray-400">
-                No bank accounts yet — add one above.
+                No bank accounts yet — add one from Finance &gt; Bank Accounts.
               </Text>
             ) : (
               accounts.map((acc) => (

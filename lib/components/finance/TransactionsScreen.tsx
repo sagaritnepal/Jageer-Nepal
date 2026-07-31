@@ -1,8 +1,9 @@
 // lib/components/finance/TransactionsScreen.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { BackHandler, View, Text, TextInput, Pressable, SectionList, Modal } from 'react-native';
+import { BackHandler, Platform, View, Text, TextInput, Pressable, SectionList, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Contacts from 'expo-contacts';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
@@ -310,6 +311,25 @@ function TransactionForm({
     return existingNames.filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q).slice(0, 5);
   }, [existingNames, partyName]);
 
+  async function handlePickExpenseNameContact() {
+    try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Contacts access needed', 'Allow contacts access to pick a name from your phone.');
+        return;
+      }
+      const contact = await Contacts.Contact.presentPicker();
+      if (!contact) return;
+      const fullName = await contact.getFullName();
+      if (fullName) {
+        setPartyName(fullName);
+        setShowNameSuggestions(false);
+      }
+    } catch (err) {
+      showAlert('Could not read contact', getErrorMessage(err));
+    }
+  }
+
   async function handleCreateCategory(name: string) {
     const created = await createCategory.mutateAsync({ owner_id: userId, name });
     setCategoryId(created.id);
@@ -504,16 +524,23 @@ function TransactionForm({
           </View>
 
           <Text className="mb-1 text-xs font-medium text-gray-500">Name</Text>
-          <TextInput
-            value={partyName}
-            onChangeText={(v) => {
-              setPartyName(v);
-              setShowNameSuggestions(true);
-            }}
-            onFocus={() => setShowNameSuggestions(true)}
-            placeholder="Who was this paid to?"
-            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-          />
+          <View className="flex-row items-center rounded-lg border border-gray-300 bg-white">
+            <TextInput
+              value={partyName}
+              onChangeText={(v) => {
+                setPartyName(v);
+                setShowNameSuggestions(true);
+              }}
+              onFocus={() => setShowNameSuggestions(true)}
+              placeholder="Who was this paid to?"
+              className="flex-1 px-3 py-2.5 text-sm text-gray-900"
+            />
+            {Platform.OS !== 'web' && (
+              <Pressable onPress={handlePickExpenseNameContact} hitSlop={8} className="px-2.5">
+                <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
+              </Pressable>
+            )}
+          </View>
           {showNameSuggestions && nameSuggestions.length > 0 && (
             <View className="mb-1 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
               {nameSuggestions.map((n, idx) => (
@@ -589,7 +616,6 @@ function TransactionForm({
         selectedId={bankAccountId}
         onSelect={setBankAccountId}
         onClose={() => setShowAccountPicker(false)}
-        onCreate={bankAccounts.create}
         onRename={bankAccounts.rename}
         onDelete={bankAccounts.remove}
       />
@@ -776,13 +802,27 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeParam]);
 
-  // Pressing the Android hardware back button while the add/edit form is
-  // open should close the form first, same as the explicit back-chevron
-  // does when the view is locked to a type - not immediately leave the
-  // whole Transactions screen with the form still hanging open behind it.
+  // Arriving with a specific ?type= (from the Sales/Purchase/Expense
+  // shortcuts or dashboard cards) means "show me only this" - lock the view
+  // to that one type instead of dropping the reseller into the shared
+  // All/Sales/Purchase/Expense hub they'd then have to filter themselves.
+  // The Transactions shortcut (no type param) still opens that full hub.
+  const isLockedToType = !!typeParam && initialFilter !== 'all';
+  // The form auto-opens on arrival in a locked view specifically to add one
+  // new entry - there's nothing else to do there once it's dismissed (no +
+  // button to reopen it, by design), so dismissing it should leave the
+  // screen entirely instead of stranding the reseller on a dead end they'd
+  // have to back out of anyway. Editing an existing row (tapped from the
+  // list) is a different flow and should just close back to that list.
+  const isQuickAddFlow = isLockedToType && !editingTx;
+
+  // Pressing the Android hardware back button while editing an existing
+  // entry should close the form and stay on the list; during the locked
+  // view's auto-opened quick-add form, let the default back navigation
+  // happen instead of closing to a dead end with no way to reopen it.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (showForm) {
+      if (showForm && !isQuickAddFlow) {
         setShowForm(false);
         setEditingTx(null);
         return true;
@@ -790,7 +830,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
       return false;
     });
     return () => sub.remove();
-  }, [showForm]);
+  }, [showForm, isQuickAddFlow]);
 
   // "All" is a full daily feed across every money-moving table (general
   // sales/purchase/expense entries plus per-customer debit/credit entries),
@@ -843,13 +883,6 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     ]);
   }
 
-  // Arriving with a specific ?type= (from the Sales/Purchase/Expense
-  // shortcuts or dashboard cards) means "show me only this" - lock the view
-  // to that one type instead of dropping the reseller into the shared
-  // All/Sales/Purchase/Expense hub they'd then have to filter themselves.
-  // The Transactions shortcut (no type param) still opens that full hub.
-  const isLockedToType = !!typeParam && initialFilter !== 'all';
-
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <SectionList
@@ -862,7 +895,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 <View className="flex-row items-center gap-2">
                   <Pressable
                     onPress={() => {
-                      if (showForm) {
+                      if (showForm && !isQuickAddFlow) {
                         setShowForm(false);
                         setEditingTx(null);
                       } else {
@@ -916,10 +949,12 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 onDone={() => {
                   setShowForm(false);
                   setEditingTx(null);
+                  if (isQuickAddFlow) router.back();
                 }}
                 onCancel={() => {
                   setShowForm(false);
                   setEditingTx(null);
+                  if (isQuickAddFlow) router.back();
                 }}
               />
             )}
