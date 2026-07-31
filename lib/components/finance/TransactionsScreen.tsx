@@ -1,6 +1,6 @@
 // lib/components/finance/TransactionsScreen.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, SectionList, Modal } from 'react-native';
+import { BackHandler, View, Text, TextInput, Pressable, SectionList, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -776,6 +776,22 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeParam]);
 
+  // Pressing the Android hardware back button while the add/edit form is
+  // open should close the form first, same as the explicit back-chevron
+  // does when the view is locked to a type - not immediately leave the
+  // whole Transactions screen with the form still hanging open behind it.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showForm) {
+        setShowForm(false);
+        setEditingTx(null);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [showForm]);
+
   // "All" is a full daily feed across every money-moving table (general
   // sales/purchase/expense entries plus per-customer debit/credit entries),
   // newest first. The type filters stay business_transactions-only, since
@@ -844,7 +860,18 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             <View className="mb-3 flex-row items-center justify-between">
               {isLockedToType ? (
                 <View className="flex-row items-center gap-2">
-                  <Pressable onPress={() => router.back()} hitSlop={8} className="p-1">
+                  <Pressable
+                    onPress={() => {
+                      if (showForm) {
+                        setShowForm(false);
+                        setEditingTx(null);
+                      } else {
+                        router.back();
+                      }
+                    }}
+                    hitSlop={8}
+                    className="p-1"
+                  >
                     <Ionicons name="chevron-back" size={20} color="#374151" />
                   </Pressable>
                   <Text className="text-base font-bold text-gray-900">{TYPE_META[initialFilter].label}</Text>
