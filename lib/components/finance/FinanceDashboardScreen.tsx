@@ -1,6 +1,6 @@
 // lib/components/finance/FinanceDashboardScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -146,6 +146,15 @@ function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
 export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const isReseller = basePath === '/(reseller)';
   const [showSalesTrend, setShowSalesTrend] = useState(false);
+  // Percentage widths (e.g. '31%') combined with a flex `gap` are computed
+  // differently by React Native's native layout engine than by the browser,
+  // so 3-across tiles that render correctly on web can wrap to 2 on a real
+  // device. Computing an exact pixel width up front avoids that mismatch.
+  const { width: screenWidth } = useWindowDimensions();
+  const SCREEN_PADDING = 24; // px-6
+  const GRID_GAP = 12; // gap-3
+  const halfTileWidth = (screenWidth - SCREEN_PADDING * 2 - GRID_GAP) / 2;
+  const thirdTileWidth = (screenWidth - SCREEN_PADDING * 2 - GRID_GAP * 2) / 3;
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
   const { data: customers } = useSupabaseQuery('customers', {
@@ -282,7 +291,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         <Pressable
           onPress={() => (isReseller ? setShowSalesTrend((v) => !v) : router.push(`${basePath}/transactions?type=sale` as any))}
           className={`rounded-2xl bg-white p-3.5 ${showSalesTrend ? 'border border-blue-200' : ''}`}
-          style={{ width: showSalesTrend ? '100%' : '48%' }}
+          style={{ width: showSalesTrend ? '100%' : halfTileWidth }}
         >
           <View className="flex-row items-center justify-between">
             <View>
@@ -293,6 +302,13 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           </View>
           {isReseller && showSalesTrend && (
             <View className="mt-3 border-t border-gray-100 pt-3">
+              <Pressable
+                onPress={() => router.push(`${basePath}/transactions?type=sale` as any)}
+                className="mb-3 flex-row items-center justify-between rounded-lg bg-emerald-50 px-3 py-2.5"
+              >
+                <Text className="text-xs font-semibold text-emerald-700">View all sales</Text>
+                <Ionicons name="chevron-forward" size={14} color="#059669" />
+              </Pressable>
               <SalesTrendChart embedded />
             </View>
           )}
@@ -300,7 +316,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=purchase` as any)}
           className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: '48%' }}
+          style={{ width: halfTileWidth }}
         >
           <View>
             <Text className="text-xs font-semibold text-gray-500">Purchase</Text>
@@ -313,7 +329,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=expense` as any)}
           className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: '48%' }}
+          style={{ width: halfTileWidth }}
         >
           <View>
             <Text className="text-xs font-semibold text-gray-500">Expense</Text>
@@ -324,7 +340,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         <Pressable
           onPress={() => router.push(`${basePath}/transactions` as any)}
           className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: '48%' }}
+          style={{ width: halfTileWidth }}
         >
           <View>
             <Text className="text-xs font-semibold text-gray-500">Available Balance</Text>
@@ -369,7 +385,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
             key={s.key}
             onPress={() => router.push(s.href as any)}
             className="items-center rounded-2xl border border-gray-200 bg-white py-4"
-            style={{ width: '31%' }}
+            style={{ width: thirdTileWidth }}
           >
             <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full bg-blue-50">
               <Ionicons name={s.icon} size={22} color={BLUE} />
