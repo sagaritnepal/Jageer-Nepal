@@ -5,20 +5,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
+import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { DateField } from '../DateTimeFields';
+import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import type {
   BusinessTransaction,
   BusinessTransactionType,
   CustomerLedgerEntry,
   ExpenseCategory,
-  PaymentMode,
 } from '../../../types/database.types';
-
-const PAYMENT_MODE_META: Record<PaymentMode, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  cash: { label: 'Cash', icon: 'cash-outline' },
-  bank: { label: 'Bank', icon: 'business-outline' },
-};
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -272,6 +268,7 @@ function TransactionForm({
   const createCategory = useSupabaseInsert('expense_categories');
   const updateCategory = useSupabaseUpdate('expense_categories');
   const deleteCategory = useSupabaseDelete('expense_categories');
+  const bankAccounts = useBankAccounts(userId);
 
   // Expense: date + addable name + a managed category + amount + remark.
   const [amount, setAmount] = useState(initial && initial.type === 'expense' ? String(initial.amount) : '');
@@ -295,13 +292,17 @@ function TransactionForm({
 
   const [partyName, setPartyName] = useState(initial?.party_name ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>(initial?.payment_mode ?? 'cash');
+  const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const isBill = type !== 'expense';
   const subtotal = items.reduce((sum, row) => sum + lineTotal(row), 0);
   const grandTotal = subtotal - (Number(discount) || 0) + (Number(vat) || 0);
   const selectedCategory = (categories ?? []).find((c) => c.id === categoryId) ?? null;
+  const selectedAccountName = bankAccountId
+    ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
+    : 'Cash';
 
   const nameSuggestions = useMemo(() => {
     const q = partyName.trim().toLowerCase();
@@ -361,7 +362,8 @@ function TransactionForm({
           })),
           discount_amount: Number(discount) || 0,
           vat_amount: Number(vat) || 0,
-          payment_mode: paymentMode,
+          payment_mode: bankAccountId ? ('bank' as const) : ('cash' as const),
+          bank_account_id: bankAccountId,
         };
         if (initial) {
           await updateTx.mutateAsync({ id: initial.id, values });
@@ -391,7 +393,8 @@ function TransactionForm({
         note: note.trim() || null,
         bill_date: expenseDate || null,
         expense_category_id: categoryId,
-        payment_mode: paymentMode,
+        payment_mode: bankAccountId ? ('bank' as const) : ('cash' as const),
+        bank_account_id: bankAccountId,
       };
       if (initial) {
         await updateTx.mutateAsync({ id: initial.id, values });
@@ -569,27 +572,27 @@ function TransactionForm({
         </>
       )}
 
-      <Text className="mb-1 text-xs font-medium text-gray-500">Payment mode</Text>
-      <View className="mb-3 flex-row gap-2">
-        {(Object.keys(PAYMENT_MODE_META) as PaymentMode[]).map((mode) => {
-          const meta = PAYMENT_MODE_META[mode];
-          const selected = paymentMode === mode;
-          return (
-            <Pressable
-              key={mode}
-              onPress={() => setPaymentMode(mode)}
-              className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border py-2.5 ${
-                selected ? 'border-orange-500 bg-orange-50' : 'border-gray-300 bg-white'
-              }`}
-            >
-              <Ionicons name={meta.icon} size={16} color={selected ? '#EA580C' : '#6B7280'} />
-              <Text className={`text-sm font-semibold ${selected ? 'text-orange-600' : 'text-gray-600'}`}>
-                {meta.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Text className="mb-1 text-xs font-medium text-gray-500">Payment account</Text>
+      <Pressable
+        onPress={() => setShowAccountPicker(true)}
+        className="mb-3 flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
+      >
+        <View className="flex-row items-center gap-2">
+          <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
+          <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
+        </View>
+        <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+      </Pressable>
+      <BankAccountPickerModal
+        visible={showAccountPicker}
+        accounts={bankAccounts.accounts}
+        selectedId={bankAccountId}
+        onSelect={setBankAccountId}
+        onClose={() => setShowAccountPicker(false)}
+        onCreate={bankAccounts.create}
+        onRename={bankAccounts.rename}
+        onDelete={bankAccounts.remove}
+      />
 
       <View className="flex-row gap-2">
         <Pressable onPress={onCancel} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
@@ -610,15 +613,18 @@ function TransactionForm({
 function TransactionRow({
   tx,
   categoryName,
+  bankAccountName,
   onEdit,
   onDelete,
 }: {
   tx: BusinessTransaction;
   categoryName: string | null;
+  bankAccountName: string | null;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const meta = TYPE_META[tx.type];
+  const accountLabel = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
   return (
     <Pressable onPress={onEdit} className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
       <View className={`h-9 w-9 items-center justify-center rounded-full ${meta.bg}`}>
@@ -642,8 +648,10 @@ function TransactionRow({
           NPR {tx.amount.toLocaleString()}
         </Text>
         <View className="mt-0.5 flex-row items-center gap-1">
-          <Ionicons name={PAYMENT_MODE_META[tx.payment_mode].icon} size={10} color="#9CA3AF" />
-          <Text className="text-[10px] text-gray-400">{PAYMENT_MODE_META[tx.payment_mode].label}</Text>
+          <Ionicons name={tx.bank_account_id ? 'business-outline' : 'cash-outline'} size={10} color="#9CA3AF" />
+          <Text className="text-[10px] text-gray-400" numberOfLines={1}>
+            {accountLabel}
+          </Text>
         </View>
       </View>
       <Pressable onPress={onDelete} hitSlop={8} className="ml-1">
@@ -716,6 +724,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
+  const bankAccounts = useBankAccounts(userId);
   const deleteTx = useSupabaseDelete('business_transactions');
 
   const customerNameById = useMemo(() => {
@@ -729,6 +738,12 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     (categories ?? []).forEach((c) => map.set(c.id, c.name));
     return map;
   }, [categories]);
+
+  const bankAccountNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    bankAccounts.accounts.forEach((a) => map.set(a.id, a.name));
+    return map;
+  }, [bankAccounts.accounts]);
 
   // Previously used expense payee names, so the Name field can suggest one
   // instead of always starting from scratch.
@@ -875,6 +890,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             <TransactionRow
               tx={item.tx}
               categoryName={item.tx.expense_category_id ? categoryNameById.get(item.tx.expense_category_id) ?? null : null}
+              bankAccountName={item.tx.bank_account_id ? bankAccountNameById.get(item.tx.bank_account_id) ?? null : null}
               onEdit={() => {
                 setEditingTx(item.tx);
                 setShowForm(true);

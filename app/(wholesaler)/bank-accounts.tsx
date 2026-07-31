@@ -1,0 +1,6 @@
+// app/(wholesaler)/bank-accounts.tsx
+import { BankAccountsScreen } from '../../lib/components/finance/BankAccountsScreen';
+
+export default function WholesalerBankAccounts() {
+  return <BankAccountsScreen />;
+}

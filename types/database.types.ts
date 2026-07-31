@@ -147,6 +147,14 @@ export interface ExpenseCategory {
   updated_at: string;
 }
 
+export interface BankAccount {
+  id: string;
+  owner_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface BusinessTransaction {
   id: string;
   owner_id: string;
@@ -165,6 +173,7 @@ export interface BusinessTransaction {
   vat_amount: number;
   expense_category_id: string | null;
   payment_mode: PaymentMode;
+  bank_account_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -301,6 +310,12 @@ export interface Database {
         Row: ExpenseCategory;
         Insert: Partial<ExpenseCategory>;
         Update: Partial<ExpenseCategory>;
+        Relationships: [];
+      };
+      bank_accounts: {
+        Row: BankAccount;
+        Insert: Partial<BankAccount>;
+        Update: Partial<BankAccount>;
         Relationships: [];
       };
     };

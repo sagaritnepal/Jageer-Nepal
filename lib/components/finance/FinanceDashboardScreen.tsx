@@ -66,6 +66,7 @@ function shortcuts(basePath: string): {
     { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense` },
     { key: 'received', label: 'Total Received', icon: 'trending-up-outline', href: `${basePath}/received` },
     { key: 'paid', label: 'Total Paid', icon: 'trending-down-outline', href: `${basePath}/paid` },
+    { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
   ];
 }
 
