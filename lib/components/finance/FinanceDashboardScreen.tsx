@@ -8,6 +8,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { ShopOverviewSection } from './ShopOverviewSection';
+import { SalesTrendChart } from './SalesTrendChart';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BLUE = '#2563EB';
@@ -329,6 +330,8 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
         </Pressable>
       </View>
+
+      {isReseller && <SalesTrendChart />}
 
       <View className="mb-3 flex-row gap-3">
         <Pressable
