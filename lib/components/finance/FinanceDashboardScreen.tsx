@@ -145,6 +145,7 @@ function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
 
 export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const isReseller = basePath === '/(reseller)';
+  const [showSalesTrend, setShowSalesTrend] = useState(false);
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
   const { data: customers } = useSupabaseQuery('customers', {
@@ -279,15 +280,22 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
       <View className="mb-3 flex-row flex-wrap gap-3">
         <Pressable
-          onPress={() => router.push(`${basePath}/transactions?type=sale` as any)}
-          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: '48%' }}
+          onPress={() => (isReseller ? setShowSalesTrend((v) => !v) : router.push(`${basePath}/transactions?type=sale` as any))}
+          className={`rounded-2xl bg-white p-3.5 ${showSalesTrend ? 'border border-blue-200' : ''}`}
+          style={{ width: showSalesTrend ? '100%' : '48%' }}
         >
-          <View>
-            <Text className="text-xs font-semibold text-gray-500">Sales</Text>
-            <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-xs font-semibold text-gray-500">Sales</Text>
+              <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
+            </View>
+            <Ionicons name={showSalesTrend ? 'chevron-up' : 'chevron-forward'} size={14} color="#D1D5DB" />
           </View>
-          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
+          {isReseller && showSalesTrend && (
+            <View className="mt-3 border-t border-gray-100 pt-3">
+              <SalesTrendChart embedded />
+            </View>
+          )}
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=purchase` as any)}
@@ -330,8 +338,6 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
         </Pressable>
       </View>
-
-      {isReseller && <SalesTrendChart />}
 
       <View className="mb-3 flex-row gap-3">
         <Pressable

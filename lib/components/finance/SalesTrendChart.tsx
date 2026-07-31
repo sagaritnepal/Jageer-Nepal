@@ -70,7 +70,7 @@ function bucketOrders(orders: Order[], period: Period): { key: string; label: st
   return buckets;
 }
 
-export function SalesTrendChart() {
+export function SalesTrendChart({ embedded = false }: { embedded?: boolean }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: salesOrders } = useSupabaseQuery('orders', {
     filters: userId ? { seller_id: userId } : {},
@@ -84,7 +84,7 @@ export function SalesTrendChart() {
   const total = buckets.reduce((sum, b) => sum + b.value, 0);
 
   return (
-    <View className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+    <View className={embedded ? '' : 'mb-4 rounded-xl border border-gray-200 bg-white p-4'}>
       <View className="mb-3 flex-row items-center justify-between">
         <Text className="text-sm font-semibold text-gray-900">Sales trend</Text>
         <View className="flex-row rounded-lg border border-gray-300 bg-gray-50 p-0.5">
