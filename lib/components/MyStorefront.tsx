@@ -120,53 +120,54 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
       : 'border-gray-200 bg-white';
 
   return (
-    <View className={`mb-3 flex-row gap-3 rounded-xl border p-3 ${cardTone} ${faded ? 'opacity-60' : ''}`}>
+    <View className={`mb-4 w-[48%] rounded-xl border p-3 ${cardTone} ${faded ? 'opacity-60' : ''}`}>
       <Pressable
         onPress={() => detailHref && router.push(detailHref)}
-        className="h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100"
+        className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100"
       >
         {item.image_url ? (
           <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
         ) : (
-          <Text className="text-2xl">🖥️</Text>
+          <Text className="text-3xl">🖥️</Text>
         )}
+        <View className={`absolute left-1 top-1 rounded-full px-2 py-0.5 ${badge.bg}`}>
+          <Text className="text-[9px] font-bold uppercase tracking-wide text-white">{badge.label}</Text>
+        </View>
       </Pressable>
 
-      <View className="flex-1">
-        <View className="flex-row items-start justify-between gap-2">
-          <Pressable onPress={() => detailHref && router.push(detailHref)} className="flex-1">
-            {item.category && (
-              <Text className="text-[11px] uppercase tracking-wide text-orange-600">{item.category}</Text>
-            )}
-            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-              {item.name}
-            </Text>
-          </Pressable>
-          <Switch
-            value={effectiveAvailable}
-            onValueChange={handleToggleAvailable}
-            disabled={!hasPrice}
-            trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
-            thumbColor={effectiveAvailable ? '#3b82f6' : '#F3F4F6'}
-          />
-        </View>
-
-        <View className="mt-1.5 flex-row items-center justify-between">
-          <EditablePrice item={item} />
-          <View className={`rounded-full px-2 py-0.5 ${badge.bg}`}>
-            <Text className="text-[9px] font-bold uppercase tracking-wide text-white">{badge.label}</Text>
-          </View>
-        </View>
-
-        {purchasePrice != null && (
-          <Text className="mt-1 text-[11px] text-gray-500">
-            Bought at NPR {Number(purchasePrice).toLocaleString()}
+      <Pressable onPress={() => detailHref && router.push(detailHref)}>
+        {item.category && (
+          <Text className="text-[10px] uppercase tracking-wide text-orange-600" numberOfLines={1}>
+            {item.category}
           </Text>
         )}
-
-        <Text className={`mt-0.5 text-[11px] ${outOfStock ? 'text-red-500' : 'text-gray-400'}`}>
-          {outOfStock ? 'Restock to sell' : `${item.stock_level} in stock`}
+        <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
+          {item.name}
         </Text>
+      </Pressable>
+
+      <EditablePrice item={item} />
+
+      {purchasePrice != null && (
+        <Text className="mt-1 text-[10px] text-gray-500" numberOfLines={1}>
+          Bought at NPR {Number(purchasePrice).toLocaleString()}
+        </Text>
+      )}
+
+      <Text className={`mt-0.5 text-[10px] ${outOfStock ? 'text-red-500' : 'text-gray-400'}`}>
+        {outOfStock ? 'Restock to sell' : `${item.stock_level} in stock`}
+      </Text>
+
+      <View className="mt-1.5 flex-row items-center justify-between">
+        <Text className="text-[10px] font-medium text-gray-500">Available</Text>
+        <Switch
+          value={effectiveAvailable}
+          onValueChange={handleToggleAvailable}
+          disabled={!hasPrice}
+          style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+          trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
+          thumbColor={effectiveAvailable ? '#3b82f6' : '#F3F4F6'}
+        />
       </View>
     </View>
   );
@@ -254,7 +255,7 @@ export function MyStorefront({
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && filtered.length === 0 && <Text className="text-gray-500">No products match your search.</Text>}
 
-      <View>
+      <View className="flex-row flex-wrap justify-between">
         {filtered.map((item) => (
           <StorefrontCard key={item.id} item={item} basePath={basePath} />
         ))}
