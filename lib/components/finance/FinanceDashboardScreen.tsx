@@ -8,7 +8,6 @@ import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { ShopOverviewSection } from './ShopOverviewSection';
-import { SalesTrendChart } from './SalesTrendChart';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BLUE = '#2563EB';
@@ -145,7 +144,6 @@ function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
 
 export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const isReseller = basePath === '/(reseller)';
-  const [showSalesTrend, setShowSalesTrend] = useState(false);
   // Percentage widths (e.g. '31%') combined with a flex `gap` are computed
   // differently by React Native's native layout engine than by the browser,
   // so 3-across tiles that render correctly on web can wrap to 2 on a real
@@ -283,29 +281,15 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
       <View className="mb-3 flex-row flex-wrap gap-3">
         <Pressable
-          onPress={() => (isReseller ? setShowSalesTrend((v) => !v) : router.push(`${basePath}/transactions?type=sale` as any))}
-          className={`rounded-2xl bg-white p-3.5 ${showSalesTrend ? 'border border-blue-200' : ''}`}
-          style={{ width: showSalesTrend ? '100%' : halfTileWidth }}
+          onPress={() => router.push(`${basePath}/transactions?type=sale` as any)}
+          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
+          style={{ width: halfTileWidth }}
         >
-          <View className="flex-row items-center justify-between">
-            <View>
-              <Text className="text-xs font-semibold text-gray-500">Sales</Text>
-              <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
-            </View>
-            <Ionicons name={showSalesTrend ? 'chevron-up' : 'chevron-forward'} size={14} color="#D1D5DB" />
+          <View>
+            <Text className="text-xs font-semibold text-gray-500">Sales</Text>
+            <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
           </View>
-          {isReseller && showSalesTrend && (
-            <View className="mt-3 border-t border-gray-100 pt-3">
-              <Pressable
-                onPress={() => router.push(`${basePath}/transactions?type=sale` as any)}
-                className="mb-3 flex-row items-center justify-between rounded-lg bg-emerald-50 px-3 py-2.5"
-              >
-                <Text className="text-xs font-semibold text-emerald-700">View all sales</Text>
-                <Ionicons name="chevron-forward" size={14} color="#059669" />
-              </Pressable>
-              <SalesTrendChart embedded />
-            </View>
-          )}
+          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=purchase` as any)}
