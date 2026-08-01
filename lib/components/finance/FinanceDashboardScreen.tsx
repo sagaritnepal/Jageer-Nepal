@@ -72,47 +72,41 @@ function startOfDay(date: Date) {
   return d;
 }
 
-function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
+// Shows both cash IN and cash OUT for each day, side by side - a net-only
+// bar can hide real volume (e.g. a big payment in and a big payment out the
+// same day would net to ~zero and look like nothing happened).
+function CashflowChart({ data }: { data: { label: string; inAmt: number; outAmt: number }[] }) {
   const [selected, setSelected] = useState<number | null>(null);
-  const half = 56;
-  const maxAbs = Math.max(1, ...data.map((d) => Math.abs(d.net)));
+  const HEIGHT = 110;
+  const maxAmt = Math.max(1, ...data.map((d) => Math.max(d.inAmt, d.outAmt)));
 
   return (
     <View>
-      <View className="relative flex-row" style={{ height: half * 2, gap: 6 }}>
-        <View className="absolute left-0 right-0 h-px bg-gray-200" style={{ top: half }} />
+      <View className="flex-row items-end" style={{ height: HEIGHT, gap: 8 }}>
         {data.map((d, i) => {
-          const barHeight = d.net === 0 ? 0 : Math.max(3, (Math.abs(d.net) / maxAbs) * half);
-          const isPositive = d.net >= 0;
+          const inHeight = d.inAmt > 0 ? Math.max(3, (d.inAmt / maxAmt) * HEIGHT) : 0;
+          const outHeight = d.outAmt > 0 ? Math.max(3, (d.outAmt / maxAmt) * HEIGHT) : 0;
           const isSelected = selected === i;
           return (
             <Pressable
               key={i}
               onPress={() => setSelected(isSelected ? null : i)}
-              className="flex-1"
-              style={{ height: half * 2 }}
+              className="flex-1 flex-row items-end justify-center"
+              style={{ height: HEIGHT, gap: 3 }}
             >
-              <View style={{ height: half, justifyContent: 'flex-end' }}>
-                {isPositive && barHeight > 0 && (
-                  <View
-                    style={{ height: barHeight, backgroundColor: isSelected ? '#059669' : '#6ee7b7' }}
-                    className="w-full rounded-t"
-                  />
-                )}
-              </View>
-              <View style={{ height: half, justifyContent: 'flex-start' }}>
-                {!isPositive && barHeight > 0 && (
-                  <View
-                    style={{ height: barHeight, backgroundColor: isSelected ? '#dc2626' : '#fca5a5' }}
-                    className="w-full rounded-b"
-                  />
-                )}
-              </View>
+              <View
+                style={{ height: inHeight, backgroundColor: isSelected ? '#059669' : '#6ee7b7' }}
+                className="flex-1 rounded-t"
+              />
+              <View
+                style={{ height: outHeight, backgroundColor: isSelected ? '#dc2626' : '#fca5a5' }}
+                className="flex-1 rounded-t"
+              />
             </Pressable>
           );
         })}
       </View>
-      <View className="mt-1.5 flex-row" style={{ gap: 6 }}>
+      <View className="mt-1.5 flex-row" style={{ gap: 8 }}>
         {data.map((d, i) => (
           <View key={i} className="flex-1 items-center">
             <Text className="text-[9px] text-gray-400">{d.label}</Text>
@@ -122,19 +116,19 @@ function CashflowChart({ data }: { data: { label: string; net: number }[] }) {
       {selected != null && (
         <View className="mt-2.5 self-start rounded-lg bg-gray-900 px-3 py-1.5">
           <Text className="text-xs font-semibold text-white">
-            {data[selected].label}: {data[selected].net >= 0 ? 'Net received ' : 'Net added '}
-            NPR {Math.abs(data[selected].net).toLocaleString()}
+            {data[selected].label}: In NPR {Math.round(data[selected].inAmt).toLocaleString()} · Out NPR{' '}
+            {Math.round(data[selected].outAmt).toLocaleString()}
           </Text>
         </View>
       )}
       <View className="mt-2.5 flex-row items-center gap-4">
         <View className="flex-row items-center gap-1.5">
           <View className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
-          <Text className="text-[11px] text-gray-500">Net received</Text>
+          <Text className="text-[11px] text-gray-500">Cash in</Text>
         </View>
         <View className="flex-row items-center gap-1.5">
           <View className="h-2.5 w-2.5 rounded-full bg-red-300" />
-          <Text className="text-[11px] text-gray-500">Net added (dues)</Text>
+          <Text className="text-[11px] text-gray-500">Cash out</Text>
         </View>
       </View>
     </View>
@@ -195,13 +189,13 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     return days.map((day) => {
       const dayStart = day.getTime();
       const dayEnd = dayStart + DAY_MS;
-      const net = (allEntries ?? [])
-        .filter((e) => {
-          const t = new Date(e.created_at).getTime();
-          return t >= dayStart && t < dayEnd;
-        })
-        .reduce((sum, e) => sum + (e.entry_type === 'credit' ? e.amount : -e.amount), 0);
-      return { label: day.toLocaleDateString('en-US', { weekday: 'short' }), net };
+      const dayEntries = (allEntries ?? []).filter((e) => {
+        const t = new Date(e.created_at).getTime();
+        return t >= dayStart && t < dayEnd;
+      });
+      const inAmt = dayEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
+      const outAmt = dayEntries.filter((e) => e.entry_type === 'debit').reduce((sum, e) => sum + e.amount, 0);
+      return { label: day.toLocaleDateString('en-US', { weekday: 'short' }), inAmt, outAmt };
     });
   }, [allEntries]);
 

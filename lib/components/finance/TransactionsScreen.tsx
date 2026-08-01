@@ -8,6 +8,8 @@ import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { DateField } from '../DateTimeFields';
+import { BarChart } from '../BarChart';
+import { NetTrendChart } from '../NetTrendChart';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { CustomerSearchModal } from './CustomerSearchModal';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -21,6 +23,51 @@ import type {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+type Granularity = 'day' | 'week' | 'month';
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function startOfWeek(d: Date) {
+  const day = startOfDay(d);
+  const dow = day.getDay() === 0 ? 7 : day.getDay(); // Monday = 1 ... Sunday = 7
+  return new Date(day.getTime() - (dow - 1) * DAY_MS);
+}
+
+// Bucket boundaries for the trend chart - day (last 30 days), week (last 12
+// weeks), or month (Jan-Dec of the current year), shared by every
+// type/filter so switching granularity re-buckets consistently.
+function periodBuckets(granularity: Granularity): { start: number; end: number; label: string }[] {
+  const now = new Date();
+  if (granularity === 'day') {
+    return Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(now.getTime() - (29 - i) * DAY_MS);
+      const start = startOfDay(d).getTime();
+      return { start, end: start + DAY_MS, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) };
+    });
+  }
+  if (granularity === 'week') {
+    const thisWeekStart = startOfWeek(now).getTime();
+    return Array.from({ length: 12 }, (_, i) => {
+      const start = thisWeekStart - (11 - i) * 7 * DAY_MS;
+      return { start, end: start + 7 * DAY_MS, label: new Date(start).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) };
+    });
+  }
+  const year = now.getFullYear();
+  return Array.from({ length: 12 }, (_, month) => {
+    const start = new Date(year, month, 1).getTime();
+    const end = new Date(year, month + 1, 1).getTime();
+    return { start, end, label: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'short' }) };
+  });
+}
+
+function formatBucketLabel(granularity: Granularity, label: string, i: number, total: number) {
+  if (granularity === 'day') return i % 5 === 0 || i === total - 1 ? label : null;
+  if (granularity === 'week') return i % 3 === 0 || i === total - 1 ? label : null;
+  return label;
 }
 
 interface ItemRowState {
@@ -946,6 +993,33 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     return () => sub.remove();
   }, [showForm, isQuickAddFlow]);
 
+  // Trend chart above the list, keyed off the active filter chip - a single
+  // type sums to a plain (always non-negative) bar chart, "All" nets
+  // sale - purchase - expense per period, which can swing either way, so it
+  // gets the diverging chart instead.
+  const [granularity, setGranularity] = useState<Granularity>('month');
+  const buckets = useMemo(() => periodBuckets(granularity), [granularity]);
+  const typeChartData = useMemo(() => {
+    if (filter === 'all') return [];
+    return buckets.map((b) => ({
+      label: b.label,
+      value: (transactions ?? [])
+        .filter((t) => t.type === filter && new Date(t.created_at).getTime() >= b.start && new Date(t.created_at).getTime() < b.end)
+        .reduce((sum, t) => sum + t.amount, 0),
+    }));
+  }, [transactions, filter, buckets]);
+  const netChartData = useMemo(() => {
+    if (filter !== 'all') return [];
+    return buckets.map((b) => {
+      const inRange = (transactions ?? []).filter((t) => {
+        const tm = new Date(t.created_at).getTime();
+        return tm >= b.start && tm < b.end;
+      });
+      const net = inRange.reduce((sum, t) => sum + (t.type === 'sale' ? t.amount : -t.amount), 0);
+      return { label: b.label, net };
+    });
+  }, [transactions, filter, buckets]);
+
   // "All" is a full daily feed across every money-moving table (general
   // sales/purchase/expense entries plus per-customer debit/credit entries),
   // newest first. The type filters stay business_transactions-only, since
@@ -1053,6 +1127,48 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 </Pressable>
               )}
             </View>
+
+            {!(showForm && isQuickAddFlow) && (
+              <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+                <Text className="mb-3 text-sm font-semibold text-gray-900">
+                  {filter === 'all' ? 'Available Balance trend' : `${TYPE_META[filter].label} trend`}
+                </Text>
+                <View className="mb-3 flex-row gap-2">
+                  {(['day', 'week', 'month'] as Granularity[]).map((g) => {
+                    const selectedG = granularity === g;
+                    const accentColor = filter === 'all' ? '#2563EB' : TYPE_META[filter].color;
+                    return (
+                      <Pressable
+                        key={g}
+                        onPress={() => setGranularity(g)}
+                        className={`flex-1 items-center rounded-full py-1.5 ${selectedG ? '' : 'border border-gray-200 bg-white'}`}
+                        style={selectedG ? { backgroundColor: accentColor } : undefined}
+                      >
+                        <Text className={`text-xs font-semibold capitalize ${selectedG ? 'text-white' : 'text-gray-600'}`}>
+                          {g}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {filter === 'all' ? (
+                  <NetTrendChart
+                    data={netChartData}
+                    positiveLabel="Net gain"
+                    negativeLabel="Net loss"
+                    formatLabel={(label, i) => formatBucketLabel(granularity, label, i, netChartData.length)}
+                  />
+                ) : (
+                  <BarChart
+                    data={typeChartData}
+                    color={TYPE_META[filter].color}
+                    selectedColor={TYPE_META[filter].color}
+                    formatValue={(v) => `NPR ${Math.round(v).toLocaleString()}`}
+                    formatLabel={(label, i) => formatBucketLabel(granularity, label, i, typeChartData.length)}
+                  />
+                )}
+              </View>
+            )}
 
             {showForm && userId && (
               <TransactionForm
