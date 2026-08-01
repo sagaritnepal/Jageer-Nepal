@@ -176,12 +176,10 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
 
 export function MyStorefront({
   sellerRole,
-  note,
   emptyText,
   basePath,
 }: {
   sellerRole: UserRole;
-  note: string;
   emptyText: string;
   basePath: string;
 }) {
@@ -189,6 +187,7 @@ export function MyStorefront({
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const { data: products, isLoading } = useSupabaseQuery('products', {
     filters: { seller_id: userId ?? '', seller_role: sellerRole },
@@ -216,6 +215,14 @@ export function MyStorefront({
     return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [visible, search, category]);
 
+  // Matching item names as you type, so you can jump straight to one instead
+  // of scanning the whole (already-filtered) grid below.
+  const nameSuggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return visible.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
+  }, [visible, search]);
+
   if (!isLoading && visible.length === 0) {
     return (
       <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-12">
@@ -228,23 +235,45 @@ export function MyStorefront({
 
   function handleSearchChange(text: string) {
     setSearch(text);
+    setShowSuggestions(true);
     if (sheetOpen) setSheetOpen(false);
+  }
+
+  function selectSuggestion(name: string) {
+    setSearch(name);
+    setShowSuggestions(false);
   }
 
   return (
     <>
-      <Text className="mb-3 text-xs text-gray-400">{note}</Text>
-
       {sellerRole === 'reseller' && <ShopOverviewSection />}
 
       <View className="mb-4">
         <SearchBar
           value={search}
           onChangeText={handleSearchChange}
+          onFocus={() => setShowSuggestions(true)}
           onOpenFilters={() => setSheetOpen(true)}
           filterActive={!!category}
           placeholder="Search by name or model…"
         />
+        {showSuggestions && nameSuggestions.length > 0 && (
+          <View className="mt-1.5 overflow-hidden rounded-xl border border-gray-200 bg-white">
+            {nameSuggestions.map((p, idx) => (
+              <Pressable
+                key={p.id}
+                onPress={() => selectSuggestion(p.name)}
+                className={`flex-row items-center gap-2 px-3 py-2.5 ${idx !== nameSuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
+              >
+                <Ionicons name="search" size={14} color="#9CA3AF" />
+                <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
+                  {p.name}
+                </Text>
+                {!!p.category && <Text className="text-xs text-gray-400">{p.category}</Text>}
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
       <SearchFilterSheet

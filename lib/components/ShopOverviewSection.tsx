@@ -1,10 +1,10 @@
-// lib/components/finance/ShopOverviewSection.tsx
+// lib/components/ShopOverviewSection.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery } from '../hooks/useSupabase';
 
-type Drill = 'stock' | null;
+type TileKey = 'types' | 'units' | 'value';
 
 function fmtAmount(n: number) {
   const rounded = Math.round(n);
@@ -39,22 +39,21 @@ function ShopStats({
   itemTypes,
   totalUnits,
   stockValue,
-  drill,
-  onSelectStock,
+  selected,
+  onSelect,
 }: {
   itemTypes: number;
   totalUnits: number;
   stockValue: number;
-  drill: Drill;
-  onSelectStock: () => void;
+  selected: TileKey | null;
+  onSelect: (key: TileKey) => void;
 }) {
-  const stockActive = drill === 'stock';
   return (
     <View className="mb-4">
       <View className="flex-row gap-2.5">
-        <StatTile label="Item types" value={String(itemTypes)} active={stockActive} onPress={onSelectStock} />
-        <StatTile label="Units in stock" value={String(totalUnits)} active={stockActive} onPress={onSelectStock} />
-        <StatTile label="Stock value" value={fmtAmount(stockValue)} active={stockActive} onPress={onSelectStock} />
+        <StatTile label="Item types" value={String(itemTypes)} active={selected === 'types'} onPress={() => onSelect('types')} />
+        <StatTile label="Units in stock" value={String(totalUnits)} active={selected === 'units'} onPress={() => onSelect('units')} />
+        <StatTile label="Stock value" value={fmtAmount(stockValue)} active={selected === 'value'} onPress={() => onSelect('value')} />
       </View>
       <Text className="mt-2 text-xs text-gray-400">Tap any tile above to see your stock.</Text>
     </View>
@@ -85,7 +84,7 @@ function StockDrilldown({ products }: { products: { id: string; name: string; ca
 
 export function ShopOverviewSection() {
   const userId = useAuthStore((state) => state.session?.user.id);
-  const [drill, setDrill] = useState<Drill>(null);
+  const [selected, setSelected] = useState<TileKey | null>(null);
 
   const { data: products } = useSupabaseQuery('products', {
     filters: userId ? { seller_id: userId, seller_role: 'reseller' } : {},
@@ -101,6 +100,10 @@ export function ShopOverviewSection() {
     };
   }, [products]);
 
+  function handleSelect(key: TileKey) {
+    setSelected((cur) => (cur === key ? null : key));
+  }
+
   return (
     <View className="mb-4">
       <Text className="mb-2 text-sm font-semibold text-gray-900">Shop Overview</Text>
@@ -108,11 +111,11 @@ export function ShopOverviewSection() {
         itemTypes={itemTypes}
         totalUnits={totalUnits}
         stockValue={stockValue}
-        drill={drill}
-        onSelectStock={() => setDrill((d) => (d === 'stock' ? null : 'stock'))}
+        selected={selected}
+        onSelect={handleSelect}
       />
 
-      {drill === 'stock' && <StockDrilldown products={products ?? []} />}
+      {selected !== null && <StockDrilldown products={products ?? []} />}
     </View>
   );
 }
