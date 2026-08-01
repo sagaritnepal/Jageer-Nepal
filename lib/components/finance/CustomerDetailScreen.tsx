@@ -11,8 +11,23 @@ import {
   useSupabaseInsert,
   useSupabaseDelete,
 } from '../../hooks/useSupabase';
+import { supabase } from '../../supabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { isValidPhone10 } from '../../utils/phone';
 import type { LedgerEntryType } from '../../../types/database.types';
+
+/** Whether `phone` is already used by a different customer of this owner. */
+async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerId: string) {
+  const { data, error } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('owner_id', ownerId)
+    .eq('phone', phone)
+    .neq('id', excludeCustomerId)
+    .limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
 
 function EditableDetails({ customerId, basePath }: { customerId: string; basePath: string }) {
   const { data: customer } = useSupabaseRow('customers', customerId);
@@ -38,11 +53,20 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
       showAlert('Add a name', "Enter the customer's name.");
       return;
     }
+    const trimmedPhone = phone.trim();
+    if (trimmedPhone && !isValidPhone10(trimmedPhone)) {
+      showAlert('Check the phone number', 'Enter a valid 10-digit phone number.');
+      return;
+    }
     setSaving(true);
     try {
+      if (trimmedPhone && (await phoneAlreadyUsed(customer!.owner_id, trimmedPhone, customerId))) {
+        showAlert('Already saved', 'A customer with this phone number already exists.');
+        return;
+      }
       await updateCustomer.mutateAsync({
         id: customerId,
-        values: { name: name.trim(), phone: phone.trim() || null, address: address.trim() || null },
+        values: { name: name.trim(), phone: trimmedPhone || null, address: address.trim() || null },
       });
       setEditing(false);
     } catch (err) {
@@ -82,9 +106,10 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
         />
         <TextInput
           value={phone}
-          onChangeText={setPhone}
-          placeholder="Phone"
+          onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
+          placeholder="Phone (10 digits)"
           keyboardType="phone-pad"
+          maxLength={10}
           className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
         />
         <TextInput
