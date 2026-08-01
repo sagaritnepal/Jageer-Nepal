@@ -279,10 +279,32 @@ function SkillsPicker({ profile }: { profile: Profile }) {
   });
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>(profile.skill_ids ?? []);
+  const [search, setSearch] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function toggle(id: string) {
-    setSelected((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  const categoryById = useMemo(() => {
+    const map = new Map<string, string>();
+    (categories ?? []).forEach((c) => map.set(c.id, c.label));
+    return map;
+  }, [categories]);
+
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (categories ?? [])
+      .filter((c) => !selected.includes(c.id))
+      .filter((c) => !q || c.label.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [categories, selected, search]);
+
+  function addSkill(id: string) {
+    setSelected((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setSearch('');
+    setShowSuggestions(false);
+  }
+
+  function removeSkill(id: string) {
+    setSelected((prev) => prev.filter((s) => s !== id));
   }
 
   async function handleSave() {
@@ -330,34 +352,54 @@ function SkillsPicker({ profile }: { profile: Profile }) {
     <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
       <Text className="mb-1 text-sm font-semibold text-gray-900">Select your skills</Text>
       <Text className="mb-3 text-xs text-gray-400">
-        Pick every category you can handle — you'll show up for more matching requests and jobs.
+        Search and add every category you can handle — you'll show up for more matching requests and jobs.
       </Text>
-      <View className="mb-3">
-        {(categories ?? []).map((c) => {
-          const isSelected = selected.includes(c.id);
-          return (
+
+      {selected.length > 0 && (
+        <View className="mb-3 flex-row flex-wrap gap-2">
+          {selected.map((id) => (
+            <View key={id} className="flex-row items-center gap-1.5 rounded-full bg-orange-500 py-1.5 pl-3 pr-2">
+              <Text className="text-xs font-semibold text-white">{categoryById.get(id) ?? '…'}</Text>
+              <Pressable onPress={() => removeSkill(id)} hitSlop={6}>
+                <Ionicons name="close" size={13} color="white" />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View className="mb-1 flex-row items-center rounded-lg border border-gray-300 bg-white px-3">
+        <Ionicons name="search" size={16} color="#9CA3AF" />
+        <TextInput
+          value={search}
+          onChangeText={(v) => {
+            setSearch(v);
+            setShowSuggestions(true);
+          }}
+          onFocus={() => setShowSuggestions(true)}
+          placeholder="Search skills…"
+          autoComplete="off"
+          className="ml-2 flex-1 py-2.5 text-sm text-gray-900"
+        />
+      </View>
+      {showSuggestions && suggestions.length > 0 && (
+        <View className="mb-1 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
+          {suggestions.map((c, idx) => (
             <Pressable
               key={c.id}
-              onPress={() => toggle(c.id)}
-              className={`mb-2 flex-row items-center gap-3 rounded-xl border px-3 py-2.5 ${
-                isSelected ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'
-              }`}
+              onPress={() => addSkill(c.id)}
+              className={`px-3 py-2.5 ${idx !== suggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
             >
-              <View
-                className={`h-5 w-5 items-center justify-center rounded-md border ${
-                  isSelected ? 'border-orange-500 bg-orange-500' : 'border-gray-300 bg-white'
-                }`}
-              >
-                {isSelected && <Ionicons name="checkmark" size={13} color="white" />}
-              </View>
-              <Text className={`flex-1 text-sm font-medium ${isSelected ? 'text-orange-700' : 'text-gray-700'}`}>
-                {c.label}
-              </Text>
+              <Text className="text-sm text-gray-900">{c.label}</Text>
             </Pressable>
-          );
-        })}
-      </View>
-      <View className="flex-row gap-2">
+          ))}
+        </View>
+      )}
+      {showSuggestions && search.trim().length > 0 && suggestions.length === 0 && (
+        <Text className="mb-1 mt-1 text-xs text-gray-400">No matching skills.</Text>
+      )}
+
+      <View className="mt-3 flex-row gap-2">
         <Pressable
           onPress={() => setOpen(false)}
           className="flex-1 items-center rounded-lg border border-gray-300 py-2.5"
