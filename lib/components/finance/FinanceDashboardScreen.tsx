@@ -61,9 +61,9 @@ function shortcuts(basePath: string): {
     { key: 'customers', label: 'Customers', icon: 'people', href: `${basePath}/customers` },
     { key: 'payment-in', label: 'Payment In', icon: 'arrow-down-circle', href: `${basePath}/quick-payment?type=in` },
     { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', href: `${basePath}/quick-payment?type=out` },
-    { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale` },
-    { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase` },
-    { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense` },
+    { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale&add=1` },
+    { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase&add=1` },
+    { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense&add=1` },
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
   ];
 }
@@ -271,19 +271,13 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
       </Pressable>
 
       <View className="mb-3 flex-row gap-3">
-        <View className="flex-1 rounded-2xl bg-emerald-50 p-4">
-          <View className="mb-2 flex-row items-center justify-end">
-            <Ionicons name="chevron-forward" size={16} color="#6EE7B7" />
-          </View>
+        <View className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5" style={{ width: halfTileWidth }}>
           <Text className="text-xs font-semibold text-emerald-700">To Receive</Text>
-          <Text className="mt-1 text-xl font-extrabold text-emerald-700">NPR {toReceive.toLocaleString()}</Text>
+          <Text className="mt-1 text-base font-extrabold text-emerald-700">NPR {toReceive.toLocaleString()}</Text>
         </View>
-        <View className="flex-1 rounded-2xl bg-red-50 p-4">
-          <View className="mb-2 flex-row items-center justify-end">
-            <Ionicons name="chevron-forward" size={16} color="#FCA5A5" />
-          </View>
+        <View className="rounded-2xl border border-red-200 bg-red-50 p-3.5" style={{ width: halfTileWidth }}>
           <Text className="text-xs font-semibold text-red-600">To Give</Text>
-          <Text className="mt-1 text-xl font-extrabold text-red-600">NPR {toGive.toLocaleString()}</Text>
+          <Text className="mt-1 text-base font-extrabold text-red-600">NPR {toGive.toLocaleString()}</Text>
         </View>
       </View>
 
@@ -358,7 +352,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
       <View className="mb-3 flex-row gap-3">
         <Pressable
           onPress={() => router.push(`${basePath}/received` as any)}
-          className="flex-1 flex-row items-center justify-between rounded-2xl bg-emerald-50 p-3.5"
+          className="flex-1 flex-row items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5"
         >
           <View>
             <Text className="text-xs font-semibold text-emerald-700">Total Received</Text>
@@ -368,7 +362,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/paid` as any)}
-          className="flex-1 flex-row items-center justify-between rounded-2xl bg-red-50 p-3.5"
+          className="flex-1 flex-row items-center justify-between rounded-2xl border border-red-200 bg-red-50 p-3.5"
         >
           <View>
             <Text className="text-xs font-semibold text-red-600">Total Paid</Text>

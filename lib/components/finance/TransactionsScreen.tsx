@@ -839,7 +839,7 @@ function LedgerRow({ item, basePath }: { item: CustomerLedgerEntry; customerName
 }
 
 export function TransactionsScreen({ basePath }: { basePath?: string }) {
-  const { type: typeParam } = useLocalSearchParams<{ type?: string }>();
+  const { type: typeParam, add: addParam } = useLocalSearchParams<{ type?: string; add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: transactions } = useSupabaseQuery('business_transactions', {
     filters: userId ? { owner_id: userId } : {},
@@ -893,8 +893,13 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const initialFilter = (typeParam as BusinessTransactionType) && ['sale', 'purchase', 'expense'].includes(typeParam ?? '')
     ? (typeParam as BusinessTransactionType)
     : 'all';
+  // Only an explicit ?add=1 (set by the Shortcuts icons) means "open the
+  // form to add one." Arriving at a type-locked view any other way (the
+  // Sales/Purchase/Expense dashboard cards) is a view-only visit - entries
+  // are only ever added from Shortcuts.
+  const isAddFlow = addParam === '1';
   const [filter, setFilter] = useState<'all' | BusinessTransactionType>(initialFilter);
-  const [showForm, setShowForm] = useState(!!typeParam);
+  const [showForm, setShowForm] = useState(isAddFlow);
   const [editingTx, setEditingTx] = useState<BusinessTransaction | null>(null);
 
   // Expo Router reuses this same screen instance when navigating between
@@ -906,10 +911,10 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   // whenever the param itself changes instead.
   useEffect(() => {
     setFilter(initialFilter);
-    setShowForm(!!typeParam);
+    setShowForm(isAddFlow);
     setEditingTx(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeParam]);
+  }, [typeParam, addParam]);
 
   // Arriving with a specific ?type= (from the Sales/Purchase/Expense
   // shortcuts or dashboard cards) means "show me only this" - lock the view
@@ -917,13 +922,13 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   // All/Sales/Purchase/Expense hub they'd then have to filter themselves.
   // The Transactions shortcut (no type param) still opens that full hub.
   const isLockedToType = !!typeParam && initialFilter !== 'all';
-  // The form auto-opens on arrival in a locked view specifically to add one
-  // new entry - there's nothing else to do there once it's dismissed (no +
-  // button to reopen it, by design), so dismissing it should leave the
-  // screen entirely instead of stranding the reseller on a dead end they'd
-  // have to back out of anyway. Editing an existing row (tapped from the
-  // list) is a different flow and should just close back to that list.
-  const isQuickAddFlow = isLockedToType && !editingTx;
+  // The form auto-opens on arrival only for the Shortcuts add flow - there's
+  // nothing else to do there once it's dismissed (no + button to reopen it,
+  // by design), so dismissing it should leave the screen entirely instead of
+  // stranding the reseller on a dead end they'd have to back out of anyway.
+  // Editing an existing row (tapped from the list) is a different flow and
+  // should just close back to that list.
+  const isQuickAddFlow = isLockedToType && isAddFlow && !editingTx;
 
   // Pressing the Android hardware back button while editing an existing
   // entry should close the form and stay on the list; during the locked
