@@ -7,9 +7,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { TrendChartCard } from './TrendChartCard';
+import { periodBuckets, formatBucketLabel, type Granularity } from './TrendChartCard';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const BLUE = '#2563EB';
 
 function CircularProgress({
@@ -67,16 +66,16 @@ function shortcuts(basePath: string): {
   ];
 }
 
-function startOfDay(date: Date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
 // Shows both cash IN and cash OUT for each day, side by side - a net-only
 // bar can hide real volume (e.g. a big payment in and a big payment out the
 // same day would net to ~zero and look like nothing happened).
-function CashflowChart({ data }: { data: { label: string; inAmt: number; outAmt: number }[] }) {
+function CashflowChart({
+  data,
+  formatLabel,
+}: {
+  data: { label: string; inAmt: number; outAmt: number }[];
+  formatLabel?: (label: string, index: number) => string | null;
+}) {
   const [selected, setSelected] = useState<number | null>(null);
   const HEIGHT = 110;
   const maxAmt = Math.max(1, ...data.map((d) => Math.max(d.inAmt, d.outAmt)));
@@ -108,11 +107,18 @@ function CashflowChart({ data }: { data: { label: string; inAmt: number; outAmt:
         })}
       </View>
       <View className="mt-1.5 flex-row" style={{ gap: 8 }}>
-        {data.map((d, i) => (
-          <View key={i} className="flex-1 items-center">
-            <Text className="text-[9px] text-gray-400">{d.label}</Text>
-          </View>
-        ))}
+        {data.map((d, i) => {
+          const label = formatLabel ? formatLabel(d.label, i) : d.label;
+          return (
+            <View key={i} className="flex-1 items-center">
+              {label ? (
+                <Text className="text-[9px] text-gray-400" numberOfLines={1}>
+                  {label}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
       </View>
       {selected != null && (
         <View className="mt-2.5 self-start rounded-lg bg-gray-900 px-3 py-1.5">
@@ -184,34 +190,41 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     return { toReceive: receive, toGive: give };
   }, [allEntries]);
 
+  const [cashflowGranularity, setCashflowGranularity] = useState<Granularity>('day');
+  // Each bucket here renders two bars (in + out) side by side, so it needs
+  // roughly half as many buckets as a single-bar chart to stay readable on
+  // a phone screen - the default 30/12/12 buckets render as near-invisible
+  // slivers once split in two.
+  const CASHFLOW_BUCKET_COUNT: Record<Granularity, number> = { day: 10, week: 8, month: 6 };
+  const cashflowBuckets = useMemo(
+    () => periodBuckets(cashflowGranularity, CASHFLOW_BUCKET_COUNT[cashflowGranularity]),
+    [cashflowGranularity]
+  );
+
   // Same "received"/"paid" definition as yearReceived/yearPaid below - real
   // cash in is sales plus any payment collected (ledger credits); real cash
   // out is purchases, expenses, and manual Payment Out entries. Ledger-only
   // data would leave this empty for anyone whose activity is mostly plain
   // Sale/Purchase/Expense entries rather than manual ledger payments.
   const cashflow = useMemo(() => {
-    const today = startOfDay(new Date());
-    const days = Array.from({ length: 7 }, (_, i) => new Date(today.getTime() - (6 - i) * DAY_MS));
-    return days.map((day) => {
-      const dayStart = day.getTime();
-      const dayEnd = dayStart + DAY_MS;
-      const dayTx = (transactions ?? []).filter((t) => {
+    return cashflowBuckets.map((b) => {
+      const bucketTx = (transactions ?? []).filter((t) => {
         const tm = new Date(t.created_at).getTime();
-        return tm >= dayStart && tm < dayEnd;
+        return tm >= b.start && tm < b.end;
       });
-      const dayEntries = (allEntries ?? []).filter((e) => {
+      const bucketEntries = (allEntries ?? []).filter((e) => {
         const t = new Date(e.created_at).getTime();
-        return t >= dayStart && t < dayEnd;
+        return t >= b.start && t < b.end;
       });
       const inAmt =
-        dayTx.filter((t) => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0) +
-        dayEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
+        bucketTx.filter((t) => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0) +
+        bucketEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
       const outAmt =
-        dayTx.filter((t) => t.type === 'purchase' || t.type === 'expense').reduce((sum, t) => sum + t.amount, 0) +
-        dayEntries.filter((e) => e.entry_type === 'debit' && e.source === 'manual').reduce((sum, e) => sum + e.amount, 0);
-      return { label: day.toLocaleDateString('en-US', { weekday: 'short' }), inAmt, outAmt };
+        bucketTx.filter((t) => t.type === 'purchase' || t.type === 'expense').reduce((sum, t) => sum + t.amount, 0) +
+        bucketEntries.filter((e) => e.entry_type === 'debit' && e.source === 'manual').reduce((sum, e) => sum + e.amount, 0);
+      return { label: b.label, inAmt, outAmt };
     });
-  }, [transactions, allEntries]);
+  }, [transactions, allEntries, cashflowBuckets]);
 
   // The combined cash-in-hand + bank balance across every account - every
   // sale, purchase, and expense already carries a payment mode (cash or a
@@ -340,8 +353,6 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         </Pressable>
       </View>
 
-      <TrendChartCard transactions={transactions ?? []} metrics={['all', 'sale', 'purchase', 'expense']} initialMetric="all" />
-
       <View className="mb-3 flex-row gap-3">
         <Pressable
           onPress={() => router.push(`${basePath}/received` as any)}
@@ -408,8 +419,26 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
       )}
 
       <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-        <Text className="mb-3 text-sm font-semibold text-gray-900">Cashflow (Last 7 Days)</Text>
-        <CashflowChart data={cashflow} />
+        <Text className="mb-3 text-sm font-semibold text-gray-900">Cashflow</Text>
+        <View className="mb-3 flex-row gap-2">
+          {(['day', 'week', 'month'] as Granularity[]).map((g) => {
+            const selectedG = cashflowGranularity === g;
+            return (
+              <Pressable
+                key={g}
+                onPress={() => setCashflowGranularity(g)}
+                className={`flex-1 items-center rounded-full py-1.5 ${selectedG ? '' : 'border border-gray-200 bg-white'}`}
+                style={selectedG ? { backgroundColor: BLUE } : undefined}
+              >
+                <Text className={`text-xs font-semibold capitalize ${selectedG ? 'text-white' : 'text-gray-600'}`}>{g}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <CashflowChart
+          data={cashflow}
+          formatLabel={(label, i) => formatBucketLabel(cashflowGranularity, label, i, cashflow.length)}
+        />
       </View>
 
       <Text className="text-center text-xs text-gray-400">
