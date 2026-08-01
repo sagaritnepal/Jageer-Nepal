@@ -1,8 +1,8 @@
 // lib/components/finance/ShopOverviewSection.tsx
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { useAuthStore } from '../../hooks/useAuth';
-import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { useAuthStore } from '../hooks/useAuth';
+import { useSupabaseQuery } from '../hooks/useSupabase';
 
 type Drill = 'stock' | null;
 

@@ -7,7 +7,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { ShopOverviewSection } from './ShopOverviewSection';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BLUE = '#2563EB';
@@ -372,8 +371,6 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           </Pressable>
         ))}
       </View>
-
-      {isReseller && <ShopOverviewSection />}
 
       {profileCompletion < 100 && (
         <Pressable onPress={() => router.push(`${basePath}/profile` as any)} className="mb-4 overflow-hidden rounded-2xl">

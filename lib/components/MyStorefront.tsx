@@ -7,6 +7,7 @@ import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate } from '../hooks/useSupabase';
 import { SearchBar } from './SearchBar';
 import { SearchFilterSheet } from './SearchFilterSheet';
+import { ShopOverviewSection } from './ShopOverviewSection';
 import { filterBySearch } from '../utils/search';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { LOW_STOCK_THRESHOLD } from '../constants/stock';
@@ -233,6 +234,8 @@ export function MyStorefront({
   return (
     <>
       <Text className="mb-3 text-xs text-gray-400">{note}</Text>
+
+      {sellerRole === 'reseller' && <ShopOverviewSection />}
 
       <View className="mb-4">
         <SearchBar

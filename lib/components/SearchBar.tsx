@@ -33,6 +33,9 @@ export function SearchBar({
         onBlur={onBlur}
         placeholder={placeholder}
         placeholderTextColor="#9CA3AF"
+        autoComplete="off"
+        autoCorrect={false}
+        spellCheck={false}
         className="ml-2 flex-1 text-sm text-gray-900"
       />
       {value.length > 0 && (
