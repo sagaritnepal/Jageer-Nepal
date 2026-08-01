@@ -9,10 +9,12 @@ import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDele
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { DateField } from '../DateTimeFields';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
+import { CustomerSearchModal } from './CustomerSearchModal';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import type {
   BusinessTransaction,
   BusinessTransactionType,
+  Customer,
   CustomerLedgerEntry,
   ExpenseCategory,
 } from '../../../types/database.types';
@@ -250,6 +252,7 @@ function TransactionForm({
   initial,
   type,
   existingNames,
+  customers,
   onDone,
   onCancel,
 }: {
@@ -257,6 +260,7 @@ function TransactionForm({
   initial?: BusinessTransaction;
   type: BusinessTransactionType;
   existingNames: string[];
+  customers: Customer[];
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -295,6 +299,8 @@ function TransactionForm({
   const [note, setNote] = useState(initial?.note ?? '');
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [saving, setSaving] = useState(false);
 
   const isBill = type !== 'expense';
@@ -305,11 +311,45 @@ function TransactionForm({
     ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
     : 'Cash';
 
-  const nameSuggestions = useMemo(() => {
+  // Merges the real customer directory (the reseller's saved book of
+  // customers/vendors) with plain previously-typed names (e.g. one-off
+  // expense payees that were never saved as a customer) into one dropdown,
+  // customer matches first since those are the ones with real records.
+  const partySuggestions = useMemo(() => {
     const q = partyName.trim().toLowerCase();
     if (!q) return [];
-    return existingNames.filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q).slice(0, 5);
-  }, [existingNames, partyName]);
+    const fromCustomers = customers
+      .filter((c) => c.name.toLowerCase().includes(q))
+      .slice(0, 6)
+      .map((c) => ({ key: c.id, name: c.name, phone: c.phone, customer: c as Customer | null }));
+    const customerNamesLower = new Set(fromCustomers.map((c) => c.name.toLowerCase()));
+    const fromHistory = existingNames
+      .filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q && !customerNamesLower.has(n.toLowerCase()))
+      .map((n) => ({ key: `hist-${n}`, name: n, phone: null as string | null, customer: null as Customer | null }));
+    return [...fromCustomers, ...fromHistory].slice(0, 6);
+  }, [customers, existingNames, partyName]);
+
+  const customerSearchResults = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter((c) => c.name.toLowerCase().includes(q));
+  }, [customers, customerSearch]);
+
+  function selectCustomer(c: Customer) {
+    setPartyName(c.name);
+    if (isBill && c.address) setPartyAddress(c.address);
+    setShowNameSuggestions(false);
+    setShowCustomerPicker(false);
+  }
+
+  function selectPartySuggestion(s: { name: string; customer: Customer | null }) {
+    if (s.customer) {
+      selectCustomer(s.customer);
+    } else {
+      setPartyName(s.name);
+      setShowNameSuggestions(false);
+    }
+  }
 
   async function handlePickExpenseNameContact() {
     try {
@@ -448,12 +488,45 @@ function TransactionForm({
               />
             </View>
           </View>
-          <TextInput
-            value={partyName}
-            onChangeText={setPartyName}
-            placeholder={type === 'purchase' ? 'Vendor/supplier name' : 'Party name'}
-            className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-          />
+          <View className="mb-1 flex-row items-center rounded-lg border border-gray-300 bg-white">
+            <TextInput
+              value={partyName}
+              onChangeText={(v) => {
+                setPartyName(v);
+                setShowNameSuggestions(true);
+              }}
+              onFocus={() => setShowNameSuggestions(true)}
+              placeholder={type === 'purchase' ? 'Vendor/supplier name' : 'Party name'}
+              className="flex-1 px-3 py-2.5 text-sm text-gray-900"
+            />
+            <Pressable
+              onPress={() => {
+                setCustomerSearch('');
+                setShowCustomerPicker(true);
+              }}
+              hitSlop={8}
+              className="px-2.5"
+            >
+              <Ionicons name="book-outline" size={18} color="#1d4ed8" />
+            </Pressable>
+          </View>
+          {showNameSuggestions && partySuggestions.length > 0 && (
+            <View className="mb-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
+              {partySuggestions.map((s, idx) => (
+                <Pressable
+                  key={s.key}
+                  onPress={() => selectPartySuggestion(s)}
+                  className={`px-3 py-2 ${idx !== partySuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                >
+                  <Text className="text-sm font-medium text-gray-900">{s.name}</Text>
+                  {!!s.phone && <Text className="text-xs text-gray-500">{s.phone}</Text>}
+                </Pressable>
+              ))}
+            </View>
+          )}
+          <Text className="mb-2.5 mt-1 text-[11px] text-gray-400">
+            Tap the book icon to search your {customers.length} saved customers, or type a new name.
+          </Text>
           <TextInput
             value={partyAddress}
             onChangeText={setPartyAddress}
@@ -535,30 +608,38 @@ function TransactionForm({
               placeholder="Who was this paid to?"
               className="flex-1 px-3 py-2.5 text-sm text-gray-900"
             />
+            <Pressable
+              onPress={() => {
+                setCustomerSearch('');
+                setShowCustomerPicker(true);
+              }}
+              hitSlop={8}
+              className="px-2"
+            >
+              <Ionicons name="book-outline" size={18} color="#1d4ed8" />
+            </Pressable>
             {Platform.OS !== 'web' && (
-              <Pressable onPress={handlePickExpenseNameContact} hitSlop={8} className="px-2.5">
+              <Pressable onPress={handlePickExpenseNameContact} hitSlop={8} className="pl-1 pr-2.5">
                 <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
               </Pressable>
             )}
           </View>
-          {showNameSuggestions && nameSuggestions.length > 0 && (
+          {showNameSuggestions && partySuggestions.length > 0 && (
             <View className="mb-1 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
-              {nameSuggestions.map((n, idx) => (
+              {partySuggestions.map((s, idx) => (
                 <Pressable
-                  key={n}
-                  onPress={() => {
-                    setPartyName(n);
-                    setShowNameSuggestions(false);
-                  }}
-                  className={`px-3 py-2 ${idx !== nameSuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                  key={s.key}
+                  onPress={() => selectPartySuggestion(s)}
+                  className={`px-3 py-2 ${idx !== partySuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
                 >
-                  <Text className="text-sm text-gray-900">{n}</Text>
+                  <Text className="text-sm font-medium text-gray-900">{s.name}</Text>
+                  {!!s.phone && <Text className="text-xs text-gray-500">{s.phone}</Text>}
                 </Pressable>
               ))}
             </View>
           )}
           <Text className="mb-2.5 mt-1 text-[11px] text-gray-400">
-            Pick a name already used before, or type a new one — it'll be remembered next time.
+            Tap the book icon to search your {customers.length} saved customers, or type a new name.
           </Text>
 
           <Text className="mb-1 text-xs font-medium text-gray-500">Expense category</Text>
@@ -618,6 +699,14 @@ function TransactionForm({
         onClose={() => setShowAccountPicker(false)}
         onRename={bankAccounts.rename}
         onDelete={bankAccounts.remove}
+      />
+      <CustomerSearchModal
+        visible={showCustomerPicker}
+        customers={customerSearchResults}
+        search={customerSearch}
+        onSearchChange={setCustomerSearch}
+        onSelect={selectCustomer}
+        onClose={() => setShowCustomerPicker(false)}
       />
 
       <View className="flex-row gap-2">
@@ -946,6 +1035,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 initial={editingTx ?? undefined}
                 type={editingTx?.type ?? (filter === 'all' ? 'sale' : filter)}
                 existingNames={existingExpenseNames}
+                customers={customers ?? []}
                 onDone={() => {
                   setShowForm(false);
                   setEditingTx(null);
