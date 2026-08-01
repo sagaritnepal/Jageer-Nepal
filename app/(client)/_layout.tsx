@@ -32,6 +32,7 @@ export default function ClientLayout() {
           }}
         />
         <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
+        <Tabs.Screen name="rewards" options={{ href: null, title: 'Rewards' }} />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a repair' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service details' }} />

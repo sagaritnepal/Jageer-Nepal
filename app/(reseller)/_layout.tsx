@@ -33,6 +33,7 @@ export default function ResellerLayout() {
           options={{ title: 'Finance', tabBarIcon: ({ color, focused }) => <TabIcon name="wallet" color={color} focused={focused} /> }}
         />
         <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
+        <Tabs.Screen name="rewards" options={{ href: null, title: 'Rewards' }} />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Service Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a technician' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service details' }} />

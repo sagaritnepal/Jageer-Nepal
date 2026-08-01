@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../hooks/useAuth';
@@ -10,7 +11,15 @@ import { supabase } from '../supabase';
 import { ROLE_ACCENT } from '../constants/roleColors';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { resizeImageForUpload } from '../utils/resizeImage';
-import type { Profile } from '../../types/database.types';
+import type { Profile, UserRole } from '../../types/database.types';
+
+const ROLE_BASE_PATH: Record<UserRole, string> = {
+  client: '/(client)',
+  technician: '/(technician)',
+  reseller: '/(reseller)',
+  wholesaler: '/(wholesaler)',
+  admin: '/(admin)',
+};
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -418,6 +427,27 @@ function SkillsPicker({ profile }: { profile: Profile }) {
   );
 }
 
+function RewardsEntryCard({ profile }: { profile: Profile }) {
+  const points = profile.reward_points ?? 0;
+  return (
+    <Pressable
+      onPress={() => router.push(`${ROLE_BASE_PATH[profile.role]}/rewards` as any)}
+      className="mb-4 flex-row items-center gap-3 rounded-2xl bg-orange-500 px-4 py-3.5"
+    >
+      <View className="h-9 w-9 items-center justify-center rounded-full bg-white/20">
+        <Ionicons name="gift" size={18} color="white" />
+      </View>
+      <View className="flex-1">
+        <Text className="font-semibold text-white">Rewards</Text>
+        <Text className="mt-0.5 text-xs text-white/80">
+          {points} point{points === 1 ? '' : 's'} · My Rewards, Refer & Earn, Redeem
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="white" />
+    </Pressable>
+  );
+}
+
 function ReportIssue({ userId }: { userId: string }) {
   const [open, setOpen] = useState(false);
   const [subject, setSubject] = useState('');
@@ -519,6 +549,8 @@ export function ProfileScreen() {
 
       <View className="px-6 pt-5">
         {profile && <ProfileDetails profile={profile} />}
+
+        {profile && profile.role !== 'admin' && <RewardsEntryCard profile={profile} />}
 
         {profile?.role === 'technician' && <TechnicianAvailability profile={profile} />}
 

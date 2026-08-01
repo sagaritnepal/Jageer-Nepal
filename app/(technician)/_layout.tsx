@@ -28,6 +28,7 @@ export default function TechnicianLayout() {
           options={{ title: 'Earnings', tabBarIcon: ({ color, focused }) => <TabIcon name="wallet" color={color} focused={focused} /> }}
         />
         <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
+        <Tabs.Screen name="rewards" options={{ href: null, title: 'Rewards' }} />
         <Tabs.Screen name="job/[id]" options={{ href: null, title: 'Job Card' }} />
         {/* "available" self-assign screen removed: resellers now assign
             technicians directly (see app/(reseller)/request/[id].tsx). Delete

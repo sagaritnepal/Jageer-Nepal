@@ -23,8 +23,19 @@ export interface Profile {
   longitude: number | null;
   verification_status: VerificationStatus;
   verification_notes: string | null;
+  reward_points: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface RewardPointEvent {
+  id: string;
+  user_id: string;
+  points: number;
+  reason: string;
+  source_type: string | null;
+  source_id: string | null;
+  created_at: string;
 }
 
 export interface RequestLocation {
@@ -317,6 +328,12 @@ export interface Database {
         Row: BankAccount;
         Insert: Partial<BankAccount>;
         Update: Partial<BankAccount>;
+        Relationships: [];
+      };
+      reward_point_events: {
+        Row: RewardPointEvent;
+        Insert: Partial<RewardPointEvent>;
+        Update: Partial<RewardPointEvent>;
         Relationships: [];
       };
     };
