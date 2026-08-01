@@ -17,16 +17,16 @@ export default function ResellerLayout() {
           options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
+          name="shop"
+          options={{ title: 'Shop', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
+        />
+        <Tabs.Screen
           name="requests"
           options={{
             title: 'My Jobs',
             tabBarLabel: 'Requests',
             tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
           }}
-        />
-        <Tabs.Screen
-          name="shop"
-          options={{ title: 'Shop', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
           name="finance"
