@@ -5,7 +5,9 @@ import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
+import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { CustomerSearchModal } from './CustomerSearchModal';
+import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import type { Customer } from '../../../types/database.types';
 
@@ -19,6 +21,7 @@ export function QuickPaymentScreen() {
     enabled: !!userId,
   });
   const insertEntry = useSupabaseInsert('customer_ledger_entries');
+  const bankAccounts = useBankAccounts(userId);
 
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -27,7 +30,13 @@ export function QuickPaymentScreen() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const selectedAccountName = bankAccountId
+    ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
+    : 'Cash';
 
   const nameSuggestions = useMemo(() => {
     const q = customerName.trim().toLowerCase();
@@ -69,6 +78,7 @@ export function QuickPaymentScreen() {
         amount: value,
         note: note.trim() || null,
         source: 'manual',
+        bank_account_id: bankAccountId,
       });
       showAlert(
         isOut ? 'Payment out recorded' : 'Payment in recorded',
@@ -78,6 +88,7 @@ export function QuickPaymentScreen() {
       setNote('');
       setSelectedCustomer(null);
       setCustomerName('');
+      setBankAccountId(null);
     } catch (err) {
       showAlert('Could not save', getErrorMessage(err));
     } finally {
@@ -163,8 +174,20 @@ export function QuickPaymentScreen() {
           value={note}
           onChangeText={setNote}
           placeholder="e.g. Cash payment"
-          className="mb-4 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
         />
+
+        <Text className="mb-1 text-xs font-medium text-gray-500">Payment account</Text>
+        <Pressable
+          onPress={() => setShowAccountPicker(true)}
+          className="mb-4 flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
+        >
+          <View className="flex-row items-center gap-2">
+            <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
+            <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
+          </View>
+          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+        </Pressable>
 
         <Pressable
           onPress={handleSave}
@@ -185,6 +208,15 @@ export function QuickPaymentScreen() {
         onSearchChange={setCustomerSearch}
         onSelect={selectCustomer}
         onClose={() => setShowCustomerPicker(false)}
+      />
+      <BankAccountPickerModal
+        visible={showAccountPicker}
+        accounts={bankAccounts.accounts}
+        selectedId={bankAccountId}
+        onSelect={setBankAccountId}
+        onClose={() => setShowAccountPicker(false)}
+        onRename={bankAccounts.rename}
+        onDelete={bankAccounts.remove}
       />
     </ScrollView>
   );

@@ -294,6 +294,9 @@ function TransactionForm({
   );
   const [discount, setDiscount] = useState(initial ? String(initial.discount_amount) : '0');
   const [vat, setVat] = useState(initial ? String(initial.vat_amount) : '0');
+  const [showDiscountVat, setShowDiscountVat] = useState(
+    !!initial && (initial.discount_amount > 0 || initial.vat_amount > 0)
+  );
 
   const [partyName, setPartyName] = useState(initial?.party_name ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
@@ -558,26 +561,43 @@ function TransactionForm({
             <Text className="text-xs text-gray-500">Subtotal</Text>
             <Text className="text-xs font-semibold text-gray-700">NPR {subtotal.toLocaleString()}</Text>
           </View>
-          <View className="mb-2.5 flex-row gap-2">
-            <View className="flex-1">
-              <Text className="mb-1 text-xs font-medium text-gray-500">Discount (optional)</Text>
-              <TextInput
-                value={discount}
-                onChangeText={setDiscount}
-                keyboardType="numeric"
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-              />
+          {showDiscountVat ? (
+            <View className="mb-2.5 flex-row items-end gap-2">
+              <View className="flex-1">
+                <Text className="mb-1 text-xs font-medium text-gray-500">Discount</Text>
+                <TextInput
+                  value={discount}
+                  onChangeText={setDiscount}
+                  keyboardType="numeric"
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+              </View>
+              <View className="flex-1">
+                <Text className="mb-1 text-xs font-medium text-gray-500">VAT</Text>
+                <TextInput
+                  value={vat}
+                  onChangeText={setVat}
+                  keyboardType="numeric"
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+              </View>
+              <Pressable
+                onPress={() => {
+                  setShowDiscountVat(false);
+                  setDiscount('0');
+                  setVat('0');
+                }}
+                hitSlop={8}
+                className="mb-2.5 p-1"
+              >
+                <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+              </Pressable>
             </View>
-            <View className="flex-1">
-              <Text className="mb-1 text-xs font-medium text-gray-500">VAT (optional)</Text>
-              <TextInput
-                value={vat}
-                onChangeText={setVat}
-                keyboardType="numeric"
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-              />
-            </View>
-          </View>
+          ) : (
+            <Pressable onPress={() => setShowDiscountVat(true)} className="mb-2.5 self-start">
+              <Text className="text-xs font-semibold text-orange-600">+ Add discount / VAT</Text>
+            </Pressable>
+          )}
           <TextInput
             value={note}
             onChangeText={setNote}

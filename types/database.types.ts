@@ -126,6 +126,7 @@ export interface CustomerLedgerEntry {
   source: 'manual' | 'booking';
   source_type: string | null;
   source_id: string | null;
+  bank_account_id: string | null;
   created_at: string;
 }
 
