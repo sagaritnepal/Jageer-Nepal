@@ -1,6 +1,6 @@
 // lib/components/finance/TransactionsScreen.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { BackHandler, Platform, View, Text, TextInput, Pressable, SectionList, Modal } from 'react-native';
+import { BackHandler, Platform, View, Text, TextInput, Pressable, SectionList, Modal, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Contacts from 'expo-contacts';
@@ -750,19 +750,19 @@ function TransactionRow({
   tx,
   categoryName,
   bankAccountName,
-  onEdit,
+  onPress,
   onDelete,
 }: {
   tx: BusinessTransaction;
   categoryName: string | null;
   bankAccountName: string | null;
-  onEdit: () => void;
+  onPress: () => void;
   onDelete: () => void;
 }) {
   const meta = TYPE_META[tx.type];
   const accountLabel = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
   return (
-    <Pressable onPress={onEdit} className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+    <Pressable onPress={onPress} className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
       <View className={`h-9 w-9 items-center justify-center rounded-full ${meta.bg}`}>
         <Ionicons name={meta.icon} size={16} color={meta.color} />
       </View>
@@ -794,6 +794,140 @@ function TransactionRow({
         <Ionicons name="trash-outline" size={16} color="#9CA3AF" />
       </Pressable>
     </Pressable>
+  );
+}
+
+// A read-only receipt view - tapping a past transaction should let you see
+// what's in it without immediately dropping into an editable form. Edit is
+// an explicit action from here, not the default.
+function TransactionDetailModal({
+  tx,
+  categoryName,
+  bankAccountName,
+  onClose,
+  onEdit,
+}: {
+  tx: BusinessTransaction | null;
+  categoryName: string | null;
+  bankAccountName: string | null;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  if (!tx) return null;
+  const meta = TYPE_META[tx.type];
+  const accountLabel = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
+  const isBill = tx.type !== 'expense';
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={onClose}>
+        <Pressable onPress={() => {}} className="w-full max-w-sm rounded-2xl bg-white" style={{ maxHeight: '85%' }}>
+          <ScrollView contentContainerStyle={{ padding: 18 }}>
+            <View className="mb-3 flex-row items-center justify-between">
+              <View className="flex-row items-center gap-2">
+                <View className={`h-8 w-8 items-center justify-center rounded-full ${meta.bg}`}>
+                  <Ionicons name={meta.icon} size={15} color={meta.color} />
+                </View>
+                <Text className="text-base font-bold text-gray-900">{meta.label}</Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={8}>
+                <Ionicons name="close" size={20} color="#6B7280" />
+              </Pressable>
+            </View>
+
+            <Text className="mb-4 text-2xl font-extrabold" style={{ color: meta.color }}>
+              NPR {tx.amount.toLocaleString()}
+            </Text>
+
+            {isBill && !!tx.bill_no && (
+              <View className="mb-2 flex-row justify-between">
+                <Text className="text-xs text-gray-400">Bill No.</Text>
+                <Text className="text-xs font-medium text-gray-900">{tx.bill_no}</Text>
+              </View>
+            )}
+            {!!tx.bill_date && (
+              <View className="mb-2 flex-row justify-between">
+                <Text className="text-xs text-gray-400">Date</Text>
+                <Text className="text-xs font-medium text-gray-900">{new Date(tx.bill_date).toLocaleDateString()}</Text>
+              </View>
+            )}
+            {!!tx.party_name && (
+              <View className="mb-2 flex-row justify-between">
+                <Text className="text-xs text-gray-400">{tx.type === 'purchase' ? 'Vendor' : tx.type === 'expense' ? 'Paid to' : 'Party'}</Text>
+                <Text className="text-xs font-medium text-gray-900">{tx.party_name}</Text>
+              </View>
+            )}
+            {!!tx.party_address && (
+              <View className="mb-2 flex-row justify-between">
+                <Text className="text-xs text-gray-400">Address</Text>
+                <Text className="flex-1 text-right text-xs font-medium text-gray-900">{tx.party_address}</Text>
+              </View>
+            )}
+            {!!tx.vat_pan_no && (
+              <View className="mb-2 flex-row justify-between">
+                <Text className="text-xs text-gray-400">VAT/PAN</Text>
+                <Text className="text-xs font-medium text-gray-900">{tx.vat_pan_no}</Text>
+              </View>
+            )}
+            {!!categoryName && (
+              <View className="mb-2 flex-row justify-between">
+                <Text className="text-xs text-gray-400">Category</Text>
+                <Text className="text-xs font-medium text-gray-900">{categoryName}</Text>
+              </View>
+            )}
+            <View className="mb-3 flex-row justify-between">
+              <Text className="text-xs text-gray-400">Payment account</Text>
+              <Text className="text-xs font-medium text-gray-900">{accountLabel}</Text>
+            </View>
+
+            {tx.items.length > 0 && (
+              <View className="mb-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <Text className="mb-2 text-xs font-semibold text-gray-500">Items</Text>
+                {tx.items.map((item, idx) => (
+                  <View key={idx} className="mb-1.5 flex-row items-center justify-between">
+                    <Text className="flex-1 pr-2 text-xs text-gray-700" numberOfLines={2}>
+                      {item.description} × {item.qty}
+                    </Text>
+                    <Text className="text-xs font-semibold text-gray-900">NPR {item.amount.toLocaleString()}</Text>
+                  </View>
+                ))}
+                {(tx.discount_amount > 0 || tx.vat_amount > 0) && (
+                  <View className="mt-2 border-t border-gray-200 pt-2">
+                    {tx.discount_amount > 0 && (
+                      <View className="mb-1 flex-row justify-between">
+                        <Text className="text-xs text-gray-400">Discount</Text>
+                        <Text className="text-xs text-gray-700">− NPR {tx.discount_amount.toLocaleString()}</Text>
+                      </View>
+                    )}
+                    {tx.vat_amount > 0 && (
+                      <View className="flex-row justify-between">
+                        <Text className="text-xs text-gray-400">VAT</Text>
+                        <Text className="text-xs text-gray-700">+ NPR {tx.vat_amount.toLocaleString()}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {!!tx.note && (
+              <View className="mb-3">
+                <Text className="mb-0.5 text-xs text-gray-400">Note</Text>
+                <Text className="text-xs text-gray-700">{tx.note}</Text>
+              </View>
+            )}
+
+            <Pressable
+              onPress={onEdit}
+              className="mt-2 flex-row items-center justify-center gap-1.5 rounded-lg bg-orange-500 py-3"
+            >
+              <Ionicons name="pencil" size={14} color="white" />
+              <Text className="text-sm font-semibold text-white">Edit</Text>
+            </Pressable>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -902,6 +1036,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const [filter, setFilter] = useState<'all' | BusinessTransactionType>(initialFilter);
   const [showForm, setShowForm] = useState(isAddFlow);
   const [editingTx, setEditingTx] = useState<BusinessTransaction | null>(null);
+  const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
 
   // Expo Router reuses this same screen instance when navigating between
   // shortcuts that share this route (Sales/Purchase/Expense/Net
@@ -937,6 +1072,10 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   // happen instead of closing to a dead end with no way to reopen it.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (viewingTx) {
+        setViewingTx(null);
+        return true;
+      }
       if (showForm && !isQuickAddFlow) {
         setShowForm(false);
         setEditingTx(null);
@@ -945,7 +1084,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
       return false;
     });
     return () => sub.remove();
-  }, [showForm, isQuickAddFlow]);
+  }, [showForm, isQuickAddFlow, viewingTx]);
 
   // "All" is a full daily feed across every money-moving table (general
   // sales/purchase/expense entries plus per-customer debit/credit entries),
@@ -1089,10 +1228,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
               tx={item.tx}
               categoryName={item.tx.expense_category_id ? categoryNameById.get(item.tx.expense_category_id) ?? null : null}
               bankAccountName={item.tx.bank_account_id ? bankAccountNameById.get(item.tx.bank_account_id) ?? null : null}
-              onEdit={() => {
-                setEditingTx(item.tx);
-                setShowForm(true);
-              }}
+              onPress={() => setViewingTx(item.tx)}
               onDelete={() => handleDelete(item.tx)}
             />
           ) : (
@@ -1108,6 +1244,18 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             <Text className="mt-2 text-gray-500">No transactions yet.</Text>
           </View>
         }
+      />
+
+      <TransactionDetailModal
+        tx={viewingTx}
+        categoryName={viewingTx?.expense_category_id ? categoryNameById.get(viewingTx.expense_category_id) ?? null : null}
+        bankAccountName={viewingTx?.bank_account_id ? bankAccountNameById.get(viewingTx.bank_account_id) ?? null : null}
+        onClose={() => setViewingTx(null)}
+        onEdit={() => {
+          setEditingTx(viewingTx);
+          setShowForm(true);
+          setViewingTx(null);
+        }}
       />
     </View>
   );
