@@ -1,0 +1,163 @@
+// lib/components/finance/TrendChartCard.tsx
+import { useMemo, useState } from 'react';
+import { View, Text, Pressable } from 'react-native';
+import { BarChart } from '../BarChart';
+import { NetTrendChart } from '../NetTrendChart';
+import type { BusinessTransaction, BusinessTransactionType } from '../../../types/database.types';
+
+export type TrendMetric = 'all' | BusinessTransactionType;
+export type Granularity = 'day' | 'week' | 'month';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const METRIC_META: Record<TrendMetric, { label: string; color: string }> = {
+  all: { label: 'Available Balance', color: '#2563EB' },
+  sale: { label: 'Sales', color: '#059669' },
+  purchase: { label: 'Purchase', color: '#2563eb' },
+  expense: { label: 'Expense', color: '#dc2626' },
+};
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function startOfWeek(d: Date) {
+  const day = startOfDay(d);
+  const dow = day.getDay() === 0 ? 7 : day.getDay(); // Monday = 1 ... Sunday = 7
+  return new Date(day.getTime() - (dow - 1) * DAY_MS);
+}
+
+// Bucket boundaries for the trend chart - day (last 30 days), week (last 12
+// weeks), or month (Jan-Dec of the current year), shared by every
+// metric so switching granularity re-buckets consistently.
+export function periodBuckets(granularity: Granularity): { start: number; end: number; label: string }[] {
+  const now = new Date();
+  if (granularity === 'day') {
+    return Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(now.getTime() - (29 - i) * DAY_MS);
+      const start = startOfDay(d).getTime();
+      return { start, end: start + DAY_MS, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) };
+    });
+  }
+  if (granularity === 'week') {
+    const thisWeekStart = startOfWeek(now).getTime();
+    return Array.from({ length: 12 }, (_, i) => {
+      const start = thisWeekStart - (11 - i) * 7 * DAY_MS;
+      return { start, end: start + 7 * DAY_MS, label: new Date(start).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) };
+    });
+  }
+  const year = now.getFullYear();
+  return Array.from({ length: 12 }, (_, month) => {
+    const start = new Date(year, month, 1).getTime();
+    const end = new Date(year, month + 1, 1).getTime();
+    return { start, end, label: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'short' }) };
+  });
+}
+
+export function formatBucketLabel(granularity: Granularity, label: string, i: number, total: number) {
+  if (granularity === 'day') return i % 5 === 0 || i === total - 1 ? label : null;
+  if (granularity === 'week') return i % 3 === 0 || i === total - 1 ? label : null;
+  return label;
+}
+
+// A Day/Week/Month bar chart for one or more transaction metrics - a single
+// type (Sales/Purchase/Expense) sums to a plain bar chart, "Available
+// Balance" nets sale - purchase - expense per period (which can swing either
+// way) via the diverging NetTrendChart instead. Pass a single-item `metrics`
+// list to lock the metric with no tabs (e.g. a screen already filtered to
+// one type); pass several to let the user switch between them.
+export function TrendChartCard({
+  transactions,
+  metrics,
+  initialMetric,
+}: {
+  transactions: BusinessTransaction[];
+  metrics: TrendMetric[];
+  initialMetric?: TrendMetric;
+}) {
+  const [metric, setMetric] = useState<TrendMetric>(initialMetric ?? metrics[0]);
+  const [granularity, setGranularity] = useState<Granularity>('month');
+  const buckets = useMemo(() => periodBuckets(granularity), [granularity]);
+
+  const typeChartData = useMemo(() => {
+    if (metric === 'all') return [];
+    return buckets.map((b) => ({
+      label: b.label,
+      value: transactions
+        .filter((t) => t.type === metric && new Date(t.created_at).getTime() >= b.start && new Date(t.created_at).getTime() < b.end)
+        .reduce((sum, t) => sum + t.amount, 0),
+    }));
+  }, [transactions, metric, buckets]);
+
+  const netChartData = useMemo(() => {
+    if (metric !== 'all') return [];
+    return buckets.map((b) => {
+      const inRange = transactions.filter((t) => {
+        const tm = new Date(t.created_at).getTime();
+        return tm >= b.start && tm < b.end;
+      });
+      const net = inRange.reduce((sum, t) => sum + (t.type === 'sale' ? t.amount : -t.amount), 0);
+      return { label: b.label, net };
+    });
+  }, [transactions, metric, buckets]);
+
+  const accentColor = METRIC_META[metric].color;
+
+  return (
+    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+      {metrics.length > 1 && (
+        <View className="mb-3 flex-row flex-wrap gap-2">
+          {metrics.map((m) => {
+            const selected = metric === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setMetric(m)}
+                className={`rounded-full px-3 py-1.5 ${selected ? '' : 'border border-gray-200 bg-white'}`}
+                style={selected ? { backgroundColor: METRIC_META[m].color } : undefined}
+              >
+                <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-gray-600'}`}>
+                  {METRIC_META[m].label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      <Text className="mb-3 text-sm font-semibold text-gray-900">{METRIC_META[metric].label} trend</Text>
+
+      <View className="mb-3 flex-row gap-2">
+        {(['day', 'week', 'month'] as Granularity[]).map((g) => {
+          const selectedG = granularity === g;
+          return (
+            <Pressable
+              key={g}
+              onPress={() => setGranularity(g)}
+              className={`flex-1 items-center rounded-full py-1.5 ${selectedG ? '' : 'border border-gray-200 bg-white'}`}
+              style={selectedG ? { backgroundColor: accentColor } : undefined}
+            >
+              <Text className={`text-xs font-semibold capitalize ${selectedG ? 'text-white' : 'text-gray-600'}`}>{g}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {metric === 'all' ? (
+        <NetTrendChart
+          data={netChartData}
+          positiveLabel="Net gain"
+          negativeLabel="Net loss"
+          formatLabel={(label, i) => formatBucketLabel(granularity, label, i, netChartData.length)}
+        />
+      ) : (
+        <BarChart
+          data={typeChartData}
+          color={accentColor}
+          selectedColor={accentColor}
+          formatValue={(v) => `NPR ${Math.round(v).toLocaleString()}`}
+          formatLabel={(label, i) => formatBucketLabel(granularity, label, i, typeChartData.length)}
+        />
+      )}
+    </View>
+  );
+}

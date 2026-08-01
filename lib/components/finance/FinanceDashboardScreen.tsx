@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { TrendChartCard } from './TrendChartCard';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BLUE = '#2563EB';
@@ -183,21 +184,34 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     return { toReceive: receive, toGive: give };
   }, [allEntries]);
 
+  // Same "received"/"paid" definition as yearReceived/yearPaid below - real
+  // cash in is sales plus any payment collected (ledger credits); real cash
+  // out is purchases, expenses, and manual Payment Out entries. Ledger-only
+  // data would leave this empty for anyone whose activity is mostly plain
+  // Sale/Purchase/Expense entries rather than manual ledger payments.
   const cashflow = useMemo(() => {
     const today = startOfDay(new Date());
     const days = Array.from({ length: 7 }, (_, i) => new Date(today.getTime() - (6 - i) * DAY_MS));
     return days.map((day) => {
       const dayStart = day.getTime();
       const dayEnd = dayStart + DAY_MS;
+      const dayTx = (transactions ?? []).filter((t) => {
+        const tm = new Date(t.created_at).getTime();
+        return tm >= dayStart && tm < dayEnd;
+      });
       const dayEntries = (allEntries ?? []).filter((e) => {
         const t = new Date(e.created_at).getTime();
         return t >= dayStart && t < dayEnd;
       });
-      const inAmt = dayEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
-      const outAmt = dayEntries.filter((e) => e.entry_type === 'debit').reduce((sum, e) => sum + e.amount, 0);
+      const inAmt =
+        dayTx.filter((t) => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0) +
+        dayEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
+      const outAmt =
+        dayTx.filter((t) => t.type === 'purchase' || t.type === 'expense').reduce((sum, t) => sum + t.amount, 0) +
+        dayEntries.filter((e) => e.entry_type === 'debit' && e.source === 'manual').reduce((sum, e) => sum + e.amount, 0);
       return { label: day.toLocaleDateString('en-US', { weekday: 'short' }), inAmt, outAmt };
     });
-  }, [allEntries]);
+  }, [transactions, allEntries]);
 
   // The combined cash-in-hand + bank balance across every account - every
   // sale, purchase, and expense already carries a payment mode (cash or a
@@ -325,6 +339,8 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
         </Pressable>
       </View>
+
+      <TrendChartCard transactions={transactions ?? []} metrics={['all', 'sale', 'purchase', 'expense']} initialMetric="all" />
 
       <View className="mb-3 flex-row gap-3">
         <Pressable
