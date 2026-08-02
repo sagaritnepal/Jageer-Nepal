@@ -7,12 +7,14 @@ export function CategoryBadge({
   category,
   size = 44,
   emoji,
+  categoryId,
 }: {
   category: string | null | undefined;
   size?: number;
   emoji?: string | null;
+  categoryId?: string | null;
 }) {
-  const { bg, icon, image } = getCategoryVisual(category);
+  const { bg, icon, image } = getCategoryVisual(category, categoryId);
 
   if (image) {
     return (

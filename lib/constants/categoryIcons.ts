@@ -109,14 +109,25 @@ export const CATEGORY_BG_COLORS = [
 // show one category badge at a time rather than a whole grid. Accepts either
 // a bare category label or a request's `issue_type` (built as
 // "{category} - {action}" in request-details.tsx), matching by prefix.
-export function getCategoryVisual(rawLabel: string | null | undefined): {
+//
+// `stableId` is the category's real (immutable) database id, when the
+// caller has an actual service_categories row rather than just free text -
+// pass it so the color hash is keyed to the category itself instead of its
+// current label, so renaming a category in admin doesn't reshuffle its
+// color/emoji everywhere it's shown. Callers with only free text (e.g. a
+// request's issue_type, which has no live category reference) omit it and
+// fall back to hashing the text as before.
+export function getCategoryVisual(
+  rawLabel: string | null | undefined,
+  stableId?: string | null
+): {
   bg: string;
   icon: IoniconName | null;
   image: ImageSourcePropType | null;
 } {
   if (!rawLabel) return { bg: 'bg-gray-400', icon: null, image: null };
   const matchedLabel = Object.keys(CATEGORY_ICON_MAP).find((label) => rawLabel.startsWith(label));
-  const hashSource = matchedLabel ?? rawLabel;
+  const hashSource = matchedLabel ?? stableId ?? rawLabel;
   let hash = 0;
   for (let i = 0; i < hashSource.length; i++) hash = (hash * 31 + hashSource.charCodeAt(i)) >>> 0;
   return {

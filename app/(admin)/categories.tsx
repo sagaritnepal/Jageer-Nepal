@@ -96,7 +96,7 @@ function CategoryRow({ category }: { category: ServiceCategory }) {
       }`}
     >
       <View className="flex-1 flex-row items-center gap-3">
-        <CategoryBadge category={category.label} emoji={category.icon} size={40} />
+        <CategoryBadge category={category.label} emoji={category.icon} categoryId={category.id} size={40} />
         <View className="flex-1">
           <Text className="font-semibold text-gray-900">{category.label}</Text>
           {category.description && <Text className="mt-0.5 text-xs text-gray-400">{category.description}</Text>}
