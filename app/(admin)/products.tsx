@@ -1,12 +1,51 @@
 // app/(admin)/products.tsx
-import { useMemo } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import { useSupabaseQuery, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { useMemo, useState } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { Product } from '../../types/database.types';
 
 function ProductRow({ product, sellerName }: { product: Product; sellerName: string }) {
+  const updateProduct = useSupabaseUpdate('products');
   const deleteProduct = useSupabaseDelete('products');
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(product.name);
+  const [price, setPrice] = useState(String(product.price));
+  const [stockLevel, setStockLevel] = useState(String(product.stock_level));
+  const [saving, setSaving] = useState(false);
+
+  function startEditing() {
+    setName(product.name);
+    setPrice(String(product.price));
+    setStockLevel(String(product.stock_level));
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    const priceNum = Number(price);
+    const stockNum = Number(stockLevel);
+    if (!name.trim()) {
+      showAlert('Add a name', 'Product name is required.');
+      return;
+    }
+    if (Number.isNaN(priceNum) || priceNum < 0 || Number.isNaN(stockNum) || stockNum < 0) {
+      showAlert('Check the values', 'Price and stock must be valid numbers.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateProduct.mutateAsync({
+        id: product.id,
+        values: { name: name.trim(), price: priceNum, stock_level: stockNum },
+      });
+      setEditing(false);
+    } catch (err) {
+      showAlert('Could not save', getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function confirmRemove() {
     showAlert('Remove this listing?', `"${product.name}" will be delisted from the marketplace.`, [
@@ -20,13 +59,63 @@ function ProductRow({ product, sellerName }: { product: Product; sellerName: str
     ]);
   }
 
+  if (editing) {
+    return (
+      <View className="mb-2.5 rounded-xl border border-blue-300 bg-white p-4">
+        <Text className="mb-1 text-xs font-medium text-gray-500">Name</Text>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+        <View className="mb-3 flex-row gap-2">
+          <View className="flex-1">
+            <Text className="mb-1 text-xs font-medium text-gray-500">Price (NPR)</Text>
+            <TextInput
+              value={price}
+              onChangeText={setPrice}
+              keyboardType="numeric"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </View>
+          <View className="flex-1">
+            <Text className="mb-1 text-xs font-medium text-gray-500">Stock</Text>
+            <TextInput
+              value={stockLevel}
+              onChangeText={setStockLevel}
+              keyboardType="numeric"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </View>
+        </View>
+        <View className="flex-row gap-2">
+          <Pressable onPress={() => setEditing(false)} className="flex-1 items-center rounded-lg border border-gray-300 py-2">
+            <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleSave}
+            disabled={saving}
+            className="flex-1 items-center rounded-lg bg-orange-500 py-2 disabled:opacity-50"
+          >
+            <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save'}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="mb-2.5 rounded-xl border border-gray-200 bg-white p-4">
       <View className="flex-row items-center justify-between">
         <Text className="flex-1 font-semibold text-gray-900">{product.name}</Text>
-        <Pressable onPress={confirmRemove} className="rounded-lg bg-red-50 px-3 py-1.5">
-          <Text className="text-xs font-semibold text-red-700">Remove</Text>
-        </Pressable>
+        <View className="flex-row items-center gap-3">
+          <Pressable onPress={startEditing} hitSlop={8}>
+            <Ionicons name="pencil" size={16} color="#2563eb" />
+          </Pressable>
+          <Pressable onPress={confirmRemove} className="rounded-lg bg-red-50 px-3 py-1.5">
+            <Text className="text-xs font-semibold text-red-700">Remove</Text>
+          </Pressable>
+        </View>
       </View>
       <View className="mt-1 flex-row items-center gap-2">
         <Text className="text-xs text-gray-400">Seller: {sellerName}</Text>

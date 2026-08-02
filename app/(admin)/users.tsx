@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
 import { showAlert } from '../../lib/utils/alert';
-import type { Profile, VerificationStatus } from '../../types/database.types';
+import type { Profile, UserRole, VerificationStatus } from '../../types/database.types';
 
 const VERIFICATION_COLORS: Record<VerificationStatus, string> = {
   unverified: 'bg-gray-100 text-gray-600',
@@ -13,11 +13,13 @@ const VERIFICATION_COLORS: Record<VerificationStatus, string> = {
 };
 
 const ROLE_FILTERS = ['all', 'client', 'technician', 'reseller', 'wholesaler', 'admin'] as const;
+const ASSIGNABLE_ROLES: UserRole[] = ['client', 'technician', 'reseller', 'wholesaler', 'admin'];
 
 function UserRow({ user }: { user: Profile }) {
   const updateProfile = useSupabaseUpdate('profiles');
   const deleteProfile = useSupabaseDelete('profiles');
   const needsVerification = user.role === 'technician' || user.role === 'reseller' || user.role === 'wholesaler';
+  const [showRolePicker, setShowRolePicker] = useState(false);
 
   function setVerification(status: VerificationStatus) {
     updateProfile.mutate({ id: user.id, values: { verification_status: status } });
@@ -25,6 +27,15 @@ function UserRow({ user }: { user: Profile }) {
 
   function toggleActive() {
     updateProfile.mutate({ id: user.id, values: { is_active: !user.is_active } });
+  }
+
+  function changeRole(role: UserRole) {
+    setShowRolePicker(false);
+    if (role === user.role) return;
+    showAlert(`Change category to ${role}?`, `${user.full_name ?? 'This user'} will move from ${user.role} to ${role}.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Change', onPress: () => updateProfile.mutate({ id: user.id, values: { role } }) },
+    ]);
   }
 
   function confirmRemove() {
@@ -44,9 +55,13 @@ function UserRow({ user }: { user: Profile }) {
         <View className="flex-1">
           <Text className="font-semibold text-gray-900">{user.full_name ?? 'Unnamed'}</Text>
           <View className="mt-1 flex-row items-center gap-2">
-            <View className="rounded-full bg-blue-50 px-3 py-1">
+            <Pressable
+              onPress={() => setShowRolePicker((v) => !v)}
+              className="flex-row items-center gap-1 rounded-full bg-blue-50 px-3 py-1"
+            >
               <Text className="text-xs font-semibold capitalize text-blue-700">{user.role}</Text>
-            </View>
+              <Text className="text-[10px] text-blue-700">{showRolePicker ? '▲' : '▼'}</Text>
+            </Pressable>
             {needsVerification && (
               <View className={`rounded-full px-3 py-1 ${VERIFICATION_COLORS[user.verification_status].split(' ')[0]}`}>
                 <Text className={`text-xs font-semibold capitalize ${VERIFICATION_COLORS[user.verification_status].split(' ')[1]}`}>
@@ -60,6 +75,25 @@ function UserRow({ user }: { user: Profile }) {
               </View>
             )}
           </View>
+          {showRolePicker && (
+            <View className="mt-2.5 flex-row flex-wrap gap-1.5">
+              {ASSIGNABLE_ROLES.map((role) => {
+                const selected = role === user.role;
+                return (
+                  <Pressable
+                    key={role}
+                    onPress={() => changeRole(role)}
+                    disabled={updateProfile.isPending}
+                    className={`rounded-full border px-2.5 py-1 ${selected ? 'border-blue-700 bg-blue-700' : 'border-gray-300 bg-white'}`}
+                  >
+                    <Text className={`text-[11px] font-semibold capitalize ${selected ? 'text-white' : 'text-gray-600'}`}>
+                      {role}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
       </View>
 
