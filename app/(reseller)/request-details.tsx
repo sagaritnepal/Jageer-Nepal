@@ -44,6 +44,8 @@ export default function ResellerRequestDetails() {
   const [contactPerson, setContactPerson] = useState('');
   const [contactPersonPhone, setContactPersonPhone] = useState('');
   const [contactSameAsCustomer, setContactSameAsCustomer] = useState(true);
+  const [isCompanyOrOffice, setIsCompanyOrOffice] = useState(false);
+  const [companyName, setCompanyName] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [address, setAddress] = useState('');
@@ -300,6 +302,10 @@ export default function ResellerRequestDetails() {
       );
       return;
     }
+    if (isCompanyOrOffice && !companyName.trim()) {
+      showAlert('Add the company name', 'Enter the company or office name for this request.');
+      return;
+    }
     if (!date.trim() || !time.trim()) {
       showAlert('Add date and time', 'Let us know when you need this service.');
       return;
@@ -358,6 +364,7 @@ export default function ResellerRequestDetails() {
         customer_phone: customerPhone.trim(),
         contact_person_name: resolvedContactPerson ?? customerName.trim(),
         contact_person_phone: resolvedContactPersonPhone ?? customerPhone.trim(),
+        company_name: isCompanyOrOffice ? companyName.trim() || null : null,
         issue_type: `${category} - ${action}`,
         description: notes.trim() || null,
         status: 'pending',
@@ -615,6 +622,23 @@ export default function ResellerRequestDetails() {
         className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
         style={{ minHeight: 60, textAlignVertical: 'top' }}
       />
+
+      <Pressable
+        onPress={() => setIsCompanyOrOffice((v) => !v)}
+        className="mb-2 flex-row items-center gap-2"
+        hitSlop={4}
+      >
+        <Ionicons name={isCompanyOrOffice ? 'checkbox' : 'square-outline'} size={20} color="#1d4ed8" />
+        <Text className="text-sm text-gray-600">This request is for a company / office</Text>
+      </Pressable>
+      {isCompanyOrOffice && (
+        <TextInput
+          value={companyName}
+          onChangeText={setCompanyName}
+          placeholder="Company / office name"
+          className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+        />
+      )}
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Contact person</Text>
       <Pressable

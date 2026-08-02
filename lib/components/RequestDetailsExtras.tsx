@@ -52,6 +52,7 @@ export function RequestDetailsExtras({
   customerPhotoUrl,
   contactPersonName,
   contactPersonPhone,
+  companyName,
 }: {
   scheduledDate: string | null;
   scheduledTime: string | null;
@@ -62,6 +63,7 @@ export function RequestDetailsExtras({
   customerPhotoUrl?: string | null;
   contactPersonName?: string | null;
   contactPersonPhone?: string | null;
+  companyName?: string | null;
 }) {
   const hasSchedule = !!(scheduledDate || scheduledTime);
   const hasLocation = !!(location?.address || (location?.latitude != null && location?.longitude != null));
@@ -79,6 +81,12 @@ export function RequestDetailsExtras({
             <PersonAvatar name={customerName} photoUrl={customerPhotoUrl} size={36} bg="bg-orange-500" />
             {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
           </View>
+          {!!companyName && (
+            <View className="mt-1 flex-row items-center gap-1">
+              <Ionicons name="business-outline" size={12} color="#6B7280" />
+              <Text className="text-xs text-gray-500">{companyName}</Text>
+            </View>
+          )}
           {showContactPerson && (
             <View className="mt-1 flex-row items-center gap-1.5">
               <Text className="text-xs text-gray-500">

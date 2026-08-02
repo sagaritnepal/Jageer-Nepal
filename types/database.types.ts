@@ -69,6 +69,7 @@ export interface ServiceRequest {
   customer_phone: string | null;
   contact_person_name: string | null;
   contact_person_phone: string | null;
+  company_name: string | null;
   origin: RequestOrigin;
   remark: string | null;
   created_at: string;

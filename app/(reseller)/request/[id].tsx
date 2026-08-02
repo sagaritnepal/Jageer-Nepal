@@ -76,6 +76,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
         contactPersonPhone={request.contact_person_phone}
+        companyName={request.company_name}
       />
 
       <RemarkBlock remark={request.remark} />
@@ -186,6 +187,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
         customerPhone={request.customer_phone}
         contactPersonName={request.contact_person_name}
         contactPersonPhone={request.contact_person_phone}
+        companyName={request.company_name}
       />
 
       <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Quoted price (NPR, optional)</Text>
@@ -251,6 +253,7 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
         contactPersonPhone={request.contact_person_phone}
+        companyName={request.company_name}
       />
 
       <Pressable
@@ -314,6 +317,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
         contactPersonPhone={request.contact_person_phone}
+        companyName={request.company_name}
       />
 
       <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Remark</Text>
@@ -387,6 +391,7 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
         contactPersonPhone={request.contact_person_phone}
+        companyName={request.company_name}
       />
 
       <RemarkBlock remark={request.remark} />
@@ -436,6 +441,7 @@ function ChooseTechnician({ request }: { request: ServiceRequest }) {
         customerPhotoUrl={customer?.avatar_url}
         contactPersonName={request.contact_person_name}
         contactPersonPhone={request.contact_person_phone}
+        companyName={request.company_name}
       />
 
       <RemarkBlock remark={request.remark} />
