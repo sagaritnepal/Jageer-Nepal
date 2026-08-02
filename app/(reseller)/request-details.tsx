@@ -35,9 +35,6 @@ export default function ResellerRequestDetails() {
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
-  const [newCustContactPerson, setNewCustContactPerson] = useState('');
-  const [newCustContactPersonPhone, setNewCustContactPersonPhone] = useState('');
-  const [newCustContactSame, setNewCustContactSame] = useState(true);
   const [savingNewCustomer, setSavingNewCustomer] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -133,13 +130,6 @@ export default function ResellerRequestDetails() {
     if (picked.phone) setNewCustPhone(picked.phone);
   }
 
-  async function handlePickNewCustContactPerson() {
-    const picked = await pickPhoneContact();
-    if (!picked) return;
-    if (picked.name) setNewCustContactPerson(picked.name);
-    if (picked.phone) setNewCustContactPersonPhone(picked.phone);
-  }
-
   function handleSelectCustomer(customer: Customer) {
     setCustomerId(customer.id);
     setCustomerName(customer.name);
@@ -213,9 +203,6 @@ export default function ResellerRequestDetails() {
     setNewCustName(customerName.trim());
     setNewCustPhone(customerPhone.trim());
     setNewCustAddress(address.trim());
-    setNewCustContactPerson(contactSameAsCustomer ? '' : contactPerson.trim());
-    setNewCustContactPersonPhone(contactSameAsCustomer ? '' : contactPersonPhone.trim());
-    setNewCustContactSame(contactSameAsCustomer);
     setShowCustomerSuggestions(false);
     setShowNewCustomerModal(true);
   }
@@ -229,10 +216,6 @@ export default function ResellerRequestDetails() {
       showAlert('Add a name', "Enter the customer's name to save them.");
       return;
     }
-    if (!newCustContactSame && (!newCustContactPerson.trim() || !newCustContactPersonPhone.trim())) {
-      showAlert('Add contact person details', "Enter the contact person's name and phone number, or tick \"Same as customer name\".");
-      return;
-    }
     setSavingNewCustomer(true);
     try {
       const created = await createCustomer.mutateAsync({
@@ -240,8 +223,6 @@ export default function ResellerRequestDetails() {
         name: newCustName.trim(),
         phone: newCustPhone.trim() || null,
         address: newCustAddress.trim() || null,
-        contact_person_name: newCustContactSame ? null : newCustContactPerson.trim() || null,
-        contact_person_phone: newCustContactSame ? null : newCustContactPersonPhone.trim() || null,
         latitude: null,
         longitude: null,
       });
@@ -525,41 +506,6 @@ export default function ResellerRequestDetails() {
               className="mb-4 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
               style={{ minHeight: 50, textAlignVertical: 'top' }}
             />
-            <Text className="mb-1 text-xs font-medium text-gray-600">Contact person</Text>
-            <Pressable
-              onPress={() => setNewCustContactSame((v) => !v)}
-              className="mb-2 flex-row items-center gap-2"
-              hitSlop={4}
-            >
-              <Ionicons name={newCustContactSame ? 'checkbox' : 'square-outline'} size={18} color="#1d4ed8" />
-              <Text className="text-xs text-gray-600">Same as customer name</Text>
-            </Pressable>
-            {!newCustContactSame && (
-              <>
-                {Platform.OS !== 'web' && (
-                  <Pressable
-                    onPress={handlePickNewCustContactPerson}
-                    className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2"
-                  >
-                    <Ionicons name="person-add-outline" size={14} color="#1d4ed8" />
-                    <Text className="text-xs font-semibold text-blue-700">Pick from phone contacts</Text>
-                  </Pressable>
-                )}
-                <TextInput
-                  value={newCustContactPerson}
-                  onChangeText={setNewCustContactPerson}
-                  placeholder="e.g. Office receptionist, site manager"
-                  className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
-                />
-                <TextInput
-                  value={newCustContactPersonPhone}
-                  onChangeText={setNewCustContactPersonPhone}
-                  placeholder="Contact person's phone"
-                  keyboardType="phone-pad"
-                  className="mb-4 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
-                />
-              </>
-            )}
             <View className="flex-row justify-end gap-3">
               <Pressable onPress={closeNewCustomerModal} className="px-3 py-2">
                 <Text className="text-sm font-semibold text-gray-500">Cancel</Text>
