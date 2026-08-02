@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { ServiceCategory } from '../../types/database.types';
 
@@ -95,7 +96,7 @@ function CategoryRow({ category }: { category: ServiceCategory }) {
       }`}
     >
       <View className="flex-1 flex-row items-center gap-3">
-        <Text className="text-xl">{category.icon || '📁'}</Text>
+        <CategoryBadge category={category.label} emoji={category.icon} size={40} />
         <View className="flex-1">
           <Text className="font-semibold text-gray-900">{category.label}</Text>
           {category.description && <Text className="mt-0.5 text-xs text-gray-400">{category.description}</Text>}
