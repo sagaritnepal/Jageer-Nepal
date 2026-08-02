@@ -35,12 +35,11 @@ export default function ResellerRequestDetails() {
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
+  const [newCustCoords, setNewCustCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locatingNewCust, setLocatingNewCust] = useState(false);
   const [savingNewCustomer, setSavingNewCustomer] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [contactPerson, setContactPerson] = useState('');
-  const [contactPersonPhone, setContactPersonPhone] = useState('');
-  const [contactSameAsCustomer, setContactSameAsCustomer] = useState(true);
   const [companyName, setCompanyName] = useState('');
   const [companySameAsCustomer, setCompanySameAsCustomer] = useState(false);
   const [date, setDate] = useState('');
@@ -86,6 +85,35 @@ export default function ResellerRequestDetails() {
     }
   }
 
+  async function handleUseMyLocationForNewCust() {
+    setLocatingNewCust(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Location permission needed', 'Allow location access to attach a position.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = position.coords;
+      setNewCustCoords({ latitude, longitude });
+
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+          { headers: { Accept: 'application/json' } }
+        );
+        const data = await res.json();
+        if (data?.display_name) setNewCustAddress(data.display_name);
+      } catch {
+        // The reseller can still type the address manually if this fails.
+      }
+    } catch (err) {
+      showAlert('Could not get location', getErrorMessage(err));
+    } finally {
+      setLocatingNewCust(false);
+    }
+  }
+
   async function pickPhoneContact(): Promise<{ name: string; phone: string } | null> {
     try {
       const { status } = await Contacts.requestPermissionsAsync();
@@ -116,13 +144,6 @@ export default function ResellerRequestDetails() {
     if (picked.phone) setCustomerPhone(picked.phone);
   }
 
-  async function handlePickContactPerson() {
-    const picked = await pickPhoneContact();
-    if (!picked) return;
-    if (picked.name) setContactPerson(picked.name);
-    if (picked.phone) setContactPersonPhone(picked.phone);
-  }
-
   async function handlePickNewCustFromContacts() {
     const picked = await pickPhoneContact();
     if (!picked) return;
@@ -137,16 +158,6 @@ export default function ResellerRequestDetails() {
     if (customer.address) setAddress(customer.address);
     if (customer.latitude != null && customer.longitude != null) {
       setCoords({ latitude: customer.latitude, longitude: customer.longitude });
-    }
-    const savedContact = customer.contact_person_name?.trim();
-    if (savedContact && savedContact !== customer.name.trim()) {
-      setContactPerson(savedContact);
-      setContactPersonPhone(customer.contact_person_phone ?? '');
-      setContactSameAsCustomer(false);
-    } else {
-      setContactPerson('');
-      setContactPersonPhone('');
-      setContactSameAsCustomer(true);
     }
     setShowCustomerSuggestions(false);
   }
@@ -164,8 +175,6 @@ export default function ResellerRequestDetails() {
         name: customerName.trim(),
         phone: customerPhone.trim() || null,
         address: address.trim() || null,
-        contact_person_name: contactSameAsCustomer ? null : contactPerson.trim() || null,
-        contact_person_phone: contactSameAsCustomer ? null : contactPersonPhone.trim() || null,
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
       });
@@ -203,6 +212,7 @@ export default function ResellerRequestDetails() {
     setNewCustName(customerName.trim());
     setNewCustPhone(customerPhone.trim());
     setNewCustAddress(address.trim());
+    setNewCustCoords(coords);
     setShowCustomerSuggestions(false);
     setShowNewCustomerModal(true);
   }
@@ -223,8 +233,8 @@ export default function ResellerRequestDetails() {
         name: newCustName.trim(),
         phone: newCustPhone.trim() || null,
         address: newCustAddress.trim() || null,
-        latitude: null,
-        longitude: null,
+        latitude: newCustCoords?.latitude ?? null,
+        longitude: newCustCoords?.longitude ?? null,
       });
       handleSelectCustomer(created);
       setShowNewCustomerModal(false);
@@ -276,13 +286,6 @@ export default function ResellerRequestDetails() {
       showAlert('Add customer details', "Enter the customer's name and phone so the technician can reach them.");
       return;
     }
-    if (!contactSameAsCustomer && (!contactPerson.trim() || !contactPersonPhone.trim())) {
-      showAlert(
-        'Add contact person details',
-        "Enter the contact person's name and phone number, or tick \"Same as customer name\"."
-      );
-      return;
-    }
     if (!date.trim() || !time.trim()) {
       showAlert('Add date and time', 'Let us know when you need this service.');
       return;
@@ -308,17 +311,12 @@ export default function ResellerRequestDetails() {
       // Keep the customer directory in sync: update the saved record if one
       // was picked (and possibly edited here), or save a brand new one so
       // it's ready to reuse next time. Never blocks the booking if it fails.
-      const resolvedContactPerson = contactSameAsCustomer ? null : contactPerson.trim() || null;
-      const resolvedContactPersonPhone = contactSameAsCustomer ? null : contactPersonPhone.trim() || null;
-
       let linkedCustomerId: string | null = customerId;
       try {
         const customerValues = {
           name: customerName.trim(),
           phone: customerPhone.trim(),
           address: address.trim() || null,
-          contact_person_name: resolvedContactPerson,
-          contact_person_phone: resolvedContactPersonPhone,
           latitude: coords?.latitude ?? null,
           longitude: coords?.longitude ?? null,
         };
@@ -339,8 +337,8 @@ export default function ResellerRequestDetails() {
         origin: 'reseller',
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
-        contact_person_name: resolvedContactPerson ?? customerName.trim(),
-        contact_person_phone: resolvedContactPersonPhone ?? customerPhone.trim(),
+        contact_person_name: customerName.trim(),
+        contact_person_phone: customerPhone.trim(),
         company_name: (companySameAsCustomer ? customerName : companyName).trim() || null,
         issue_type: `${category} - ${action}`,
         description: notes.trim() || null,
@@ -498,6 +496,15 @@ export default function ResellerRequestDetails() {
               className="mb-3 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
             />
             <Text className="mb-1 text-xs font-medium text-gray-600">Location</Text>
+            <Pressable
+              onPress={handleUseMyLocationForNewCust}
+              disabled={locatingNewCust}
+              className="mb-2 items-center rounded-lg border border-blue-700 bg-blue-50 py-2 disabled:opacity-50"
+            >
+              <Text className="text-xs font-semibold text-blue-700">
+                {locatingNewCust ? 'Locating…' : newCustCoords ? '📍 Location captured — tap to refresh' : '📍 Use my current location'}
+              </Text>
+            </Pressable>
             <TextInput
               value={newCustAddress}
               onChangeText={setNewCustAddress}
@@ -582,51 +589,7 @@ export default function ResellerRequestDetails() {
         <Text className="text-sm text-gray-600">Same as customer name</Text>
       </Pressable>
 
-      <Text className="mb-2 text-sm font-medium text-gray-700">Contact person</Text>
-      <Pressable
-        onPress={() => setContactSameAsCustomer((v) => !v)}
-        className="mb-2 flex-row items-center gap-2"
-        hitSlop={4}
-      >
-        <Ionicons name={contactSameAsCustomer ? 'checkbox' : 'square-outline'} size={20} color="#1d4ed8" />
-        <Text className="text-sm text-gray-600">Same as customer name</Text>
-      </Pressable>
-      {!contactSameAsCustomer && (
-        <>
-          {Platform.OS !== 'web' && (
-            <Pressable
-              onPress={handlePickContactPerson}
-              className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
-            >
-              <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
-              <Text className="text-sm font-semibold text-blue-700">Pick from phone contacts</Text>
-            </Pressable>
-          )}
-          <TextInput
-            value={contactPerson}
-            onChangeText={setContactPerson}
-            placeholder="e.g. Office receptionist, site manager"
-            className="mb-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-          />
-          <TextInput
-            value={contactPersonPhone}
-            onChangeText={setContactPersonPhone}
-            placeholder="Contact person's phone"
-            keyboardType="phone-pad"
-            className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-          />
-        </>
-      )}
-
-      {customerId ? (
-        <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-2">
-          <Ionicons name="checkmark-circle" size={14} color="#0d9488" />
-          <Text className="flex-1 text-xs font-medium text-teal-700">Using saved customer — edits here will update their record.</Text>
-          <Pressable onPress={() => setCustomerId(null)}>
-            <Text className="text-xs font-bold text-teal-700">Unlink</Text>
-          </Pressable>
-        </View>
-      ) : (
+      {!customerId &&
         customerName.trim().length > 0 &&
         (address.trim().length > 0 || coords) && (
           <View className="mb-4 flex-row items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2">
@@ -640,8 +603,7 @@ export default function ResellerRequestDetails() {
               </Text>
             </Pressable>
           </View>
-        )
-      )}
+        )}
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Date</Text>
       <View className="mb-4">
