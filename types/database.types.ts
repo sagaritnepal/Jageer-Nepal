@@ -265,6 +265,7 @@ export interface ServiceCategory {
   label: string;
   description: string | null;
   icon: string | null;
+  visual_key: string | null;
   sort_order: number;
   is_active: boolean;
   created_at: string;

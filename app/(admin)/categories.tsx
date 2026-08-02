@@ -4,6 +4,7 @@ import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { resolveVisualKey } from '../../lib/constants/categoryIcons';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { ServiceCategory } from '../../types/database.types';
 
@@ -96,7 +97,13 @@ function CategoryRow({ category }: { category: ServiceCategory }) {
       }`}
     >
       <View className="flex-1 flex-row items-center gap-3">
-        <CategoryBadge category={category.label} emoji={category.icon} categoryId={category.id} size={40} />
+        <CategoryBadge
+          category={category.label}
+          emoji={category.icon}
+          categoryId={category.id}
+          visualKey={category.visual_key}
+          size={40}
+        />
         <View className="flex-1">
           <Text className="font-semibold text-gray-900">{category.label}</Text>
           {category.description && <Text className="mt-0.5 text-xs text-gray-400">{category.description}</Text>}
@@ -142,6 +149,7 @@ export default function AdminCategories() {
         label: label.trim(),
         description: description.trim() || null,
         icon: icon.trim() || null,
+        visual_key: resolveVisualKey(label.trim()),
         sort_order: categories?.length ?? 0,
       });
       setLabel('');

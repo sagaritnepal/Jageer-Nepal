@@ -8,13 +8,15 @@ export function CategoryBadge({
   size = 44,
   emoji,
   categoryId,
+  visualKey,
 }: {
   category: string | null | undefined;
   size?: number;
   emoji?: string | null;
   categoryId?: string | null;
+  visualKey?: string | null;
 }) {
-  const { bg, icon, image } = getCategoryVisual(category, categoryId);
+  const { bg, icon, image } = getCategoryVisual(category, categoryId, visualKey);
 
   if (image) {
     return (

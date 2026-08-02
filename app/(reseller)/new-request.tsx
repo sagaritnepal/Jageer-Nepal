@@ -34,7 +34,7 @@ export default function ResellerNewRequest() {
                 isPreset ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'
               }`}
             >
-              <CategoryBadge category={c.label} emoji={c.icon} categoryId={c.id} />
+              <CategoryBadge category={c.label} emoji={c.icon} categoryId={c.id} visualKey={c.visual_key} />
               <Text
                 className={`mt-2 text-[13px] font-bold leading-[1.25] ${
                   isPreset ? 'text-orange-600' : 'text-gray-900'

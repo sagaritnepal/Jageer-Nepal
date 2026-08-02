@@ -105,6 +105,15 @@ export const CATEGORY_BG_COLORS = [
   'bg-cyan-500',
 ];
 
+// The preset key (if any) a label currently matches - used both to resolve
+// a visual below and to pin a new category's visual_key at creation time,
+// so a later rename has something stable to fall back on instead of
+// re-matching the (by-then-different) label.
+export function resolveVisualKey(rawLabel: string | null | undefined): string | null {
+  if (!rawLabel) return null;
+  return Object.keys(CATEGORY_ICON_MAP).find((label) => rawLabel.startsWith(label)) ?? null;
+}
+
 // Stable per-label color + icon, for places (request cards, job cards) that
 // show one category badge at a time rather than a whole grid. Accepts either
 // a bare category label or a request's `issue_type` (built as
@@ -114,19 +123,25 @@ export const CATEGORY_BG_COLORS = [
 // caller has an actual service_categories row rather than just free text -
 // pass it so the color hash is keyed to the category itself instead of its
 // current label, so renaming a category in admin doesn't reshuffle its
-// color/emoji everywhere it's shown. Callers with only free text (e.g. a
-// request's issue_type, which has no live category reference) omit it and
-// fall back to hashing the text as before.
+// color/emoji everywhere it's shown. `visualKey` is that row's pinned
+// preset identity (service_categories.visual_key, set at creation time) -
+// when present it's used instead of re-matching the live label, so a
+// rename can't lose a category's curated illustration/icon either. Callers
+// with only free text (e.g. a request's issue_type, which has no live
+// category reference) omit both and fall back to hashing/matching the text
+// as before.
 export function getCategoryVisual(
   rawLabel: string | null | undefined,
-  stableId?: string | null
+  stableId?: string | null,
+  visualKey?: string | null
 ): {
   bg: string;
   icon: IoniconName | null;
   image: ImageSourcePropType | null;
 } {
   if (!rawLabel) return { bg: 'bg-gray-400', icon: null, image: null };
-  const matchedLabel = Object.keys(CATEGORY_ICON_MAP).find((label) => rawLabel.startsWith(label));
+  const pinnedMatch = visualKey && CATEGORY_ICON_MAP[visualKey] ? visualKey : null;
+  const matchedLabel = pinnedMatch ?? resolveVisualKey(rawLabel);
   const hashSource = matchedLabel ?? stableId ?? rawLabel;
   let hash = 0;
   for (let i = 0; i < hashSource.length; i++) hash = (hash * 31 + hashSource.charCodeAt(i)) >>> 0;
