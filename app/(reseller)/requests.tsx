@@ -417,7 +417,16 @@ export default function ResellerRequestQueue() {
             />
           ) : null
         }
+        contentContainerStyle={{ paddingBottom: 90 }}
       />
+
+      <Pressable
+        onPress={() => router.push('/(reseller)/new-request')}
+        className="absolute bottom-6 right-6 h-14 w-14 items-center justify-center rounded-full bg-orange-500 shadow-lg"
+        style={{ elevation: 4, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
+      >
+        <Ionicons name="add" size={28} color="white" />
+      </Pressable>
     </View>
   );
 }
