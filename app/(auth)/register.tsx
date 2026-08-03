@@ -42,7 +42,7 @@ export default function Register() {
   }
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: 64 }}
