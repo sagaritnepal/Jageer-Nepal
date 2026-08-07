@@ -21,7 +21,13 @@
           "contactsPermission": "Jageer needs access to your contacts so you can quickly fill in a customer's name and phone number when creating a job."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Jageer uses Face ID to quickly and securely unlock the app."
+        }
+      ]
     ],
     "name": "jageer-app",
     "slug": "jageer-app",

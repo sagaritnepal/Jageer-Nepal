@@ -5,18 +5,30 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryProvider } from '../lib/providers/QueryProvider';
 import { useAuthListener, useAuthStore } from '../lib/hooks/useAuth';
+import { useBiometricLockBootstrap, useBiometricLockStore } from '../lib/hooks/useBiometricLock';
+import { BiometricLockScreen } from '../lib/components/BiometricLockScreen';
 import '../global.css';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   useAuthListener();
   const isLoading = useAuthStore((state) => state.isLoading);
+  const userId = useAuthStore((state) => state.session?.user.id);
 
-  if (isLoading) {
+  useBiometricLockBootstrap(userId);
+  const biometricEnabled = useBiometricLockStore((state) => state.enabled);
+  const biometricLocked = useBiometricLockStore((state) => state.locked);
+  const biometricChecked = useBiometricLockStore((state) => state.checked);
+
+  if (isLoading || (userId && !biometricChecked)) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
         <ActivityIndicator size="large" color="#1d4ed8" />
       </View>
     );
+  }
+
+  if (userId && biometricEnabled && biometricLocked) {
+    return <BiometricLockScreen />;
   }
 
   return <>{children}</>;

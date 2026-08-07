@@ -1,16 +1,18 @@
 // lib/components/ProfileScreen.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../hooks/useAuth';
+import { useBiometricLockStore, toggleBiometricLock } from '../hooks/useBiometricLock';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate } from '../hooks/useSupabase';
 import { supabase } from '../supabase';
 import { ROLE_ACCENT } from '../constants/roleColors';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { resizeImageForUpload } from '../utils/resizeImage';
+import { isBiometricHardwareReady, authenticateWithBiometrics } from '../utils/biometric';
 import type { Profile, UserRole } from '../../types/database.types';
 
 const ROLE_BASE_PATH: Record<UserRole, string> = {
@@ -185,6 +187,62 @@ function ProfileDetails({ profile }: { profile: Profile }) {
         >
           <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save'}</Text>
         </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function BiometricLockToggle({ profile }: { profile: Profile }) {
+  const enabled = useBiometricLockStore((state) => state.enabled);
+  const [hardwareReady, setHardwareReady] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    isBiometricHardwareReady().then(setHardwareReady);
+  }, []);
+
+  async function handleToggle(next: boolean) {
+    if (next) {
+      const verified = await authenticateWithBiometrics();
+      if (!verified) return;
+    }
+    setBusy(true);
+    try {
+      await toggleBiometricLock(profile.id, next);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (hardwareReady === false) {
+    return (
+      <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
+        <Text className="font-semibold text-gray-900">Biometric Unlock</Text>
+        <Text className="mt-1 text-xs text-gray-400">
+          Set up a fingerprint or face unlock in your phone's settings to use this.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 pr-3">
+          <Text className="font-semibold text-gray-900">Biometric Unlock</Text>
+          <Text className="mt-0.5 text-xs text-gray-400">
+            {enabled
+              ? "You'll unlock the app with your fingerprint or face."
+              : 'Use your fingerprint or face to unlock the app.'}
+          </Text>
+        </View>
+        <Switch
+          value={enabled}
+          onValueChange={handleToggle}
+          disabled={busy || hardwareReady === null}
+          trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
+          thumbColor={enabled ? '#3b82f6' : '#F3F4F6'}
+        />
       </View>
     </View>
   );
@@ -549,6 +607,8 @@ export function ProfileScreen() {
 
       <View className="px-6 pt-5">
         {profile && <ProfileDetails profile={profile} />}
+
+        {profile && <BiometricLockToggle profile={profile} />}
 
         {profile && profile.role !== 'admin' && <RewardsEntryCard profile={profile} />}
 
