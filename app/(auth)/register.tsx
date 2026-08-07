@@ -1,6 +1,6 @@
 // app/(auth)/register.tsx
-import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
@@ -21,6 +21,21 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('client');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // On some Android devices KeyboardAvoidingView's automatic resize doesn't
+  // kick in (edge-to-edge layouts can make its measurement unreliable), so
+  // track the keyboard's real height directly and pad the scroll content by
+  // that amount - that guarantees the fields stay reachable by scrolling.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const selectedRole = ROLES.find((r) => r.value === role)!;
 
@@ -42,10 +57,10 @@ export default function Register() {
   }
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: 64 }}
+        contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: 64, paddingBottom: 24 + keyboardHeight }}
         keyboardShouldPersistTaps="handled"
       >
         <View className="mb-5 items-center">

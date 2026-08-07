@@ -1,6 +1,6 @@
 // app/(auth)/login.tsx
-import { useState } from 'react';
-import { View, Text, TextInput, Pressable, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, Pressable, KeyboardAvoidingView, ScrollView, Platform, Keyboard } from 'react-native';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { AppLogo } from '../../lib/components/AppLogo';
@@ -10,6 +10,21 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // On some Android devices KeyboardAvoidingView's automatic resize doesn't
+  // kick in (edge-to-edge layouts can make its measurement unreliable), so
+  // track the keyboard's real height directly and pad the scroll content by
+  // that amount - that guarantees the fields stay reachable by scrolling.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   async function handleLogin() {
     setIsSubmitting(true);
@@ -26,11 +41,11 @@ export default function Login() {
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-white"
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         className="px-6"
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingBottom: keyboardHeight }}
         keyboardShouldPersistTaps="handled"
       >
         <View className="mb-5 items-center">
