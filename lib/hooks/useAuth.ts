@@ -43,20 +43,22 @@ export function useAuthListener() {
       if (!error && isMounted) setProfile(data as Profile);
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted) return;
-      setSession(session);
-      if (session?.user) loadProfile(session.user.id);
-      setLoading(false);
-    });
-
+    // A separate getSession() call here used to race the INITIAL_SESSION
+    // event below - on a cold start, whichever one happened to resolve
+    // last would win and could stomp a real restored session with null,
+    // silently forcing the user back to the login screen. onAuthStateChange
+    // alone already fires once with the fully-restored session (or null)
+    // as soon as the client finishes reading it from storage, so that's
+    // the only source of truth this needs.
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
       setSession(session);
       if (session?.user) {
         loadProfile(session.user.id);
       } else {
         setProfile(null);
       }
+      setLoading(false);
     });
 
     return () => {
