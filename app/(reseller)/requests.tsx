@@ -175,7 +175,8 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
   const customerName = item.customer_name ?? customerProfile?.full_name;
   const customerPhone = item.customer_phone ?? customerProfile?.phone;
   const hint = nextStepHint(item);
-  const stageMeta = STAGE_META[stageOf(item)];
+  const stage = stageOf(item);
+  const stageMeta = STAGE_META[stage];
 
   const distance =
     item.location_data?.latitude != null &&
@@ -275,7 +276,7 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
           )}
         </View>
 
-        {item.quoted_price != null && (
+        {item.quoted_price != null && stage !== 'in_progress' && (
           <View className="mt-2 flex-row justify-end">
             <Text className="text-2xl font-extrabold text-gray-900">
               NPR {Number(item.quoted_price).toLocaleString()}
