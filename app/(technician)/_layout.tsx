@@ -30,6 +30,7 @@ export default function TechnicianLayout() {
         <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
         <Tabs.Screen name="rewards" options={{ href: null, title: 'Rewards' }} />
         <Tabs.Screen name="job/[id]" options={{ href: null, title: 'Job Card' }} />
+        <Tabs.Screen name="employment" options={{ href: null, title: 'Employment' }} />
         {/* "available" self-assign screen removed: resellers now assign
             technicians directly (see app/(reseller)/request/[id].tsx). Delete
             app/(technician)/available.tsx if you copied it in earlier. */}

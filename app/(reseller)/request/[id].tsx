@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate } from '../../../lib/hooks/useSupabase';
 import { useRankedTechnicians } from '../../../lib/hooks/useTechnicianRanking';
@@ -11,6 +12,7 @@ import { TechnicianPicker } from '../../../lib/components/TechnicianPicker';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
+import { assignTechnician } from '../../../lib/utils/assignTechnician';
 import type { ServiceRequest } from '../../../types/database.types';
 
 function RemarkBlock({ remark }: { remark: string | null }) {
@@ -152,24 +154,31 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
   const [quotedPrice, setQuotedPrice] = useState(
     request.quoted_price != null ? String(request.quoted_price) : ''
   );
-  const { rankedTechnicians, isLoading: loadingTechs } = useRankedTechnicians(request.location_data);
-  const updateRequest = useSupabaseUpdate('service_requests');
+  const { rankedTechnicians, isLoading: loadingTechs } = useRankedTechnicians(request.location_data, userId);
+  const queryClient = useQueryClient();
+  const [assigning, setAssigning] = useState(false);
 
-  async function handleAssign(technicianId: string) {
+  async function handleAssign(technicianId: string, isEmployee: boolean) {
     const price = quotedPrice.trim() ? Number(quotedPrice) : null;
     if (price != null && (Number.isNaN(price) || price <= 0)) {
       showAlert('Invalid price', 'Enter a valid price in NPR, or leave it blank.');
       return;
     }
+    setAssigning(true);
     try {
-      await updateRequest.mutateAsync({
-        id: request.id,
-        values: { technician_id: technicianId, status: 'assigned', quoted_price: price, reseller_id: userId },
+      await assignTechnician({
+        requestId: request.id,
+        technicianId,
+        isEmployee,
+        extraValues: { quoted_price: price, reseller_id: userId },
       });
+      queryClient.invalidateQueries({ queryKey: ['service_requests'] });
       showAlert('Technician assigned', 'The job has been handed off.');
       router.replace('/(reseller)/requests');
     } catch (err) {
       showAlert('Could not assign', getErrorMessage(err));
+    } finally {
+      setAssigning(false);
     }
   }
 
@@ -204,7 +213,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
         isLoading={loadingTechs}
         locationKnown={request.location_data?.latitude != null}
         onAssign={handleAssign}
-        disabled={updateRequest.isPending}
+        disabled={assigning}
       />
     </ScrollView>
   );
@@ -399,24 +408,26 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
   );
 }
 
-function ChooseTechnician({ request }: { request: ServiceRequest }) {
+function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId: string }) {
   // A "reseller" origin request's client_id is just the reseller's own id
   // (there's no real customer profile behind it), so only look up a photo
   // for real app customers.
   const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
-  const { rankedTechnicians, isLoading: loadingTechs } = useRankedTechnicians(request.location_data);
-  const updateRequest = useSupabaseUpdate('service_requests');
+  const { rankedTechnicians, isLoading: loadingTechs } = useRankedTechnicians(request.location_data, userId);
+  const queryClient = useQueryClient();
+  const [assigning, setAssigning] = useState(false);
 
-  async function handleAssign(technicianId: string) {
+  async function handleAssign(technicianId: string, isEmployee: boolean) {
+    setAssigning(true);
     try {
-      await updateRequest.mutateAsync({
-        id: request.id,
-        values: { technician_id: technicianId, status: 'assigned' },
-      });
+      await assignTechnician({ requestId: request.id, technicianId, isEmployee });
+      queryClient.invalidateQueries({ queryKey: ['service_requests'] });
       showAlert('Technician assigned', 'The job has been handed off.');
       router.replace('/(reseller)/requests');
     } catch (err) {
       showAlert('Could not assign', getErrorMessage(err));
+    } finally {
+      setAssigning(false);
     }
   }
 
@@ -452,7 +463,7 @@ function ChooseTechnician({ request }: { request: ServiceRequest }) {
           isLoading={loadingTechs}
           locationKnown={request.location_data?.latitude != null}
           onAssign={handleAssign}
-          disabled={updateRequest.isPending}
+          disabled={assigning}
         />
       </View>
     </ScrollView>
@@ -496,7 +507,7 @@ export default function ResellerRequestDetail() {
   }
 
   if (request.status === 'approved' && isMine) {
-    return <ChooseTechnician request={request} />;
+    return <ChooseTechnician request={request} userId={userId} />;
   }
 
   if (isMine) {

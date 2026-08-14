@@ -38,6 +38,20 @@ export interface RewardPointEvent {
   created_at: string;
 }
 
+export type TechnicianEmploymentStatus = 'pending' | 'accepted' | 'rejected' | 'ended';
+
+export interface TechnicianEmployment {
+  id: string;
+  technician_id: string;
+  reseller_id: string;
+  status: TechnicianEmploymentStatus;
+  work_start_time: string | null;
+  work_end_time: string | null;
+  requested_at: string;
+  responded_at: string | null;
+  ended_at: string | null;
+}
+
 export interface RequestLocation {
   latitude?: number;
   longitude?: number;
@@ -122,6 +136,7 @@ export interface Customer {
   contact_person_phone: string | null;
   latitude: number | null;
   longitude: number | null;
+  phone_contact_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -336,6 +351,12 @@ export interface Database {
         Row: RewardPointEvent;
         Insert: Partial<RewardPointEvent>;
         Update: Partial<RewardPointEvent>;
+        Relationships: [];
+      };
+      technician_employment: {
+        Row: TechnicianEmployment;
+        Insert: Partial<TechnicianEmployment>;
+        Update: Partial<TechnicianEmployment>;
         Relationships: [];
       };
     };

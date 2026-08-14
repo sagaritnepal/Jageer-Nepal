@@ -7,6 +7,8 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
+import { usePendingHires, useMyEmployees, useRespondToHire, useEndEmployment } from '../../lib/hooks/useTechnicianEmployment';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { Profile, ServiceCategory } from '../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
@@ -17,6 +19,104 @@ function initialsOf(name: string | null | undefined) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('');
+}
+
+function HiringSections({ userId }: { userId: string }) {
+  const { data: pendingHires } = usePendingHires(userId);
+  const { data: employees } = useMyEmployees(userId);
+  const respondToHire = useRespondToHire();
+  const endEmployment = useEndEmployment();
+
+  async function handleRespond(id: string, accept: boolean) {
+    try {
+      await respondToHire.respond(id, accept);
+    } catch (err) {
+      showAlert('Could not respond', getErrorMessage(err));
+    }
+  }
+
+  async function handleRemove(id: string, name: string) {
+    showAlert('Remove employee?', `${name} will go back to being an outsource technician.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await endEmployment.end(id);
+          } catch (err) {
+            showAlert('Could not remove', getErrorMessage(err));
+          }
+        },
+      },
+    ]);
+  }
+
+  return (
+    <>
+      {pendingHires.length > 0 && (
+        <>
+          <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Hiring Requests</Text>
+          {pendingHires.map(({ employment, profile }) => (
+            <View key={employment.id} className="mb-2.5 rounded-2xl border border-blue-200 bg-blue-50 p-3.5">
+              <View className="mb-2.5 flex-row items-center gap-3">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-600">
+                  <Text className="text-xs font-bold text-white">{initialsOf(profile.full_name)}</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[13.5px] font-bold text-gray-900">{profile.full_name ?? 'Technician'}</Text>
+                  <Text className="mt-0.5 text-[11.5px] text-gray-500">
+                    Wants to work {employment.work_start_time?.slice(0, 5)}–{employment.work_end_time?.slice(0, 5)}
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-row gap-2.5">
+                <Pressable
+                  onPress={() => handleRespond(employment.id, false)}
+                  disabled={respondToHire.isPending}
+                  className="flex-1 items-center rounded-lg border border-gray-300 py-2 disabled:opacity-50"
+                >
+                  <Text className="text-xs font-semibold text-gray-600">Reject</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleRespond(employment.id, true)}
+                  disabled={respondToHire.isPending}
+                  className="flex-1 items-center rounded-lg bg-blue-600 py-2 disabled:opacity-50"
+                >
+                  <Text className="text-xs font-semibold text-white">Accept</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {employees.length > 0 && (
+        <>
+          <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">My Employee Technicians</Text>
+          {employees.map(({ employment, profile }) => (
+            <View
+              key={employment.id}
+              className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
+            >
+              <View className="h-11 w-11 items-center justify-center rounded-full bg-emerald-600">
+                <Text className="text-xs font-bold text-white">{initialsOf(profile.full_name)}</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-[13.5px] font-bold text-gray-900">{profile.full_name ?? 'Technician'}</Text>
+                <Text className="mt-0.5 text-[11.5px] text-gray-400">
+                  On duty {employment.work_start_time?.slice(0, 5)}–{employment.work_end_time?.slice(0, 5)}
+                </Text>
+              </View>
+              <Pressable onPress={() => handleRemove(employment.id, profile.full_name ?? 'This technician')} hitSlop={8}>
+                <Text className="text-xs font-semibold text-red-600">Remove</Text>
+              </Pressable>
+            </View>
+          ))}
+        </>
+      )}
+    </>
+  );
 }
 
 export default function ResellerDashboard() {
@@ -151,6 +251,8 @@ export default function ResellerDashboard() {
               ))}
             </>
           )}
+
+          {userId && <HiringSections userId={userId} />}
 
           {(appCustomerCount > 0 || ownCustomerCount > 0) && (
             <>

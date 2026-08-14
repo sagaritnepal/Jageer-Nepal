@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
+import { useMyEmployment } from '../../lib/hooks/useTechnicianEmployment';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
@@ -138,6 +139,33 @@ function ActiveJobCard({ item }: { item: ServiceRequest }) {
   );
 }
 
+function EmploymentStatusCard({ userId }: { userId: string }) {
+  const { current, employer } = useMyEmployment(userId);
+
+  const label =
+    current?.status === 'accepted'
+      ? `Employee of ${employer?.full_name ?? 'a reseller'}`
+      : current?.status === 'pending'
+        ? `Waiting on ${employer?.full_name ?? 'a reseller'}`
+        : 'Not employed by a reseller';
+  const icon = current?.status === 'accepted' ? 'briefcase' : current?.status === 'pending' ? 'time-outline' : 'person-add-outline';
+
+  return (
+    <Pressable
+      onPress={() => router.push('/(technician)/employment')}
+      className="mb-4 flex-row items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3"
+    >
+      <View className="flex-1 flex-row items-center gap-2.5">
+        <Ionicons name={icon} size={18} color="#3b82f6" />
+        <Text className="flex-1 text-sm font-semibold text-gray-800" numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+    </Pressable>
+  );
+}
+
 export default function TechnicianDashboard() {
   const profile = useAuthStore((state) => state.profile);
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -170,6 +198,8 @@ export default function TechnicianDashboard() {
         {totalActive} active job{totalActive === 1 ? '' : 's'} right now
         {averageRating != null && ` · ★ ${averageRating.toFixed(1)}`}
       </Text>
+
+      {userId && <EmploymentStatusCard userId={userId} />}
 
       {totalActive === 0 && (
         <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
