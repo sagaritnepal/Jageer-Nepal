@@ -27,7 +27,8 @@
         {
           "faceIDPermission": "Jageer uses Face ID to quickly and securely unlock the app."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "name": "jageer-app",
     "slug": "jageer-app",
@@ -40,7 +41,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -51,12 +52,27 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.READ_CONTACTS",
-        "android.permission.WRITE_CONTACTS"
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ],
       "package": "com.anonymous.jageerapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "55d39a89-72c8-4ffa-aec8-c0423c67443e"
+      }
+    },
+    "owner": "ai-biztech-nepal",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/55d39a89-72c8-4ffa-aec8-c0423c67443e"
     }
   }
 }
