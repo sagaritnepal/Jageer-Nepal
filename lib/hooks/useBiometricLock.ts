@@ -22,9 +22,13 @@ export const useBiometricLockStore = create<BiometricLockState>((set) => ({
   setChecked: (checked) => set({ checked }),
 }));
 
-/** Mount once near the root. Loads the signed-in user's saved preference,
- * re-locks whenever it changes users, and re-locks whenever the app is
- * backgrounded so returning to it always requires another check. */
+/** Mount once near the root. Loads the signed-in user's saved preference
+ * and re-locks whenever the app is backgrounded so returning to it always
+ * requires another check. Deliberately does NOT lock right when `userId`
+ * first appears (i.e. right after any fresh sign-in, password or
+ * fingerprint) - the user just actively proved who they are to get that
+ * session, so immediately demanding another biometric check on top of a
+ * fingerprint sign-in was a redundant double-prompt. */
 export function useBiometricLockBootstrap(userId: string | undefined) {
   const appState = useRef(AppState.currentState);
 
@@ -41,7 +45,7 @@ export function useBiometricLockBootstrap(userId: string | undefined) {
     isBiometricLockEnabled(userId).then((isEnabled) => {
       if (!isMounted) return;
       setEnabled(isEnabled);
-      setLocked(isEnabled);
+      setLocked(false);
       setChecked(true);
     });
     return () => {

@@ -22,6 +22,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   setSession: (session) => set({ session }),
   setProfile: (profile) => set({ profile }),
   setLoading: (isLoading) => set({ isLoading }),
+  // Deliberately does NOT clear saved fingerprint sign-in credentials here -
+  // signing out is the only way to ever reach the login screen's fingerprint
+  // button, so wiping them on every sign-out would defeat the feature
+  // entirely (see lib/utils/biometricLogin.ts - they're only cleared when
+  // the saved password stops working, e.g. it was changed elsewhere).
   signOut: async () => {
     await supabase.auth.signOut();
     set({ session: null, profile: null });

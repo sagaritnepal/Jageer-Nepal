@@ -22,9 +22,15 @@ export async function setBiometricLockEnabled(userId: string, enabled: boolean):
 }
 
 export async function authenticateWithBiometrics(): Promise<boolean> {
+  // disableDeviceFallback: true - this is a quick re-entry gate on an
+  // already-authenticated session, not an account-recovery flow, so a
+  // failed/cancelled fingerprint should just let the user retry the
+  // fingerprint (or use the app's own login) rather than Android falling
+  // back to the phone's device-credential prompt - which on some Samsung
+  // devices surfaces as a Samsung account sign-in, not a local PIN.
   const result = await LocalAuthentication.authenticateAsync({
     promptMessage: 'Unlock Jageer Nepal',
-    disableDeviceFallback: false,
+    disableDeviceFallback: true,
     cancelLabel: 'Cancel',
   });
   return result.success;
