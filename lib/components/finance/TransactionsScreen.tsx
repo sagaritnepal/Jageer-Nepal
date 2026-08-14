@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { BackHandler, Platform, View, Text, TextInput, Pressable, SectionList, Modal, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Contacts from 'expo-contacts';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
@@ -12,6 +11,7 @@ import { TrendChartCard } from './TrendChartCard';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { CustomerSearchModal } from './CustomerSearchModal';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type {
   BusinessTransaction,
   BusinessTransactionType,
@@ -355,23 +355,11 @@ function TransactionForm({
     }
   }
 
-  async function handlePickExpenseNameContact() {
-    try {
-      const { status } = await Contacts.requestPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Contacts access needed', 'Allow contacts access to pick a name from your phone.');
-        return;
-      }
-      const contact = await Contacts.Contact.presentPicker();
-      if (!contact) return;
-      const fullName = await contact.getFullName();
-      if (fullName) {
-        setPartyName(fullName);
-        setShowNameSuggestions(false);
-      }
-    } catch (err) {
-      showAlert('Could not read contact', getErrorMessage(err));
-    }
+  async function handlePickPartyContact() {
+    const picked = await pickPhoneContact();
+    if (!picked?.name) return;
+    setPartyName(picked.name);
+    setShowNameSuggestions(false);
   }
 
   async function handleCreateCategory(name: string) {
@@ -513,6 +501,11 @@ function TransactionForm({
             >
               <Ionicons name="book-outline" size={18} color="#1d4ed8" />
             </Pressable>
+            {Platform.OS !== 'web' && (
+              <Pressable onPress={handlePickPartyContact} hitSlop={8} className="pl-1 pr-2.5">
+                <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
+              </Pressable>
+            )}
           </View>
           {showNameSuggestions && partySuggestions.length > 0 && (
             <View className="mb-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -640,7 +633,7 @@ function TransactionForm({
               <Ionicons name="book-outline" size={18} color="#1d4ed8" />
             </Pressable>
             {Platform.OS !== 'web' && (
-              <Pressable onPress={handlePickExpenseNameContact} hitSlop={8} className="pl-1 pr-2.5">
+              <Pressable onPress={handlePickPartyContact} hitSlop={8} className="pl-1 pr-2.5">
                 <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
               </Pressable>
             )}

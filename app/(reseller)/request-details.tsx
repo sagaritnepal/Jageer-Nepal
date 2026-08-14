@@ -4,7 +4,6 @@ import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform,
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import * as Contacts from 'expo-contacts';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
@@ -12,6 +11,7 @@ import { supabase } from '../../lib/supabase';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
+import { pickPhoneContact } from '../../lib/utils/pickPhoneContact';
 import type { Customer } from '../../types/database.types';
 
 const PHOTO_SLOTS = 3;
@@ -114,31 +114,19 @@ export default function ResellerRequestDetails() {
     }
   }
 
-  async function pickPhoneContact(): Promise<{ name: string; phone: string } | null> {
-    try {
-      const { status } = await Contacts.requestPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Contacts access needed', 'Allow contacts access to pick from your phone.');
-        return null;
-      }
-      const contact = await Contacts.Contact.presentPicker();
-      if (!contact) return null;
-
-      const [fullName, phones] = await Promise.all([contact.getFullName(), contact.getPhones()]);
-      const phone = phones[0]?.number?.replace(/[^\d+]/g, '') ?? '';
-      if (!phone) {
-        showAlert('No phone number', 'That contact has no phone number saved — add one manually.');
-      }
-      return { name: fullName ?? '', phone };
-    } catch (err) {
-      showAlert('Could not read contact', getErrorMessage(err));
-      return null;
-    }
-  }
-
   async function handlePickContact() {
     const picked = await pickPhoneContact();
     if (!picked) return;
+    // This same person may already be in the contact book - either synced
+    // in already from the phone, or saved by hand with the same number.
+    // Link to that existing record instead of always starting a fresh one,
+    // so the booking actually connects to the contact book entry (and its
+    // saved address) rather than silently creating an unlinked duplicate.
+    const existing = picked.phone ? (myCustomers ?? []).find((c) => c.phone === picked.phone) : undefined;
+    if (existing) {
+      handleSelectCustomer(existing);
+      return;
+    }
     setCustomerId(null);
     if (picked.name) setCustomerName(picked.name);
     if (picked.phone) setCustomerPhone(picked.phone);
@@ -327,7 +315,14 @@ export default function ResellerRequestDetails() {
           linkedCustomerId = created.id;
         }
       } catch {
-        linkedCustomerId = null;
+        // Most likely a duplicate-phone conflict (customers_owner_phone_idx)
+        // against a record that isn't in myCustomers' current cache yet -
+        // link to it by phone instead of leaving the booking unlinked from
+        // the contact book.
+        const existing = customerPhone.trim()
+          ? (myCustomers ?? []).find((c) => c.phone === customerPhone.trim())
+          : undefined;
+        linkedCustomerId = existing?.id ?? null;
       }
 
       await createRequest.mutateAsync({
@@ -367,16 +362,6 @@ export default function ResellerRequestDetails() {
         </Text>
       </View>
 
-      {Platform.OS !== 'web' && (
-        <Pressable
-          onPress={handlePickContact}
-          className="mb-4 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
-        >
-          <Ionicons name="person-add-outline" size={16} color="#1d4ed8" />
-          <Text className="text-sm font-semibold text-blue-700">Pick from phone contacts</Text>
-        </Pressable>
-      )}
-
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>
       <View className="mb-1 flex-row items-center rounded-lg border border-gray-300 bg-white">
         <TextInput
@@ -388,9 +373,14 @@ export default function ResellerRequestDetails() {
           placeholder="Who is this request for?"
           className="flex-1 px-4 py-3 text-base"
         />
-        <Pressable onPress={openCustomerPicker} hitSlop={8} className="px-3">
+        <Pressable onPress={openCustomerPicker} hitSlop={8} className="px-2.5">
           <Ionicons name="book-outline" size={20} color="#1d4ed8" />
         </Pressable>
+        {Platform.OS !== 'web' && (
+          <Pressable onPress={handlePickContact} hitSlop={8} className="pl-1 pr-3">
+            <Ionicons name="person-add-outline" size={20} color="#1d4ed8" />
+          </Pressable>
+        )}
       </View>
 
       {inlineSuggestions.length > 0 && (
@@ -471,22 +461,20 @@ export default function ResellerRequestDetails() {
         <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={closeNewCustomerModal}>
           <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-4">
             <Text className="mb-3 text-base font-semibold text-gray-900">New customer</Text>
-            {Platform.OS !== 'web' && (
-              <Pressable
-                onPress={handlePickNewCustFromContacts}
-                className="mb-3 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2"
-              >
-                <Ionicons name="person-add-outline" size={14} color="#1d4ed8" />
-                <Text className="text-xs font-semibold text-blue-700">Pick from phone contacts</Text>
-              </Pressable>
-            )}
             <Text className="mb-1 text-xs font-medium text-gray-600">Name</Text>
-            <TextInput
-              value={newCustName}
-              onChangeText={setNewCustName}
-              placeholder="Customer name"
-              className="mb-3 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
-            />
+            <View className="mb-3 flex-row items-center rounded-lg border border-gray-300 bg-white">
+              <TextInput
+                value={newCustName}
+                onChangeText={setNewCustName}
+                placeholder="Customer name"
+                className="flex-1 px-3 py-2 text-sm"
+              />
+              {Platform.OS !== 'web' && (
+                <Pressable onPress={handlePickNewCustFromContacts} hitSlop={8} className="px-2.5">
+                  <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
+                </Pressable>
+              )}
+            </View>
             <Text className="mb-1 text-xs font-medium text-gray-600">Contact no.</Text>
             <TextInput
               value={newCustPhone}

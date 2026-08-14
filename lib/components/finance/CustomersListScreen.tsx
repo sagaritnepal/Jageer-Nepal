@@ -1,8 +1,8 @@
 // lib/components/finance/CustomersListScreen.tsx
-import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { View, Text, TextInput, Pressable, FlatList, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -11,6 +11,8 @@ import { supabase } from '../../supabase';
 import { SearchBar } from '../SearchBar';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { isValidPhone10 } from '../../utils/phone';
+import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
+import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { Customer, Profile } from '../../../types/database.types';
 
 type Tab = 'app' | 'yours';
@@ -50,6 +52,13 @@ function AddCustomerForm({ userId, onDone }: { userId: string; onDone: () => voi
     }
   }
 
+  async function handlePickContact() {
+    const picked = await pickPhoneContact();
+    if (!picked) return;
+    if (picked.name) setName(picked.name);
+    if (picked.phone) setPhone(picked.phone);
+  }
+
   async function handleSave() {
     if (!name.trim()) {
       showAlert('Add a name', "Enter the customer's name.");
@@ -85,12 +94,19 @@ function AddCustomerForm({ userId, onDone }: { userId: string; onDone: () => voi
   return (
     <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
       <Text className="mb-3 text-sm font-semibold text-gray-900">Add a customer</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Name"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
+      <View className="mb-2.5 flex-row items-center rounded-lg border border-gray-300">
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Name"
+          className="flex-1 px-3 py-2.5 text-sm text-gray-900"
+        />
+        {Platform.OS !== 'web' && (
+          <Pressable onPress={handlePickContact} hitSlop={8} className="px-2.5">
+            <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
+          </Pressable>
+        )}
+      </View>
       <TextInput
         value={phone}
         onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
@@ -230,6 +246,72 @@ function AppCustomerRow({ entry }: { entry: AppCustomer }) {
   );
 }
 
+function timeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return `${Math.floor(hours / 24)} day ago`;
+}
+
+/** Button + status line for the "Your Customers" tab: first tap asks for
+ * contacts permission and does an initial pull; after that, the app keeps
+ * this list in sync with the phone's contacts automatically in the
+ * background (useContactsSyncBootstrap), and this button just lets the
+ * user force an immediate re-sync. */
+function PhoneContactsSyncButton({ userId }: { userId: string }) {
+  const queryClient = useQueryClient();
+  const [syncing, setSyncing] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+
+  useEffect(() => {
+    isContactsSyncEnabled(userId).then(setEnabled);
+    getLastSyncedAt(userId).then(setLastSynced);
+  }, [userId]);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const { granted, synced } = await requestAndSyncPhoneContacts(userId);
+      if (!granted) {
+        showAlert('Contacts access needed', 'Allow contacts access to sync your phone contacts here.');
+        return;
+      }
+      setEnabled(true);
+      setLastSynced(new Date());
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      showAlert('Synced', `${synced} phone contact${synced === 1 ? '' : 's'} synced to your customers.`);
+    } catch (err) {
+      showAlert('Could not sync contacts', getErrorMessage(err));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <View className="mb-3">
+      <Pressable
+        onPress={handleSync}
+        disabled={syncing}
+        className="flex-row items-center justify-center gap-2 rounded-2xl border border-blue-700 bg-blue-50 py-2.5 disabled:opacity-50"
+      >
+        <Ionicons name="sync-outline" size={16} color="#1d4ed8" />
+        <Text className="text-xs font-semibold text-blue-700">
+          {syncing ? 'Syncing…' : enabled ? 'Sync phone contacts now' : 'Sync from phone contacts'}
+        </Text>
+      </Pressable>
+      {enabled && (
+        <Text className="mt-1 text-center text-[10px] text-gray-400">
+          {lastSynced ? `Auto-synced with your phone · last synced ${timeAgo(lastSynced)}` : 'Auto-synced with your phone'}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 export function CustomersListScreen({ basePath }: { basePath: string }) {
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -289,6 +371,8 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
           </Pressable>
         )}
       </View>
+
+      {tab === 'yours' && userId && <PhoneContactsSyncButton userId={userId} />}
 
       {tab === 'yours' && showAddForm && userId && (
         <AddCustomerForm userId={userId} onDone={() => setShowAddForm(false)} />

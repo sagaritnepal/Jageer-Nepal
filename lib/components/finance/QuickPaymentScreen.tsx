@@ -1,6 +1,6 @@
 // lib/components/finance/QuickPaymentScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -9,6 +9,7 @@ import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { CustomerSearchModal } from './CustomerSearchModal';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { Customer } from '../../../types/database.types';
 
 export function QuickPaymentScreen() {
@@ -56,6 +57,20 @@ export function QuickPaymentScreen() {
     setCustomerName(c.name);
     setShowNameSuggestions(false);
     setShowCustomerPicker(false);
+  }
+
+  // Payments must link to an existing saved customer (handleSave blocks
+  // otherwise), so a picked phone contact only helps if it matches one -
+  // unlike request-details.tsx, there's no "create new customer" path here.
+  async function handlePickContact() {
+    const picked = await pickPhoneContact();
+    if (!picked?.phone) return;
+    const existing = (customers ?? []).find((c) => c.phone === picked.phone);
+    if (existing) {
+      selectCustomer(existing);
+    } else {
+      showAlert('Not a saved customer', `${picked.name || 'This contact'} isn't saved yet — add them from Your Customers first.`);
+    }
   }
 
   async function handleSave() {
@@ -133,6 +148,11 @@ export function QuickPaymentScreen() {
           >
             <Ionicons name="book-outline" size={18} color="#1d4ed8" />
           </Pressable>
+          {Platform.OS !== 'web' && (
+            <Pressable onPress={handlePickContact} hitSlop={8} className="pl-1 pr-2.5">
+              <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
+            </Pressable>
+          )}
         </View>
         {showNameSuggestions && nameSuggestions.length > 0 && (
           <View className="mb-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
