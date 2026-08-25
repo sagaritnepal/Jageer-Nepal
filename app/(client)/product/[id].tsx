@@ -5,6 +5,7 @@ import { useSupabaseRow } from '../../../lib/hooks/useSupabase';
 import { useCartStore } from '../../../lib/hooks/useCart';
 import { CartBar } from '../../../lib/components/CartBar';
 import { showAlert } from '../../../lib/utils/alert';
+import { toSafeImageUri } from '../../../lib/utils/image';
 
 export default function ClientProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -62,7 +63,7 @@ export default function ClientProductDetail() {
       <View className="px-6 pt-4">
         <View className="mb-4 aspect-square items-center justify-center overflow-hidden rounded-2xl bg-blue-50">
           {product.image_url ? (
-            <Image source={{ uri: product.image_url }} className="h-full w-full" resizeMode="cover" />
+            <Image source={{ uri: toSafeImageUri(product.image_url)! }} className="h-full w-full" resizeMode="cover" />
           ) : (
             <Text className="text-5xl">🖥️</Text>
           )}

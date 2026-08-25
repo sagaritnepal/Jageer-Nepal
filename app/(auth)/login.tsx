@@ -106,13 +106,27 @@ export default function Login() {
         showAlert('Fingerprint not recognized', 'Try again, or sign in with your password below.');
         return;
       }
-      const { error } = await supabase.auth.signInWithPassword(creds);
+      // A slow/flaky connection used to leave this spinning with no way
+      // out - bound it so a stall becomes a clear, retryable error instead
+      // of "hangs there".
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Sign-in is taking too long. Check your connection and try again.')), 15000)
+      );
+      const { error } = await Promise.race([supabase.auth.signInWithPassword(creds), timeout]);
       if (error) {
-        // The saved password no longer works (changed elsewhere, etc.) -
-        // clear it so this doesn't keep failing the same way every time.
-        await clearBiometricCredentials();
-        setShowBiometricButton(false);
-        showAlert('Sign-in failed', `${error.message} Sign in with your password to set up fingerprint sign-in again.`);
+        // Only clear the saved credentials when the server actually
+        // rejected them (changed elsewhere, etc.) - a network hiccup or
+        // server error isn't proof the password is stale, and wiping it
+        // for those used to silently disable fingerprint sign-in until the
+        // reseller re-entered their password for no real reason.
+        const isInvalidCredentials = /invalid login credentials/i.test(error.message);
+        if (isInvalidCredentials) {
+          await clearBiometricCredentials();
+          setShowBiometricButton(false);
+          showAlert('Sign-in failed', `${error.message} Sign in with your password to set up fingerprint sign-in again.`);
+        } else {
+          showAlert('Could not sign in', `${error.message} Please try again.`);
+        }
         return;
       }
       router.replace('/');

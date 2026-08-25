@@ -1,5 +1,6 @@
 // lib/components/SearchSuggestions.tsx
 import { View, Text, Pressable, Image } from 'react-native';
+import { toSafeImageUri } from '../utils/image';
 
 interface SuggestionItem {
   id: string;
@@ -30,7 +31,7 @@ export function SearchSuggestions<T extends SuggestionItem>({
         >
           <View className="h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-gray-100">
             {item.image_url ? (
-              <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+              <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
             ) : (
               <Text className="text-sm">📦</Text>
             )}

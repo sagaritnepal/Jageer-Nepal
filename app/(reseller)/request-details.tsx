@@ -12,6 +12,8 @@ import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 import { pickPhoneContact } from '../../lib/utils/pickPhoneContact';
+import { usePhoneContacts } from '../../lib/hooks/usePhoneContacts';
+import { ContactPickerModal } from '../../lib/components/ContactPickerModal';
 import type { Customer } from '../../types/database.types';
 
 const PHOTO_SLOTS = 3;
@@ -27,10 +29,10 @@ export default function ResellerRequestDetails() {
     orderBy: { column: 'name' },
     enabled: !!userId,
   });
+  const phoneContacts = usePhoneContacts();
 
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState('');
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
@@ -114,24 +116,6 @@ export default function ResellerRequestDetails() {
     }
   }
 
-  async function handlePickContact() {
-    const picked = await pickPhoneContact();
-    if (!picked) return;
-    // This same person may already be in the contact book - either synced
-    // in already from the phone, or saved by hand with the same number.
-    // Link to that existing record instead of always starting a fresh one,
-    // so the booking actually connects to the contact book entry (and its
-    // saved address) rather than silently creating an unlinked duplicate.
-    const existing = picked.phone ? (myCustomers ?? []).find((c) => c.phone === picked.phone) : undefined;
-    if (existing) {
-      handleSelectCustomer(existing);
-      return;
-    }
-    setCustomerId(null);
-    if (picked.name) setCustomerName(picked.name);
-    if (picked.phone) setCustomerPhone(picked.phone);
-  }
-
   async function handlePickNewCustFromContacts() {
     const picked = await pickPhoneContact();
     if (!picked) return;
@@ -147,7 +131,6 @@ export default function ResellerRequestDetails() {
     if (customer.latitude != null && customer.longitude != null) {
       setCoords({ latitude: customer.latitude, longitude: customer.longitude });
     }
-    setShowCustomerSuggestions(false);
   }
 
   async function handleRegisterNow() {
@@ -175,25 +158,15 @@ export default function ResellerRequestDetails() {
     }
   }
 
-  const customerSuggestions = useMemo(() => {
-    const q = customerSearch.trim().toLowerCase();
-    const list = myCustomers ?? [];
-    if (!q) return list;
-    return list.filter((c) => c.name.toLowerCase().includes(q));
-  }, [myCustomers, customerSearch]);
-
-  // Live matches shown right under the name field as the reseller types,
-  // so picking a saved customer doesn't require opening the book-icon modal.
-  const inlineSuggestions = useMemo(() => {
-    if (customerId) return [];
-    const q = customerName.trim().toLowerCase();
-    if (!q) return [];
-    return (myCustomers ?? []).filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5);
-  }, [myCustomers, customerName, customerId]);
-
-  function openCustomerPicker() {
-    setCustomerSearch('');
-    setShowCustomerSuggestions(true);
+  // A saved customer is selected directly; a phone contact not saved yet
+  // just fills the fields (not created yet) - handleSubmit below already
+  // saves a brand new customer from whatever's in these fields at booking
+  // time, so there's no need to create one early here.
+  function handleSelectNew(name: string, phone: string | null) {
+    setShowNameSuggestions(false);
+    setCustomerId(null);
+    setCustomerName(name);
+    if (phone) setCustomerPhone(phone);
   }
 
   function openNewCustomerModal() {
@@ -201,7 +174,6 @@ export default function ResellerRequestDetails() {
     setNewCustPhone(customerPhone.trim());
     setNewCustAddress(address.trim());
     setNewCustCoords(coords);
-    setShowCustomerSuggestions(false);
     setShowNewCustomerModal(true);
   }
 
@@ -363,94 +335,37 @@ export default function ResellerRequestDetails() {
       </View>
 
       <Text className="mb-2 text-sm font-medium text-gray-700">Customer name</Text>
-      <View className="mb-1 flex-row items-center rounded-lg border border-gray-300 bg-white">
-        <TextInput
-          value={customerName}
-          onChangeText={(text) => {
-            setCustomerName(text);
-            setCustomerId(null);
-          }}
-          placeholder="Who is this request for?"
-          className="flex-1 px-4 py-3 text-base"
-        />
-        <Pressable onPress={openCustomerPicker} hitSlop={8} className="px-2.5">
-          <Ionicons name="book-outline" size={20} color="#1d4ed8" />
-        </Pressable>
-        {Platform.OS !== 'web' && (
-          <Pressable onPress={handlePickContact} hitSlop={8} className="pl-1 pr-3">
-            <Ionicons name="person-add-outline" size={20} color="#1d4ed8" />
-          </Pressable>
-        )}
-      </View>
-
-      {inlineSuggestions.length > 0 && (
-        <View className="mb-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
-          {inlineSuggestions.map((c, idx) => (
-            <Pressable
-              key={c.id}
-              onPress={() => handleSelectCustomer(c)}
-              className={`px-4 py-2.5 ${idx !== inlineSuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
-            >
-              <Text className="text-sm font-semibold text-gray-900">{c.name}</Text>
-              {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
-            </Pressable>
-          ))}
-        </View>
-      )}
-      <Text className="mb-4 text-xs text-gray-400">
-        Matches from your saved customers appear as you type. Tap the book icon to browse all or add a new customer.
-      </Text>
-
-      <Modal
-        visible={showCustomerSuggestions}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCustomerSuggestions(false)}
+      <Pressable
+        onPress={() => {
+          phoneContacts.request();
+          setShowNameSuggestions(true);
+        }}
+        className="mb-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3"
       >
-        <Pressable
-          className="flex-1 items-center justify-center bg-black/40 px-6"
-          onPress={() => setShowCustomerSuggestions(false)}
-        >
-          <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-3" style={{ maxHeight: '70%' }}>
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-base font-semibold text-gray-900">My Customers</Text>
-              <Pressable onPress={() => setShowCustomerSuggestions(false)} className="px-2 py-1">
-                <Text className="text-sm font-semibold text-blue-700">Close</Text>
-              </Pressable>
-            </View>
-            <TextInput
-              value={customerSearch}
-              onChangeText={setCustomerSearch}
-              placeholder="Search by name"
-              autoFocus
-              className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
-            />
-            <Pressable
-              onPress={openNewCustomerModal}
-              className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-orange-400 bg-orange-50 py-2"
-            >
-              <Ionicons name="person-add-outline" size={16} color="#c2410c" />
-              <Text className="text-sm font-semibold text-orange-700">+ Add new customer</Text>
-            </Pressable>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              {customerSuggestions.length === 0 ? (
-                <Text className="px-2 py-3 text-center text-sm text-gray-400">No saved customers match.</Text>
-              ) : (
-                customerSuggestions.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => handleSelectCustomer(c)}
-                    className="border-b border-gray-100 px-2 py-2.5"
-                  >
-                    <Text className="text-sm font-semibold text-gray-900">{c.name}</Text>
-                    {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
-                  </Pressable>
-                ))
-              )}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        <Text className={`flex-1 text-base ${customerName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+          {customerName || 'Who is this request for?'}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+      </Pressable>
+      <Text className="mb-1 text-xs text-gray-400">
+        Tap to search your saved customers and phone contacts.
+      </Text>
+      <Pressable onPress={openNewCustomerModal} className="mb-4 self-start">
+        <Text className="text-xs font-semibold text-orange-600">+ Add a new customer manually</Text>
+      </Pressable>
+
+      <ContactPickerModal
+        visible={showNameSuggestions}
+        initialQuery=""
+        customers={myCustomers ?? []}
+        phoneContacts={phoneContacts.contacts}
+        onSelectCustomer={(c) => {
+          handleSelectCustomer(c);
+          setShowNameSuggestions(false);
+        }}
+        onSelectNew={handleSelectNew}
+        onClose={() => setShowNameSuggestions(false)}
+      />
 
       <Modal
         visible={showNewCustomerModal}

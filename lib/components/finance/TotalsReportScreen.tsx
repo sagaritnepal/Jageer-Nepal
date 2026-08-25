@@ -5,12 +5,15 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { toBsDayChartLabel, toBsHistoryLabel, toBsMonthChartLabel } from '../../utils/nepaliDate';
 import { BarChart } from '../BarChart';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Kind = 'received' | 'paid';
-type Granularity = 'day' | 'week' | 'month';
+type Granularity = 'week' | 'month';
+
+type NavTarget = { kind: 'transactions'; type: 'expense' } | { kind: 'party'; partyId: string };
 
 interface Entry {
   id: string;
@@ -18,6 +21,7 @@ interface Entry {
   amount: number;
   label: string;
   sub: string;
+  nav: NavTarget;
 }
 
 const KIND_META: Record<Kind, { title: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
@@ -34,7 +38,7 @@ function startOfWeek(d: Date) {
   return new Date(day.getTime() - (dow - 1) * DAY_MS);
 }
 
-export function TotalsReportScreen({ kind }: { kind: Kind }) {
+export function TotalsReportScreen({ kind, basePath }: { kind: Kind; basePath: string }) {
   const meta = KIND_META[kind];
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: transactions } = useSupabaseQuery('business_transactions', {
@@ -45,48 +49,84 @@ export function TotalsReportScreen({ kind }: { kind: Kind }) {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
+  const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
+  const { data: customers } = useSupabaseQuery('customers', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
+  const nameById = useMemo(() => {
+    const map = new Map<string, string>();
+    (customers ?? []).forEach((c) => map.set(c.id, c.name));
+    return map;
+  }, [customers]);
 
   const [granularity, setGranularity] = useState<Granularity>('month');
   const year = new Date().getFullYear();
 
-  // "Received" = real cash in (sales + every payment actually collected from a
-  // customer, whether logged manually or synced from a paid booking).
-  // "Paid" = real cash out (purchases, expenses, and manual Payment Out
-  // entries) - deliberately excludes booking-sourced debit entries, since
-  // those represent a customer owing money for a job, not the business
-  // paying anything out.
+  // "Received" = every payment actually collected from a customer, whether
+  // logged manually (Payment In) or synced from a paid booking - NOT Sales,
+  // which since 0061_sale_purchase_always_ledger.sql book a debt rather than
+  // cash received. "Paid" = real cash out: Expenses, manual Payment Out to a
+  // customer, and payments actually made to a vendor - a Purchase itself is
+  // a debt too now, not cash spent, same as booking-sourced debit entries
+  // are excluded since those represent money owed, not money that's left
+  // the business yet.
   const entries = useMemo((): Entry[] => {
     const list: Entry[] = [];
     for (const t of transactions ?? []) {
-      if (kind === 'received' && t.type === 'sale') {
-        list.push({ id: t.id, date: t.created_at, amount: t.amount, label: 'Sale', sub: t.party_name ?? t.note ?? '' });
-      }
-      if (kind === 'paid' && (t.type === 'purchase' || t.type === 'expense')) {
+      if (kind === 'paid' && t.type === 'expense') {
         list.push({
           id: t.id,
-          date: t.created_at,
+          date: t.bill_date ?? t.created_at,
           amount: t.amount,
-          label: t.type === 'purchase' ? 'Purchase' : 'Expense',
+          label: 'Expense',
           sub: t.party_name ?? t.note ?? '',
+          nav: { kind: 'transactions', type: 'expense' },
         });
       }
     }
     for (const e of ledgerEntries ?? []) {
+      const customerName = nameById.get(e.customer_id) ?? 'Unknown customer';
       if (kind === 'received' && e.entry_type === 'credit') {
         list.push({
           id: e.id,
-          date: e.created_at,
+          date: e.entry_date ?? e.created_at,
           amount: e.amount,
-          label: e.source === 'booking' ? 'Job payment' : 'Payment received',
+          label: `${e.source === 'booking' ? 'Job payment' : 'Payment received'} · ${customerName}`,
           sub: e.note ?? '',
+          nav: { kind: 'party', partyId: e.customer_id },
         });
       }
       if (kind === 'paid' && e.entry_type === 'debit' && e.source === 'manual') {
-        list.push({ id: e.id, date: e.created_at, amount: e.amount, label: 'Payment out', sub: e.note ?? '' });
+        list.push({
+          id: e.id,
+          date: e.entry_date ?? e.created_at,
+          amount: e.amount,
+          label: `Payment out · ${customerName}`,
+          sub: e.note ?? '',
+          nav: { kind: 'party', partyId: e.customer_id },
+        });
+      }
+    }
+    if (kind === 'paid') {
+      for (const e of vendorEntries ?? []) {
+        if (e.entry_type === 'credit') {
+          list.push({
+            id: e.id,
+            date: e.entry_date ?? e.created_at,
+            amount: e.amount,
+            label: `Paid vendor · ${nameById.get(e.vendor_id) ?? 'Unknown vendor'}`,
+            sub: e.note ?? '',
+            nav: { kind: 'party', partyId: e.vendor_id },
+          });
+        }
       }
     }
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions, ledgerEntries, kind]);
+  }, [transactions, ledgerEntries, vendorEntries, nameById, kind]);
 
   const yearTotal = useMemo(
     () => entries.filter((e) => new Date(e.date).getFullYear() === year).reduce((sum, e) => sum + e.amount, 0),
@@ -95,20 +135,6 @@ export function TotalsReportScreen({ kind }: { kind: Kind }) {
 
   const chartData = useMemo(() => {
     const now = new Date();
-    if (granularity === 'day') {
-      const days = Array.from({ length: 30 }, (_, i) => new Date(now.getTime() - (29 - i) * DAY_MS));
-      return days.map((d) => {
-        const dayStart = startOfDay(d).getTime();
-        const dayEnd = dayStart + DAY_MS;
-        const value = entries
-          .filter((e) => {
-            const t = new Date(e.date).getTime();
-            return t >= dayStart && t < dayEnd;
-          })
-          .reduce((sum, e) => sum + e.amount, 0);
-        return { label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), value };
-      });
-    }
     if (granularity === 'week') {
       const thisWeekStart = startOfWeek(now);
       const weeks = Array.from({ length: 12 }, (_, i) => new Date(thisWeekStart.getTime() - (11 - i) * 7 * DAY_MS));
@@ -121,7 +147,7 @@ export function TotalsReportScreen({ kind }: { kind: Kind }) {
             return t >= start && t < end;
           })
           .reduce((sum, e) => sum + e.amount, 0);
-        return { label: weekStart.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), value };
+        return { label: toBsDayChartLabel(weekStart), value };
       });
     }
     // month: Jan-Dec of the current year
@@ -134,7 +160,7 @@ export function TotalsReportScreen({ kind }: { kind: Kind }) {
           return t >= start && t < end;
         })
         .reduce((sum, e) => sum + e.amount, 0);
-      return { label: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'short' }), value };
+      return { label: toBsMonthChartLabel(start), value };
     });
   }, [entries, granularity, year]);
 
@@ -160,7 +186,7 @@ export function TotalsReportScreen({ kind }: { kind: Kind }) {
       </View>
 
       <View className="mb-3 flex-row gap-2">
-        {(['day', 'week', 'month'] as Granularity[]).map((g) => {
+        {(['week', 'month'] as Granularity[]).map((g) => {
           const selected = granularity === g;
           return (
             <Pressable
@@ -179,16 +205,14 @@ export function TotalsReportScreen({ kind }: { kind: Kind }) {
 
       <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
         <Text className="mb-3 text-xs text-gray-400">
-          {granularity === 'day' ? 'Last 30 days' : granularity === 'week' ? 'Last 12 weeks' : `${year}, by month`}
+          {granularity === 'week' ? 'Last 12 weeks' : `${year}, by month`}
         </Text>
         <BarChart
           data={chartData}
           color={meta.color}
           selectedColor={meta.color}
           formatValue={(v) => `NPR ${Math.round(v).toLocaleString()}`}
-          formatLabel={(label, i) =>
-            granularity === 'day' ? (i % 5 === 0 ? label : null) : granularity === 'week' ? (i % 3 === 0 ? label : null) : label
-          }
+          formatLabel={(label, i) => (granularity === 'week' ? (i % 3 === 0 ? label : null) : label)}
         />
       </View>
 
@@ -202,17 +226,28 @@ export function TotalsReportScreen({ kind }: { kind: Kind }) {
       {entries
         .filter((e) => new Date(e.date).getFullYear() === year)
         .map((e) => (
-          <View key={e.id} className="mb-2 flex-row items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <Pressable
+            key={e.id}
+            onPress={() =>
+              router.push(
+                (e.nav.kind === 'transactions'
+                  ? `${basePath}/transactions?type=${e.nav.type}`
+                  : `${basePath}/customer/${e.nav.partyId}`) as any
+              )
+            }
+            className="mb-2 flex-row items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3"
+          >
             <View className="flex-1 pr-2">
               <Text className="text-sm font-semibold text-gray-900">{e.label}</Text>
               <Text className="text-xs text-gray-400" numberOfLines={1}>
-                {e.sub || new Date(e.date).toLocaleDateString()}
+                {[e.sub, toBsHistoryLabel(e.date)].filter(Boolean).join(' · ')}
               </Text>
             </View>
             <Text className="text-sm font-extrabold" style={{ color: meta.color }}>
               NPR {e.amount.toLocaleString()}
             </Text>
-          </View>
+            <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginLeft: 6 }} />
+          </Pressable>
         ))}
     </ScrollView>
   );

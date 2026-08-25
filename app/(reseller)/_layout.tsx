@@ -49,7 +49,12 @@ export default function ResellerLayout() {
         <Tabs.Screen name="quick-payment" options={{ href: null, title: 'Quick Payment' }} />
         <Tabs.Screen name="received" options={{ href: null, title: 'Total Received' }} />
         <Tabs.Screen name="paid" options={{ href: null, title: 'Total Paid' }} />
+        <Tabs.Screen name="to-receive" options={{ href: null, title: 'To Receive' }} />
+        <Tabs.Screen name="to-give" options={{ href: null, title: 'To Give' }} />
         <Tabs.Screen name="bank-accounts" options={{ href: null, title: 'Bank Accounts' }} />
+        <Tabs.Screen name="bank-balances" options={{ href: null, title: 'Available Balance' }} />
+        <Tabs.Screen name="inventory" options={{ href: null, title: 'Inventory' }} />
+        <Tabs.Screen name="report" options={{ href: null, title: 'Report' }} />
       </Tabs>
     </RoleGuard>
   );

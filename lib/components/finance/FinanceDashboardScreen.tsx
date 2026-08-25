@@ -1,5 +1,5 @@
 // lib/components/finance/FinanceDashboardScreen.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,9 +7,25 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { periodBuckets, formatBucketLabel, type Granularity } from './TrendChartCard';
+import { useAccountBalances } from '../../hooks/useAccountBalances';
+import { periodBuckets, type Granularity } from './TrendChartCard';
+import { toBsDayChartLabel } from '../../utils/nepaliDate';
 
 const BLUE = '#2563EB';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Cashflow's own "week" means the last 7 individual days, not an 8-week
+// rolling aggregate like the shared periodBuckets('week', ...) other charts
+// use - a reseller checking cashflow wants to see each day's activity, not
+// one bar per calendar week.
+function last7DayBuckets(): { start: number; end: number; label: string }[] {
+  const now = new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now.getTime() - (6 - i) * DAY_MS);
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return { start, end: start + DAY_MS, label: toBsDayChartLabel(d) };
+  });
+}
 
 function CircularProgress({
   percent,
@@ -63,8 +79,33 @@ function shortcuts(basePath: string): {
     { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase&add=1` },
     { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense&add=1` },
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
+    { key: 'inventory', label: 'Inventory', icon: 'cube', href: `${basePath}/inventory` },
+    { key: 'report', label: 'Report', icon: 'bar-chart', href: `${basePath}/report` },
   ];
 }
+
+// Purely a rendering hint (icon badge color per shortcut) - not part of the
+// shortcuts() data/routing above, so restyling the grid can never touch the
+// key/label/icon/href it returns.
+const SHORTCUT_COLORS: Record<string, { bg: string; fg: string }> = {
+  customers: { bg: '#EFF6FF', fg: '#2563EB' },
+  'payment-in': { bg: '#ECFDF5', fg: '#059669' },
+  'payment-out': { bg: '#FEF2F2', fg: '#DC2626' },
+  sales: { bg: '#ECFDF5', fg: '#059669' },
+  purchase: { bg: '#FEF2F2', fg: '#DC2626' },
+  expenses: { bg: '#FFFBEB', fg: '#D97706' },
+  'bank-accounts': { bg: '#EEF2FF', fg: '#4F46E5' },
+  inventory: { bg: '#F5F3FF', fg: '#7C3AED' },
+  report: { bg: '#EFF6FF', fg: '#2563EB' },
+};
+
+const CARD_SHADOW = {
+  shadowColor: '#101828',
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+} as const;
 
 // Shows both cash IN and cash OUT for each day, side by side - a net-only
 // bar can hide real volume (e.g. a big payment in and a big payment out the
@@ -77,6 +118,12 @@ function CashflowChart({
   formatLabel?: (label: string, index: number) => string | null;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
+  // Switching granularity (e.g. Day -> Month) swaps in a shorter `data`
+  // array - a selected index from the old, longer array would otherwise
+  // point past the end of the new one and crash on data[selected].label.
+  useEffect(() => {
+    setSelected(null);
+  }, [data]);
   const HEIGHT = 110;
   const maxAmt = Math.max(1, ...data.map((d) => Math.max(d.inAmt, d.outAmt)));
 
@@ -120,7 +167,7 @@ function CashflowChart({
           );
         })}
       </View>
-      {selected != null && (
+      {selected != null && data[selected] && (
         <View className="mt-2.5 self-start rounded-lg bg-gray-900 px-3 py-1.5">
           <Text className="text-xs font-semibold text-white">
             {data[selected].label}: In NPR {Math.round(data[selected].inAmt).toLocaleString()} · Out NPR{' '}
@@ -151,7 +198,6 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const { width: screenWidth } = useWindowDimensions();
   const SCREEN_PADDING = 24; // px-6
   const GRID_GAP = 12; // gap-3
-  const halfTileWidth = (screenWidth - SCREEN_PADDING * 2 - GRID_GAP) / 2;
   const thirdTileWidth = (screenWidth - SCREEN_PADDING * 2 - GRID_GAP * 2) / 3;
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
@@ -160,6 +206,10 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     enabled: !!userId,
   });
   const { data: allEntries } = useSupabaseQuery('customer_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
+  const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
@@ -176,36 +226,48 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     return result;
   }, [transactions]);
 
-  const { toReceive, toGive } = useMemo(() => {
+  // To Receive = customers who owe the business (customer_ledger_entries).
+  // To Give = vendors the business owes (vendor_ledger_entries) - a
+  // separate ledger with the opposite polarity, so a customer overpayment
+  // never gets misread as a supplier debt and vice versa.
+  const toReceive = useMemo(() => {
     const perCustomer: Record<string, number> = {};
     for (const e of allEntries ?? []) {
       perCustomer[e.customer_id] = (perCustomer[e.customer_id] ?? 0) + (e.entry_type === 'debit' ? e.amount : -e.amount);
     }
-    let receive = 0;
-    let give = 0;
-    for (const balance of Object.values(perCustomer)) {
-      if (balance > 0) receive += balance;
-      else give += -balance;
-    }
-    return { toReceive: receive, toGive: give };
+    return Object.values(perCustomer)
+      .filter((balance) => balance > 0)
+      .reduce((sum, balance) => sum + balance, 0);
   }, [allEntries]);
 
-  const [cashflowGranularity, setCashflowGranularity] = useState<Granularity>('day');
-  // Each bucket here renders two bars (in + out) side by side, so it needs
-  // roughly half as many buckets as a single-bar chart to stay readable on
-  // a phone screen - the default 30/12/12 buckets render as near-invisible
-  // slivers once split in two.
-  const CASHFLOW_BUCKET_COUNT: Record<Granularity, number> = { day: 10, week: 8, month: 6 };
+  const toGive = useMemo(() => {
+    const perVendor: Record<string, number> = {};
+    for (const e of vendorEntries ?? []) {
+      perVendor[e.vendor_id] = (perVendor[e.vendor_id] ?? 0) + (e.entry_type === 'debit' ? e.amount : -e.amount);
+    }
+    return Object.values(perVendor)
+      .filter((balance) => balance > 0)
+      .reduce((sum, balance) => sum + balance, 0);
+  }, [vendorEntries]);
+
+  const [cashflowGranularity, setCashflowGranularity] = useState<Granularity>('week');
+  // "Week" = the last 7 individual days (last7DayBuckets, above) rather than
+  // an 8-week rolling aggregate - a reseller checking cashflow wants each
+  // day's activity, not one bar per calendar week. "Month" still uses the
+  // shared monthly buckets; 6 of them (not 12) since each bucket here
+  // renders two bars (in + out) side by side and needs roughly half as many
+  // buckets as a single-bar chart to stay readable on a phone screen.
   const cashflowBuckets = useMemo(
-    () => periodBuckets(cashflowGranularity, CASHFLOW_BUCKET_COUNT[cashflowGranularity]),
+    () => (cashflowGranularity === 'week' ? last7DayBuckets() : periodBuckets('month', 6)),
     [cashflowGranularity]
   );
 
   // Same "received"/"paid" definition as yearReceived/yearPaid below - real
-  // cash in is sales plus any payment collected (ledger credits); real cash
-  // out is purchases, expenses, and manual Payment Out entries. Ledger-only
-  // data would leave this empty for anyone whose activity is mostly plain
-  // Sale/Purchase/Expense entries rather than manual ledger payments.
+  // cash in is any payment collected (ledger credits); real cash out is
+  // expenses, manual Payment Out entries, and payments made to a vendor.
+  // Sale/Purchase don't move cash by themselves any more - each one books a
+  // debt on the party's ledger instead (0061_sale_purchase_always_ledger.sql),
+  // and it's that ledger being settled that actually shows up as cash here.
   const cashflow = useMemo(() => {
     return cashflowBuckets.map((b) => {
       const bucketTx = (transactions ?? []).filter((t) => {
@@ -216,43 +278,53 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         const t = new Date(e.created_at).getTime();
         return t >= b.start && t < b.end;
       });
-      const inAmt =
-        bucketTx.filter((t) => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0) +
-        bucketEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
+      const bucketVendorEntries = (vendorEntries ?? []).filter((e) => {
+        const t = new Date(e.created_at).getTime();
+        return t >= b.start && t < b.end;
+      });
+      const inAmt = bucketEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
       const outAmt =
-        bucketTx.filter((t) => t.type === 'purchase' || t.type === 'expense').reduce((sum, t) => sum + t.amount, 0) +
-        bucketEntries.filter((e) => e.entry_type === 'debit' && e.source === 'manual').reduce((sum, e) => sum + e.amount, 0);
+        bucketTx.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0) +
+        bucketEntries.filter((e) => e.entry_type === 'debit' && e.source === 'manual').reduce((sum, e) => sum + e.amount, 0) +
+        bucketVendorEntries.filter((e) => e.entry_type === 'credit').reduce((sum, e) => sum + e.amount, 0);
       return { label: b.label, inAmt, outAmt };
     });
-  }, [transactions, allEntries, cashflowBuckets]);
+  }, [transactions, allEntries, vendorEntries, cashflowBuckets]);
 
-  // The combined cash-in-hand + bank balance across every account - every
-  // sale, purchase, and expense already carries a payment mode (cash or a
-  // specific bank account), so summing all of them together is exactly the
-  // money actually on hand, live-updating as each one is recorded.
-  const availableBalance = totals.sale - totals.purchase - totals.expense;
+  // The combined cash-in-hand + bank balance across every account - shared
+  // with the Bank Accounts screen's per-account breakdown so the two can
+  // never drift apart (see useAccountBalances for the full formula).
+  const accountBalances = useAccountBalances(userId);
+  const availableBalance = accountBalances.total;
 
-  // Matches TotalsReportScreen's definitions: "received" is every real cash
-  // inflow (sales + any payment actually collected from a customer);
-  // "paid" is every real cash outflow (purchases, expenses, and manual
-  // Payment Out entries) - booking-sourced debit entries are excluded since
-  // those represent a customer owing money, not the business paying it out.
+  // Matches TotalsReportScreen's definitions: "received" is a payment
+  // actually collected from a customer (Payment In, or a synced job
+  // payment) - NOT a Sale, which is its own separate figure (the Sales
+  // tile above) and, since 0061_sale_purchase_always_ledger.sql, books a
+  // debt rather than cash received. "paid" is every expense, every manual
+  // Payment Out to a customer, and every payment actually made to a vendor
+  // (a Purchase itself is a debt too now, not cash spent) - booking-sourced
+  // debit entries are excluded since those represent money owed, not money
+  // that's actually left the business yet.
   const { yearReceived, yearPaid } = useMemo(() => {
     const year = new Date().getFullYear();
     let received = 0;
     let paid = 0;
     for (const t of transactions ?? []) {
       if (new Date(t.created_at).getFullYear() !== year) continue;
-      if (t.type === 'sale') received += t.amount;
-      if (t.type === 'purchase' || t.type === 'expense') paid += t.amount;
+      if (t.type === 'expense') paid += t.amount;
     }
     for (const e of allEntries ?? []) {
       if (new Date(e.created_at).getFullYear() !== year) continue;
       if (e.entry_type === 'credit') received += e.amount;
       if (e.entry_type === 'debit' && e.source === 'manual') paid += e.amount;
     }
+    for (const e of vendorEntries ?? []) {
+      if (new Date(e.created_at).getFullYear() !== year) continue;
+      if (e.entry_type === 'credit') paid += e.amount;
+    }
     return { yearReceived: received, yearPaid: paid };
-  }, [transactions, allEntries]);
+  }, [transactions, allEntries, vendorEntries]);
 
   const profileCompletion = useMemo(() => {
     const fields = [profile?.full_name, profile?.phone, profile?.avatar_url, profile?.city];
@@ -262,135 +334,164 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      {isReseller && (
-        <Pressable
-          onPress={() => router.push(`${basePath}/wholesale` as any)}
-          className="mb-3 flex-row items-center justify-between rounded-2xl px-4 py-3.5"
-          style={{ backgroundColor: BLUE }}
-        >
-          <View className="flex-row items-center gap-2.5">
-            <Ionicons name="cart-outline" size={18} color="white" />
-            <Text className="text-sm font-semibold text-white">Buy From Wholesaler</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color="white" />
-        </Pressable>
-      )}
-
-      <Pressable
-        onPress={() => router.push(`${basePath}/transactions` as any)}
-        className="mb-3 flex-row items-center justify-between rounded-2xl px-4 py-3.5"
-        style={{ backgroundColor: BLUE }}
+      <LinearGradient
+        colors={['#2563EB', '#1D4ED8']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          borderRadius: 24,
+          padding: 20,
+          gap: 16,
+          marginBottom: 12,
+          shadowColor: '#2563EB',
+          shadowOpacity: 0.35,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 6,
+        }}
       >
-        <View className="flex-row items-center gap-2.5">
-          <Ionicons name="list-outline" size={18} color="white" />
-          <Text className="text-sm font-semibold text-white">Transactions</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="white" />
-      </Pressable>
+        <Pressable onPress={() => router.push(`${basePath}/bank-balances` as any)}>
+          <Text className="text-xs font-bold text-white/75" style={{ letterSpacing: 0.5 }}>
+            AVAILABLE BALANCE
+          </Text>
+          <Text className="mt-1 text-3xl font-extrabold text-white">NPR {availableBalance.toLocaleString()}</Text>
+        </Pressable>
 
-      <View className="mb-3 flex-row gap-3">
-        <View className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5" style={{ width: halfTileWidth }}>
-          <Text className="text-xs font-semibold text-emerald-700">To Receive</Text>
-          <Text className="mt-1 text-base font-extrabold text-emerald-700">NPR {toReceive.toLocaleString()}</Text>
+        <View className="flex-row gap-2.5">
+          <Pressable
+            onPress={() => router.push(`${basePath}/to-receive` as any)}
+            className="flex-1 rounded-2xl p-3"
+            style={{ backgroundColor: 'rgba(255,255,255,0.14)' }}
+          >
+            <View className="flex-row items-center gap-1.5">
+              <View className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              <Text className="text-[11px] font-semibold text-white/85">To Receive</Text>
+            </View>
+            <Text className="mt-0.5 text-sm font-extrabold text-white">NPR {toReceive.toLocaleString()}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push(`${basePath}/to-give` as any)}
+            className="flex-1 rounded-2xl p-3"
+            style={{ backgroundColor: 'rgba(255,255,255,0.14)' }}
+          >
+            <View className="flex-row items-center gap-1.5">
+              <View className="h-1.5 w-1.5 rounded-full bg-red-300" />
+              <Text className="text-[11px] font-semibold text-white/85">To Give</Text>
+            </View>
+            <Text className="mt-0.5 text-sm font-extrabold text-white">NPR {toGive.toLocaleString()}</Text>
+          </Pressable>
         </View>
-        <View className="rounded-2xl border border-red-200 bg-red-50 p-3.5" style={{ width: halfTileWidth }}>
-          <Text className="text-xs font-semibold text-red-600">To Give</Text>
-          <Text className="mt-1 text-base font-extrabold text-red-600">NPR {toGive.toLocaleString()}</Text>
-        </View>
-      </View>
 
+        <View className="flex-row gap-2.5">
+          <Pressable
+            onPress={() => router.push(`${basePath}/transactions` as any)}
+            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-2.5"
+            style={{ backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)' }}
+          >
+            <Ionicons name="list-outline" size={15} color="white" />
+            <Text className="text-[13px] font-semibold text-white" numberOfLines={1}>
+              Transactions
+            </Text>
+          </Pressable>
+          {isReseller && (
+            <Pressable
+              onPress={() => router.push(`${basePath}/wholesale` as any)}
+              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-white py-2.5"
+            >
+              <Ionicons name="cart-outline" size={15} color={BLUE} />
+              <Text className="text-[13px] font-semibold" style={{ color: BLUE }} numberOfLines={1}>
+                Buy Stock
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </LinearGradient>
+
+      {/* Sales is money in (green); Purchase and Expense are money spent
+          (red), regardless of the actual figure's sign. Available Balance
+          moved into the hero above - same value, same route, just shown
+          once, big, instead of duplicated in a small tile here. */}
       <View className="mb-3 flex-row flex-wrap gap-3">
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=sale` as any)}
-          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: halfTileWidth }}
+          className="rounded-2xl bg-white p-3.5"
+          style={{ width: thirdTileWidth, ...CARD_SHADOW }}
         >
-          <View>
-            <Text className="text-xs font-semibold text-gray-500">Sales</Text>
-            <Text className="mt-1 text-base font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
+          <View className="mb-2 h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
+            <Ionicons name="trending-up" size={16} color="#059669" />
           </View>
-          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
+          <Text className="text-xs font-semibold text-gray-500">Sales</Text>
+          <Text className="mt-0.5 text-sm font-extrabold text-emerald-600">NPR {totals.sale.toLocaleString()}</Text>
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=purchase` as any)}
-          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: halfTileWidth }}
+          className="rounded-2xl bg-white p-3.5"
+          style={{ width: thirdTileWidth, ...CARD_SHADOW }}
         >
-          <View>
-            <Text className="text-xs font-semibold text-gray-500">Purchase</Text>
-            <Text className="mt-1 text-base font-extrabold" style={{ color: BLUE }}>
-              NPR {totals.purchase.toLocaleString()}
-            </Text>
+          <View className="mb-2 h-8 w-8 items-center justify-center rounded-lg bg-red-50">
+            <Ionicons name="cart" size={16} color="#DC2626" />
           </View>
-          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
+          <Text className="text-xs font-semibold text-gray-500">Purchase</Text>
+          <Text className="mt-0.5 text-sm font-extrabold text-red-600">NPR {totals.purchase.toLocaleString()}</Text>
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/transactions?type=expense` as any)}
-          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: halfTileWidth }}
+          className="rounded-2xl bg-white p-3.5"
+          style={{ width: thirdTileWidth, ...CARD_SHADOW }}
         >
-          <View>
-            <Text className="text-xs font-semibold text-gray-500">Expense</Text>
-            <Text className="mt-1 text-base font-extrabold text-red-600">NPR {totals.expense.toLocaleString()}</Text>
+          <View className="mb-2 h-8 w-8 items-center justify-center rounded-lg bg-red-50">
+            <Ionicons name="receipt" size={16} color="#DC2626" />
           </View>
-          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
-        </Pressable>
-        <Pressable
-          onPress={() => router.push(`${basePath}/transactions` as any)}
-          className="flex-row items-center justify-between rounded-2xl bg-white p-3.5"
-          style={{ width: halfTileWidth }}
-        >
-          <View>
-            <Text className="text-xs font-semibold text-gray-500">Available Balance</Text>
-            <Text
-              className="mt-1 text-base font-extrabold"
-              style={{ color: availableBalance >= 0 ? BLUE : '#DC2626' }}
-            >
-              NPR {availableBalance.toLocaleString()}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={14} color="#D1D5DB" />
+          <Text className="text-xs font-semibold text-gray-500">Expense</Text>
+          <Text className="mt-0.5 text-sm font-extrabold text-red-600">NPR {totals.expense.toLocaleString()}</Text>
         </Pressable>
       </View>
 
       <View className="mb-3 flex-row gap-3">
         <Pressable
           onPress={() => router.push(`${basePath}/received` as any)}
-          className="flex-1 flex-row items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5"
+          className="flex-1 flex-row items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5"
         >
-          <View>
-            <Text className="text-xs font-semibold text-emerald-700">Total Received</Text>
-            <Text className="mt-1 text-base font-extrabold text-emerald-700">NPR {yearReceived.toLocaleString()}</Text>
+          <View className="h-9 w-9 items-center justify-center rounded-full bg-white">
+            <Ionicons name="arrow-down-circle" size={18} color="#059669" />
           </View>
-          <Ionicons name="chevron-forward" size={14} color="#6EE7B7" />
+          <View className="flex-1">
+            <Text className="text-xs font-semibold text-emerald-700">Total Received</Text>
+            <Text className="mt-0.5 text-sm font-extrabold text-emerald-700">NPR {yearReceived.toLocaleString()}</Text>
+          </View>
         </Pressable>
         <Pressable
           onPress={() => router.push(`${basePath}/paid` as any)}
-          className="flex-1 flex-row items-center justify-between rounded-2xl border border-red-200 bg-red-50 p-3.5"
+          className="flex-1 flex-row items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-3.5"
         >
-          <View>
-            <Text className="text-xs font-semibold text-red-600">Total Paid</Text>
-            <Text className="mt-1 text-base font-extrabold text-red-600">NPR {yearPaid.toLocaleString()}</Text>
+          <View className="h-9 w-9 items-center justify-center rounded-full bg-white">
+            <Ionicons name="arrow-up-circle" size={18} color="#DC2626" />
           </View>
-          <Ionicons name="chevron-forward" size={14} color="#FCA5A5" />
+          <View className="flex-1">
+            <Text className="text-xs font-semibold text-red-600">Total Paid</Text>
+            <Text className="mt-0.5 text-sm font-extrabold text-red-600">NPR {yearPaid.toLocaleString()}</Text>
+          </View>
         </Pressable>
       </View>
 
       <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
       <View className="mb-4 flex-row flex-wrap gap-3">
-        {shortcuts(basePath).map((s) => (
-          <Pressable
-            key={s.key}
-            onPress={() => router.push(s.href as any)}
-            className="items-center rounded-2xl border border-gray-200 bg-white py-4"
-            style={{ width: thirdTileWidth }}
-          >
-            <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full bg-blue-50">
-              <Ionicons name={s.icon} size={22} color={BLUE} />
-            </View>
-            <Text className="text-center text-xs font-semibold text-gray-700">{s.label}</Text>
-          </Pressable>
-        ))}
+        {shortcuts(basePath).map((s) => {
+          const color = SHORTCUT_COLORS[s.key] ?? { bg: '#EFF6FF', fg: BLUE };
+          return (
+            <Pressable
+              key={s.key}
+              onPress={() => router.push(s.href as any)}
+              className="items-center rounded-2xl bg-white py-4"
+              style={{ width: thirdTileWidth, ...CARD_SHADOW }}
+            >
+              <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: color.bg }}>
+                <Ionicons name={s.icon} size={22} color={color.fg} />
+              </View>
+              <Text className="text-center text-xs font-semibold text-gray-700">{s.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {profileCompletion < 100 && (
@@ -418,10 +519,10 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         </Pressable>
       )}
 
-      <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+      <View className="mb-4 rounded-2xl bg-white p-4" style={CARD_SHADOW}>
         <Text className="mb-3 text-sm font-semibold text-gray-900">Cashflow</Text>
         <View className="mb-3 flex-row gap-2">
-          {(['day', 'week', 'month'] as Granularity[]).map((g) => {
+          {(['week', 'month'] as Granularity[]).map((g) => {
             const selectedG = cashflowGranularity === g;
             return (
               <Pressable
@@ -435,10 +536,10 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
             );
           })}
         </View>
-        <CashflowChart
-          data={cashflow}
-          formatLabel={(label, i) => formatBucketLabel(cashflowGranularity, label, i, cashflow.length)}
-        />
+        {/* Only ever 7 (week) or 6 (month) buckets here - few enough to
+            always show every label, unlike the sparser 8-12 bucket charts
+            elsewhere that need to skip some to avoid crowding. */}
+        <CashflowChart data={cashflow} formatLabel={(label) => label} />
       </View>
 
       <Text className="text-center text-xs text-gray-400">

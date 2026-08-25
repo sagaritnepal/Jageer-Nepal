@@ -1,5 +1,5 @@
 // lib/components/NetTrendChart.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 
 // A per-period NET value that can swing positive or negative (e.g. Available
@@ -18,6 +18,12 @@ export function NetTrendChart({
   formatLabel?: (label: string, index: number) => string | null;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
+  // Switching granularity (e.g. Day -> Month) swaps in a shorter `data`
+  // array - a selected index from the old, longer array would otherwise
+  // point past the end of the new one and crash on data[selected].label.
+  useEffect(() => {
+    setSelected(null);
+  }, [data]);
   const half = 56;
   const maxAbs = Math.max(1, ...data.map((d) => Math.abs(d.net)));
 
@@ -70,7 +76,7 @@ export function NetTrendChart({
           );
         })}
       </View>
-      {selected != null && (
+      {selected != null && data[selected] && (
         <View className="mt-2.5 self-start rounded-lg bg-gray-900 px-3 py-1.5">
           <Text className="text-xs font-semibold text-white">
             {data[selected].label}: {data[selected].net >= 0 ? positiveLabel : negativeLabel} NPR{' '}

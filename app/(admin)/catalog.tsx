@@ -8,6 +8,7 @@ import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
 import { pickAndUploadCatalogImage } from '../../lib/utils/catalogImage';
+import { toSafeImageUri } from '../../lib/utils/image';
 import type { CatalogProduct } from '../../types/database.types';
 
 function CatalogRow({ item }: { item: CatalogProduct }) {
@@ -58,7 +59,7 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
           className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100"
         >
           {item.image_url ? (
-            <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+            <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
           ) : (
             <Ionicons name={uploading ? 'hourglass-outline' : 'camera'} size={16} color="#9CA3AF" />
           )}

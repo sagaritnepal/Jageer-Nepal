@@ -1,5 +1,5 @@
 // lib/components/BarChart.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 
 export function BarChart({
@@ -18,6 +18,12 @@ export function BarChart({
   formatLabel?: (label: string, index: number) => string | null;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
+  // Switching granularity (e.g. Day -> Month) swaps in a shorter `data`
+  // array - a selected index from the old, longer array would otherwise
+  // point past the end of the new one and crash on data[selected].label.
+  useEffect(() => {
+    setSelected(null);
+  }, [data]);
   const max = Math.max(1, ...data.map((d) => d.value));
 
   return (
@@ -50,7 +56,7 @@ export function BarChart({
           );
         })}
       </View>
-      {selected != null && (
+      {selected != null && data[selected] && (
         <View className="mt-2.5 self-start rounded-lg bg-gray-900 px-3 py-1.5">
           <Text className="text-xs font-semibold text-white">
             {data[selected].label}: {formatValue(data[selected].value)}

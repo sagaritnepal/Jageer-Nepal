@@ -15,18 +15,16 @@ import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } f
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { Customer, Profile } from '../../../types/database.types';
 
-type Tab = 'app' | 'yours';
-
-/** Whether `phone` is already used by a different customer of this owner. */
-async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerId?: string) {
+/** Id of the existing customer already using `phone` for this owner, if any. */
+async function findExistingCustomerByPhone(ownerId: string, phone: string, excludeCustomerId?: string) {
   let query = supabase.from('customers').select('id').eq('owner_id', ownerId).eq('phone', phone);
   if (excludeCustomerId) query = query.neq('id', excludeCustomerId);
   const { data, error } = await query.limit(1);
   if (error) throw error;
-  return (data ?? []).length > 0;
+  return ((data ?? []) as { id: string }[])[0]?.id ?? null;
 }
 
-function AddCustomerForm({ userId, onDone }: { userId: string; onDone: () => void }) {
+function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePath: string; onDone: () => void }) {
   const createCustomer = useSupabaseInsert('customers');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -71,8 +69,18 @@ function AddCustomerForm({ userId, onDone }: { userId: string; onDone: () => voi
     }
     setSaving(true);
     try {
-      if (trimmedPhone && (await phoneAlreadyUsed(userId, trimmedPhone))) {
-        showAlert('Already saved', 'A customer with this phone number already exists.');
+      const existingId = trimmedPhone ? await findExistingCustomerByPhone(userId, trimmedPhone) : null;
+      if (existingId) {
+        // Almost always means this contact was already pulled in by the
+        // background phone-contacts sync (see contactsSync.ts) before the
+        // user got to it manually - a flat "already exists" refusal with no
+        // way forward reads as the app just blocking them, so take them
+        // straight to the record that's already there instead.
+        showAlert('Already saved', 'A customer with this phone number is already in your list.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'View customer', onPress: () => router.push(`${basePath}/customer/${existingId}` as any) },
+        ]);
+        onDone();
         return;
       }
       await createCustomer.mutateAsync({
@@ -146,13 +154,23 @@ function AddCustomerForm({ userId, onDone }: { userId: string; onDone: () => voi
   );
 }
 
-function CustomerRow({ customer, basePath }: { customer: Customer; basePath: string }) {
+function CustomerRow({ customer, basePath, isApp }: { customer: Customer; basePath: string; isApp: boolean }) {
   return (
     <Pressable
       onPress={() => router.push(`${basePath}/customer/${customer.id}` as any)}
       className="mb-2.5 rounded-2xl border border-gray-200 bg-white p-4"
     >
-      <Text className="font-semibold text-gray-900">{customer.name}</Text>
+      <View className="mb-0.5 flex-row items-center justify-between gap-2">
+        <Text className="flex-1 font-semibold text-gray-900" numberOfLines={1}>
+          {customer.name}
+        </Text>
+        {isApp && (
+          <View className="flex-row items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5">
+            <Ionicons name="phone-portrait-outline" size={11} color="#2563eb" />
+            <Text className="text-[10px] font-bold text-blue-700">APP</Text>
+          </View>
+        )}
+      </View>
       {!!customer.phone && (
         <Text className="mt-0.5 text-xs text-gray-500">
           <Ionicons name="call-outline" size={11} color="#9CA3AF" /> {customer.phone}
@@ -312,10 +330,17 @@ function PhoneContactsSyncButton({ userId }: { userId: string }) {
   );
 }
 
+// One combined row: either a saved customer (tappable into the ledger) or,
+// for a registered app user who's booked a request but was never saved to
+// the customers directory, an app-only row (informational, same as the old
+// "App Customers" tab - there's no customer_id to open a ledger for).
+type MergedRow =
+  | { kind: 'customer'; id: string; name: string; phone: string | null; customer: Customer; isApp: boolean }
+  | { kind: 'app'; id: string; name: string; phone: string | null; entry: AppCustomer };
+
 export function CustomersListScreen({ basePath }: { basePath: string }) {
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
-  const [tab, setTab] = useState<Tab>('app');
   const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(add === '1');
 
@@ -326,93 +351,80 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   });
   const appCustomers = useAppCustomers(userId);
 
-  const filteredCustomers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = customers ?? [];
-    if (!q) return list;
-    return list.filter((c) => c.name.toLowerCase().includes(q) || (c.phone ?? '').includes(q));
-  }, [customers, search]);
+  // A saved customer whose phone matches a registered app user is marked
+  // "APP" on their existing row instead of being listed twice; an app user
+  // with no matching saved customer still shows up, just without a ledger
+  // to open.
+  const merged = useMemo((): MergedRow[] => {
+    const customerPhones = new Set((customers ?? []).map((c) => c.phone).filter((p): p is string => !!p));
+    const appPhones = new Set(appCustomers.map((a) => a.profile.phone).filter((p): p is string => !!p));
 
-  const filteredAppCustomers = useMemo(() => {
+    const customerRows: MergedRow[] = (customers ?? []).map((c) => ({
+      kind: 'customer',
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      customer: c,
+      isApp: !!c.phone && appPhones.has(c.phone),
+    }));
+    const appOnlyRows: MergedRow[] = appCustomers
+      .filter((a) => !a.profile.phone || !customerPhones.has(a.profile.phone))
+      .map((a) => ({
+        kind: 'app',
+        id: a.profile.id,
+        name: a.profile.full_name ?? 'Unnamed',
+        phone: a.profile.phone,
+        entry: a,
+      }));
+
+    return [...customerRows, ...appOnlyRows].sort((a, b) => a.name.localeCompare(b.name));
+  }, [customers, appCustomers]);
+
+  const filteredMerged = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return appCustomers;
-    return appCustomers.filter(
-      (e) => (e.profile.full_name ?? '').toLowerCase().includes(q) || (e.profile.phone ?? '').includes(q)
-    );
-  }, [appCustomers, search]);
+    if (!q) return merged;
+    return merged.filter((r) => r.name.toLowerCase().includes(q) || (r.phone ?? '').includes(q));
+  }, [merged, search]);
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-3 flex-row gap-2">
-        <Pressable
-          onPress={() => setTab('app')}
-          className={`flex-1 items-center rounded-full py-2 ${tab === 'app' ? 'bg-orange-500' : 'border border-gray-200 bg-white'}`}
-        >
-          <Text className={`text-xs font-semibold ${tab === 'app' ? 'text-white' : 'text-gray-600'}`}>App Customers</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setTab('yours')}
-          className={`flex-1 items-center rounded-full py-2 ${tab === 'yours' ? 'bg-orange-500' : 'border border-gray-200 bg-white'}`}
-        >
-          <Text className={`text-xs font-semibold ${tab === 'yours' ? 'text-white' : 'text-gray-600'}`}>Your Customers</Text>
-        </Pressable>
-      </View>
-
       <View className="mb-3 flex-row items-center gap-2">
         <View className="flex-1">
           <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
         </View>
-        {tab === 'yours' && (
-          <Pressable
-            onPress={() => setShowAddForm((v) => !v)}
-            className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500"
-          >
-            <Ionicons name={showAddForm ? 'close' : 'add'} size={22} color="white" />
-          </Pressable>
-        )}
+        <Pressable
+          onPress={() => setShowAddForm((v) => !v)}
+          className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500"
+        >
+          <Ionicons name={showAddForm ? 'close' : 'add'} size={22} color="white" />
+        </Pressable>
       </View>
 
-      {tab === 'yours' && userId && <PhoneContactsSyncButton userId={userId} />}
+      {userId && <PhoneContactsSyncButton userId={userId} />}
 
-      {tab === 'yours' && showAddForm && userId && (
-        <AddCustomerForm userId={userId} onDone={() => setShowAddForm(false)} />
-      )}
+      {showAddForm && userId && <AddCustomerForm userId={userId} basePath={basePath} onDone={() => setShowAddForm(false)} />}
 
-      {tab === 'app' ? (
-        <FlatList
-          data={filteredAppCustomers}
-          keyExtractor={(item) => item.profile.id}
-          renderItem={({ item }) => <AppCustomerRow entry={item} />}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          ListEmptyComponent={
-            <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
-              <Ionicons name="phone-portrait-outline" size={28} color="#D1D5DB" />
-              <Text className="mt-2 text-gray-500">
-                {appCustomers.length > 0 ? 'No matches.' : 'No app customers yet.'}
-              </Text>
-              <Text className="text-xs text-gray-400">Shows up once someone books a request with you through the app.</Text>
-            </View>
-          }
-        />
-      ) : (
-        <FlatList
-          data={filteredCustomers}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <CustomerRow customer={item} basePath={basePath} />}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          ListEmptyComponent={
-            <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
-              <Ionicons name="people-outline" size={28} color="#D1D5DB" />
-              <Text className="mt-2 text-gray-500">
-                {customers && customers.length > 0 ? 'No matches.' : 'No customers saved yet.'}
-              </Text>
-              <Text className="text-xs text-gray-400">
-                Add one above, or they'll be saved automatically when you book a job for them.
-              </Text>
-            </View>
-          }
-        />
-      )}
+      <FlatList
+        data={filteredMerged}
+        keyExtractor={(item) => `${item.kind}-${item.id}`}
+        renderItem={({ item }) =>
+          item.kind === 'customer' ? (
+            <CustomerRow customer={item.customer} basePath={basePath} isApp={item.isApp} />
+          ) : (
+            <AppCustomerRow entry={item.entry} />
+          )
+        }
+        contentContainerStyle={{ paddingBottom: 40 }}
+        ListEmptyComponent={
+          <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
+            <Ionicons name="people-outline" size={28} color="#D1D5DB" />
+            <Text className="mt-2 text-gray-500">{merged.length > 0 ? 'No matches.' : 'No customers yet.'}</Text>
+            <Text className="text-xs text-gray-400">
+              Add one above, or they'll be saved automatically when you book a job for them.
+            </Text>
+          </View>
+        }
+      />
     </View>
   );
 }

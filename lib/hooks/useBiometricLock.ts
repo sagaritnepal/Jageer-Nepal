@@ -29,8 +29,11 @@ export const useBiometricLockStore = create<BiometricLockState>((set) => ({
  * fingerprint) - the user just actively proved who they are to get that
  * session, so immediately demanding another biometric check on top of a
  * fingerprint sign-in was a redundant double-prompt. */
+const BACKGROUND_LOCK_GRACE_MS = 5 * 60 * 1000;
+
 export function useBiometricLockBootstrap(userId: string | undefined) {
   const appState = useRef(AppState.currentState);
+  const backgroundedAt = useRef<number | null>(null);
 
   useEffect(() => {
     const { setEnabled, setLocked, setChecked } = useBiometricLockStore.getState();
@@ -56,10 +59,23 @@ export function useBiometricLockBootstrap(userId: string | undefined) {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       const wasActive = appState.current === 'active';
-      appState.current = next;
-      if (wasActive && next !== 'active' && useBiometricLockStore.getState().enabled) {
-        useBiometricLockStore.getState().setLocked(true);
+      const returningToActive = !wasActive && next === 'active';
+
+      if (wasActive && next !== 'active') {
+        backgroundedAt.current = Date.now();
+      } else if (returningToActive && useBiometricLockStore.getState().enabled) {
+        // Re-lock only after a real backgrounding, not a quick screen
+        // lock/unlock - re-scanning a fingerprint every single time the
+        // phone screen so much as locks was reported as too aggressive, so
+        // only demand it again once the app has actually been away for a
+        // while (someone could've handed the unlocked phone to someone
+        // else in that time).
+        const elapsed = backgroundedAt.current ? Date.now() - backgroundedAt.current : Infinity;
+        if (elapsed >= BACKGROUND_LOCK_GRACE_MS) {
+          useBiometricLockStore.getState().setLocked(true);
+        }
       }
+      appState.current = next;
     });
     return () => sub.remove();
   }, []);

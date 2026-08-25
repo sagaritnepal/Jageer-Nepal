@@ -6,6 +6,7 @@ import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpsert, useSupabaseUpdate } from '../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { filterBySearch } from '../utils/search';
+import { toSafeImageUri } from '../utils/image';
 import { SearchSuggestions } from './SearchSuggestions';
 import { SearchBar } from './SearchBar';
 import { SearchFilterSheet } from './SearchFilterSheet';
@@ -113,7 +114,7 @@ function StockRow({
         >
           <View className="h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100">
             {item.image_url ? (
-              <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+              <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
             ) : (
               <Text className="text-base">📦</Text>
             )}

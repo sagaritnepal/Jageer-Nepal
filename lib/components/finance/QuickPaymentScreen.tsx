@@ -1,16 +1,23 @@
 // lib/components/finance/QuickPaymentScreen.tsx
-import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { View, Text, TextInput, Pressable } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
-import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
+import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
-import { CustomerSearchModal } from './CustomerSearchModal';
+import { usePhoneContacts } from '../../hooks/usePhoneContacts';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
+import { ContactPickerModal } from '../ContactPickerModal';
+import { DateField } from '../DateTimeFields';
+import { FormSection } from './FormSection';
 import { showAlert, getErrorMessage } from '../../utils/alert';
-import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { Customer } from '../../../types/database.types';
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export function QuickPaymentScreen() {
   const { type } = useLocalSearchParams<{ type?: string }>();
@@ -21,14 +28,33 @@ export function QuickPaymentScreen() {
     orderBy: { column: 'name' },
     enabled: !!userId,
   });
+  // Same-direction manual entries only - counts Payment In separately from
+  // Payment Out, and skips booking-synced credits (job payments), which
+  // never carry a receipt_no of their own.
+  const { data: sameDirectionEntries } = useSupabaseQuery('customer_ledger_entries', {
+    filters: userId ? { owner_id: userId, entry_type: isOut ? 'debit' : 'credit', source: 'manual' } : {},
+    enabled: !!userId,
+  });
   const insertEntry = useSupabaseInsert('customer_ledger_entries');
+  const createCustomer = useSupabaseInsert('customers');
+  const updateCustomer = useSupabaseUpdate('customers');
   const bankAccounts = useBankAccounts(userId);
+  const phoneContacts = usePhoneContacts();
 
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
-  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
+  // Lets a typo in a just-added (or existing) customer's name get fixed
+  // right here instead of hunting it down in Customers afterward.
+  const [showRenameCustomer, setShowRenameCustomer] = useState(false);
+  const [renameCustomerValue, setRenameCustomerValue] = useState('');
+  const [renamingCustomer, setRenamingCustomer] = useState(false);
+  const [date, setDate] = useState(todayIso());
+  const [receiptNo, setReceiptNo] = useState('');
+  // Only true once the reseller has actually typed in the field - lets the
+  // auto-filled next number keep updating (e.g. once real data loads in) up
+  // until they've made it their own, without ever overwriting an edit.
+  const [receiptNoTouched, setReceiptNoTouched] = useState(false);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
@@ -39,44 +65,70 @@ export function QuickPaymentScreen() {
     ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
     : 'Cash';
 
-  const nameSuggestions = useMemo(() => {
-    const q = customerName.trim().toLowerCase();
-    if (!q) return [];
-    return (customers ?? []).filter((c) => c.name.toLowerCase().includes(q)).slice(0, 6);
-  }, [customers, customerName]);
+  // 001, 002, 003... ascending off the highest number already used in this
+  // direction - padded to 3 digits until there are enough entries to need
+  // more.
+  const nextReceiptNo = useMemo(() => {
+    const nums = (sameDirectionEntries ?? [])
+      .map((e) => Number((e.receipt_no ?? '').replace(/\D/g, '')))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return String(next).padStart(3, '0');
+  }, [sameDirectionEntries]);
 
-  const customerSearchResults = useMemo(() => {
-    const q = customerSearch.trim().toLowerCase();
-    const list = customers ?? [];
-    if (!q) return list;
-    return list.filter((c) => c.name.toLowerCase().includes(q) || (c.phone ?? '').includes(q));
-  }, [customers, customerSearch]);
+  useEffect(() => {
+    if (!receiptNoTouched) setReceiptNo(nextReceiptNo);
+  }, [nextReceiptNo, receiptNoTouched]);
 
   function selectCustomer(c: Customer) {
     setSelectedCustomer(c);
     setCustomerName(c.name);
-    setShowNameSuggestions(false);
-    setShowCustomerPicker(false);
+    setShowPicker(false);
   }
 
-  // Payments must link to an existing saved customer (handleSave blocks
-  // otherwise), so a picked phone contact only helps if it matches one -
-  // unlike request-details.tsx, there's no "create new customer" path here.
-  async function handlePickContact() {
-    const picked = await pickPhoneContact();
-    if (!picked?.phone) return;
-    const existing = (customers ?? []).find((c) => c.phone === picked.phone);
-    if (existing) {
-      selectCustomer(existing);
-    } else {
-      showAlert('Not a saved customer', `${picked.name || 'This contact'} isn't saved yet — add them from Your Customers first.`);
+  // Picking a phone contact not already saved (or typing a brand new name
+  // in the popup's own search box) saves them now - payments must link to
+  // a real customer_id, so this shouldn't mean a trip to Your Customers
+  // first. If the phone number already matches someone saved, use that
+  // record instead of creating an unlinked duplicate.
+  async function handleSelectNew(name: string, phone: string | null) {
+    if (!userId) return;
+    setShowPicker(false);
+    if (phone) {
+      const existing = (customers ?? []).find((c) => c.phone === phone);
+      if (existing) {
+        selectCustomer(existing);
+        return;
+      }
+    }
+    try {
+      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone });
+      selectCustomer(created);
+    } catch (err) {
+      showAlert('Could not add customer', getErrorMessage(err));
+    }
+  }
+
+  async function handleRenameCustomer() {
+    if (!selectedCustomer || !renameCustomerValue.trim()) return;
+    setRenamingCustomer(true);
+    try {
+      await updateCustomer.mutateAsync({ id: selectedCustomer.id, values: { name: renameCustomerValue.trim() } });
+      setCustomerName(renameCustomerValue.trim());
+      setSelectedCustomer({ ...selectedCustomer, name: renameCustomerValue.trim() });
+      setShowRenameCustomer(false);
+    } catch (err) {
+      showAlert('Could not rename', getErrorMessage(err));
+    } finally {
+      setRenamingCustomer(false);
     }
   }
 
   async function handleSave() {
     if (!userId) return;
-    if (!selectedCustomer) {
-      showAlert('Select a customer', 'Search or pick a saved customer for this payment.');
+    const trimmedName = customerName.trim();
+    if (!trimmedName) {
+      showAlert('Add a customer', 'Tap the field to search or add a customer for this payment.');
       return;
     }
     const value = Number(amount);
@@ -86,24 +138,32 @@ export function QuickPaymentScreen() {
     }
     setSaving(true);
     try {
+      // Typed a name that doesn't match anyone picked/selected above - save
+      // them as a new customer on the spot rather than making this a dead
+      // end that sends the reseller off to Your Customers first.
+      const customer = selectedCustomer ?? (await createCustomer.mutateAsync({ owner_id: userId, name: trimmedName, phone: null }));
       await insertEntry.mutateAsync({
-        customer_id: selectedCustomer.id,
+        customer_id: customer.id,
         owner_id: userId,
         entry_type: isOut ? 'debit' : 'credit',
         amount: value,
         note: note.trim() || null,
         source: 'manual',
         bank_account_id: bankAccountId,
+        entry_date: date || null,
+        receipt_no: receiptNo.trim() || null,
       });
       showAlert(
         isOut ? 'Payment out recorded' : 'Payment in recorded',
-        `NPR ${value.toLocaleString()} for ${selectedCustomer.name}.`
+        `NPR ${value.toLocaleString()} for ${customer.name}.`
       );
       setAmount('');
       setNote('');
       setSelectedCustomer(null);
       setCustomerName('');
       setBankAccountId(null);
+      setDate(todayIso());
+      setReceiptNoTouched(false);
     } catch (err) {
       showAlert('Could not save', getErrorMessage(err));
     } finally {
@@ -116,7 +176,13 @@ export function QuickPaymentScreen() {
     : { label: 'Payment In', color: '#059669', bg: 'bg-emerald-50', icon: 'arrow-down-circle' as const };
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+    <KeyboardAwareScrollView
+      className="flex-1 bg-gray-50 px-6 pt-4"
+      contentContainerStyle={{ paddingBottom: 40 }}
+      enableOnAndroid
+      extraScrollHeight={20}
+      keyboardShouldPersistTaps="handled"
+    >
       <View className={`mb-4 flex-row items-center gap-2 rounded-2xl p-4 ${meta.bg}`}>
         <Ionicons name={meta.icon} size={20} color={meta.color} />
         <Text className="text-base font-bold" style={{ color: meta.color }}>
@@ -125,89 +191,117 @@ export function QuickPaymentScreen() {
       </View>
 
       <View className="rounded-2xl border border-gray-200 bg-white p-4">
-        <Text className="mb-1 text-xs font-medium text-gray-500">Customer</Text>
-        <View className="mb-1 flex-row items-center rounded-lg border border-gray-300 bg-white">
-          <TextInput
-            value={customerName}
-            onChangeText={(v) => {
-              setCustomerName(v);
-              setSelectedCustomer(null);
-              setShowNameSuggestions(true);
-            }}
-            onFocus={() => setShowNameSuggestions(true)}
-            placeholder={isOut ? "Who are you paying?" : 'Who is this payment from?'}
-            className="flex-1 px-3 py-2.5 text-sm text-gray-900"
-          />
-          <Pressable
-            onPress={() => {
-              setCustomerSearch('');
-              setShowCustomerPicker(true);
-            }}
-            hitSlop={8}
-            className="px-2.5"
-          >
-            <Ionicons name="book-outline" size={18} color="#1d4ed8" />
-          </Pressable>
-          {Platform.OS !== 'web' && (
-            <Pressable onPress={handlePickContact} hitSlop={8} className="pl-1 pr-2.5">
-              <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
+        <FormSection icon="person-outline" title="Customer" first>
+          <View className="mb-1 flex-row items-center gap-2">
+            <Pressable
+              onPress={() => {
+                phoneContacts.request();
+                setShowPicker(true);
+              }}
+              className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+            >
+              <Text className={`flex-1 text-sm ${customerName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+                {customerName || (isOut ? 'Who are you paying?' : 'Who is this payment from?')}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
             </Pressable>
-          )}
-        </View>
-        {showNameSuggestions && nameSuggestions.length > 0 && (
-          <View className="mb-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
-            {nameSuggestions.map((c, idx) => (
+            {!!selectedCustomer && (
               <Pressable
-                key={c.id}
-                onPress={() => selectCustomer(c)}
-                className={`px-3 py-2 ${idx !== nameSuggestions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                onPress={() => {
+                  setRenameCustomerValue(selectedCustomer.name);
+                  setShowRenameCustomer(true);
+                }}
+                hitSlop={8}
+                className="rounded-lg border border-gray-300 bg-white p-2.5"
               >
-                <Text className="text-sm font-medium text-gray-900">{c.name}</Text>
-                {!!c.phone && <Text className="text-xs text-gray-500">{c.phone}</Text>}
+                <Ionicons name="pencil-outline" size={16} color="#6B7280" />
               </Pressable>
-            ))}
+            )}
           </View>
-        )}
-        {selectedCustomer && (
-          <View className="mb-1 flex-row items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
-            <Ionicons name="checkmark-circle" size={14} color="#1d4ed8" />
-            <Text className="flex-1 text-xs font-medium text-blue-700">Using saved customer</Text>
+          {showRenameCustomer && (
+            <View className="mb-1 flex-row items-center gap-2">
+              <TextInput
+                value={renameCustomerValue}
+                onChangeText={setRenameCustomerValue}
+                autoFocus
+                placeholder="Name"
+                placeholderTextColor="#9CA3AF"
+                className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+              />
+              <Pressable onPress={handleRenameCustomer} disabled={renamingCustomer} hitSlop={8}>
+                <Ionicons name="checkmark-circle" size={22} color="#059669" />
+              </Pressable>
+              <Pressable onPress={() => setShowRenameCustomer(false)} hitSlop={8}>
+                <Ionicons name="close-circle" size={22} color="#9CA3AF" />
+              </Pressable>
+            </View>
+          )}
+          {selectedCustomer ? (
+            <View className="flex-row items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
+              <Ionicons name="checkmark-circle" size={14} color="#1d4ed8" />
+              <Text className="flex-1 text-xs font-medium text-blue-700">Using saved customer</Text>
+            </View>
+          ) : (
+            <Text className="text-[11px] text-gray-400">Tap to search your saved customers and phone contacts.</Text>
+          )}
+        </FormSection>
+
+        <FormSection icon="document-text-outline" title="Details">
+          <View className="mb-3 flex-row gap-2">
+            <View className="flex-1">
+              <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
+              <DateField value={date} onChange={setDate} />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-1 text-xs font-medium text-gray-500">{isOut ? 'Payment No.' : 'Receipt No.'}</Text>
+              <TextInput
+                value={receiptNo}
+                onChangeText={(v) => {
+                  setReceiptNo(v);
+                  setReceiptNoTouched(true);
+                }}
+                placeholder="Optional"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+                className="rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-900"
+              />
+            </View>
           </View>
-        )}
-        <Text className="mb-3 mt-1 text-[11px] text-gray-400">
-          Tap the book icon to search your {(customers ?? []).length} saved customers.
-        </Text>
 
-        <Text className="mb-1 text-xs font-medium text-gray-500">
-          {isOut ? 'Amount paid out (NPR)' : 'Amount received (NPR)'}
-        </Text>
-        <TextInput
-          value={amount}
-          onChangeText={setAmount}
-          placeholder="e.g. 1000"
-          keyboardType="numeric"
-          className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-        />
+          <Text className="mb-1 text-xs font-medium text-gray-500">
+            {isOut ? 'Amount paid out (NPR)' : 'Amount received (NPR)'}
+          </Text>
+          <TextInput
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="e.g. 1000"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
 
-        <Text className="mb-1 text-xs font-medium text-gray-500">Note (optional)</Text>
-        <TextInput
-          value={note}
-          onChangeText={setNote}
-          placeholder="e.g. Cash payment"
-          className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-        />
+          <Text className="mb-1 text-xs font-medium text-gray-500">Note (optional)</Text>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="e.g. Cash payment"
+            placeholderTextColor="#9CA3AF"
+            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+          />
+        </FormSection>
 
-        <Text className="mb-1 text-xs font-medium text-gray-500">Payment account</Text>
-        <Pressable
-          onPress={() => setShowAccountPicker(true)}
-          className="mb-4 flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
-        >
-          <View className="flex-row items-center gap-2">
-            <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
-            <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
-          </View>
-          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-        </Pressable>
+        <FormSection icon="wallet-outline" title="Payment method">
+          <Pressable
+            onPress={() => setShowAccountPicker(true)}
+            className="flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
+          >
+            <View className="flex-row items-center gap-2">
+              <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
+              <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
+            </View>
+            <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+          </Pressable>
+        </FormSection>
 
         <Pressable
           onPress={handleSave}
@@ -221,13 +315,14 @@ export function QuickPaymentScreen() {
         </Pressable>
       </View>
 
-      <CustomerSearchModal
-        visible={showCustomerPicker}
-        customers={customerSearchResults}
-        search={customerSearch}
-        onSearchChange={setCustomerSearch}
-        onSelect={selectCustomer}
-        onClose={() => setShowCustomerPicker(false)}
+      <ContactPickerModal
+        visible={showPicker}
+        initialQuery=""
+        customers={customers ?? []}
+        phoneContacts={phoneContacts.contacts}
+        onSelectCustomer={selectCustomer}
+        onSelectNew={handleSelectNew}
+        onClose={() => setShowPicker(false)}
       />
       <BankAccountPickerModal
         visible={showAccountPicker}
@@ -238,6 +333,6 @@ export function QuickPaymentScreen() {
         onRename={bankAccounts.rename}
         onDelete={bankAccounts.remove}
       />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }

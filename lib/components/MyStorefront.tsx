@@ -10,6 +10,7 @@ import { SearchFilterSheet } from './SearchFilterSheet';
 import { ShopOverviewSection } from './ShopOverviewSection';
 import { filterBySearch } from '../utils/search';
 import { showAlert, getErrorMessage } from '../utils/alert';
+import { toSafeImageUri } from '../utils/image';
 import { LOW_STOCK_THRESHOLD } from '../constants/stock';
 import type { Product, UserRole } from '../../types/database.types';
 
@@ -87,6 +88,23 @@ function EditablePrice({ item }: { item: Product }) {
   );
 }
 
+function ProductThumbnail({ item }: { item: Product }) {
+  const [failed, setFailed] = useState(false);
+  const uri = toSafeImageUri(item.image_url);
+
+  if (!uri || failed) {
+    return <Text className="text-3xl">🖥️</Text>;
+  }
+  return (
+    <Image
+      source={{ uri }}
+      className="h-full w-full"
+      resizeMode="cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function StorefrontCard({ item, basePath }: { item: Product; basePath: string }) {
   const updateProduct = useSupabaseUpdate('products');
   const isAvailable = item.is_listed ?? true;
@@ -126,11 +144,7 @@ function StorefrontCard({ item, basePath }: { item: Product; basePath: string })
         onPress={() => detailHref && router.push(detailHref)}
         className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100"
       >
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
-        ) : (
-          <Text className="text-3xl">🖥️</Text>
-        )}
+        <ProductThumbnail item={item} />
         <View className={`absolute left-1 top-1 rounded-full px-2 py-0.5 ${badge.bg}`}>
           <Text className="text-[9px] font-bold uppercase tracking-wide text-white">{badge.label}</Text>
         </View>

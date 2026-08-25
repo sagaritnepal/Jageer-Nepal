@@ -112,6 +112,34 @@ export interface Product {
   updated_at: string;
 }
 
+// A name (and its last-used rate) typed into Sale/Purchase's item picker
+// that isn't a real product in the reseller's marketplace catalog - kept so
+// the picker can offer it again next time, without needing (or being
+// allowed - see 0063_finance_items.sql) to create a real `products` row.
+export interface FinanceItem {
+  id: string;
+  owner_id: string;
+  name: string;
+  rate: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Moving money between the business's own accounts (Cash and/or a
+// bank_accounts row) - null on either side means Cash, same convention as
+// bank_account_id everywhere else. Doesn't represent income or expense, so
+// it's kept out of Sales/Purchase/Expense/Total Received/Total Paid.
+export interface AccountTransfer {
+  id: string;
+  owner_id: string;
+  from_account_id: string | null;
+  to_account_id: string | null;
+  amount: number;
+  note: string | null;
+  transfer_date: string;
+  created_at: string;
+}
+
 export interface CatalogProduct {
   id: string;
   name: string;
@@ -154,11 +182,34 @@ export interface CustomerLedgerEntry {
   source_type: string | null;
   source_id: string | null;
   bank_account_id: string | null;
+  entry_date: string | null;
+  receipt_no: string | null;
   created_at: string;
 }
 
 export type BusinessTransactionType = 'sale' | 'purchase' | 'expense';
-export type PaymentMode = 'cash' | 'bank';
+export type PaymentMode = 'cash' | 'bank' | 'credit';
+
+// Same shape as CustomerLedgerEntry, but opposite polarity: 'debit' = the
+// business owes this vendor more (bought on credit), 'credit' = a payment
+// the business made to the vendor. vendor_id points at the same `customers`
+// directory Purchase's "Vendor" field picks from - vendors and customers
+// share one contacts list.
+export interface VendorLedgerEntry {
+  id: string;
+  vendor_id: string;
+  owner_id: string;
+  entry_type: LedgerEntryType;
+  amount: number;
+  note: string | null;
+  source: 'manual' | 'booking';
+  source_type: string | null;
+  source_id: string | null;
+  entry_date: string | null;
+  receipt_no: string | null;
+  bank_account_id: string | null;
+  created_at: string;
+}
 
 export interface BillItem {
   description: string;
@@ -179,6 +230,10 @@ export interface BankAccount {
   id: string;
   owner_id: string;
   name: string;
+  bank_name: string | null;
+  account_number: string | null;
+  account_holder_name: string | null;
+  address: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -190,6 +245,7 @@ export interface BusinessTransaction {
   amount: number;
   note: string | null;
   party_name: string | null;
+  customer_id: string | null;
   source_type: string | null;
   source_id: string | null;
   bill_no: string | null;
@@ -323,10 +379,23 @@ export interface Database {
         Relationships: [];
       };
       customers: { Row: Customer; Insert: Partial<Customer>; Update: Partial<Customer>; Relationships: [] };
+      finance_items: { Row: FinanceItem; Insert: Partial<FinanceItem>; Update: Partial<FinanceItem>; Relationships: [] };
+      account_transfers: {
+        Row: AccountTransfer;
+        Insert: Partial<AccountTransfer>;
+        Update: Partial<AccountTransfer>;
+        Relationships: [];
+      };
       customer_ledger_entries: {
         Row: CustomerLedgerEntry;
         Insert: Partial<CustomerLedgerEntry>;
         Update: Partial<CustomerLedgerEntry>;
+        Relationships: [];
+      };
+      vendor_ledger_entries: {
+        Row: VendorLedgerEntry;
+        Insert: Partial<VendorLedgerEntry>;
+        Update: Partial<VendorLedgerEntry>;
         Relationships: [];
       };
       business_transactions: {

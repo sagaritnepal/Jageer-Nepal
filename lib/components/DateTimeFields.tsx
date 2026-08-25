@@ -1,7 +1,17 @@
 // lib/components/DateTimeFields.tsx
 import { createElement, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  BS_MONTHS,
+  adStringToBs,
+  adStringToBsOrToday,
+  bsDaysInMonth,
+  bsToAdString,
+  bsWeekdayOfFirst,
+  toAdLabel,
+  toBsLabel,
+} from '../utils/nepaliDate';
 
 const webInputStyle = {
   border: '1px solid #d1d5db',
@@ -30,59 +40,221 @@ function formatDateValue(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-// Always en-US: guarantees English, Gregorian-calendar labels regardless of
-// the device's own locale/calendar settings.
-function formatDateLabel(value: string): string {
-  return parseDateValue(value).toLocaleDateString('en-US', {
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const AD_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+interface CalendarGridSpec {
+  monthLabel: string;
+  daysInMonth: number;
+  firstWeekday: number;
 }
 
-/** English (Gregorian) calendar picker: a native input on web, the OS's native calendar grid on iOS/Android. */
+/** A month grid shared by both calendars - leading blanks for the 1st's
+ * weekday offset, then 1..daysInMonth, padded to full weeks. Which calendar
+ * it's showing is entirely decided by the `spec` passed in, so switching
+ * between AD and BS always produces a visibly different header and day
+ * count instead of silently reusing whatever was already on screen. */
+function MonthCalendarGrid({
+  spec,
+  selectedDate,
+  onSelectDay,
+  onNavigate,
+}: {
+  spec: CalendarGridSpec;
+  selectedDate: number | null;
+  onSelectDay: (day: number) => void;
+  onNavigate: (deltaMonths: number) => void;
+}) {
+  const cells: (number | null)[] = [
+    ...Array(spec.firstWeekday).fill(null),
+    ...Array.from({ length: spec.daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  return (
+    <View>
+      <View className="mb-3 flex-row items-center justify-between">
+        <Pressable onPress={() => onNavigate(-1)} hitSlop={8} className="p-1">
+          <Ionicons name="chevron-back" size={20} color="#374151" />
+        </Pressable>
+        <Text className="text-sm font-semibold text-gray-900">{spec.monthLabel}</Text>
+        <Pressable onPress={() => onNavigate(1)} hitSlop={8} className="p-1">
+          <Ionicons name="chevron-forward" size={20} color="#374151" />
+        </Pressable>
+      </View>
+      <View className="flex-row">
+        {WEEKDAY_LABELS.map((w) => (
+          <Text key={w} className="flex-1 text-center text-[11px] font-medium text-gray-400">
+            {w}
+          </Text>
+        ))}
+      </View>
+      <View className="flex-row flex-wrap">
+        {cells.map((day, idx) => (
+          <View key={idx} style={{ width: '14.2857%' }} className="items-center py-1">
+            {day != null && (
+              <Pressable
+                onPress={() => onSelectDay(day)}
+                className={`h-8 w-8 items-center justify-center rounded-full ${day === selectedDate ? 'bg-orange-500' : ''}`}
+              >
+                <Text className={day === selectedDate ? 'text-sm font-bold text-white' : 'text-sm text-gray-800'}>{day}</Text>
+              </Pressable>
+            )}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Date picker defaulting to a BS (Bikram Sambat) calendar grid - the
+ * calendar Nepal actually runs on day-to-day - with a real toggle to an AD
+ * (Gregorian) grid for anyone who wants that instead. Both are the same
+ * kind of custom grid (no native OS picker involved), so switching between
+ * them always visibly changes the header/day layout rather than risking a
+ * silent no-op. Always stores/reports the value as an AD 'YYYY-MM-DD'
+ * string either way, since that's the shape every date column already uses. */
 export function DateField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [mode, setMode] = useState<'bs' | 'ad'>('bs');
+  // bsSpec/adSpec below are computed on every render (not just while the
+  // picker is open) to feed the always-visible trigger label too, so these
+  // must never sit at an invalid default like 0 - NepaliDate throws outside
+  // BS 2000-2090, which crashed the app on mount before the first tap ever
+  // set a real year/month.
+  const [bsYear, setBsYear] = useState(() => adStringToBsOrToday(value || formatDateValue(new Date())).year);
+  const [bsMonth, setBsMonth] = useState(() => adStringToBsOrToday(value || formatDateValue(new Date())).month);
+  const [adYear, setAdYear] = useState(() => (value ? parseDateValue(value) : new Date()).getFullYear());
+  const [adMonth, setAdMonth] = useState(() => (value ? parseDateValue(value) : new Date()).getMonth());
 
   if (Platform.OS === 'web') {
-    return createElement('input', {
-      type: 'date',
-      value,
-      onChange: (e: any) => onChange(e.target.value),
-      style: webInputStyle,
-    });
+    return (
+      <View>
+        {createElement('input', {
+          type: 'date',
+          value,
+          onChange: (e: any) => onChange(e.target.value),
+          style: webInputStyle,
+        })}
+        {!!value && <Text className="mt-1 text-xs text-gray-500">{toBsLabel(value)}</Text>}
+      </View>
+    );
   }
 
-  function handleChange(event: DateTimePickerEvent, selectedDate?: Date) {
-    if (Platform.OS === 'android') setShowPicker(false);
-    if (event.type === 'set' && selectedDate) onChange(formatDateValue(selectedDate));
+  function openPicker() {
+    const base = value || formatDateValue(new Date());
+    const bs = adStringToBsOrToday(base);
+    setBsYear(bs.year);
+    setBsMonth(bs.month);
+    const ad = parseDateValue(base);
+    setAdYear(ad.getFullYear());
+    setAdMonth(ad.getMonth());
+    setMode('bs');
+    setShowPicker(true);
   }
+
+  function navigateBs(delta: number) {
+    let m = bsMonth + delta;
+    let y = bsYear;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    } else if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    setBsMonth(m);
+    setBsYear(y);
+  }
+
+  function navigateAd(delta: number) {
+    let m = adMonth + delta;
+    let y = adYear;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    } else if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    setAdMonth(m);
+    setAdYear(y);
+  }
+
+  function selectBsDay(day: number) {
+    onChange(bsToAdString(bsYear, bsMonth, day));
+    setShowPicker(false);
+  }
+
+  function selectAdDay(day: number) {
+    onChange(formatDateValue(new Date(adYear, adMonth, day)));
+    setShowPicker(false);
+  }
+
+  const selectedBs = value ? adStringToBs(value) : null;
+  const bsSelectedDay = selectedBs && selectedBs.year === bsYear && selectedBs.month === bsMonth ? selectedBs.date : null;
+
+  const selectedAd = value ? parseDateValue(value) : null;
+  const adSelectedDay =
+    selectedAd && selectedAd.getFullYear() === adYear && selectedAd.getMonth() === adMonth ? selectedAd.getDate() : null;
+
+  const bsSpec: CalendarGridSpec = {
+    monthLabel: `${BS_MONTHS[bsMonth]} ${bsYear}`,
+    daysInMonth: bsDaysInMonth(bsYear, bsMonth),
+    firstWeekday: bsWeekdayOfFirst(bsYear, bsMonth),
+  };
+  const adSpec: CalendarGridSpec = {
+    monthLabel: `${AD_MONTH_NAMES[adMonth]} ${adYear}`,
+    daysInMonth: new Date(adYear, adMonth + 1, 0).getDate(),
+    firstWeekday: new Date(adYear, adMonth, 1).getDay(),
+  };
 
   return (
     <View>
       <Pressable
-        onPress={() => setShowPicker(true)}
-        className="rounded-lg border border-gray-300 bg-white px-4 py-3"
+        onPress={openPicker}
+        className="rounded-lg border border-gray-300 bg-white px-3 py-2"
       >
-        <Text className={value ? 'text-base text-gray-900' : 'text-base text-gray-400'}>
-          {value ? formatDateLabel(value) : 'Select a date'}
+        <Text className={value ? 'text-xs font-bold text-gray-900' : 'text-xs font-bold text-gray-400'}>
+          {value ? toBsLabel(value) : 'Select a date'}
         </Text>
+        {!!value && <Text className="mt-0.5 text-[10px] text-gray-500">{toAdLabel(value)}</Text>}
       </Pressable>
 
-      {showPicker && (
-        <DateTimePicker
-          value={value ? parseDateValue(value) : new Date()}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
-          onChange={handleChange}
-        />
-      )}
-      {showPicker && Platform.OS === 'ios' && (
-        <Pressable onPress={() => setShowPicker(false)} className="mt-2 items-center rounded-lg bg-orange-500 py-2">
-          <Text className="text-sm font-semibold text-white">Done</Text>
+      <Modal visible={showPicker} transparent animationType="fade" onRequestClose={() => setShowPicker(false)}>
+        <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={() => setShowPicker(false)}>
+          <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-4">
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-gray-900">Select a date</Text>
+              <View className="flex-row rounded-full bg-gray-100 p-0.5">
+                <Pressable
+                  onPress={() => setMode('bs')}
+                  className={`rounded-full px-3 py-1 ${mode === 'bs' ? 'bg-orange-500' : ''}`}
+                >
+                  <Text className={`text-xs font-semibold ${mode === 'bs' ? 'text-white' : 'text-gray-600'}`}>BS</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setMode('ad')}
+                  className={`rounded-full px-3 py-1 ${mode === 'ad' ? 'bg-orange-500' : ''}`}
+                >
+                  <Text className={`text-xs font-semibold ${mode === 'ad' ? 'text-white' : 'text-gray-600'}`}>AD</Text>
+                </Pressable>
+              </View>
+            </View>
+            {mode === 'bs' ? (
+              <MonthCalendarGrid spec={bsSpec} selectedDate={bsSelectedDay} onSelectDay={selectBsDay} onNavigate={navigateBs} />
+            ) : (
+              <MonthCalendarGrid spec={adSpec} selectedDate={adSelectedDay} onSelectDay={selectAdDay} onNavigate={navigateAd} />
+            )}
+            <Pressable onPress={() => setShowPicker(false)} className="mt-3 items-center rounded-lg border border-gray-300 py-2">
+              <Text className="text-sm font-semibold text-gray-600">Close</Text>
+            </Pressable>
+          </Pressable>
         </Pressable>
-      )}
+      </Modal>
     </View>
   );
 }

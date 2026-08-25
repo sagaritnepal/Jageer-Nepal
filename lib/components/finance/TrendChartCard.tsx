@@ -3,10 +3,11 @@ import { useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { BarChart } from '../BarChart';
 import { NetTrendChart } from '../NetTrendChart';
+import { toBsDayChartLabel, toBsMonthChartLabel } from '../../utils/nepaliDate';
 import type { BusinessTransaction, BusinessTransactionType } from '../../../types/database.types';
 
 export type TrendMetric = 'all' | BusinessTransactionType;
-export type Granularity = 'day' | 'week' | 'month';
+export type Granularity = 'week' | 'month';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -26,27 +27,20 @@ function startOfWeek(d: Date) {
   return new Date(day.getTime() - (dow - 1) * DAY_MS);
 }
 
-const DEFAULT_COUNTS: Record<Granularity, number> = { day: 30, week: 12, month: 12 };
+const DEFAULT_COUNTS: Record<Granularity, number> = { week: 12, month: 12 };
 
-// Bucket boundaries for the trend chart - day (last N days), week (last N
-// weeks), or month (last N months, capped at the 12 months of the current
-// year), shared by every metric so switching granularity re-buckets
-// consistently. `count` lets a narrower chart (e.g. a dual bar-per-bucket
-// layout) ask for fewer, wider buckets than the default single-bar charts.
+// Bucket boundaries for the trend chart - week (last N weeks) or month
+// (last N months, capped at the 12 months of the current year), shared by
+// every metric so switching granularity re-buckets consistently. `count`
+// lets a narrower chart (e.g. a dual bar-per-bucket layout) ask for fewer,
+// wider buckets than the default single-bar charts.
 export function periodBuckets(granularity: Granularity, count = DEFAULT_COUNTS[granularity]): { start: number; end: number; label: string }[] {
   const now = new Date();
-  if (granularity === 'day') {
-    return Array.from({ length: count }, (_, i) => {
-      const d = new Date(now.getTime() - (count - 1 - i) * DAY_MS);
-      const start = startOfDay(d).getTime();
-      return { start, end: start + DAY_MS, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) };
-    });
-  }
   if (granularity === 'week') {
     const thisWeekStart = startOfWeek(now).getTime();
     return Array.from({ length: count }, (_, i) => {
       const start = thisWeekStart - (count - 1 - i) * 7 * DAY_MS;
-      return { start, end: start + 7 * DAY_MS, label: new Date(start).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) };
+      return { start, end: start + 7 * DAY_MS, label: toBsDayChartLabel(start) };
     });
   }
   const monthCount = Math.min(count, 12);
@@ -55,12 +49,11 @@ export function periodBuckets(granularity: Granularity, count = DEFAULT_COUNTS[g
     const month = 12 - monthCount + i;
     const start = new Date(year, month, 1).getTime();
     const end = new Date(year, month + 1, 1).getTime();
-    return { start, end, label: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'short' }) };
+    return { start, end, label: toBsMonthChartLabel(start) };
   });
 }
 
 export function formatBucketLabel(granularity: Granularity, label: string, i: number, total: number) {
-  if (granularity === 'day') return i % 5 === 0 || i === total - 1 ? label : null;
   if (granularity === 'week') return i % 3 === 0 || i === total - 1 ? label : null;
   return label;
 }
@@ -133,7 +126,7 @@ export function TrendChartCard({
       <Text className="mb-3 text-sm font-semibold text-gray-900">{METRIC_META[metric].label} trend</Text>
 
       <View className="mb-3 flex-row gap-2">
-        {(['day', 'week', 'month'] as Granularity[]).map((g) => {
+        {(['week', 'month'] as Granularity[]).map((g) => {
           const selectedG = granularity === g;
           return (
             <Pressable

@@ -1,6 +1,10 @@
 // lib/utils/contactsSync.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Contacts from 'expo-contacts';
+// The default 'expo-contacts' export's getContactsAsync/requestPermissionsAsync
+// are deprecated in favor of a new class-based API and now throw instead of
+// just warning - the legacy import keeps the same function-based shape this
+// file already uses (see also lib/hooks/usePhoneContacts.ts).
+import * as Contacts from 'expo-contacts/legacy';
 import { supabase } from '../supabase';
 import { normalizePhone } from './phone';
 

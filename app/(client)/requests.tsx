@@ -13,7 +13,7 @@ import type { RequestStatus, ServiceRequest, Order, OrderStatus } from '../../ty
 type ViewMode = 'active' | 'history';
 
 const ACTIVE_STATUSES: RequestStatus[] = ['pending', 'quoted', 'approved', 'assigned', 'in_progress'];
-const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'shipped'];
+const ACTIVE_ORDER_STATUSES: OrderStatus[] = ['confirmed', 'shipped'];
 
 type CombinedItem =
   | { kind: 'service'; key: string; created_at: string; data: ServiceRequest }
@@ -147,6 +147,12 @@ export default function ClientRequests() {
       .map((r) => ({ kind: 'service' as const, key: `s-${r.id}`, created_at: r.created_at, data: r }));
 
     const orderItems: CombinedItem[] = (orders ?? [])
+      // A brand-new order sits at 'pending' until the seller actually
+      // accepts it - showing it to the buyer straight away makes an
+      // unconfirmed order look like it's already been taken on, so it stays
+      // hidden here (in both Active and History) until the seller moves it
+      // past 'pending'.
+      .filter((o) => o.status !== 'pending')
       .filter((o) =>
         viewMode === 'active' ? ACTIVE_ORDER_STATUSES.includes(o.status) : !ACTIVE_ORDER_STATUSES.includes(o.status)
       )

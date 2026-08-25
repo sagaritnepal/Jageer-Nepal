@@ -1,6 +1,6 @@
 // lib/components/finance/BankAccountPickerModal.tsx
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import type { BankAccount } from '../../../types/database.types';
@@ -46,6 +46,7 @@ export function BankAccountPickerModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={onClose}>
         <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-3" style={{ maxHeight: '75%' }}>
           <View className="mb-2 flex-row items-center justify-between">
@@ -131,6 +132,7 @@ export function BankAccountPickerModal({
           </ScrollView>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

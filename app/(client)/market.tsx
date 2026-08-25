@@ -9,6 +9,7 @@ import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { CartBar } from '../../lib/components/CartBar';
 import { showAlert } from '../../lib/utils/alert';
 import { filterBySearch } from '../../lib/utils/search';
+import { toSafeImageUri } from '../../lib/utils/image';
 import type { Product } from '../../types/database.types';
 
 function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product) => void }) {
@@ -17,7 +18,7 @@ function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product)
       <Pressable onPress={() => router.push(`/(client)/product/${item.id}`)}>
         <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
           {item.image_url ? (
-            <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+            <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
           ) : (
             <Text className="text-3xl">🖥️</Text>
           )}

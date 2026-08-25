@@ -5,6 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseRow, useSupabaseQuery, useSupabaseUpsert } from '../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../utils/alert';
+import { toSafeImageUri } from '../utils/image';
 
 export function CatalogProductDetail({
   priceLabel,
@@ -97,7 +98,7 @@ export function CatalogProductDetail({
       <View className="px-6 pt-16">
         <View className="mb-4 aspect-square items-center justify-center overflow-hidden rounded-2xl bg-gray-100">
           {item.image_url ? (
-            <Image source={{ uri: item.image_url }} className="h-full w-full" resizeMode="cover" />
+            <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
           ) : (
             <Text className="text-5xl">📦</Text>
           )}

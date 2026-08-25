@@ -2,5 +2,5 @@
 import { TotalsReportScreen } from '../../lib/components/finance/TotalsReportScreen';
 
 export default function ReceivedScreen() {
-  return <TotalsReportScreen kind="received" />;
+  return <TotalsReportScreen kind="received" basePath="/(reseller)" />;
 }
