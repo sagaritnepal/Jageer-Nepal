@@ -3,6 +3,7 @@
     "scheme": "jageer",
     "plugins": [
       "expo-router",
+      "expo-document-picker",
       [
         "expo-image-picker",
         {
@@ -28,7 +29,13 @@
           "faceIDPermission": "Jageer uses Face ID to quickly and securely unlock the app."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Jageer needs microphone access so you can add Finance entries by voice."
+        }
+      ]
     ],
     "name": "jageer-app",
     "slug": "jageer-app",

@@ -12,6 +12,40 @@ interface QueryFilters {
   [column: string]: string | number | boolean | null;
 }
 
+// Several DB triggers cascade one table's write into another's rows
+// server-side - the database always gets this right on its own, but the
+// app's query cache has no way to know a write to table A also touched
+// table B unless told, so a screen reading B can keep showing stale data
+// until something else happens to refetch it. Each entry here is the full
+// (already-flattened) set of tables a write to the key table can cascade
+// into, so every mutation hook gets the fix for free instead of relying on
+// each call site to remember it:
+//  - business_transactions -> customer/vendor ledgers (0061, 0059): a
+//    Sale/Purchase against a real party posts/reverses a debt there.
+//  - orders -> products (0021/0028): a wholesale order reaching "delivered"
+//    credits the buying reseller's own stock_level/purchased_stock.
+//  - orders -> business_transactions -> ledgers (0049, 0050): an order's
+//    status change also books the matching Purchase/Sale for both sides.
+//  - catalog_products -> products (0023, 0025): an image edit or an
+//    approved wholesaler submission propagates into every products row
+//    sourced from that catalog entry.
+//  - service_requests -> ledgers/business_transactions (0033, 0037) and ->
+//    reward_point_events/profiles (0046, 0048): completing or paying for a
+//    job can log a ledger debt, a Finance entry, and a reward point.
+const LINKED_INVALIDATIONS: Partial<Record<TableName, TableName[]>> = {
+  business_transactions: ['customer_ledger_entries', 'vendor_ledger_entries'],
+  orders: ['products', 'business_transactions', 'customer_ledger_entries', 'vendor_ledger_entries'],
+  catalog_products: ['products'],
+  service_requests: ['customer_ledger_entries', 'business_transactions', 'vendor_ledger_entries', 'reward_point_events', 'profiles'],
+};
+
+function invalidateWithLinked(queryClient: ReturnType<typeof useQueryClient>, table: TableName) {
+  queryClient.invalidateQueries({ queryKey: [table] });
+  for (const linked of LINKED_INVALIDATIONS[table] ?? []) {
+    queryClient.invalidateQueries({ queryKey: [linked] });
+  }
+}
+
 /**
  * Generic read hook for any table, with optional equality filters.
  *
@@ -79,7 +113,7 @@ export function useSupabaseInsert<T extends TableName>(table: T) {
       if (error) throw error;
       return data as Row<T>;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [table] }),
+    onSuccess: () => invalidateWithLinked(queryClient, table),
   });
 }
 
@@ -92,7 +126,7 @@ export function useSupabaseUpdate<T extends TableName>(table: T) {
       if (error) throw error;
       return data as Row<T>;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [table] }),
+    onSuccess: () => invalidateWithLinked(queryClient, table),
   });
 }
 
@@ -108,7 +142,7 @@ export function useSupabaseUpsert<T extends TableName>(table: T, conflictColumns
       if (error) throw error;
       return data as Row<T>;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [table] }),
+    onSuccess: () => invalidateWithLinked(queryClient, table),
   });
 }
 
@@ -130,7 +164,7 @@ export function useSupabaseDelete<T extends TableName>(table: T) {
       if (error) throw error;
       return id;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [table] }),
+    onSuccess: () => invalidateWithLinked(queryClient, table),
   });
 }
 

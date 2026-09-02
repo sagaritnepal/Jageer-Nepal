@@ -8,6 +8,7 @@ import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePhoneContacts } from '../../hooks/usePhoneContacts';
+import { useScanBill } from '../../hooks/useScanBill';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { ContactPickerModal } from '../ContactPickerModal';
 import { DateField } from '../DateTimeFields';
@@ -20,30 +21,55 @@ function todayIso() {
 }
 
 export function QuickPaymentScreen() {
-  const { type } = useLocalSearchParams<{ type?: string }>();
+  // voice* params arrive from the Finance dashboard's voice-command button,
+  // routed here the same way a Shortcuts tap is (?type=in/out) - applied
+  // once on mount below, same "review before save" rule as Scan Bill.
+  const { type, voiceAmount, voiceParty, voiceDate, voiceNote } = useLocalSearchParams<{
+    type?: string;
+    voiceAmount?: string;
+    voiceParty?: string;
+    voiceDate?: string;
+    voiceNote?: string;
+  }>();
   const isOut = type === 'out';
   const userId = useAuthStore((state) => state.session?.user.id);
+  // Customers and vendors share one contacts list, but they're opposite
+  // ledgers (see PartyBalancesScreen) - a Payment Out settling a Purchase
+  // must reduce vendor_ledger_entries (what you owe), never
+  // customer_ledger_entries (what a customer owes you), or it inflates "To
+  // Receive" for someone you only ever bought from. Defaults match the more
+  // common real case for each direction, but is always an explicit choice.
+  const [payTarget, setPayTarget] = useState<'customer' | 'vendor'>(isOut ? 'vendor' : 'customer');
+  const targetTable = payTarget === 'vendor' ? 'vendor_ledger_entries' : 'customer_ledger_entries';
+  const entryType: 'debit' | 'credit' =
+    payTarget === 'customer' ? (isOut ? 'debit' : 'credit') : isOut ? 'credit' : 'debit';
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
     orderBy: { column: 'name' },
     enabled: !!userId,
   });
-  // Same-direction manual entries only - counts Payment In separately from
-  // Payment Out, and skips booking-synced credits (job payments), which
-  // never carry a receipt_no of their own.
-  const { data: sameDirectionEntries } = useSupabaseQuery('customer_ledger_entries', {
-    filters: userId ? { owner_id: userId, entry_type: isOut ? 'debit' : 'credit', source: 'manual' } : {},
+  // Same-direction, same-target manual entries only - counts Payment In
+  // separately from Payment Out (and vendor separately from customer), and
+  // skips booking-synced credits (job payments), which never carry a
+  // receipt_no of their own.
+  const { data: sameDirectionEntries } = useSupabaseQuery(targetTable, {
+    filters: userId ? { owner_id: userId, entry_type: entryType, source: 'manual' } : {},
     enabled: !!userId,
   });
-  const insertEntry = useSupabaseInsert('customer_ledger_entries');
+  const insertEntry = useSupabaseInsert(targetTable);
   const createCustomer = useSupabaseInsert('customers');
   const updateCustomer = useSupabaseUpdate('customers');
   const bankAccounts = useBankAccounts(userId);
   const phoneContacts = usePhoneContacts();
+  const { scanning, pickAndScan } = useScanBill();
 
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  // Pre-fills the customer picker's search box with whatever name Scan Bill
+  // read off the slip - still needs a tap to confirm, same reasoning as the
+  // Sale/Purchase/Expense form's version of this.
+  const [pickerQuery, setPickerQuery] = useState('');
   // Lets a typo in a just-added (or existing) customer's name get fixed
   // right here instead of hunting it down in Customers afterward.
   const [showRenameCustomer, setShowRenameCustomer] = useState(false);
@@ -143,16 +169,16 @@ export function QuickPaymentScreen() {
       // end that sends the reseller off to Your Customers first.
       const customer = selectedCustomer ?? (await createCustomer.mutateAsync({ owner_id: userId, name: trimmedName, phone: null }));
       await insertEntry.mutateAsync({
-        customer_id: customer.id,
+        [payTarget === 'vendor' ? 'vendor_id' : 'customer_id']: customer.id,
         owner_id: userId,
-        entry_type: isOut ? 'debit' : 'credit',
+        entry_type: entryType,
         amount: value,
         note: note.trim() || null,
         source: 'manual',
         bank_account_id: bankAccountId,
         entry_date: date || null,
         receipt_no: receiptNo.trim() || null,
-      });
+      } as any);
       showAlert(
         isOut ? 'Payment out recorded' : 'Payment in recorded',
         `NPR ${value.toLocaleString()} for ${customer.name}.`
@@ -171,6 +197,37 @@ export function QuickPaymentScreen() {
     }
   }
 
+  // Applies whatever the voice-command button understood - same "review
+  // before save" rule as Scan Bill below: this only fills fields, the party
+  // still needs a tap to confirm via the picker it opens, and nothing here
+  // saves on its own. Depends on the actual param values (not just "on
+  // mount") because Expo Router doesn't always have them hydrated on the
+  // very first render of a freshly-pushed route; a `[]` effect would fire
+  // once while they were still undefined and never get another chance.
+  useEffect(() => {
+    if (!voiceAmount && !voiceParty && !voiceDate && !voiceNote) return;
+    if (voiceAmount) setAmount(voiceAmount);
+    if (voiceDate) setDate(voiceDate);
+    if (voiceNote) setNote(voiceNote);
+    if (voiceParty) {
+      setPickerQuery(voiceParty);
+      setShowPicker(true);
+    }
+  }, [voiceAmount, voiceParty, voiceDate, voiceNote]);
+
+  async function handleScan() {
+    phoneContacts.request();
+    const scanned = await pickAndScan();
+    if (!scanned) return;
+    if (scanned.amount) setAmount(String(scanned.amount));
+    if (scanned.date) setDate(scanned.date);
+    if (scanned.note) setNote(scanned.note);
+    if (scanned.vendor_name) {
+      setPickerQuery(scanned.vendor_name);
+      setShowPicker(true);
+    }
+  }
+
   const meta = isOut
     ? { label: 'Payment Out', color: '#DC2626', bg: 'bg-red-50', icon: 'arrow-up-circle' as const }
     : { label: 'Payment In', color: '#059669', bg: 'bg-emerald-50', icon: 'arrow-down-circle' as const };
@@ -183,25 +240,67 @@ export function QuickPaymentScreen() {
       extraScrollHeight={20}
       keyboardShouldPersistTaps="handled"
     >
-      <View className={`mb-4 flex-row items-center gap-2 rounded-2xl p-4 ${meta.bg}`}>
+      <View className={`mb-3 flex-row items-center gap-2 rounded-2xl p-4 ${meta.bg}`}>
         <Ionicons name={meta.icon} size={20} color={meta.color} />
         <Text className="text-base font-bold" style={{ color: meta.color }}>
           {meta.label}
         </Text>
       </View>
 
+      <View className="mb-3 flex-row gap-2">
+        {(['customer', 'vendor'] as const).map((t) => {
+          const active = payTarget === t;
+          return (
+            <Pressable
+              key={t}
+              onPress={() => {
+                setPayTarget(t);
+                setSelectedCustomer(null);
+                setCustomerName('');
+                setReceiptNoTouched(false);
+              }}
+              className={`flex-1 items-center rounded-lg border py-2 ${
+                active ? meta.bg : 'bg-white border-gray-300'
+              }`}
+              style={active ? { borderColor: meta.color } : undefined}
+            >
+              <Text className="text-xs font-semibold" style={{ color: active ? meta.color : '#6B7280' }}>
+                {t === 'customer' ? 'Customer' : 'Vendor'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Pressable
+        onPress={handleScan}
+        disabled={scanning}
+        className="mb-3 flex-row items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-50 py-2.5 disabled:opacity-50"
+      >
+        <Ionicons name={scanning ? 'hourglass-outline' : 'camera-outline'} size={16} color="#2563EB" />
+        <Text className="text-sm font-semibold text-blue-700">{scanning ? 'Reading the slip…' : 'Scan Bill'}</Text>
+      </Pressable>
+
       <View className="rounded-2xl border border-gray-200 bg-white p-4">
-        <FormSection icon="person-outline" title="Customer" first>
+        <FormSection icon="person-outline" title={payTarget === 'vendor' ? 'Vendor' : 'Customer'} first>
           <View className="mb-1 flex-row items-center gap-2">
             <Pressable
               onPress={() => {
                 phoneContacts.request();
+                setPickerQuery('');
                 setShowPicker(true);
               }}
               className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
             >
               <Text className={`flex-1 text-sm ${customerName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-                {customerName || (isOut ? 'Who are you paying?' : 'Who is this payment from?')}
+                {customerName ||
+                  (payTarget === 'vendor'
+                    ? isOut
+                      ? 'Which vendor are you paying?'
+                      : 'Which vendor is this refund from?'
+                    : isOut
+                      ? 'Who are you paying?'
+                      : 'Who is this payment from?')}
               </Text>
               <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
             </Pressable>
@@ -239,7 +338,9 @@ export function QuickPaymentScreen() {
           {selectedCustomer ? (
             <View className="flex-row items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
               <Ionicons name="checkmark-circle" size={14} color="#1d4ed8" />
-              <Text className="flex-1 text-xs font-medium text-blue-700">Using saved customer</Text>
+              <Text className="flex-1 text-xs font-medium text-blue-700">
+                Using saved {payTarget === 'vendor' ? 'vendor' : 'customer'}
+              </Text>
             </View>
           ) : (
             <Text className="text-[11px] text-gray-400">Tap to search your saved customers and phone contacts.</Text>
@@ -317,7 +418,7 @@ export function QuickPaymentScreen() {
 
       <ContactPickerModal
         visible={showPicker}
-        initialQuery=""
+        initialQuery={pickerQuery}
         customers={customers ?? []}
         phoneContacts={phoneContacts.contacts}
         onSelectCustomer={selectCustomer}

@@ -1,5 +1,5 @@
 // lib/components/DateTimeFields.tsx
-import { createElement, useEffect, useRef, useState } from 'react';
+import { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -62,11 +62,13 @@ function MonthCalendarGrid({
   selectedDate,
   onSelectDay,
   onNavigate,
+  onTapHeader,
 }: {
   spec: CalendarGridSpec;
   selectedDate: number | null;
   onSelectDay: (day: number) => void;
   onNavigate: (deltaMonths: number) => void;
+  onTapHeader: () => void;
 }) {
   const cells: (number | null)[] = [
     ...Array(spec.firstWeekday).fill(null),
@@ -80,7 +82,13 @@ function MonthCalendarGrid({
         <Pressable onPress={() => onNavigate(-1)} hitSlop={8} className="p-1">
           <Ionicons name="chevron-back" size={20} color="#374151" />
         </Pressable>
-        <Text className="text-sm font-semibold text-gray-900">{spec.monthLabel}</Text>
+        {/* Tapping the label (not just the arrows) jumps to a year/month
+            list - picking, say, 5 years back used to mean 60 taps on the
+            chevron. */}
+        <Pressable onPress={onTapHeader} className="flex-row items-center gap-1 px-2 py-1">
+          <Text className="text-sm font-semibold text-gray-900">{spec.monthLabel}</Text>
+          <Ionicons name="chevron-down" size={14} color="#6B7280" />
+        </Pressable>
         <Pressable onPress={() => onNavigate(1)} hitSlop={8} className="p-1">
           <Ionicons name="chevron-forward" size={20} color="#374151" />
         </Pressable>
@@ -110,6 +118,89 @@ function MonthCalendarGrid({
   );
 }
 
+// The BS<->AD conversion (NepaliDate) only works inside BS 2000-2090, which
+// is roughly this AD window - both lists are clamped to it so nothing here
+// can ever land on a year the converter would throw on.
+const BS_MIN_YEAR = 2000;
+const BS_MAX_YEAR = 2090;
+const AD_MIN_YEAR = 1943;
+const AD_MAX_YEAR = 2033;
+
+/** Jump straight to a year and month instead of stepping through one month
+ * at a time - opened by tapping the calendar header. Two columns, side by
+ * side and independently scrollable (month names on the left, years on the
+ * right), each auto-scrolled to whatever's already selected; tapping either
+ * applies it immediately, no separate confirm step. */
+function YearMonthPicker({
+  monthNames,
+  minYear,
+  maxYear,
+  year,
+  month,
+  onSelectYear,
+  onSelectMonth,
+  onDone,
+}: {
+  monthNames: string[];
+  minYear: number;
+  maxYear: number;
+  year: number;
+  month: number;
+  onSelectYear: (y: number) => void;
+  onSelectMonth: (m: number) => void;
+  onDone: () => void;
+}) {
+  const years = useMemo(() => Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i), [minYear, maxYear]);
+  const monthScrollRef = useRef<ScrollView>(null);
+  const yearScrollRef = useRef<ScrollView>(null);
+  const ROW = 40;
+  const VISIBLE = 6;
+
+  useEffect(() => {
+    const yearIndex = years.indexOf(year);
+    const id = setTimeout(() => {
+      monthScrollRef.current?.scrollTo({ y: Math.max(0, month - 2) * ROW, animated: false });
+      yearScrollRef.current?.scrollTo({ y: Math.max(0, yearIndex - 2) * ROW, animated: false });
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <View>
+      <View className="flex-row overflow-hidden rounded-lg border border-gray-200" style={{ height: ROW * VISIBLE }}>
+        <ScrollView ref={monthScrollRef} className="flex-1 border-r border-gray-200" showsVerticalScrollIndicator>
+          {monthNames.map((name, i) => (
+            <Pressable
+              key={name}
+              onPress={() => onSelectMonth(i)}
+              style={{ height: ROW }}
+              className={`justify-center px-3 ${i === month ? 'bg-blue-50' : ''}`}
+            >
+              <Text className={i === month ? 'text-sm font-bold text-blue-700' : 'text-sm text-gray-700'}>{name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <ScrollView ref={yearScrollRef} className="flex-1" showsVerticalScrollIndicator>
+          {years.map((y) => (
+            <Pressable
+              key={y}
+              onPress={() => onSelectYear(y)}
+              style={{ height: ROW }}
+              className={`items-center justify-center ${y === year ? 'bg-blue-50' : ''}`}
+            >
+              <Text className={y === year ? 'text-sm font-bold text-blue-700' : 'text-sm text-gray-700'}>{y}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+      <Pressable onPress={onDone} className="mt-3 items-center rounded-lg border border-gray-300 py-2">
+        <Text className="text-sm font-semibold text-gray-600">Back to calendar</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 /** Date picker defaulting to a BS (Bikram Sambat) calendar grid - the
  * calendar Nepal actually runs on day-to-day - with a real toggle to an AD
  * (Gregorian) grid for anyone who wants that instead. Both are the same
@@ -120,6 +211,7 @@ function MonthCalendarGrid({
 export function DateField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [showPicker, setShowPicker] = useState(false);
   const [mode, setMode] = useState<'bs' | 'ad'>('bs');
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
   // bsSpec/adSpec below are computed on every render (not just while the
   // picker is open) to feed the always-visible trigger label too, so these
   // must never sit at an invalid default like 0 - NepaliDate throws outside
@@ -153,6 +245,7 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
     setAdYear(ad.getFullYear());
     setAdMonth(ad.getMonth());
     setMode('bs');
+    setShowYearMonthPicker(false);
     setShowPicker(true);
   }
 
@@ -229,25 +322,82 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
           <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-4">
             <View className="mb-3 flex-row items-center justify-between">
               <Text className="text-base font-semibold text-gray-900">Select a date</Text>
-              <View className="flex-row rounded-full bg-gray-100 p-0.5">
+              <View className="flex-row items-center gap-2">
+                {/* Jumps straight to today and applies it - the calendar
+                    otherwise opens on whatever date is already set (e.g. an
+                    old scanned bill date), which can be many months of
+                    chevron-tapping away from today. */}
                 <Pressable
-                  onPress={() => setMode('bs')}
-                  className={`rounded-full px-3 py-1 ${mode === 'bs' ? 'bg-orange-500' : ''}`}
+                  onPress={() => {
+                    onChange(formatDateValue(new Date()));
+                    setShowPicker(false);
+                  }}
+                  className="rounded-full border border-blue-600 px-3 py-1"
                 >
-                  <Text className={`text-xs font-semibold ${mode === 'bs' ? 'text-white' : 'text-gray-600'}`}>BS</Text>
+                  <Text className="text-xs font-semibold text-blue-700">Today</Text>
                 </Pressable>
-                <Pressable
-                  onPress={() => setMode('ad')}
-                  className={`rounded-full px-3 py-1 ${mode === 'ad' ? 'bg-orange-500' : ''}`}
-                >
-                  <Text className={`text-xs font-semibold ${mode === 'ad' ? 'text-white' : 'text-gray-600'}`}>AD</Text>
-                </Pressable>
+                <View className="flex-row rounded-full bg-gray-100 p-0.5">
+                  <Pressable
+                    onPress={() => {
+                      setMode('bs');
+                      setShowYearMonthPicker(false);
+                    }}
+                    className={`rounded-full px-3 py-1 ${mode === 'bs' ? 'bg-orange-500' : ''}`}
+                  >
+                    <Text className={`text-xs font-semibold ${mode === 'bs' ? 'text-white' : 'text-gray-600'}`}>BS</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setMode('ad');
+                      setShowYearMonthPicker(false);
+                    }}
+                    className={`rounded-full px-3 py-1 ${mode === 'ad' ? 'bg-orange-500' : ''}`}
+                  >
+                    <Text className={`text-xs font-semibold ${mode === 'ad' ? 'text-white' : 'text-gray-600'}`}>AD</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
-            {mode === 'bs' ? (
-              <MonthCalendarGrid spec={bsSpec} selectedDate={bsSelectedDay} onSelectDay={selectBsDay} onNavigate={navigateBs} />
+            {showYearMonthPicker ? (
+              mode === 'bs' ? (
+                <YearMonthPicker
+                  monthNames={BS_MONTHS}
+                  minYear={BS_MIN_YEAR}
+                  maxYear={BS_MAX_YEAR}
+                  year={bsYear}
+                  month={bsMonth}
+                  onSelectYear={setBsYear}
+                  onSelectMonth={setBsMonth}
+                  onDone={() => setShowYearMonthPicker(false)}
+                />
+              ) : (
+                <YearMonthPicker
+                  monthNames={AD_MONTH_NAMES}
+                  minYear={AD_MIN_YEAR}
+                  maxYear={AD_MAX_YEAR}
+                  year={adYear}
+                  month={adMonth}
+                  onSelectYear={setAdYear}
+                  onSelectMonth={setAdMonth}
+                  onDone={() => setShowYearMonthPicker(false)}
+                />
+              )
+            ) : mode === 'bs' ? (
+              <MonthCalendarGrid
+                spec={bsSpec}
+                selectedDate={bsSelectedDay}
+                onSelectDay={selectBsDay}
+                onNavigate={navigateBs}
+                onTapHeader={() => setShowYearMonthPicker(true)}
+              />
             ) : (
-              <MonthCalendarGrid spec={adSpec} selectedDate={adSelectedDay} onSelectDay={selectAdDay} onNavigate={navigateAd} />
+              <MonthCalendarGrid
+                spec={adSpec}
+                selectedDate={adSelectedDay}
+                onSelectDay={selectAdDay}
+                onNavigate={navigateAd}
+                onTapHeader={() => setShowYearMonthPicker(true)}
+              />
             )}
             <Pressable onPress={() => setShowPicker(false)} className="mt-3 items-center rounded-lg border border-gray-300 py-2">
               <Text className="text-sm font-semibold text-gray-600">Close</Text>

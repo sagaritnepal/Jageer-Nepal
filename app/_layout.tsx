@@ -8,6 +8,8 @@ import { useAuthListener, useAuthStore } from '../lib/hooks/useAuth';
 import { useBiometricLockBootstrap, useBiometricLockStore } from '../lib/hooks/useBiometricLock';
 import { useContactsSyncBootstrap } from '../lib/hooks/useContactsSyncBootstrap';
 import { BiometricLockScreen } from '../lib/components/BiometricLockScreen';
+import { FloatingAssistantChat } from '../lib/components/FloatingAssistantChat';
+import { ClientAssistantChat } from '../lib/components/ClientAssistantChat';
 import '../global.css';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -34,7 +36,20 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return <BiometricLockScreen />;
   }
 
-  return <>{children}</>;
+  // Floats over every screen - Finance actions for reseller/wholesaler
+  // accounts, booking a service request for client accounts. Same "Sagar"
+  // photo/branding either way, just a different conversation and a
+  // different form it hands off to.
+  const showFinanceAssistant = userId && (role === 'reseller' || role === 'wholesaler');
+  const showClientAssistant = userId && role === 'client';
+
+  return (
+    <>
+      {children}
+      {showFinanceAssistant && <FloatingAssistantChat basePath={`/(${role})`} />}
+      {showClientAssistant && <ClientAssistantChat basePath="/(client)" />}
+    </>
+  );
 }
 
 export default function RootLayout() {

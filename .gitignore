@@ -40,3 +40,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Supabase CLI local state (project-ref, versions, pooler URL) - regenerated
+# per machine, never meant to be committed
+supabase/.temp/

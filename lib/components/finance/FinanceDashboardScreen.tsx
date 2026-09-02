@@ -79,6 +79,7 @@ function shortcuts(basePath: string): {
     { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase&add=1` },
     { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense&add=1` },
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
+    { key: 'import-statement', label: 'Import Statement', icon: 'document-attach', href: `${basePath}/import-statement` },
     { key: 'inventory', label: 'Inventory', icon: 'cube', href: `${basePath}/inventory` },
     { key: 'report', label: 'Report', icon: 'bar-chart', href: `${basePath}/report` },
   ];
@@ -95,6 +96,7 @@ const SHORTCUT_COLORS: Record<string, { bg: string; fg: string }> = {
   purchase: { bg: '#FEF2F2', fg: '#DC2626' },
   expenses: { bg: '#FFFBEB', fg: '#D97706' },
   'bank-accounts': { bg: '#EEF2FF', fg: '#4F46E5' },
+  'import-statement': { bg: '#F0FDFA', fg: '#0D9488' },
   inventory: { bg: '#F5F3FF', fg: '#7C3AED' },
   report: { bg: '#EFF6FF', fg: '#2563EB' },
 };
@@ -439,11 +441,11 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
           className="rounded-2xl bg-white p-3.5"
           style={{ width: thirdTileWidth, ...CARD_SHADOW }}
         >
-          <View className="mb-2 h-8 w-8 items-center justify-center rounded-lg bg-red-50">
-            <Ionicons name="receipt" size={16} color="#DC2626" />
+          <View className="mb-2 h-8 w-8 items-center justify-center rounded-lg bg-amber-50">
+            <Ionicons name="receipt" size={16} color="#D97706" />
           </View>
           <Text className="text-xs font-semibold text-gray-500">Expense</Text>
-          <Text className="mt-0.5 text-sm font-extrabold text-red-600">NPR {totals.expense.toLocaleString()}</Text>
+          <Text className="mt-0.5 text-sm font-extrabold text-amber-600">NPR {totals.expense.toLocaleString()}</Text>
         </Pressable>
       </View>
 

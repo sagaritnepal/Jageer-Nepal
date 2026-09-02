@@ -331,6 +331,16 @@ export interface SupportTicket {
   created_at: string;
 }
 
+// One row per statement line (by its Reference Code) that's already been
+// turned into a real Finance entry - lets re-importing the same statement,
+// or one with an overlapping date range, skip rows already recorded here.
+export interface StatementImport {
+  id: string;
+  owner_id: string;
+  reference_code: string;
+  created_at: string;
+}
+
 export interface ServiceCategory {
   id: string;
   label: string;
@@ -426,6 +436,12 @@ export interface Database {
         Row: TechnicianEmployment;
         Insert: Partial<TechnicianEmployment>;
         Update: Partial<TechnicianEmployment>;
+        Relationships: [];
+      };
+      statement_imports: {
+        Row: StatementImport;
+        Insert: Partial<StatementImport>;
+        Update: Partial<StatementImport>;
         Relationships: [];
       };
     };

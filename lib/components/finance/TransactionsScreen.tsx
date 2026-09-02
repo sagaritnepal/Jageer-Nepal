@@ -1,5 +1,5 @@
 // lib/components/finance/TransactionsScreen.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, View, Text, TextInput, Pressable, Modal, ScrollView, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { KeyboardAwareSectionList } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -8,6 +8,7 @@ import { useAuthStore, useRole } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePhoneContacts } from '../../hooks/usePhoneContacts';
+import { useScanBill } from '../../hooks/useScanBill';
 import { DateField } from '../DateTimeFields';
 import { TrendChartCard } from './TrendChartCard';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
@@ -59,36 +60,47 @@ function ItemLineRow({
   onRemove: () => void;
 }) {
   return (
-    <View className="mb-2 flex-row items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 py-1.5">
-      <Pressable onPress={onEditProduct} className="flex-1 flex-row items-center gap-1 pr-1">
-        <Ionicons name="cube-outline" size={13} color="#9CA3AF" />
-        <Text className={`flex-1 text-sm ${item.description ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-          {item.description || 'Tap to pick an item'}
+    <View className="mb-2 rounded-lg border border-gray-200 bg-white px-2.5 py-2">
+      {/* Name gets its own full-width row (up to 2 lines) so a long product
+          name is actually readable, instead of squeezed into flex-1 next to
+          the qty/rate/total inputs on one line. */}
+      <View className="mb-1.5 flex-row items-start justify-between gap-2">
+        <Pressable onPress={onEditProduct} className="flex-1 flex-row items-start gap-1.5 pr-1">
+          <Ionicons name="cube-outline" size={13} color="#9CA3AF" style={{ marginTop: 2 }} />
+          <Text
+            className={`flex-1 text-sm font-semibold ${item.description ? 'text-gray-900' : 'text-gray-400'}`}
+            numberOfLines={2}
+          >
+            {item.description || 'Tap to pick an item'}
+          </Text>
+        </Pressable>
+        <Pressable onPress={onRemove} hitSlop={8}>
+          <Ionicons name="close-circle" size={16} color="#D1D5DB" />
+        </Pressable>
+      </View>
+      <View className="flex-row items-center justify-end gap-1.5">
+        <TextInput
+          value={item.qty}
+          onChangeText={onQtyChange}
+          keyboardType="numeric"
+          placeholder="Qty"
+          placeholderTextColor="#9CA3AF"
+          className="w-12 rounded border border-gray-200 py-1 text-center text-xs text-gray-900"
+        />
+        <Text className="text-[10px] text-gray-400">×</Text>
+        <TextInput
+          value={item.rate}
+          onChangeText={onRateChange}
+          keyboardType="numeric"
+          placeholder="Rate"
+          placeholderTextColor="#9CA3AF"
+          className="w-16 rounded border border-gray-200 py-1 text-center text-xs text-gray-900"
+        />
+        <Text className="text-[10px] text-gray-400">=</Text>
+        <Text className="text-right text-xs font-bold text-gray-900" numberOfLines={1}>
+          NPR {lineTotal(item).toLocaleString()}
         </Text>
-      </Pressable>
-      <TextInput
-        value={item.qty}
-        onChangeText={onQtyChange}
-        keyboardType="numeric"
-        placeholder="Qty"
-        placeholderTextColor="#9CA3AF"
-        className="w-10 rounded border border-gray-200 py-1 text-center text-xs text-gray-900"
-      />
-      <Text className="text-[10px] text-gray-400">×</Text>
-      <TextInput
-        value={item.rate}
-        onChangeText={onRateChange}
-        keyboardType="numeric"
-        placeholder="Rate"
-        placeholderTextColor="#9CA3AF"
-        className="w-16 rounded border border-gray-200 py-1 text-center text-xs text-gray-900"
-      />
-      <Text className="w-16 text-right text-xs font-bold text-gray-900" numberOfLines={1}>
-        {lineTotal(item).toLocaleString()}
-      </Text>
-      <Pressable onPress={onRemove} hitSlop={8}>
-        <Ionicons name="close-circle" size={16} color="#D1D5DB" />
-      </Pressable>
+      </View>
     </View>
   );
 }
@@ -433,6 +445,7 @@ function TransactionForm({
   existingNames,
   customers,
   products,
+  voicePrefill,
   onDone,
   onCancel,
 }: {
@@ -442,6 +455,7 @@ function TransactionForm({
   existingNames: string[];
   customers: Customer[];
   products: Product[];
+  voicePrefill?: { amount?: string; party?: string; date?: string; note?: string } | null;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -463,6 +477,12 @@ function TransactionForm({
   });
   const createFinanceItem = useSupabaseUpsert('finance_items', 'owner_id,name');
   const phoneContacts = usePhoneContacts();
+  const { scanning, pickAndScan } = useScanBill();
+  // Pre-fills the party picker's search box with whatever name Scan Bill
+  // read off the photo, instead of a silent auto-pick - a scanned name can
+  // be misread, so it still needs a tap to confirm which real customer/
+  // vendor it actually is.
+  const [partyPickerQuery, setPartyPickerQuery] = useState('');
 
   // Expense: date + addable name + a managed category + amount + remark.
   const [amount, setAmount] = useState(initial && initial.type === 'expense' ? String(initial.amount) : '');
@@ -727,8 +747,95 @@ function TransactionForm({
     }
   }
 
+  // Applies whatever the voice-command button understood (voicePrefill is
+  // only ever passed on a brand-new entry, never while editing - see the
+  // TransactionsScreen caller). Same "review before save" rule as Scan
+  // Bill: this only fills fields, it never saves on its own, and the party
+  // still needs an explicit tap to confirm via the picker it opens. Depends
+  // on voicePrefill itself (memoized by the caller on the actual param
+  // values) rather than firing once on mount, since those params aren't
+  // always hydrated yet on a freshly-pushed route's first render.
+  useEffect(() => {
+    if (!voicePrefill) return;
+    if (voicePrefill.note) setNote(voicePrefill.note);
+    if (voicePrefill.date) {
+      if (isBill) setBillDate(voicePrefill.date);
+      else setExpenseDate(voicePrefill.date);
+    }
+    if (voicePrefill.party) {
+      setPartyPickerQuery(voicePrefill.party);
+      setShowPartyPicker(true);
+    }
+    if (isBill && voicePrefill.amount) {
+      const label = voicePrefill.party
+        ? `${type === 'purchase' ? 'Purchase from' : 'Sale to'} ${voicePrefill.party}`
+        : 'Voice entry';
+      setItems((prev) => [...prev, { description: label, qty: '1', rate: voicePrefill.amount! }]);
+    } else if (!isBill && voicePrefill.amount) {
+      setAmount(voicePrefill.amount);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voicePrefill]);
+
+  // Fills in whatever Scan Bill could read off the photo; the reseller still
+  // reviews and can edit every field afterward, and still has to actually
+  // tap-confirm the party (see partyPickerQuery above) since a misread name
+  // should never silently become a wrong customer/vendor.
+  async function handleScan() {
+    phoneContacts.request();
+    const scanned = await pickAndScan();
+    if (!scanned) return;
+
+    if (scanned.note) setNote(scanned.note);
+    if (scanned.vendor_name) {
+      setPartyPickerQuery(scanned.vendor_name);
+      setShowPartyPicker(true);
+    }
+
+    if (isBill) {
+      if (scanned.bill_no) setBillNo(scanned.bill_no);
+      if (scanned.date) setBillDate(scanned.date);
+      if (scanned.items.length > 0) {
+        setItems((prev) => [
+          ...prev,
+          ...scanned.items.map((i) => ({ description: i.description, qty: String(i.qty), rate: String(i.rate) })),
+        ]);
+        if (scanned.discount_amount) {
+          setDiscountAmountInput(String(scanned.discount_amount));
+          setShowDiscount(true);
+        }
+        if (scanned.vat_amount) {
+          const scannedSubtotal = scanned.items.reduce((s, i) => s + i.qty * i.rate, 0) - (scanned.discount_amount ?? 0);
+          if (scannedSubtotal > 0) {
+            setVatPercent(String(Math.round((scanned.vat_amount / scannedSubtotal) * 10000) / 100));
+            setShowVat(true);
+          }
+        }
+      } else if (scanned.amount) {
+        // No itemized list on the bill (e.g. a simple slip) - one line for
+        // the whole amount, rather than leaving items empty and blocking
+        // Save (a bill always needs at least one item).
+        setItems((prev) => [
+          ...prev,
+          { description: scanned.vendor_name ? `Bill from ${scanned.vendor_name}` : 'Scanned bill', qty: '1', rate: String(scanned.amount) },
+        ]);
+      }
+    } else {
+      if (scanned.amount) setAmount(String(scanned.amount));
+      if (scanned.date) setExpenseDate(scanned.date);
+    }
+  }
+
   return (
     <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+      <Pressable
+        onPress={handleScan}
+        disabled={scanning}
+        className="mb-3 flex-row items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-50 py-2.5 disabled:opacity-50"
+      >
+        <Ionicons name={scanning ? 'hourglass-outline' : 'camera-outline'} size={16} color="#2563EB" />
+        <Text className="text-sm font-semibold text-blue-700">{scanning ? 'Reading the bill…' : 'Scan Bill'}</Text>
+      </Pressable>
       {isBill ? (
         <>
           <FormSection icon="receipt-outline" title="Bill info" first>
@@ -759,6 +866,7 @@ function TransactionForm({
               <Pressable
                 onPress={() => {
                   phoneContacts.request();
+                  setPartyPickerQuery('');
                   setShowPartyPicker(true);
                 }}
                 className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
@@ -936,6 +1044,7 @@ function TransactionForm({
               <Pressable
                 onPress={() => {
                   phoneContacts.request();
+                  setPartyPickerQuery('');
                   setShowPartyPicker(true);
                 }}
                 className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
@@ -1050,7 +1159,7 @@ function TransactionForm({
       />
       <ContactPickerModal
         visible={showPartyPicker}
-        initialQuery=""
+        initialQuery={partyPickerQuery}
         customers={customers}
         phoneContacts={phoneContacts.contacts}
         onSelectCustomer={selectCustomer}
@@ -1392,7 +1501,38 @@ function TransferFeedRow({
 }
 
 export function TransactionsScreen({ basePath }: { basePath?: string }) {
-  const { type: typeParam, add: addParam } = useLocalSearchParams<{ type?: string; add?: string }>();
+  // voice* params arrive from Sagar AI Assistant (see FloatingAssistantChat)
+  // - a spoken or typed command gets routed here the same way a Shortcuts
+  // tap does (?type=...&add=1), just with these extra fields for
+  // TransactionForm to pre-fill on that first render.
+  const {
+    type: typeParam,
+    add: addParam,
+    voiceAmount,
+    voiceParty,
+    voiceDate,
+    voiceNote,
+  } = useLocalSearchParams<{
+    type?: string;
+    add?: string;
+    voiceAmount?: string;
+    voiceParty?: string;
+    voiceDate?: string;
+    voiceNote?: string;
+  }>();
+  // Memoized on the actual param values (not recreated every render) so the
+  // form's effect below can safely depend on this object's identity instead
+  // of only running "on mount" - Expo Router doesn't always have these
+  // hydrated on the very first render of a freshly-pushed route, so a plain
+  // object literal here would otherwise still leave that first mount effect
+  // seeing stale/empty values with no second chance to pick up the real ones.
+  const voicePrefill = useMemo(
+    () =>
+      voiceAmount || voiceParty || voiceDate || voiceNote
+        ? { amount: voiceAmount, party: voiceParty, date: voiceDate, note: voiceNote }
+        : null,
+    [voiceAmount, voiceParty, voiceDate, voiceNote]
+  );
   const userId = useAuthStore((state) => state.session?.user.id);
   const role = useRole();
   const { data: products } = useSupabaseQuery('products', {
@@ -1471,6 +1611,17 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const [showForm, setShowForm] = useState(isAddFlow);
   const [editingTx, setEditingTx] = useState<BusinessTransaction | null>(null);
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
+  // The form renders inside the list's own header, so opening it while
+  // scrolled down through history (which is exactly when someone taps Edit
+  // on an older entry) leaves it off-screen above the current scroll
+  // position - scroll back to the top whenever it opens so it's actually
+  // visible instead of looking like nothing happened.
+  const listRef = useRef<KeyboardAwareSectionList>(null);
+  function openForm(tx: BusinessTransaction | null) {
+    setEditingTx(tx);
+    setShowForm(true);
+    setTimeout(() => listRef.current?.scrollToPosition(0, 0, true), 0);
+  }
 
   // Expo Router reuses this same screen instance when navigating between
   // shortcuts that share this route (Sales/Purchase/Expense/Net
@@ -1597,6 +1748,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <KeyboardAwareSectionList
+        ref={listRef}
         enableOnAndroid
         extraScrollHeight={20}
         sections={sections}
@@ -1665,6 +1817,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 existingNames={existingExpenseNames}
                 customers={customers ?? []}
                 products={products ?? []}
+                voicePrefill={editingTx ? null : voicePrefill}
                 onDone={() => {
                   setShowForm(false);
                   setEditingTx(null);
@@ -1720,9 +1873,8 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         bankAccountName={viewingTx?.bank_account_id ? bankAccountNameById.get(viewingTx.bank_account_id) ?? null : null}
         onClose={() => setViewingTx(null)}
         onEdit={() => {
-          setEditingTx(viewingTx);
-          setShowForm(true);
           setViewingTx(null);
+          openForm(viewingTx);
         }}
       />
     </View>
