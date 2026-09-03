@@ -1,6 +1,6 @@
 // app/(reseller)/dashboard.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -189,6 +189,134 @@ export default function ResellerDashboard() {
   );
   const deadStock = useMemo(() => (products ?? []).filter((p) => p.is_dead_stock), [products]);
 
+  const actionSheet = (
+    <ServiceActionSheet
+      category={pickerCategory}
+      onClose={() => setPickerCategory(null)}
+      onSelect={(action) => {
+        if (!pickerCategory) return;
+        const category = pickerCategory.label;
+        setPickerCategory(null);
+        router.push(
+          `/(reseller)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}`
+        );
+      }}
+    />
+  );
+
+  // Web gets its own reflowed arrangement (wider category grid, a right
+  // rail for secondary content) instead of one long mobile-width scroll -
+  // see WebSidebarShell. Kept as a fully separate branch below rather than
+  // one JSX tree with conditional classes, so the native layout stays
+  // byte-for-byte what it already was.
+  if (Platform.OS === 'web') {
+    const needTechnicianCard = (
+      <Pressable
+        onPress={() => router.push('/(reseller)/new-request')}
+        className="rounded-2xl bg-blue-50 p-4"
+      >
+        <Text className="text-[13.5px] font-bold text-blue-700">Need a technician?</Text>
+        <Text className="mb-2.5 mt-0.5 text-xs text-blue-600">Request one directly in seconds</Text>
+        <View className="self-start rounded-full bg-blue-600 px-4 py-1.5">
+          <Text className="text-xs font-bold text-white">Request</Text>
+        </View>
+      </Pressable>
+    );
+
+    return (
+      <>
+        <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
+          <View className="px-8 pb-2 pt-6">
+            <View className="mb-5 flex-row items-center justify-between">
+              <Text className="text-2xl font-extrabold text-gray-900">
+                Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
+              </Text>
+              <View className="w-80 flex-row items-center rounded-xl border border-gray-200 bg-white px-4 py-2.5">
+                <Ionicons name="search" size={16} color="#9CA3AF" />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search for services..."
+                  placeholderTextColor="#9CA3AF"
+                  className="ml-2 flex-1 text-sm text-gray-900"
+                />
+              </View>
+            </View>
+
+            <View className="flex-row gap-6">
+              <View className="flex-1" style={{ minWidth: 0 }}>
+                <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
+                <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} columns={8} />
+
+                {recentlyHiredTechnicians.length > 0 && (
+                  <>
+                    <Text className="mb-3 mt-2 text-[15px] font-bold text-gray-900">Recently Hired Technicians</Text>
+                    <View className="mb-2 flex-row flex-wrap gap-3">
+                      {recentlyHiredTechnicians.map(({ tech, count }) => (
+                        <View
+                          key={tech.id}
+                          className="flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
+                          style={{ width: '32%' }}
+                        >
+                          <View className="h-11 w-11 items-center justify-center rounded-full bg-teal-600">
+                            <Text className="text-xs font-bold text-white">{initialsOf(tech.full_name)}</Text>
+                          </View>
+                          <View className="flex-1">
+                            <Pressable onPress={() => router.push(`/(reseller)/technician/${tech.id}`)}>
+                              <Text className="text-[13.5px] font-bold text-teal-700 underline">
+                                {tech.full_name ?? 'Technician'}
+                              </Text>
+                            </Pressable>
+                            <Text className="mt-0.5 text-[11.5px] text-gray-400">
+                              {tech.city ?? 'Nepal'} · {count} job{count === 1 ? '' : 's'} together
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {userId && <HiringSections userId={userId} />}
+              </View>
+
+              <View className="w-72 gap-4">
+                {(appCustomerCount > 0 || ownCustomerCount > 0) && (
+                  <View className="rounded-2xl border border-gray-100 bg-white p-4">
+                    <Text className="mb-2.5 text-[13px] font-bold text-gray-900">Where your customers come from</Text>
+                    <View className="flex-row gap-2.5">
+                      <View className="flex-1 rounded-xl bg-gray-50 p-3">
+                        <Text className="text-lg font-bold text-blue-600">{appCustomerCount}</Text>
+                        <Text className="text-[10.5px] text-gray-500">From the app</Text>
+                      </View>
+                      <View className="flex-1 rounded-xl bg-gray-50 p-3">
+                        <Text className="text-lg font-bold text-purple-700">{ownCustomerCount}</Text>
+                        <Text className="text-[10.5px] text-gray-500">Your own</Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                <View className="rounded-2xl border border-gray-100 bg-white p-4">
+                  <Text className="mb-2 text-[13px] font-bold text-gray-900">Shop performance</Text>
+                  <Text className="text-xl font-bold text-blue-600">NPR {revenue.toLocaleString()}</Text>
+                  <Text className="text-xs text-gray-400">Revenue</Text>
+                  {deadStock.length > 0 && (
+                    <Text className="mt-2 text-xs text-gray-500">{deadStock.length} item(s) flagged as dead stock</Text>
+                  )}
+                </View>
+
+                {needTechnicianCard}
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+
+        {actionSheet}
+      </>
+    );
+  }
+
   return (
     <>
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
@@ -282,18 +410,7 @@ export default function ResellerDashboard() {
         </View>
       </ScrollView>
 
-      <ServiceActionSheet
-        category={pickerCategory}
-        onClose={() => setPickerCategory(null)}
-        onSelect={(action) => {
-          if (!pickerCategory) return;
-          const category = pickerCategory.label;
-          setPickerCategory(null);
-          router.push(
-            `/(reseller)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}`
-          );
-        }}
-      />
+      {actionSheet}
     </>
   );
 }

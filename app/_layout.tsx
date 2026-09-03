@@ -12,13 +12,16 @@ import { FloatingAssistantChat } from '../lib/components/FloatingAssistantChat';
 import { ClientAssistantChat } from '../lib/components/ClientAssistantChat';
 import '../global.css';
 
-// Every screen is built mobile-first with no width cap, so on a laptop
-// browser it just stretches edge-to-edge - a login form with a
-// full-viewport-wide email box, buttons a foot long, etc. This letterboxes
-// the actual app into a fixed-width column on wide viewports (a phone-app
-// look, like WhatsApp Web) instead of redesigning every screen's internal
-// layout. Native mobile is untouched - the cap only ever matters when the
-// viewport is wider than it, which never happens on an actual phone.
+// Pre-login screens (login/register) are still a bare mobile-first form
+// with no width cap, so on a laptop browser it'd stretch edge-to-edge - a
+// full-viewport-wide email box, buttons a foot long. This letterboxes just
+// those into a fixed-width column on wide viewports (a phone-app look, like
+// WhatsApp Web). Once signed in, each role's own layout takes over width
+// management via WebSidebarShell instead (a real sidebar + content column,
+// not a centered phone screen), so this only wraps the pre-login state -
+// see RootLayout. Native mobile is untouched either way - the cap only
+// ever matters when the viewport is wider than it, which never happens on
+// an actual phone.
 const WEB_MAX_WIDTH = 640;
 
 function WebFrame({ children }: { children: React.ReactNode }) {
@@ -71,9 +74,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const showFinanceAssistant = userId && (role === 'reseller' || role === 'wholesaler');
   const showClientAssistant = userId && role === 'client';
 
+  // Signed-in role layouts manage their own web width (WebSidebarShell);
+  // only the pre-login state gets the generic centered letterbox.
+  const content = userId ? <>{children}</> : <WebFrame>{children}</WebFrame>;
+
   return (
     <>
-      {children}
+      {content}
       {showFinanceAssistant && <FloatingAssistantChat basePath={`/(${role})`} />}
       {showClientAssistant && <ClientAssistantChat basePath="/(client)" />}
     </>
@@ -86,17 +93,15 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <QueryProvider>
         <AuthGate>
-          <WebFrame>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(client)" />
-              <Stack.Screen name="(technician)" />
-              <Stack.Screen name="(reseller)" />
-              <Stack.Screen name="(wholesaler)" />
-              <Stack.Screen name="(admin)" />
-            </Stack>
-          </WebFrame>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(client)" />
+            <Stack.Screen name="(technician)" />
+            <Stack.Screen name="(reseller)" />
+            <Stack.Screen name="(wholesaler)" />
+            <Stack.Screen name="(admin)" />
+          </Stack>
         </AuthGate>
       </QueryProvider>
     </SafeAreaProvider>

@@ -1,17 +1,31 @@
 // app/(reseller)/_layout.tsx
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
 import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
+import { WebSidebarShell, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
+
+// Same 4 sections as the mobile bottom tabs below, just as a persistent
+// left rail on web instead - see WebSidebarShell.
+const NAV_ITEMS: WebNavItem[] = [
+  { href: '/(reseller)/dashboard', label: 'Home', icon: 'home' },
+  { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
+  { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
+  { href: '/(reseller)/finance', label: 'Finance', icon: 'wallet' },
+];
 
 export default function ResellerLayout() {
-  return (
-    <RoleGuard allow={['reseller']}>
-      <Tabs
-        backBehavior="history"
-        screenOptions={{ header: ({ options }) => <PortalHeaderBar title={options.title} />, tabBarActiveTintColor: ROLE_ACCENT.reseller }}
-      >
+  const tabs = (
+    <Tabs
+      backBehavior="history"
+      screenOptions={{
+        header: ({ options }) => <PortalHeaderBar title={options.title} />,
+        tabBarActiveTintColor: ROLE_ACCENT.reseller,
+        ...(Platform.OS === 'web' ? { tabBarStyle: { display: 'none' } } : null),
+      }}
+    >
         <Tabs.Screen
           name="dashboard"
           options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} /> }}
@@ -57,6 +71,17 @@ export default function ResellerLayout() {
         <Tabs.Screen name="inventory" options={{ href: null, title: 'Inventory' }} />
         <Tabs.Screen name="report" options={{ href: null, title: 'Report' }} />
       </Tabs>
+  );
+
+  return (
+    <RoleGuard allow={['reseller']}>
+      {Platform.OS === 'web' ? (
+        <WebSidebarShell items={NAV_ITEMS} roleLabel="Reseller">
+          {tabs}
+        </WebSidebarShell>
+      ) : (
+        tabs
+      )}
     </RoleGuard>
   );
 }
