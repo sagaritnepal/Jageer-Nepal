@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import { Stack } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryProvider } from '../lib/providers/QueryProvider';
@@ -11,6 +11,34 @@ import { BiometricLockScreen } from '../lib/components/BiometricLockScreen';
 import { FloatingAssistantChat } from '../lib/components/FloatingAssistantChat';
 import { ClientAssistantChat } from '../lib/components/ClientAssistantChat';
 import '../global.css';
+
+// Every screen is built mobile-first with no width cap, so on a laptop
+// browser it just stretches edge-to-edge - a login form with a
+// full-viewport-wide email box, buttons a foot long, etc. This letterboxes
+// the actual app into a fixed-width column on wide viewports (a phone-app
+// look, like WhatsApp Web) instead of redesigning every screen's internal
+// layout. Native mobile is untouched - the cap only ever matters when the
+// viewport is wider than it, which never happens on an actual phone.
+const WEB_MAX_WIDTH = 640;
+
+function WebFrame({ children }: { children: React.ReactNode }) {
+  if (Platform.OS !== 'web') return <>{children}</>;
+  return (
+    <View style={{ flex: 1, backgroundColor: '#E5E7EB', alignItems: 'center' }}>
+      <View
+        style={{
+          flex: 1,
+          width: '100%',
+          maxWidth: WEB_MAX_WIDTH,
+          backgroundColor: '#fff',
+          boxShadow: '0 0 24px rgba(0,0,0,0.08)',
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   useAuthListener();
@@ -58,15 +86,17 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <QueryProvider>
         <AuthGate>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(client)" />
-            <Stack.Screen name="(technician)" />
-            <Stack.Screen name="(reseller)" />
-            <Stack.Screen name="(wholesaler)" />
-            <Stack.Screen name="(admin)" />
-          </Stack>
+          <WebFrame>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(client)" />
+              <Stack.Screen name="(technician)" />
+              <Stack.Screen name="(reseller)" />
+              <Stack.Screen name="(wholesaler)" />
+              <Stack.Screen name="(admin)" />
+            </Stack>
+          </WebFrame>
         </AuthGate>
       </QueryProvider>
     </SafeAreaProvider>
