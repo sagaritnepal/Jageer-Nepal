@@ -4,28 +4,36 @@ import { View, Text, FlatList, ScrollView, Pressable, Platform } from 'react-nat
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
 import { distanceKm } from '../../lib/utils/distance';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { OrderCard } from '../../lib/components/OrderCard';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { Order, RequestStatus, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
 // was hard to tell what actually needed attention. Group by pipeline stage
 // instead - what the reseller should be doing right now for that job - with
 // a plain-language hint per card, rather than making them decode raw status
-// strings across the whole list.
-type Stage = 'requests' | 'action' | 'waiting_customer' | 'in_progress' | 'awaiting_payment' | 'completed' | 'cancelled';
+// strings across the whole list. There used to be a separate "Needs your
+// action" stage covering both "claimed, still needs a quote" and "approved,
+// needs a technician" - it's gone now: the former folds into "Waiting on
+// customer" (the reseller's own next step there is just to call the
+// customer and send a quote, but the request is functionally waiting on
+// that conversation), and the latter becomes its own "My Jobs" stage,
+// positioned right before "Job in progress" since picking a technician is
+// the last thing standing between an approved job and it actually starting.
+type Stage = 'requests' | 'waiting_customer' | 'my_jobs' | 'in_progress' | 'awaiting_payment' | 'completed' | 'cancelled';
 
-const STAGE_ORDER: Stage[] = ['requests', 'action', 'waiting_customer', 'in_progress', 'awaiting_payment', 'completed', 'cancelled'];
+const STAGE_ORDER: Stage[] = ['requests', 'waiting_customer', 'my_jobs', 'in_progress', 'awaiting_payment', 'completed', 'cancelled'];
 
 const STAGE_META: Record<Stage, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
   requests: { label: 'Requests', icon: 'download-outline', color: '#EA580C', bg: 'bg-orange-50' },
-  action: { label: 'Needs your action', icon: 'alert-circle', color: '#2563eb', bg: 'bg-orange-50' },
   waiting_customer: { label: 'Waiting on customer', icon: 'time-outline', color: '#D97706', bg: 'bg-amber-50' },
+  my_jobs: { label: 'My Jobs', icon: 'briefcase', color: '#2563eb', bg: 'bg-blue-50' },
   in_progress: { label: 'Job in progress', icon: 'build', color: '#2563EB', bg: 'bg-blue-50' },
   awaiting_payment: { label: 'Awaiting payment', icon: 'cash-outline', color: '#DC2626', bg: 'bg-red-50' },
   completed: { label: 'Completed', icon: 'checkmark-done-circle', color: '#16A34A', bg: 'bg-green-50' },
@@ -37,10 +45,16 @@ function stageOf(item: ServiceRequest): Stage {
     case 'cancelled':
       return 'cancelled';
     case 'pending':
-    case 'approved':
-      return 'action';
+      // A self-sourced (reseller-posted) job skips the quote/approval
+      // conversation entirely - SelfSourcedAssign lets the reseller pick a
+      // technician immediately, the same next step as an app request whose
+      // price was just approved, so it lands directly in "My Jobs" instead
+      // of "Waiting on customer" (there's no customer to wait on).
+      return item.origin === 'reseller' ? 'my_jobs' : 'waiting_customer';
     case 'quoted':
       return 'waiting_customer';
+    case 'approved':
+      return 'my_jobs';
     case 'assigned':
     case 'in_progress':
       return 'in_progress';
@@ -51,17 +65,16 @@ function stageOf(item: ServiceRequest): Stage {
 
 // A pending order hasn't been looked at yet - same as a brand new,
 // unclaimed service request, it belongs in "Requests" until the reseller
-// confirms it. From there a confirmed order still needs shipping, and a
-// shipped one still needs a delivery confirmation - both "you need to do
-// something next", the same idea "action" covers for an already-claimed
-// service request. Once delivered there's nothing left to do, same as a
-// paid, resolved service request.
+// confirms it. A confirmed order still needs shipping - the same "ready to
+// act on" idea "My Jobs" covers for an approved service request - and a
+// shipped one is in progress the same way an assigned job is. Once
+// delivered there's nothing left to do, same as a paid, resolved request.
 function orderStageOf(order: Order): Stage {
   switch (order.status) {
     case 'pending':
       return 'requests';
     case 'confirmed':
-      return 'action';
+      return 'my_jobs';
     case 'shipped':
       return 'in_progress';
     case 'delivered':
@@ -78,7 +91,9 @@ type JobItem = { kind: 'request'; id: string; request: ServiceRequest } | { kind
 function nextStepHint(item: ServiceRequest): string | null {
   switch (item.status) {
     case 'pending':
-      return 'Call the customer to verify the issue, then send them a quote.';
+      return item.origin === 'reseller'
+        ? 'Pick a technician to assign.'
+        : 'Call the customer to verify the issue, then send them a quote.';
     case 'quoted':
       return `Waiting for the customer to approve NPR ${Number(item.quoted_price ?? 0).toLocaleString()}.`;
     case 'approved':
@@ -171,6 +186,8 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
   // for real app customers.
   const { data: customerProfile } = useSupabaseRow('profiles', item.origin === 'app' ? item.client_id : undefined);
   const { data: technicianProfile } = useSupabaseRow('profiles', item.technician_id ?? undefined);
+  const updateRequest = useSupabaseUpdate('service_requests');
+  const [cancelling, setCancelling] = useState(false);
 
   const customerName = item.customer_name ?? customerProfile?.full_name;
   const customerPhone = item.customer_phone ?? customerProfile?.phone;
@@ -189,11 +206,35 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
         )
       : null;
 
+  // Only requests the reseller sourced themselves - never a real app
+  // customer's, which isn't this reseller's to change - and only while
+  // there's still something to change: once it's paid/resolved or already
+  // cancelled, editing or cancelling it doesn't mean anything anymore.
+  const canManage = item.origin === 'reseller' && item.status !== 'resolved' && item.status !== 'cancelled';
+
+  function handleCancel() {
+    showAlert('Cancel this request?', "This marks it as cancelled - it can't be undone.", [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Cancel request',
+        style: 'destructive',
+        onPress: async () => {
+          setCancelling(true);
+          try {
+            await updateRequest.mutateAsync({ id: item.id, values: { status: 'cancelled' } });
+          } catch (err) {
+            showAlert('Could not cancel', getErrorMessage(err));
+          } finally {
+            setCancelling(false);
+          }
+        },
+      },
+    ]);
+  }
+
   return (
-    <Pressable
-      onPress={() => router.push(`/(reseller)/request/${item.id}`)}
-      className="mb-3 flex-row items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4"
-    >
+    <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <Pressable onPress={() => router.push(`/(reseller)/request/${item.id}`)} className="flex-row items-start gap-3">
       <View className="items-center gap-1.5">
         <CategoryBadge category={item.issue_type} />
         <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
@@ -284,7 +325,28 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
           </View>
         )}
       </View>
-    </Pressable>
+      </Pressable>
+
+      {canManage && (
+        <View className="mt-3 flex-row gap-2">
+          <Pressable
+            onPress={() => router.push(`/(reseller)/edit-request?id=${item.id}`)}
+            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white py-2"
+          >
+            <Ionicons name="create-outline" size={14} color="#374151" />
+            <Text className="text-xs font-semibold text-gray-700">Edit</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleCancel}
+            disabled={cancelling}
+            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 py-2 disabled:opacity-50"
+          >
+            <Ionicons name="trash-outline" size={14} color="#DC2626" />
+            <Text className="text-xs font-semibold text-red-600">{cancelling ? 'Cancelling…' : 'Delete'}</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
 }
 
