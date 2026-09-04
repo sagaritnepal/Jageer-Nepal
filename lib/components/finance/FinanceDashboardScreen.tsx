@@ -1,6 +1,6 @@
 // lib/components/finance/FinanceDashboardScreen.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, ScrollView, useWindowDimensions, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -201,6 +201,17 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const SCREEN_PADDING = 24; // px-6
   const GRID_GAP = 12; // gap-3
   const thirdTileWidth = (screenWidth - SCREEN_PADDING * 2 - GRID_GAP * 2) / 3;
+  // On web this screen renders inside WebSidebarShell's content column - a
+  // 240px sidebar plus a max-1120px capped column, never the full browser
+  // window. Sizing "3-across"/"5-across" tiles off the raw useWindowDimensions
+  // width (as the native math above does) made each tile as wide as if it
+  // owned the whole monitor, so flex-wrap could only fit one per row - the
+  // "1x1 grid" the cards collapsed into. Size web tiles off that column's
+  // actual width instead.
+  const WEB_SIDEBAR_WIDTH = 240;
+  const WEB_CONTENT_MAX_WIDTH = 1120;
+  const webContentWidth = Math.min(screenWidth - WEB_SIDEBAR_WIDTH, WEB_CONTENT_MAX_WIDTH);
+  const webFifthTileWidth = (webContentWidth - SCREEN_PADDING * 2 - GRID_GAP * 4) / 5;
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
   const { data: customers } = useSupabaseQuery('customers', {
@@ -334,80 +345,218 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     return Math.round((filled / fields.length) * 100);
   }, [profile]);
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+  const heroCard = (
+    <LinearGradient
+      colors={['#2563EB', '#1D4ED8']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{
+        borderRadius: 24,
+        padding: 20,
+        gap: 16,
+        marginBottom: 12,
+        shadowColor: '#2563EB',
+        shadowOpacity: 0.35,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 6,
+      }}
+    >
+      <Pressable onPress={() => router.push(`${basePath}/bank-balances` as any)}>
+        <Text className="text-xs font-bold text-white/75" style={{ letterSpacing: 0.5 }}>
+          AVAILABLE BALANCE
+        </Text>
+        <Text className="mt-1 text-3xl font-extrabold text-white">NPR {availableBalance.toLocaleString()}</Text>
+      </Pressable>
+
+      <View className="flex-row gap-2.5">
+        <Pressable
+          onPress={() => router.push(`${basePath}/to-receive` as any)}
+          className="flex-1 rounded-2xl p-3"
+          style={{ backgroundColor: 'rgba(255,255,255,0.14)' }}
+        >
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+            <Text className="text-[11px] font-semibold text-white/85">To Receive</Text>
+          </View>
+          <Text className="mt-0.5 text-sm font-extrabold text-white">NPR {toReceive.toLocaleString()}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`${basePath}/to-give` as any)}
+          className="flex-1 rounded-2xl p-3"
+          style={{ backgroundColor: 'rgba(255,255,255,0.14)' }}
+        >
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-1.5 w-1.5 rounded-full bg-red-300" />
+            <Text className="text-[11px] font-semibold text-white/85">To Give</Text>
+          </View>
+          <Text className="mt-0.5 text-sm font-extrabold text-white">NPR {toGive.toLocaleString()}</Text>
+        </Pressable>
+      </View>
+
+      <View className="flex-row gap-2.5">
+        <Pressable
+          onPress={() => router.push(`${basePath}/transactions` as any)}
+          className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-2.5"
+          style={{ backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)' }}
+        >
+          <Ionicons name="list-outline" size={15} color="white" />
+          <Text className="text-[13px] font-semibold text-white" numberOfLines={1}>
+            Transactions
+          </Text>
+        </Pressable>
+        {isReseller && (
+          <Pressable
+            onPress={() => router.push(`${basePath}/wholesale` as any)}
+            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-white py-2.5"
+          >
+            <Ionicons name="cart-outline" size={15} color={BLUE} />
+            <Text className="text-[13px] font-semibold" style={{ color: BLUE }} numberOfLines={1}>
+              Buy Stock
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </LinearGradient>
+  );
+
+  const profileCompletionCard = profileCompletion < 100 && (
+    <Pressable onPress={() => router.push(`${basePath}/profile` as any)} className="mb-4 overflow-hidden rounded-2xl">
       <LinearGradient
         colors={['#2563EB', '#1D4ED8']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{
-          borderRadius: 24,
-          padding: 20,
-          gap: 16,
-          marginBottom: 12,
-          shadowColor: '#2563EB',
-          shadowOpacity: 0.35,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 6,
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}
       >
-        <Pressable onPress={() => router.push(`${basePath}/bank-balances` as any)}>
-          <Text className="text-xs font-bold text-white/75" style={{ letterSpacing: 0.5 }}>
-            AVAILABLE BALANCE
-          </Text>
-          <Text className="mt-1 text-3xl font-extrabold text-white">NPR {availableBalance.toLocaleString()}</Text>
-        </Pressable>
-
-        <View className="flex-row gap-2.5">
-          <Pressable
-            onPress={() => router.push(`${basePath}/to-receive` as any)}
-            className="flex-1 rounded-2xl p-3"
-            style={{ backgroundColor: 'rgba(255,255,255,0.14)' }}
-          >
-            <View className="flex-row items-center gap-1.5">
-              <View className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-              <Text className="text-[11px] font-semibold text-white/85">To Receive</Text>
-            </View>
-            <Text className="mt-0.5 text-sm font-extrabold text-white">NPR {toReceive.toLocaleString()}</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push(`${basePath}/to-give` as any)}
-            className="flex-1 rounded-2xl p-3"
-            style={{ backgroundColor: 'rgba(255,255,255,0.14)' }}
-          >
-            <View className="flex-row items-center gap-1.5">
-              <View className="h-1.5 w-1.5 rounded-full bg-red-300" />
-              <Text className="text-[11px] font-semibold text-white/85">To Give</Text>
-            </View>
-            <Text className="mt-0.5 text-sm font-extrabold text-white">NPR {toGive.toLocaleString()}</Text>
-          </Pressable>
+        <View style={{ width: 44, height: 44 }} className="items-center justify-center">
+          <View style={{ position: 'absolute' }}>
+            <CircularProgress percent={profileCompletion} />
+          </View>
+          <Text className="text-xs font-extrabold text-white">{profileCompletion}%</Text>
         </View>
+        <View className="flex-1">
+          <Text className="text-sm font-bold text-white">Complete your profile</Text>
+          <Text className="mt-0.5 text-xs text-white/80">
+            Add your remaining details so customers and technicians trust your business.
+          </Text>
+        </View>
+        <Ionicons name="arrow-forward" size={18} color="white" />
+      </LinearGradient>
+    </Pressable>
+  );
 
-        <View className="flex-row gap-2.5">
-          <Pressable
-            onPress={() => router.push(`${basePath}/transactions` as any)}
-            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-2.5"
-            style={{ backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)' }}
-          >
-            <Ionicons name="list-outline" size={15} color="white" />
-            <Text className="text-[13px] font-semibold text-white" numberOfLines={1}>
-              Transactions
-            </Text>
-          </Pressable>
-          {isReseller && (
+  const cashflowCard = (
+    <View className="mb-4 rounded-2xl bg-white p-4" style={CARD_SHADOW}>
+      <Text className="mb-3 text-sm font-semibold text-gray-900">Cashflow</Text>
+      <View className="mb-3 flex-row gap-2">
+        {(['week', 'month'] as Granularity[]).map((g) => {
+          const selectedG = cashflowGranularity === g;
+          return (
             <Pressable
-              onPress={() => router.push(`${basePath}/wholesale` as any)}
-              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full bg-white py-2.5"
+              key={g}
+              onPress={() => setCashflowGranularity(g)}
+              className={`flex-1 items-center rounded-full py-1.5 ${selectedG ? '' : 'border border-gray-200 bg-white'}`}
+              style={selectedG ? { backgroundColor: BLUE } : undefined}
             >
-              <Ionicons name="cart-outline" size={15} color={BLUE} />
-              <Text className="text-[13px] font-semibold" style={{ color: BLUE }} numberOfLines={1}>
-                Buy Stock
+              <Text className={`text-xs font-semibold capitalize ${selectedG ? 'text-white' : 'text-gray-600'}`}>{g}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {/* Only ever 7 (week) or 6 (month) buckets here - few enough to
+          always show every label, unlike the sparser 8-12 bucket charts
+          elsewhere that need to skip some to avoid crowding. */}
+      <CashflowChart data={cashflow} formatLabel={(label) => label} />
+    </View>
+  );
+
+  const footerText = (
+    <Text className="text-center text-xs text-gray-400">
+      Across {customers?.length ?? 0} customer{(customers?.length ?? 0) === 1 ? '' : 's'}
+    </Text>
+  );
+
+  if (Platform.OS === 'web') {
+    // Sales/Purchase/Expense and Total Received/Total Paid were two
+    // separate rows (3 then 2) stacked vertically - on a laptop that's
+    // just wasted height for no reason, so combine all 5 into one row.
+    // They land at exactly 5-across since webFifthTileWidth is computed
+    // for 5 columns, which conveniently also matches the "Received"/
+    // "Paid" pair, so nothing needs its own leftover 2-wide row.
+    const webStatCards: {
+      key: string;
+      label: string;
+      value: number;
+      icon: keyof typeof Ionicons.glyphMap;
+      bg: string;
+      fg: string;
+      href: string;
+    }[] = [
+      { key: 'sales', label: 'Sales', value: totals.sale, icon: 'trending-up', bg: '#ECFDF5', fg: '#059669', href: `${basePath}/transactions?type=sale` },
+      { key: 'purchase', label: 'Purchase', value: totals.purchase, icon: 'cart', bg: '#FEF2F2', fg: '#DC2626', href: `${basePath}/transactions?type=purchase` },
+      { key: 'expense', label: 'Expense', value: totals.expense, icon: 'receipt', bg: '#FFFBEB', fg: '#D97706', href: `${basePath}/transactions?type=expense` },
+      { key: 'received', label: 'Total Received', value: yearReceived, icon: 'arrow-down-circle', bg: '#ECFDF5', fg: '#059669', href: `${basePath}/received` },
+      { key: 'paid', label: 'Total Paid', value: yearPaid, icon: 'arrow-up-circle', bg: '#FEF2F2', fg: '#DC2626', href: `${basePath}/paid` },
+    ];
+
+    return (
+      <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 24 }}>
+        {heroCard}
+
+        <View className="mb-3 flex-row flex-wrap" style={{ gap: GRID_GAP }}>
+          {webStatCards.map((s) => (
+            <Pressable
+              key={s.key}
+              onPress={() => router.push(s.href as any)}
+              className="rounded-2xl bg-white p-3.5"
+              style={{ width: webFifthTileWidth, ...CARD_SHADOW }}
+            >
+              <View className="mb-2 h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: s.bg }}>
+                <Ionicons name={s.icon} size={16} color={s.fg} />
+              </View>
+              <Text className="text-xs font-semibold text-gray-500" numberOfLines={1}>
+                {s.label}
+              </Text>
+              <Text className="mt-0.5 text-sm font-extrabold" style={{ color: s.fg }} numberOfLines={1}>
+                NPR {s.value.toLocaleString()}
               </Text>
             </Pressable>
-          )}
+          ))}
         </View>
-      </LinearGradient>
+
+        {/* 10 shortcuts at a 5-column tile width lands as a literal 5x2
+            grid instead of wrapping down to a single narrow column the
+            way the native (screen-width-based) tile size did here. */}
+        <Text className="mb-2 text-sm font-semibold text-gray-900">Shortcuts</Text>
+        <View className="mb-4 flex-row flex-wrap" style={{ gap: GRID_GAP }}>
+          {shortcuts(basePath).map((s) => {
+            const color = SHORTCUT_COLORS[s.key] ?? { bg: '#EFF6FF', fg: BLUE };
+            return (
+              <Pressable
+                key={s.key}
+                onPress={() => router.push(s.href as any)}
+                className="items-center rounded-2xl bg-white py-4"
+                style={{ width: webFifthTileWidth, ...CARD_SHADOW }}
+              >
+                <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: color.bg }}>
+                  <Ionicons name={s.icon} size={22} color={color.fg} />
+                </View>
+                <Text className="text-center text-xs font-semibold text-gray-700">{s.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {profileCompletionCard}
+        {cashflowCard}
+        {footerText}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      {heroCard}
 
       {/* Sales is money in (green); Purchase and Expense are money spent
           (red), regardless of the actual figure's sign. Available Balance
@@ -496,57 +645,9 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         })}
       </View>
 
-      {profileCompletion < 100 && (
-        <Pressable onPress={() => router.push(`${basePath}/profile` as any)} className="mb-4 overflow-hidden rounded-2xl">
-          <LinearGradient
-            colors={['#2563EB', '#1D4ED8']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}
-          >
-            <View style={{ width: 44, height: 44 }} className="items-center justify-center">
-              <View style={{ position: 'absolute' }}>
-                <CircularProgress percent={profileCompletion} />
-              </View>
-              <Text className="text-xs font-extrabold text-white">{profileCompletion}%</Text>
-            </View>
-            <View className="flex-1">
-              <Text className="text-sm font-bold text-white">Complete your profile</Text>
-              <Text className="mt-0.5 text-xs text-white/80">
-                Add your remaining details so customers and technicians trust your business.
-              </Text>
-            </View>
-            <Ionicons name="arrow-forward" size={18} color="white" />
-          </LinearGradient>
-        </Pressable>
-      )}
-
-      <View className="mb-4 rounded-2xl bg-white p-4" style={CARD_SHADOW}>
-        <Text className="mb-3 text-sm font-semibold text-gray-900">Cashflow</Text>
-        <View className="mb-3 flex-row gap-2">
-          {(['week', 'month'] as Granularity[]).map((g) => {
-            const selectedG = cashflowGranularity === g;
-            return (
-              <Pressable
-                key={g}
-                onPress={() => setCashflowGranularity(g)}
-                className={`flex-1 items-center rounded-full py-1.5 ${selectedG ? '' : 'border border-gray-200 bg-white'}`}
-                style={selectedG ? { backgroundColor: BLUE } : undefined}
-              >
-                <Text className={`text-xs font-semibold capitalize ${selectedG ? 'text-white' : 'text-gray-600'}`}>{g}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        {/* Only ever 7 (week) or 6 (month) buckets here - few enough to
-            always show every label, unlike the sparser 8-12 bucket charts
-            elsewhere that need to skip some to avoid crowding. */}
-        <CashflowChart data={cashflow} formatLabel={(label) => label} />
-      </View>
-
-      <Text className="text-center text-xs text-gray-400">
-        Across {customers?.length ?? 0} customer{(customers?.length ?? 0) === 1 ? '' : 's'}
-      </Text>
+      {profileCompletionCard}
+      {cashflowCard}
+      {footerText}
     </ScrollView>
   );
 }

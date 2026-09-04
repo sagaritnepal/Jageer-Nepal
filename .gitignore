@@ -44,3 +44,6 @@ yarn-error.*
 # Supabase CLI local state (project-ref, versions, pooler URL) - regenerated
 # per machine, never meant to be committed
 supabase/.temp/
+
+.vercel
+.env*

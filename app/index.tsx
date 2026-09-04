@@ -1,6 +1,6 @@
 // app/index.tsx
 import { useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '../lib/hooks/useAuth';
 import { ROLE_ACCENT } from '../lib/constants/roleColors';
@@ -48,10 +48,20 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  // Session exists but profile hasn't loaded yet - the AuthGate's loading
-  // state should normally prevent this, but guard anyway.
+  // Session exists but profile hasn't loaded yet. useAuthListener sets
+  // isLoading=false in the same tick it kicks off the (async) profile
+  // fetch, so there's a real window - on every cold start/page refresh,
+  // not just rarely - where session is restored but profile is still
+  // null. Redirecting to login here (the old behavior) is what forced a
+  // fresh login on every web refresh despite a perfectly valid session;
+  // show a loading state instead and let the effect above re-render once
+  // the profile arrives.
   if (!profile) {
-    return <Redirect href="/(auth)/login" />;
+    return (
+      <View className="flex-1 items-center justify-center bg-white">
+        <ActivityIndicator size="large" color="#1d4ed8" />
+      </View>
+    );
   }
 
   return <Redirect href={(ROLE_HOME[profile.role] ?? '/(client)/dashboard') as never} />;
