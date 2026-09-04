@@ -201,17 +201,15 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const SCREEN_PADDING = 24; // px-6
   const GRID_GAP = 12; // gap-3
   const thirdTileWidth = (screenWidth - SCREEN_PADDING * 2 - GRID_GAP * 2) / 3;
-  // On web this screen renders inside WebSidebarShell's content column - a
-  // 240px sidebar plus a max-1120px capped column, never the full browser
-  // window. Sizing "3-across"/"5-across" tiles off the raw useWindowDimensions
-  // width (as the native math above does) made each tile as wide as if it
-  // owned the whole monitor, so flex-wrap could only fit one per row - the
-  // "1x1 grid" the cards collapsed into. Size web tiles off that column's
-  // actual width instead.
-  const WEB_SIDEBAR_WIDTH = 240;
-  const WEB_CONTENT_MAX_WIDTH = 1120;
-  const webContentWidth = Math.min(screenWidth - WEB_SIDEBAR_WIDTH, WEB_CONTENT_MAX_WIDTH);
-  const webFifthTileWidth = (webContentWidth - SCREEN_PADDING * 2 - GRID_GAP * 4) / 5;
+  // On web this screen renders inside WebSidebarShell's content column, not
+  // the full browser window - a first attempt guessed that column's width
+  // from useWindowDimensions (screen width minus an assumed sidebar width,
+  // capped at the shell's max-width), but that guess didn't match the
+  // column's true rendered width, so 5-across tiles only fit 4 per row. A
+  // CSS calc() width sized against the tile's actual parent (100%) rather
+  // than a guessed screen width fixes that, and works regardless of how
+  // wide the sidebar/content column end up being.
+  const webTileWidth = (columns: number) => `calc((100% - ${GRID_GAP * (columns - 1)}px) / ${columns})` as unknown as number;
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
   const { data: customers } = useSupabaseQuery('customers', {
@@ -480,9 +478,9 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     // Sales/Purchase/Expense and Total Received/Total Paid were two
     // separate rows (3 then 2) stacked vertically - on a laptop that's
     // just wasted height for no reason, so combine all 5 into one row.
-    // They land at exactly 5-across since webFifthTileWidth is computed
-    // for 5 columns, which conveniently also matches the "Received"/
-    // "Paid" pair, so nothing needs its own leftover 2-wide row.
+    // They land at exactly 5-across since webTileWidth(5) sizes each card
+    // as a fifth of the row, which conveniently also matches the
+    // "Received"/"Paid" pair, so nothing needs its own leftover 2-wide row.
     const webStatCards: {
       key: string;
       label: string;
@@ -509,7 +507,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
               key={s.key}
               onPress={() => router.push(s.href as any)}
               className="rounded-2xl bg-white p-3.5"
-              style={{ width: webFifthTileWidth, ...CARD_SHADOW }}
+              style={{ width: webTileWidth(5), ...CARD_SHADOW }}
             >
               <View className="mb-2 h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: s.bg }}>
                 <Ionicons name={s.icon} size={16} color={s.fg} />
@@ -536,7 +534,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
                 key={s.key}
                 onPress={() => router.push(s.href as any)}
                 className="items-center rounded-2xl bg-white py-4"
-                style={{ width: webFifthTileWidth, ...CARD_SHADOW }}
+                style={{ width: webTileWidth(5), ...CARD_SHADOW }}
               >
                 <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: color.bg }}>
                   <Ionicons name={s.icon} size={22} color={color.fg} />
