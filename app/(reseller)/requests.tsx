@@ -1,6 +1,6 @@
 // app/(reseller)/requests.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, ScrollView, Pressable } from 'react-native';
+import { View, Text, FlatList, ScrollView, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -356,70 +356,106 @@ export default function ResellerRequestQueue() {
     }
   }, [activeStage]);
 
+  // Chip bar: a horizontal-scroll strip makes sense on a phone (only a few
+  // chips fit before running out of width), but on a laptop-wide screen all
+  // 7 stages fit without scrolling - flex-wrap just lays them out flat
+  // instead of hiding most of them behind a scroll gesture nobody expects
+  // on a desktop toggle bar.
+  const stageChip = (stage: Stage, withLayout: boolean) => {
+    const meta = STAGE_META[stage];
+    const count = myByStage.get(stage)?.length ?? 0;
+    const active = activeStage === stage;
+    return (
+      <Pressable
+        key={stage}
+        onPress={() => setJobStage(stage)}
+        onLayout={
+          withLayout
+            ? (e) => {
+                chipLayouts.current[stage] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
+              }
+            : undefined
+        }
+        className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
+        style={{
+          backgroundColor: active ? meta.color : '#FFFFFF',
+          borderWidth: active ? 0 : 1,
+          borderColor: '#E5E7EB',
+        }}
+      >
+        <Ionicons name={meta.icon} size={13} color={active ? 'white' : meta.color} />
+        <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
+          {meta.label} ({count})
+        </Text>
+      </Pressable>
+    );
+  };
+
+  // Same reasoning as the Finance grid fix: a CSS calc() width sizes each
+  // card off its actual parent, so it lands at exactly `columns` across no
+  // matter how wide the sidebar/content column really is - no need to guess
+  // the screen width.
+  const CARD_GRID_GAP = 12;
+  const webCardWidth = (columns: number) =>
+    `calc((100% - ${CARD_GRID_GAP * (columns - 1)}px) / ${columns})` as unknown as number;
+
+  const jobCard = (item: JobItem) =>
+    item.kind === 'request' ? (
+      item.request.reseller_id ? (
+        <MyRequestCard item={item.request} />
+      ) : (
+        <IncomingRequestCard item={item.request} />
+      )
+    ) : userId ? (
+      <OrderCard order={item.order} productMap={productMap} viewerId={userId} basePath="/(reseller)" roleLabel="Selling" />
+    ) : null;
+
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <ScrollView
-        ref={chipScrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0, flexShrink: 0 }}
-        className="mb-4"
-        contentContainerStyle={{ alignItems: 'center', gap: 8, paddingRight: 8 }}
-      >
-        {STAGE_ORDER.map((stage) => {
-          const meta = STAGE_META[stage];
-          const count = myByStage.get(stage)?.length ?? 0;
-          const active = activeStage === stage;
-          return (
-            <Pressable
-              key={stage}
-              onPress={() => setJobStage(stage)}
-              onLayout={(e) => {
-                chipLayouts.current[stage] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
-              }}
-              className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
-              style={{
-                backgroundColor: active ? meta.color : '#FFFFFF',
-                borderWidth: active ? 0 : 1,
-                borderColor: '#E5E7EB',
-              }}
-            >
-              <Ionicons name={meta.icon} size={13} color={active ? 'white' : meta.color} />
-              <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
-                {meta.label} ({count})
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {Platform.OS === 'web' ? (
+        <View className="mb-4 flex-row flex-wrap" style={{ gap: 8 }}>
+          {STAGE_ORDER.map((stage) => stageChip(stage, false))}
+        </View>
+      ) : (
+        <ScrollView
+          ref={chipScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, flexShrink: 0 }}
+          className="mb-4"
+          contentContainerStyle={{ alignItems: 'center', gap: 8, paddingRight: 8 }}
+        >
+          {STAGE_ORDER.map((stage) => stageChip(stage, true))}
+        </ScrollView>
+      )}
 
       <Text className="mb-3 text-base font-bold text-gray-900">{STAGE_META[activeStage].label}</Text>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && stageJobs.length === 0 && <Text className="text-gray-500">Nothing here right now.</Text>}
 
-      <FlatList
-        data={stageJobs}
-        keyExtractor={(item) => `${item.kind}-${item.id}`}
-        renderItem={({ item }) =>
-          item.kind === 'request' ? (
-            item.request.reseller_id ? (
-              <MyRequestCard item={item.request} />
-            ) : (
-              <IncomingRequestCard item={item.request} />
-            )
-          ) : userId ? (
-            <OrderCard
-              order={item.order}
-              productMap={productMap}
-              viewerId={userId}
-              basePath="/(reseller)"
-              roleLabel="Selling"
-            />
-          ) : null
-        }
-        contentContainerStyle={{ paddingBottom: 90 }}
-      />
+      {Platform.OS === 'web' ? (
+        // Every request/order card used to render at full content-column
+        // width in a single column (a "1x1" tile per row) - way more
+        // whitespace than a laptop screen needs. Lay them out 2-across
+        // instead so more of the queue is visible without scrolling.
+        <ScrollView contentContainerStyle={{ paddingBottom: 90 }}>
+          <View className="flex-row flex-wrap" style={{ gap: CARD_GRID_GAP }}>
+            {stageJobs.map((item) => (
+              <View key={`${item.kind}-${item.id}`} style={{ width: webCardWidth(2) }}>
+                {jobCard(item)}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={stageJobs}
+          keyExtractor={(item) => `${item.kind}-${item.id}`}
+          renderItem={({ item }) => jobCard(item)}
+          contentContainerStyle={{ paddingBottom: 90 }}
+        />
+      )}
 
       <Pressable
         onPress={() => router.push('/(reseller)/new-request')}
