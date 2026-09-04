@@ -37,9 +37,11 @@ export function QuickPaymentScreen() {
   // ledgers (see PartyBalancesScreen) - a Payment Out settling a Purchase
   // must reduce vendor_ledger_entries (what you owe), never
   // customer_ledger_entries (what a customer owes you), or it inflates "To
-  // Receive" for someone you only ever bought from. Defaults match the more
-  // common real case for each direction, but is always an explicit choice.
-  const [payTarget, setPayTarget] = useState<'customer' | 'vendor'>(isOut ? 'vendor' : 'customer');
+  // Receive" for someone you only ever bought from. This used to be a
+  // manual Customer/Vendor toggle, but Payment Out is a vendor payment and
+  // Payment In is a customer payment in every real case that comes through
+  // here, so it's just the fixed direction now instead of an extra choice.
+  const payTarget: 'customer' | 'vendor' = isOut ? 'vendor' : 'customer';
   const targetTable = payTarget === 'vendor' ? 'vendor_ledger_entries' : 'customer_ledger_entries';
   const entryType: 'debit' | 'credit' =
     payTarget === 'customer' ? (isOut ? 'debit' : 'credit') : isOut ? 'credit' : 'debit';
@@ -93,12 +95,16 @@ export function QuickPaymentScreen() {
 
   // 001, 002, 003... ascending off the highest number already used in this
   // direction - padded to 3 digits until there are enough entries to need
-  // more.
+  // more. Entries saved before this auto-numbering existed have no
+  // receipt_no at all, so falling back to "how many entries are there"
+  // when none of them parse keeps the count moving forward instead of
+  // resetting to 1 forever just because the earliest ones weren't numbered.
   const nextReceiptNo = useMemo(() => {
-    const nums = (sameDirectionEntries ?? [])
+    const entries = sameDirectionEntries ?? [];
+    const nums = entries
       .map((e) => Number((e.receipt_no ?? '').replace(/\D/g, '')))
       .filter((n) => Number.isFinite(n) && n > 0);
-    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    const next = (nums.length ? Math.max(...nums) : entries.length) + 1;
     return String(next).padStart(3, '0');
   }, [sameDirectionEntries]);
 
@@ -245,31 +251,6 @@ export function QuickPaymentScreen() {
         <Text className="text-base font-bold" style={{ color: meta.color }}>
           {meta.label}
         </Text>
-      </View>
-
-      <View className="mb-3 flex-row gap-2">
-        {(['customer', 'vendor'] as const).map((t) => {
-          const active = payTarget === t;
-          return (
-            <Pressable
-              key={t}
-              onPress={() => {
-                setPayTarget(t);
-                setSelectedCustomer(null);
-                setCustomerName('');
-                setReceiptNoTouched(false);
-              }}
-              className={`flex-1 items-center rounded-lg border py-2 ${
-                active ? meta.bg : 'bg-white border-gray-300'
-              }`}
-              style={active ? { borderColor: meta.color } : undefined}
-            >
-              <Text className="text-xs font-semibold" style={{ color: active ? meta.color : '#6B7280' }}>
-                {t === 'customer' ? 'Customer' : 'Vendor'}
-              </Text>
-            </Pressable>
-          );
-        })}
       </View>
 
       <Pressable

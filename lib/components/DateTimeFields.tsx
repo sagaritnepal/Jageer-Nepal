@@ -1,6 +1,6 @@
 // lib/components/DateTimeFields.tsx
-import { createElement, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   BS_MONTHS,
@@ -12,20 +12,6 @@ import {
   toAdLabel,
   toBsLabel,
 } from '../utils/nepaliDate';
-
-const webInputStyle = {
-  border: '1px solid #d1d5db',
-  borderRadius: 8,
-  backgroundColor: '#fff',
-  paddingLeft: 16,
-  paddingRight: 16,
-  paddingTop: 12,
-  paddingBottom: 12,
-  fontSize: 16,
-  color: '#111827',
-  width: '100%',
-  boxSizing: 'border-box' as const,
-};
 
 function parseDateValue(value: string): Date {
   const [y, m, d] = value.split('-').map(Number);
@@ -221,20 +207,6 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
   const [bsMonth, setBsMonth] = useState(() => adStringToBsOrToday(value || formatDateValue(new Date())).month);
   const [adYear, setAdYear] = useState(() => (value ? parseDateValue(value) : new Date()).getFullYear());
   const [adMonth, setAdMonth] = useState(() => (value ? parseDateValue(value) : new Date()).getMonth());
-
-  if (Platform.OS === 'web') {
-    return (
-      <View>
-        {createElement('input', {
-          type: 'date',
-          value,
-          onChange: (e: any) => onChange(e.target.value),
-          style: webInputStyle,
-        })}
-        {!!value && <Text className="mt-1 text-xs text-gray-500">{toBsLabel(value)}</Text>}
-      </View>
-    );
-  }
 
   function openPicker() {
     const base = value || formatDateValue(new Date());
