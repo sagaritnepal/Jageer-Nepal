@@ -13,6 +13,15 @@ export interface BsDate {
   date: number;
 }
 
+// Nepal's official fiscal year runs Shrawan 1 - Ashad end (BS_MONTHS index 3
+// through the end of index 2 the following year), not Baisakh-Chaitra - used
+// for the "083/84" style suffix on a quotation number. Verified against a
+// real quotation: 2083-05 (Bhadra, index 4) -> "083/84".
+export function nepaliFiscalYearSuffix(bsYear: number, bsMonth: number): string {
+  const startYear = bsMonth >= 3 ? bsYear : bsYear - 1;
+  return `${String(startYear).slice(-3)}/${String(startYear + 1).slice(-2)}`;
+}
+
 /** Bikram Sambat label for an AD date string ('YYYY-MM-DD'), e.g. "Falgun 27, 2082 BS".
  * Nepal runs on the BS calendar day-to-day, so every date shown or picked in the app
  * should carry its BS equivalent alongside the AD one - not just the Gregorian date. */

@@ -83,6 +83,12 @@ function shortcuts(basePath: string): {
     { key: 'import-statement', label: 'Import Statement', icon: 'document-attach', href: `${basePath}/import-statement` },
     { key: 'inventory', label: 'Inventory', icon: 'cube', href: `${basePath}/inventory` },
     { key: 'report', label: 'Report', icon: 'bar-chart', href: `${basePath}/report` },
+    // Quotation generation only exists under (reseller) for now - a
+    // wholesaler basePath has no matching route, so this would be a dead
+    // link there.
+    ...(basePath === '/(reseller)'
+      ? [{ key: 'quotation', label: 'Quotation', icon: 'document-text' as const, href: `${basePath}/quotation/new` }]
+      : []),
   ];
 }
 
@@ -100,6 +106,7 @@ const SHORTCUT_COLORS: Record<string, { bg: string; fg: string }> = {
   'import-statement': { bg: '#F0FDFA', fg: '#0D9488' },
   inventory: { bg: '#F5F3FF', fg: '#7C3AED' },
   report: { bg: '#EFF6FF', fg: '#2563EB' },
+  quotation: { bg: '#FDF4FF', fg: '#A21CAF' },
 };
 
 const CARD_SHADOW = {

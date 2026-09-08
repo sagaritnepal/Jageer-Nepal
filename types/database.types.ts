@@ -24,6 +24,46 @@ export interface Profile {
   verification_status: VerificationStatus;
   verification_notes: string | null;
   reward_points: number;
+  // A reseller's own business letterhead, used on generated quotations
+  // (see QuotationScreen) - all null until they fill in "Business details"
+  // once. business_logo_path is a public storage path in the
+  // business-assets bucket, not a full URL.
+  business_name: string | null;
+  business_reg_no: string | null;
+  business_vat_no: string | null;
+  business_address: string | null;
+  business_phone: string | null;
+  business_logo_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuotationItem {
+  photo_url: string | null;
+  subject: string;
+  description: string;
+  mrp: number | null;
+  discount: number | null;
+  rate: number | null;
+  qty: number;
+  amount: number;
+}
+
+export interface Quotation {
+  id: string;
+  owner_id: string;
+  quote_seq: number;
+  quote_no: string;
+  quote_date: string;
+  subject: string | null;
+  client_name: string;
+  client_address: string | null;
+  salesperson_name: string | null;
+  salesperson_phone: string | null;
+  items: QuotationItem[];
+  terms: string | null;
+  total: number;
+  pdf_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -370,6 +410,7 @@ export interface Database {
         Relationships: [];
       };
       products: { Row: Product; Insert: Partial<Product>; Update: Partial<Product>; Relationships: [] };
+      quotations: { Row: Quotation; Insert: Partial<Quotation>; Update: Partial<Quotation>; Relationships: [] };
       orders: { Row: Order; Insert: Partial<Order>; Update: Partial<Order>; Relationships: [] };
       order_items: { Row: OrderItem; Insert: Partial<OrderItem>; Update: Partial<OrderItem>; Relationships: [] };
       job_cards: { Row: JobCard; Insert: Partial<JobCard>; Update: Partial<JobCard>; Relationships: [] };

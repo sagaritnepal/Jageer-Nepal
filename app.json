@@ -35,7 +35,8 @@
         {
           "microphonePermission": "Jageer needs microphone access so you can add Finance entries by voice."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "name": "jageer-app",
     "slug": "jageer-app",
