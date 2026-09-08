@@ -10,6 +10,7 @@ import { useRankedTechnicians } from '../../../lib/hooks/useTechnicianRanking';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { TechnicianPicker } from '../../../lib/components/TechnicianPicker';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
+import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { assignTechnician } from '../../../lib/utils/assignTechnician';
@@ -82,6 +83,17 @@ function JobTracking({ request }: { request: ServiceRequest }) {
       />
 
       <RemarkBlock remark={request.remark} />
+
+      {request.chalan_urls.length > 0 && (
+        <View className="mt-4 rounded-xl bg-white p-5">
+          <ChalanPhotos
+            chalanUrls={request.chalan_urls}
+            requestId={request.id}
+            editable={false}
+            onUploaded={() => {}}
+          />
+        </View>
+      )}
 
       <View className="mt-4 rounded-xl bg-white p-5">
         <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Payment</Text>

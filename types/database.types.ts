@@ -75,6 +75,11 @@ export interface ServiceRequest {
   scheduled_date: string | null;
   scheduled_time: string | null;
   photo_urls: string[];
+  // A photographed paper chalan (delivery/completion slip) the assigned
+  // technician attaches once work is done - never the reseller or client,
+  // see ChalanPhotos. Stored the same way as photo_urls (private paths in
+  // the request-photos bucket).
+  chalan_urls: string[];
   payment_status: PaymentStatus;
   payment_method: PaymentMethod | null;
   fonepay_prn: string | null;

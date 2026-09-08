@@ -8,6 +8,7 @@ import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery 
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
+import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { RequestStatus } from '../../../types/database.types';
 
@@ -187,6 +188,18 @@ export default function JobCard() {
         <View className="mb-6 mt-4 rounded-xl bg-white p-5">
           <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Remark</Text>
           <Text className="text-sm text-gray-700">{request.remark}</Text>
+        </View>
+      )}
+
+      {hasAccepted && (
+        <View className="mb-6 rounded-xl bg-white p-5">
+          <ChalanPhotos
+            chalanUrls={request.chalan_urls}
+            requestId={request.id}
+            userId={userId}
+            editable
+            onUploaded={(urls) => updateRequest.mutateAsync({ id: request.id, values: { chalan_urls: urls } })}
+          />
         </View>
       )}
 

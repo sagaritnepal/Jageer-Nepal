@@ -276,6 +276,12 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
               {item.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
             </Text>
           </View>
+          {item.chalan_urls.length > 0 && (
+            <View className="flex-row items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5">
+              <Ionicons name="document-attach" size={10} color="#0F766E" />
+              <Text className="text-[10px] font-semibold text-teal-700">Chalan attached</Text>
+            </View>
+          )}
         </View>
 
         <View className="mt-2.5 gap-1">
