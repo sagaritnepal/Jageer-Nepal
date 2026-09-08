@@ -1,11 +1,11 @@
 // app/(technician)/_layout.tsx
-import { Platform } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
 import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
-import { WebSidebarShell, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
+import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
 
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(technician)/dashboard', label: 'Home', icon: 'home' },
@@ -14,13 +14,15 @@ const NAV_ITEMS: WebNavItem[] = [
 ];
 
 export default function TechnicianLayout() {
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const tabs = (
     <Tabs
       backBehavior="history"
       screenOptions={{
         header: ({ options }) => <PortalHeaderBar title={options.title} />,
         tabBarActiveTintColor: ROLE_ACCENT.technician,
-        ...(Platform.OS === 'web' ? { tabBarStyle: { display: 'none' } } : null),
+        ...(isWideWeb ? { tabBarStyle: { display: 'none' } } : null),
       }}
     >
       <Tabs.Screen
@@ -47,7 +49,7 @@ export default function TechnicianLayout() {
 
   return (
     <RoleGuard allow={['technician']}>
-      {Platform.OS === 'web' ? (
+      {isWideWeb ? (
         <WebSidebarShell items={NAV_ITEMS} roleLabel="Technician">
           {tabs}
         </WebSidebarShell>

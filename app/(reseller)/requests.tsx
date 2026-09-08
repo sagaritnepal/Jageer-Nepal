@@ -1,6 +1,6 @@
 // app/(reseller)/requests.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, ScrollView, Pressable, Platform } from 'react-native';
+import { View, Text, FlatList, ScrollView, Pressable, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -12,6 +12,7 @@ import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { OrderCard } from '../../lib/components/OrderCard';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
+import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import type { Order, RequestStatus, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
@@ -359,6 +360,12 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
 export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [jobStage, setJobStage] = useState<Stage | null>(null);
+  // A phone browser hitting the website is still "web" (Platform.OS ===
+  // 'web'), but the 2-column card grid and flat chip row below only make
+  // sense once the viewport is wide enough for it - same breakpoint as the
+  // sidebar shell this screen normally renders inside.
+  const { width: screenWidth } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
 
   const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
     filters: { status: 'pending', origin: 'app' },
@@ -480,7 +487,7 @@ export default function ResellerRequestQueue() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      {Platform.OS === 'web' ? (
+      {isWideWeb ? (
         <View className="mb-4 flex-row flex-wrap" style={{ gap: 8 }}>
           {STAGE_ORDER.map((stage) => stageChip(stage, false))}
         </View>
@@ -502,7 +509,7 @@ export default function ResellerRequestQueue() {
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && stageJobs.length === 0 && <Text className="text-gray-500">Nothing here right now.</Text>}
 
-      {Platform.OS === 'web' ? (
+      {isWideWeb ? (
         // Every request/order card used to render at full content-column
         // width in a single column (a "1x1" tile per row) - way more
         // whitespace than a laptop screen needs. Lay them out 2-across

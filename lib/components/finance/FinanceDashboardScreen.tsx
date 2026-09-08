@@ -10,6 +10,7 @@ import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useAccountBalances } from '../../hooks/useAccountBalances';
 import { periodBuckets, type Granularity } from './TrendChartCard';
 import { toBsDayChartLabel } from '../../utils/nepaliDate';
+import { WEB_SIDEBAR_MIN_WIDTH } from '../web/WebSidebarShell';
 
 const BLUE = '#2563EB';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -474,7 +475,13 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
     </Text>
   );
 
-  if (Platform.OS === 'web') {
+  // A phone browser hitting the website is still "web" (Platform.OS ===
+  // 'web'), but cramming a 5-across desktop grid into a ~360-400px phone
+  // viewport is just as broken as the sidebar was there - this only kicks
+  // in wide enough for it to actually make sense (matches the sidebar's own
+  // breakpoint in WebSidebarShell, since that's the layout this screen
+  // normally renders inside once it's wide enough to show at all).
+  if (Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH) {
     // Sales/Purchase/Expense and Total Received/Total Paid were two
     // separate rows (3 then 2) stacked vertically - on a laptop that's
     // just wasted height for no reason, so combine all 5 into one row.

@@ -26,6 +26,14 @@ function initialsOf(name: string | null | undefined) {
 // instead of stretching to the sidebar's full remaining width.
 const CONTENT_MAX_WIDTH = 1120;
 
+// Below this viewport width, each _layout.tsx renders plain Tabs (bottom
+// bar and all) instead of this shell - a phone browser hitting the website
+// is still "web" (Platform.OS === 'web'), but a 240px sidebar plus content
+// squeezed into a ~360-400px phone screen has nowhere near enough room and
+// collapses into single characters per line. 768px comfortably fits the
+// 240px sidebar plus a readable content column beside it.
+export const WEB_SIDEBAR_MIN_WIDTH = 768;
+
 /** Web-only desktop shell: a persistent left sidebar (the same sections as
  * the mobile bottom tabs, always visible) beside the actual screen content.
  * Mobile is untouched - each role's _layout.tsx only reaches for this on
