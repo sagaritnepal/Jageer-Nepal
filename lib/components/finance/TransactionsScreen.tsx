@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, View, Text, TextInput, Pressable, Modal, ScrollView, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { KeyboardAwareSectionList } from 'react-native-keyboard-aware-scroll-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
@@ -36,6 +37,28 @@ interface ItemRowState {
   description: string;
   qty: string;
   rate: string;
+}
+
+let expenseRowSeq = 0;
+function makeExpenseRowKey() {
+  expenseRowSeq += 1;
+  return `expense-row-${expenseRowSeq}`;
+}
+
+// Web only: recording several expenses under one Date/Payment method in a
+// single save, same "shared voucher, per-row table" shape as Quick Payment's
+// multi-entry table - see the web branch of TransactionForm below.
+interface ExpenseRow {
+  key: string;
+  partyName: string;
+  customerId: string | null;
+  categoryId: string | null;
+  amount: string;
+  note: string;
+}
+
+function emptyExpenseRow(): ExpenseRow {
+  return { key: makeExpenseRowKey(), partyName: '', customerId: null, categoryId: null, amount: '', note: '' };
 }
 
 function lineTotal(row: ItemRowState) {
@@ -824,6 +847,311 @@ function TransactionForm({
       if (scanned.amount) setAmount(String(scanned.amount));
       if (scanned.date) setExpenseDate(scanned.date);
     }
+  }
+
+  // Web-only multi-expense table (new entries only - editing an existing
+  // expense, `initial` set, stays the single-entry form below regardless of
+  // platform). Purely additive: the single-entry amount/partyName/categoryId
+  // state and handleSave above are untouched and still drive every other
+  // path (native, sale/purchase, and editing).
+  const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([emptyExpenseRow()]);
+  const [activePartyRowKey, setActivePartyRowKey] = useState<string | null>(null);
+  const [activeCategoryRowKey, setActiveCategoryRowKey] = useState<string | null>(null);
+  const [expenseRowPickerQuery, setExpenseRowPickerQuery] = useState('');
+  const expenseRowsTotal = expenseRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  function addExpenseRow() {
+    setExpenseRows((prev) => [...prev, emptyExpenseRow()]);
+  }
+
+  function removeExpenseRow(key: string) {
+    setExpenseRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== key) : prev));
+  }
+
+  function updateExpenseRow(key: string, patch: Partial<ExpenseRow>) {
+    setExpenseRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function selectPartyForExpenseRow(c: Customer) {
+    if (activePartyRowKey) updateExpenseRow(activePartyRowKey, { partyName: c.name, customerId: c.id });
+    setActivePartyRowKey(null);
+  }
+
+  // Same "a plain typed name with no phone just fills party_name, a phone
+  // number links or creates a real customer" behavior as handleSelectPartyNew
+  // above (expense never requires a real customer_id, unlike a bill).
+  async function handleSelectNewPartyForExpenseRow(name: string, phone: string | null) {
+    const key = activePartyRowKey;
+    setActivePartyRowKey(null);
+    if (!key) return;
+    if (!phone) {
+      updateExpenseRow(key, { partyName: name, customerId: null });
+      return;
+    }
+    const existing = customers.find((c) => c.phone === phone);
+    if (existing) {
+      updateExpenseRow(key, { partyName: existing.name, customerId: existing.id });
+      return;
+    }
+    try {
+      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone });
+      updateExpenseRow(key, { partyName: created.name, customerId: created.id });
+    } catch (err) {
+      showAlert('Could not add customer', getErrorMessage(err));
+    }
+  }
+
+  function selectCategoryForRow(id: string) {
+    if (activeCategoryRowKey) updateExpenseRow(activeCategoryRowKey, { categoryId: id });
+    setActiveCategoryRowKey(null);
+  }
+
+  // Scanning a bill in the multi-expense table adds a fresh row for it
+  // instead of overwriting whichever row is already being edited.
+  async function handleScanForExpenseRow() {
+    phoneContacts.request();
+    const scanned = await pickAndScan();
+    if (!scanned) return;
+    const key = makeExpenseRowKey();
+    setExpenseRows((prev) => [
+      ...prev,
+      {
+        key,
+        partyName: scanned.vendor_name ?? '',
+        customerId: null,
+        categoryId: null,
+        amount: scanned.amount ? String(scanned.amount) : '',
+        note: scanned.note ?? '',
+      },
+    ]);
+    if (scanned.date) setExpenseDate(scanned.date);
+    if (scanned.vendor_name) {
+      setExpenseRowPickerQuery(scanned.vendor_name);
+      setActivePartyRowKey(key);
+    }
+  }
+
+  async function handleSaveAllExpenses() {
+    const validRows = expenseRows.filter((r) => Number(r.amount) > 0);
+    if (validRows.length === 0) {
+      showAlert('Add an expense', 'Add at least one expense with a valid amount.');
+      return;
+    }
+    setSaving(true);
+    try {
+      for (const row of validRows) {
+        await createTx.mutateAsync({
+          owner_id: userId,
+          type: 'expense',
+          amount: Number(row.amount),
+          party_name: row.partyName.trim() || null,
+          customer_id: row.customerId,
+          note: row.note.trim() || null,
+          bill_date: expenseDate || null,
+          expense_category_id: row.categoryId,
+          payment_mode: bankAccountId ? ('bank' as const) : ('cash' as const),
+          bank_account_id: bankAccountId,
+        });
+      }
+      onDone();
+    } catch (err) {
+      showAlert('Could not save', getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (Platform.OS === 'web' && type === 'expense' && !initial) {
+    return (
+      <View className="mb-4">
+        <View className="mb-4 flex-row" style={{ gap: 24 }}>
+          <View className="flex-1" style={{ minWidth: 0, maxWidth: 720 }}>
+            <View className="mb-5 flex-row items-center justify-between">
+              <Text className="text-lg font-bold" style={{ color: TYPE_META.expense.color }}>
+                New Expenses
+              </Text>
+              <Pressable
+                onPress={handleScanForExpenseRow}
+                disabled={scanning}
+                className="flex-row items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-50 px-4 py-2.5 disabled:opacity-50"
+              >
+                <Ionicons name={scanning ? 'hourglass-outline' : 'camera-outline'} size={16} color="#2563EB" />
+                <Text className="text-sm font-semibold text-blue-700">{scanning ? 'Reading the slip…' : 'Scan Bill'}</Text>
+              </Pressable>
+            </View>
+
+            <View className="mb-5 rounded-2xl border border-gray-200 bg-white p-5">
+              <FormSection icon="calendar-outline" title="Details" first>
+                <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
+                <DateField value={expenseDate} onChange={setExpenseDate} />
+              </FormSection>
+
+              <FormSection icon="wallet-outline" title="Payment method">
+                <Pressable
+                  onPress={() => setShowAccountPicker(true)}
+                  className="flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
+                >
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
+                    <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
+                  </View>
+                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                </Pressable>
+              </FormSection>
+            </View>
+
+            <View className="rounded-2xl border border-gray-200 bg-white p-5">
+              <View className="mb-3 flex-row items-center gap-1.5">
+                <Ionicons name="receipt-outline" size={13} color="#9CA3AF" />
+                <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Expenses</Text>
+              </View>
+
+              <View className="mb-1.5 flex-row gap-2 px-1">
+                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Paid to</Text>
+                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Category</Text>
+                <Text className="w-24 text-[11px] font-semibold text-gray-500">Amount</Text>
+                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Note</Text>
+                <View style={{ width: 28 }} />
+              </View>
+
+              {expenseRows.map((row) => {
+                const rowCategory = (categories ?? []).find((c) => c.id === row.categoryId) ?? null;
+                return (
+                  <View key={row.key} className="mb-2 flex-row items-center gap-2">
+                    <Pressable
+                      onPress={() => {
+                        phoneContacts.request();
+                        setExpenseRowPickerQuery('');
+                        setActivePartyRowKey(row.key);
+                      }}
+                      className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+                    >
+                      <Text className={`flex-1 text-sm ${row.partyName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+                        {row.partyName || 'Paid to?'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setActiveCategoryRowKey(row.key)}
+                      className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+                    >
+                      <Text className={`flex-1 text-sm ${rowCategory ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+                        {rowCategory?.name ?? 'Category'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
+                    </Pressable>
+                    <TextInput
+                      value={row.amount}
+                      onChangeText={(v) => updateExpenseRow(row.key, { amount: v })}
+                      placeholder="0"
+                      placeholderTextColor="#D1D5DB"
+                      keyboardType="numeric"
+                      className="w-24 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-900"
+                    />
+                    <TextInput
+                      value={row.note}
+                      onChangeText={(v) => updateExpenseRow(row.key, { note: v })}
+                      placeholder="Optional"
+                      placeholderTextColor="#9CA3AF"
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+                    />
+                    <Pressable onPress={() => removeExpenseRow(row.key)} hitSlop={8} style={{ width: 28, alignItems: 'center' }}>
+                      <Ionicons name="close-circle" size={18} color={expenseRows.length > 1 ? '#DC2626' : '#E5E7EB'} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+
+              <Pressable onPress={addExpenseRow} className="mt-2 flex-row items-center gap-1.5 self-start">
+                <Ionicons name="add-circle-outline" size={16} color={TYPE_META.expense.color} />
+                <Text className="text-sm font-semibold" style={{ color: TYPE_META.expense.color }}>
+                  Add expense
+                </Text>
+              </Pressable>
+
+              <View className="mt-5 flex-row gap-3 border-t border-gray-100 pt-4">
+                <Pressable onPress={onCancel} className="flex-1 items-center rounded-xl border border-gray-300 py-3">
+                  <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSaveAllExpenses}
+                  disabled={saving}
+                  className="flex-1 items-center rounded-xl py-3 disabled:opacity-50"
+                  style={{ backgroundColor: TYPE_META.expense.color }}
+                >
+                  <Text className="text-sm font-bold text-white">{saving ? 'Saving…' : 'Save'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          <View style={{ width: 320 }}>
+            <LinearGradient
+              colors={['#DC2626', '#B91C1C']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                borderRadius: 20,
+                padding: 20,
+                shadowColor: '#DC2626',
+                shadowOpacity: 0.3,
+                shadowRadius: 14,
+                shadowOffset: { width: 0, height: 8 },
+                elevation: 5,
+              }}
+            >
+              <Text className="text-xs font-bold uppercase text-white/70" style={{ letterSpacing: 0.5 }}>
+                Spending · {expenseRows.filter((r) => Number(r.amount) > 0).length}{' '}
+                {expenseRows.filter((r) => Number(r.amount) > 0).length === 1 ? 'expense' : 'expenses'}
+              </Text>
+              <Text className="mt-1 text-4xl font-extrabold text-white" numberOfLines={1}>
+                NPR {expenseRowsTotal.toLocaleString()}
+              </Text>
+
+              <View className="mt-5" style={{ gap: 10 }}>
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  <Text className="text-sm text-white/90">{toBsLabel(expenseDate)}</Text>
+                </View>
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={14} color="rgba(255,255,255,0.85)" />
+                  <Text className="text-sm text-white/90">{selectedAccountName}</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </View>
+        </View>
+
+        <ContactPickerModal
+          visible={activePartyRowKey != null}
+          initialQuery={expenseRowPickerQuery}
+          customers={customers}
+          phoneContacts={phoneContacts.contacts}
+          onSelectCustomer={selectPartyForExpenseRow}
+          onSelectNew={handleSelectNewPartyForExpenseRow}
+          onClose={() => setActivePartyRowKey(null)}
+        />
+        <CategoryPickerModal
+          visible={activeCategoryRowKey != null}
+          categories={categories ?? []}
+          selectedId={activeCategoryRowKey ? expenseRows.find((r) => r.key === activeCategoryRowKey)?.categoryId ?? null : null}
+          onSelect={selectCategoryForRow}
+          onClose={() => setActiveCategoryRowKey(null)}
+          onCreate={handleCreateCategory}
+          onRename={handleRenameCategory}
+          onDelete={handleDeleteCategory}
+        />
+        <BankAccountPickerModal
+          visible={showAccountPicker}
+          accounts={bankAccounts.accounts}
+          selectedId={bankAccountId}
+          onSelect={setBankAccountId}
+          onClose={() => setShowAccountPicker(false)}
+          onRename={bankAccounts.rename}
+          onDelete={bankAccounts.remove}
+        />
+      </View>
+    );
   }
 
   return (
