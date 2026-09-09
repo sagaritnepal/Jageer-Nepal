@@ -22,6 +22,24 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+let rowKeySeq = 0;
+function makeRowKey() {
+  rowKeySeq += 1;
+  return `row-${rowKeySeq}`;
+}
+
+interface PaymentRow {
+  key: string;
+  customerName: string;
+  selectedCustomer: Customer | null;
+  amount: string;
+  note: string;
+}
+
+function emptyPaymentRow(): PaymentRow {
+  return { key: makeRowKey(), customerName: '', selectedCustomer: null, amount: '', note: '' };
+}
+
 export function QuickPaymentScreen() {
   // voice* params arrive from the Finance dashboard's voice-command button,
   // routed here the same way a Shortcuts tap is (?type=in/out) - applied
@@ -236,6 +254,119 @@ export function QuickPaymentScreen() {
     }
   }
 
+  // Web only: recording several people's payments under one Date/Receipt
+  // No./Payment method in a single save, instead of one form per person -
+  // see the `rows` table below. Native keeps the original single-entry
+  // form untouched (customerName/selectedCustomer/amount/note above).
+  const [rows, setRows] = useState<PaymentRow[]>([emptyPaymentRow()]);
+  const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
+  const [rowPickerQuery, setRowPickerQuery] = useState('');
+  const rowsTotal = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  function addRow() {
+    setRows((prev) => [...prev, emptyPaymentRow()]);
+  }
+
+  function removeRow(key: string) {
+    setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== key) : prev));
+  }
+
+  function updateRow(key: string, patch: Partial<PaymentRow>) {
+    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function selectCustomerForRow(c: Customer) {
+    if (activeRowKey) updateRow(activeRowKey, { selectedCustomer: c, customerName: c.name });
+    setActiveRowKey(null);
+  }
+
+  // Same "typed a name that isn't saved yet -> save it now" behavior as
+  // handleSelectNew above, just targeting whichever row's picker is open.
+  async function handleSelectNewForRow(name: string, phone: string | null) {
+    if (!userId || !activeRowKey) return;
+    const key = activeRowKey;
+    setActiveRowKey(null);
+    if (phone) {
+      const existing = (customers ?? []).find((c) => c.phone === phone);
+      if (existing) {
+        updateRow(key, { selectedCustomer: existing, customerName: existing.name });
+        return;
+      }
+    }
+    try {
+      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone });
+      updateRow(key, { selectedCustomer: created, customerName: created.name });
+    } catch (err) {
+      showAlert('Could not add customer', getErrorMessage(err));
+    }
+  }
+
+  // Scanning a bill in the multi-entry table adds a fresh row for it
+  // instead of overwriting whichever row is already being edited.
+  async function handleScanForRow() {
+    phoneContacts.request();
+    const scanned = await pickAndScan();
+    if (!scanned) return;
+    const key = makeRowKey();
+    setRows((prev) => [
+      ...prev,
+      {
+        key,
+        customerName: scanned.vendor_name ?? '',
+        selectedCustomer: null,
+        amount: scanned.amount ? String(scanned.amount) : '',
+        note: scanned.note ?? '',
+      },
+    ]);
+    if (scanned.date) setDate(scanned.date);
+    if (scanned.vendor_name) {
+      setRowPickerQuery(scanned.vendor_name);
+      setActiveRowKey(key);
+    }
+  }
+
+  async function handleSaveAll() {
+    if (!userId) return;
+    const validRows = rows.filter((r) => r.customerName.trim() && Number(r.amount) > 0);
+    if (validRows.length === 0) {
+      showAlert('Add a payment', 'Add at least one person and a valid amount to record.');
+      return;
+    }
+    setSaving(true);
+    try {
+      for (const row of validRows) {
+        const trimmedName = row.customerName.trim();
+        const customer =
+          row.selectedCustomer ?? (await createCustomer.mutateAsync({ owner_id: userId, name: trimmedName, phone: null }));
+        await insertEntry.mutateAsync({
+          [payTarget === 'vendor' ? 'vendor_id' : 'customer_id']: customer.id,
+          owner_id: userId,
+          entry_type: entryType,
+          amount: Number(row.amount),
+          note: row.note.trim() || null,
+          source: 'manual',
+          bank_account_id: bankAccountId,
+          entry_date: date || null,
+          receipt_no: receiptNo.trim() || null,
+        } as any);
+      }
+      showAlert(
+        isOut ? 'Payments out recorded' : 'Payments in recorded',
+        `${validRows.length} ${validRows.length === 1 ? 'entry' : 'entries'} saved, NPR ${validRows
+          .reduce((sum, r) => sum + Number(r.amount), 0)
+          .toLocaleString()} total.`
+      );
+      setRows([emptyPaymentRow()]);
+      setBankAccountId(null);
+      setDate(todayIso());
+      setReceiptNoTouched(false);
+    } catch (err) {
+      showAlert('Could not save', getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const meta = isOut
     ? { label: 'Payment Out', color: '#DC2626', gradient: ['#DC2626', '#B91C1C'] as const, bg: 'bg-red-50', icon: 'arrow-up-circle' as const }
     : { label: 'Payment In', color: '#059669', gradient: ['#059669', '#047857'] as const, bg: 'bg-emerald-50', icon: 'arrow-down-circle' as const };
@@ -357,6 +488,17 @@ export function QuickPaymentScreen() {
   );
 
   if (Platform.OS === 'web') {
+    const webScanBillButton = (
+      <Pressable
+        onPress={handleScanForRow}
+        disabled={scanning}
+        className="flex-row items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-50 px-4 py-2.5 disabled:opacity-50"
+      >
+        <Ionicons name={scanning ? 'hourglass-outline' : 'camera-outline'} size={16} color="#2563EB" />
+        <Text className="text-sm font-semibold text-blue-700">{scanning ? 'Reading the slip…' : 'Scan Bill'}</Text>
+      </Pressable>
+    );
+
     return (
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
         <View className="px-8 pt-6">
@@ -364,16 +506,17 @@ export function QuickPaymentScreen() {
             <Text className="text-2xl font-bold" style={{ color: meta.color }}>
               {meta.label}
             </Text>
-            {scanBillButton}
+            {webScanBillButton}
           </View>
 
           <View className="flex-row" style={{ gap: 24 }}>
-            <View className="flex-1" style={{ minWidth: 0, maxWidth: 640 }}>
-              <View className="rounded-2xl border border-gray-200 bg-white p-5">
-                {customerSection}
-
-                <FormSection icon="document-text-outline" title="Details">
-                  <View className="mb-3 flex-row gap-3">
+            <View className="flex-1" style={{ minWidth: 0, maxWidth: 720 }}>
+              {/* Date/Receipt No. and Payment method apply to every row in
+                  the table below - one voucher covering several people,
+                  not a separate form per person. */}
+              <View className="mb-5 rounded-2xl border border-gray-200 bg-white p-5">
+                <FormSection icon="document-text-outline" title="Details" first>
+                  <View className="flex-row gap-3">
                     <View className="flex-1">
                       <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
                       <DateField value={date} onChange={setDate} />
@@ -393,30 +536,70 @@ export function QuickPaymentScreen() {
                       />
                     </View>
                   </View>
-
-                  <Text className="mb-1 text-xs font-medium text-gray-500">
-                    {isOut ? 'Amount paid out (NPR)' : 'Amount received (NPR)'}
-                  </Text>
-                  <TextInput
-                    value={amount}
-                    onChangeText={setAmount}
-                    placeholder="0"
-                    placeholderTextColor="#D1D5DB"
-                    keyboardType="numeric"
-                    className="mb-3 rounded-lg border border-gray-300 px-4 py-3 text-2xl font-bold text-gray-900"
-                  />
-
-                  <Text className="mb-1 text-xs font-medium text-gray-500">Note (optional)</Text>
-                  <TextInput
-                    value={note}
-                    onChangeText={setNote}
-                    placeholder="e.g. Cash payment"
-                    placeholderTextColor="#9CA3AF"
-                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-                  />
                 </FormSection>
 
                 {paymentMethodSection}
+              </View>
+
+              <View className="rounded-2xl border border-gray-200 bg-white p-5">
+                <View className="mb-3 flex-row items-center gap-1.5">
+                  <Ionicons name="people-outline" size={13} color="#9CA3AF" />
+                  <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                    {payTarget === 'vendor' ? 'Vendors' : 'Customers'}
+                  </Text>
+                </View>
+
+                <View className="mb-1.5 flex-row gap-2 px-1">
+                  <Text className="flex-[1.3] text-[11px] font-semibold text-gray-500">
+                    {payTarget === 'vendor' ? 'Vendor' : 'Customer'}
+                  </Text>
+                  <Text className="flex-1 text-[11px] font-semibold text-gray-500">Amount (NPR)</Text>
+                  <Text className="flex-[1.3] text-[11px] font-semibold text-gray-500">Note</Text>
+                  <View style={{ width: 28 }} />
+                </View>
+
+                {rows.map((row) => (
+                  <View key={row.key} className="mb-2 flex-row items-center gap-2">
+                    <Pressable
+                      onPress={() => {
+                        phoneContacts.request();
+                        setRowPickerQuery('');
+                        setActiveRowKey(row.key);
+                      }}
+                      className="flex-[1.3] flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+                    >
+                      <Text className={`flex-1 text-sm ${row.customerName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+                        {row.customerName || (payTarget === 'vendor' ? 'Which vendor?' : 'Who is this from/for?')}
+                      </Text>
+                      <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
+                    </Pressable>
+                    <TextInput
+                      value={row.amount}
+                      onChangeText={(v) => updateRow(row.key, { amount: v })}
+                      placeholder="0"
+                      placeholderTextColor="#D1D5DB"
+                      keyboardType="numeric"
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-900"
+                    />
+                    <TextInput
+                      value={row.note}
+                      onChangeText={(v) => updateRow(row.key, { note: v })}
+                      placeholder="Optional"
+                      placeholderTextColor="#9CA3AF"
+                      className="flex-[1.3] rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+                    />
+                    <Pressable onPress={() => removeRow(row.key)} hitSlop={8} style={{ width: 28, alignItems: 'center' }}>
+                      <Ionicons name="close-circle" size={18} color={rows.length > 1 ? '#DC2626' : '#E5E7EB'} />
+                    </Pressable>
+                  </View>
+                ))}
+
+                <Pressable onPress={addRow} className="mt-2 flex-row items-center gap-1.5 self-start">
+                  <Ionicons name="add-circle-outline" size={16} color={meta.color} />
+                  <Text className="text-sm font-semibold" style={{ color: meta.color }}>
+                    Add {payTarget === 'vendor' ? 'vendor' : 'person'}
+                  </Text>
+                </Pressable>
               </View>
             </View>
 
@@ -436,19 +619,14 @@ export function QuickPaymentScreen() {
                 }}
               >
                 <Text className="text-xs font-bold uppercase text-white/70" style={{ letterSpacing: 0.5 }}>
-                  {isOut ? 'Paying out' : 'Receiving'}
+                  {isOut ? 'Paying out' : 'Receiving'} · {rows.filter((r) => r.customerName.trim() && Number(r.amount) > 0).length}{' '}
+                  {rows.filter((r) => r.customerName.trim() && Number(r.amount) > 0).length === 1 ? 'person' : 'people'}
                 </Text>
                 <Text className="mt-1 text-4xl font-extrabold text-white" numberOfLines={1}>
-                  NPR {(Number(amount) || 0).toLocaleString()}
+                  NPR {rowsTotal.toLocaleString()}
                 </Text>
 
                 <View className="mt-5" style={{ gap: 10 }}>
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name="person-outline" size={14} color="rgba(255,255,255,0.85)" />
-                    <Text className="flex-1 text-sm text-white/90" numberOfLines={1}>
-                      {customerName || `No ${payTarget} selected`}
-                    </Text>
-                  </View>
                   <View className="flex-row items-center gap-2">
                     <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
                     <Text className="text-sm text-white/90">{toBsLabel(date)}</Text>
@@ -457,11 +635,11 @@ export function QuickPaymentScreen() {
                     <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={14} color="rgba(255,255,255,0.85)" />
                     <Text className="text-sm text-white/90">{selectedAccountName}</Text>
                   </View>
-                  {!!note && (
-                    <View className="flex-row items-start gap-2">
+                  {!!receiptNo.trim() && (
+                    <View className="flex-row items-center gap-2">
                       <Ionicons name="document-text-outline" size={14} color="rgba(255,255,255,0.85)" />
-                      <Text className="flex-1 text-sm text-white/90" numberOfLines={2}>
-                        {note}
+                      <Text className="text-sm text-white/90">
+                        {isOut ? 'Payment No.' : 'Receipt No.'} {receiptNo}
                       </Text>
                     </View>
                   )}
@@ -469,20 +647,37 @@ export function QuickPaymentScreen() {
               </LinearGradient>
 
               <Pressable
-                onPress={handleSave}
+                onPress={handleSaveAll}
                 disabled={saving}
                 className="mt-4 items-center rounded-xl py-3.5 disabled:opacity-50"
                 style={{ backgroundColor: meta.color }}
               >
                 <Text className="text-base font-bold text-white">
-                  {saving ? 'Saving…' : isOut ? 'Record payment out' : 'Record payment in'}
+                  {saving ? 'Saving…' : isOut ? 'Record payments out' : 'Record payments in'}
                 </Text>
               </Pressable>
             </View>
           </View>
         </View>
 
-        {pickerModals}
+        <ContactPickerModal
+          visible={activeRowKey != null}
+          initialQuery={rowPickerQuery}
+          customers={customers ?? []}
+          phoneContacts={phoneContacts.contacts}
+          onSelectCustomer={selectCustomerForRow}
+          onSelectNew={handleSelectNewForRow}
+          onClose={() => setActiveRowKey(null)}
+        />
+        <BankAccountPickerModal
+          visible={showAccountPicker}
+          accounts={bankAccounts.accounts}
+          selectedId={bankAccountId}
+          onSelect={setBankAccountId}
+          onClose={() => setShowAccountPicker(false)}
+          onRename={bankAccounts.rename}
+          onDelete={bankAccounts.remove}
+        />
       </ScrollView>
     );
   }
