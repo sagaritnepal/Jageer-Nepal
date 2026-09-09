@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
@@ -600,6 +600,23 @@ export function QuickPaymentScreen() {
                     Add {payTarget === 'vendor' ? 'vendor' : 'person'}
                   </Text>
                 </Pressable>
+
+                <View className="mt-5 flex-row gap-3 border-t border-gray-100 pt-4">
+                  <Pressable
+                    onPress={() => router.back()}
+                    className="flex-1 items-center rounded-xl border border-gray-300 py-3"
+                  >
+                    <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleSaveAll}
+                    disabled={saving}
+                    className="flex-1 items-center rounded-xl py-3 disabled:opacity-50"
+                    style={{ backgroundColor: meta.color }}
+                  >
+                    <Text className="text-sm font-bold text-white">{saving ? 'Saving…' : 'Save'}</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
 
@@ -645,17 +662,6 @@ export function QuickPaymentScreen() {
                   )}
                 </View>
               </LinearGradient>
-
-              <Pressable
-                onPress={handleSaveAll}
-                disabled={saving}
-                className="mt-4 items-center rounded-xl py-3.5 disabled:opacity-50"
-                style={{ backgroundColor: meta.color }}
-              >
-                <Text className="text-base font-bold text-white">
-                  {saving ? 'Saving…' : isOut ? 'Record payments out' : 'Record payments in'}
-                </Text>
-              </Pressable>
             </View>
           </View>
         </View>
