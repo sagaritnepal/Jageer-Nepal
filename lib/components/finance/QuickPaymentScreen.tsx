@@ -1,7 +1,8 @@
 // lib/components/finance/QuickPaymentScreen.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -14,6 +15,7 @@ import { ContactPickerModal } from '../ContactPickerModal';
 import { DateField } from '../DateTimeFields';
 import { FormSection } from './FormSection';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { toBsLabel } from '../../utils/nepaliDate';
 import type { Customer } from '../../../types/database.types';
 
 function todayIso() {
@@ -235,8 +237,255 @@ export function QuickPaymentScreen() {
   }
 
   const meta = isOut
-    ? { label: 'Payment Out', color: '#DC2626', bg: 'bg-red-50', icon: 'arrow-up-circle' as const }
-    : { label: 'Payment In', color: '#059669', bg: 'bg-emerald-50', icon: 'arrow-down-circle' as const };
+    ? { label: 'Payment Out', color: '#DC2626', gradient: ['#DC2626', '#B91C1C'] as const, bg: 'bg-red-50', icon: 'arrow-up-circle' as const }
+    : { label: 'Payment In', color: '#059669', gradient: ['#059669', '#047857'] as const, bg: 'bg-emerald-50', icon: 'arrow-down-circle' as const };
+
+  const scanBillButton = (
+    <Pressable
+      onPress={handleScan}
+      disabled={scanning}
+      className="flex-row items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-50 px-4 py-2.5 disabled:opacity-50"
+    >
+      <Ionicons name={scanning ? 'hourglass-outline' : 'camera-outline'} size={16} color="#2563EB" />
+      <Text className="text-sm font-semibold text-blue-700">{scanning ? 'Reading the slip…' : 'Scan Bill'}</Text>
+    </Pressable>
+  );
+
+  const customerSection = (
+    <FormSection icon="person-outline" title={payTarget === 'vendor' ? 'Vendor' : 'Customer'} first>
+      <View className="mb-1 flex-row items-center gap-2">
+        <Pressable
+          onPress={() => {
+            phoneContacts.request();
+            setPickerQuery('');
+            setShowPicker(true);
+          }}
+          className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+        >
+          <Text className={`flex-1 text-sm ${customerName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+            {customerName ||
+              (payTarget === 'vendor'
+                ? isOut
+                  ? 'Which vendor are you paying?'
+                  : 'Which vendor is this refund from?'
+                : isOut
+                  ? 'Who are you paying?'
+                  : 'Who is this payment from?')}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+        </Pressable>
+        {!!selectedCustomer && (
+          <Pressable
+            onPress={() => {
+              setRenameCustomerValue(selectedCustomer.name);
+              setShowRenameCustomer(true);
+            }}
+            hitSlop={8}
+            className="rounded-lg border border-gray-300 bg-white p-2.5"
+          >
+            <Ionicons name="pencil-outline" size={16} color="#6B7280" />
+          </Pressable>
+        )}
+      </View>
+      {showRenameCustomer && (
+        <View className="mb-1 flex-row items-center gap-2">
+          <TextInput
+            value={renameCustomerValue}
+            onChangeText={setRenameCustomerValue}
+            autoFocus
+            placeholder="Name"
+            placeholderTextColor="#9CA3AF"
+            className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+          />
+          <Pressable onPress={handleRenameCustomer} disabled={renamingCustomer} hitSlop={8}>
+            <Ionicons name="checkmark-circle" size={22} color="#059669" />
+          </Pressable>
+          <Pressable onPress={() => setShowRenameCustomer(false)} hitSlop={8}>
+            <Ionicons name="close-circle" size={22} color="#9CA3AF" />
+          </Pressable>
+        </View>
+      )}
+      {selectedCustomer ? (
+        <View className="flex-row items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
+          <Ionicons name="checkmark-circle" size={14} color="#1d4ed8" />
+          <Text className="flex-1 text-xs font-medium text-blue-700">
+            Using saved {payTarget === 'vendor' ? 'vendor' : 'customer'}
+          </Text>
+        </View>
+      ) : (
+        <Text className="text-[11px] text-gray-400">Tap to search your saved customers and phone contacts.</Text>
+      )}
+    </FormSection>
+  );
+
+  const paymentMethodSection = (
+    <FormSection icon="wallet-outline" title="Payment method">
+      <Pressable
+        onPress={() => setShowAccountPicker(true)}
+        className="flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
+      >
+        <View className="flex-row items-center gap-2">
+          <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
+          <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
+        </View>
+        <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+      </Pressable>
+    </FormSection>
+  );
+
+  const pickerModals = (
+    <>
+      <ContactPickerModal
+        visible={showPicker}
+        initialQuery={pickerQuery}
+        customers={customers ?? []}
+        phoneContacts={phoneContacts.contacts}
+        onSelectCustomer={selectCustomer}
+        onSelectNew={handleSelectNew}
+        onClose={() => setShowPicker(false)}
+      />
+      <BankAccountPickerModal
+        visible={showAccountPicker}
+        accounts={bankAccounts.accounts}
+        selectedId={bankAccountId}
+        onSelect={setBankAccountId}
+        onClose={() => setShowAccountPicker(false)}
+        onRename={bankAccounts.rename}
+        onDelete={bankAccounts.remove}
+      />
+    </>
+  );
+
+  if (Platform.OS === 'web') {
+    return (
+      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+        <View className="px-8 pt-6">
+          <View className="mb-5 flex-row items-center justify-between">
+            <Text className="text-2xl font-bold" style={{ color: meta.color }}>
+              {meta.label}
+            </Text>
+            {scanBillButton}
+          </View>
+
+          <View className="flex-row" style={{ gap: 24 }}>
+            <View className="flex-1" style={{ minWidth: 0, maxWidth: 640 }}>
+              <View className="rounded-2xl border border-gray-200 bg-white p-5">
+                {customerSection}
+
+                <FormSection icon="document-text-outline" title="Details">
+                  <View className="mb-3 flex-row gap-3">
+                    <View className="flex-1">
+                      <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
+                      <DateField value={date} onChange={setDate} />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="mb-1 text-xs font-medium text-gray-500">{isOut ? 'Payment No.' : 'Receipt No.'}</Text>
+                      <TextInput
+                        value={receiptNo}
+                        onChangeText={(v) => {
+                          setReceiptNo(v);
+                          setReceiptNoTouched(true);
+                        }}
+                        placeholder="Optional"
+                        placeholderTextColor="#9CA3AF"
+                        keyboardType="numeric"
+                        className="rounded-lg border border-gray-300 px-3 py-3 text-sm text-gray-900"
+                      />
+                    </View>
+                  </View>
+
+                  <Text className="mb-1 text-xs font-medium text-gray-500">
+                    {isOut ? 'Amount paid out (NPR)' : 'Amount received (NPR)'}
+                  </Text>
+                  <TextInput
+                    value={amount}
+                    onChangeText={setAmount}
+                    placeholder="0"
+                    placeholderTextColor="#D1D5DB"
+                    keyboardType="numeric"
+                    className="mb-3 rounded-lg border border-gray-300 px-4 py-3 text-2xl font-bold text-gray-900"
+                  />
+
+                  <Text className="mb-1 text-xs font-medium text-gray-500">Note (optional)</Text>
+                  <TextInput
+                    value={note}
+                    onChangeText={setNote}
+                    placeholder="e.g. Cash payment"
+                    placeholderTextColor="#9CA3AF"
+                    className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+                  />
+                </FormSection>
+
+                {paymentMethodSection}
+              </View>
+            </View>
+
+            <View style={{ width: 320 }}>
+              <LinearGradient
+                colors={meta.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  borderRadius: 20,
+                  padding: 20,
+                  shadowColor: meta.color,
+                  shadowOpacity: 0.3,
+                  shadowRadius: 14,
+                  shadowOffset: { width: 0, height: 8 },
+                  elevation: 5,
+                }}
+              >
+                <Text className="text-xs font-bold uppercase text-white/70" style={{ letterSpacing: 0.5 }}>
+                  {isOut ? 'Paying out' : 'Receiving'}
+                </Text>
+                <Text className="mt-1 text-4xl font-extrabold text-white" numberOfLines={1}>
+                  NPR {(Number(amount) || 0).toLocaleString()}
+                </Text>
+
+                <View className="mt-5" style={{ gap: 10 }}>
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons name="person-outline" size={14} color="rgba(255,255,255,0.85)" />
+                    <Text className="flex-1 text-sm text-white/90" numberOfLines={1}>
+                      {customerName || `No ${payTarget} selected`}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
+                    <Text className="text-sm text-white/90">{toBsLabel(date)}</Text>
+                  </View>
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={14} color="rgba(255,255,255,0.85)" />
+                    <Text className="text-sm text-white/90">{selectedAccountName}</Text>
+                  </View>
+                  {!!note && (
+                    <View className="flex-row items-start gap-2">
+                      <Ionicons name="document-text-outline" size={14} color="rgba(255,255,255,0.85)" />
+                      <Text className="flex-1 text-sm text-white/90" numberOfLines={2}>
+                        {note}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </LinearGradient>
+
+              <Pressable
+                onPress={handleSave}
+                disabled={saving}
+                className="mt-4 items-center rounded-xl py-3.5 disabled:opacity-50"
+                style={{ backgroundColor: meta.color }}
+              >
+                <Text className="text-base font-bold text-white">
+                  {saving ? 'Saving…' : isOut ? 'Record payment out' : 'Record payment in'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
+        {pickerModals}
+      </ScrollView>
+    );
+  }
 
   return (
     <KeyboardAwareScrollView
@@ -253,80 +502,10 @@ export function QuickPaymentScreen() {
         </Text>
       </View>
 
-      <Pressable
-        onPress={handleScan}
-        disabled={scanning}
-        className="mb-3 flex-row items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-50 py-2.5 disabled:opacity-50"
-      >
-        <Ionicons name={scanning ? 'hourglass-outline' : 'camera-outline'} size={16} color="#2563EB" />
-        <Text className="text-sm font-semibold text-blue-700">{scanning ? 'Reading the slip…' : 'Scan Bill'}</Text>
-      </Pressable>
+      <View className="mb-3">{scanBillButton}</View>
 
       <View className="rounded-2xl border border-gray-200 bg-white p-4">
-        <FormSection icon="person-outline" title={payTarget === 'vendor' ? 'Vendor' : 'Customer'} first>
-          <View className="mb-1 flex-row items-center gap-2">
-            <Pressable
-              onPress={() => {
-                phoneContacts.request();
-                setPickerQuery('');
-                setShowPicker(true);
-              }}
-              className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
-            >
-              <Text className={`flex-1 text-sm ${customerName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-                {customerName ||
-                  (payTarget === 'vendor'
-                    ? isOut
-                      ? 'Which vendor are you paying?'
-                      : 'Which vendor is this refund from?'
-                    : isOut
-                      ? 'Who are you paying?'
-                      : 'Who is this payment from?')}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-            </Pressable>
-            {!!selectedCustomer && (
-              <Pressable
-                onPress={() => {
-                  setRenameCustomerValue(selectedCustomer.name);
-                  setShowRenameCustomer(true);
-                }}
-                hitSlop={8}
-                className="rounded-lg border border-gray-300 bg-white p-2.5"
-              >
-                <Ionicons name="pencil-outline" size={16} color="#6B7280" />
-              </Pressable>
-            )}
-          </View>
-          {showRenameCustomer && (
-            <View className="mb-1 flex-row items-center gap-2">
-              <TextInput
-                value={renameCustomerValue}
-                onChangeText={setRenameCustomerValue}
-                autoFocus
-                placeholder="Name"
-                placeholderTextColor="#9CA3AF"
-                className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-              />
-              <Pressable onPress={handleRenameCustomer} disabled={renamingCustomer} hitSlop={8}>
-                <Ionicons name="checkmark-circle" size={22} color="#059669" />
-              </Pressable>
-              <Pressable onPress={() => setShowRenameCustomer(false)} hitSlop={8}>
-                <Ionicons name="close-circle" size={22} color="#9CA3AF" />
-              </Pressable>
-            </View>
-          )}
-          {selectedCustomer ? (
-            <View className="flex-row items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
-              <Ionicons name="checkmark-circle" size={14} color="#1d4ed8" />
-              <Text className="flex-1 text-xs font-medium text-blue-700">
-                Using saved {payTarget === 'vendor' ? 'vendor' : 'customer'}
-              </Text>
-            </View>
-          ) : (
-            <Text className="text-[11px] text-gray-400">Tap to search your saved customers and phone contacts.</Text>
-          )}
-        </FormSection>
+        {customerSection}
 
         <FormSection icon="document-text-outline" title="Details">
           <View className="mb-3 flex-row gap-2">
@@ -372,18 +551,7 @@ export function QuickPaymentScreen() {
           />
         </FormSection>
 
-        <FormSection icon="wallet-outline" title="Payment method">
-          <Pressable
-            onPress={() => setShowAccountPicker(true)}
-            className="flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
-          >
-            <View className="flex-row items-center gap-2">
-              <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
-              <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
-            </View>
-            <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-          </Pressable>
-        </FormSection>
+        {paymentMethodSection}
 
         <Pressable
           onPress={handleSave}
@@ -397,24 +565,7 @@ export function QuickPaymentScreen() {
         </Pressable>
       </View>
 
-      <ContactPickerModal
-        visible={showPicker}
-        initialQuery={pickerQuery}
-        customers={customers ?? []}
-        phoneContacts={phoneContacts.contacts}
-        onSelectCustomer={selectCustomer}
-        onSelectNew={handleSelectNew}
-        onClose={() => setShowPicker(false)}
-      />
-      <BankAccountPickerModal
-        visible={showAccountPicker}
-        accounts={bankAccounts.accounts}
-        selectedId={bankAccountId}
-        onSelect={setBankAccountId}
-        onClose={() => setShowAccountPicker(false)}
-        onRename={bankAccounts.rename}
-        onDelete={bankAccounts.remove}
-      />
+      {pickerModals}
     </KeyboardAwareScrollView>
   );
 }
