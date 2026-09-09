@@ -1,6 +1,6 @@
 // lib/components/web/WebSidebarShell.tsx
 import { View, Text, Pressable } from 'react-native';
-import { router, usePathname } from 'expo-router';
+import { router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 
@@ -8,6 +8,11 @@ export interface WebNavItem {
   href: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  // Sub-links shown nested under this item, always expanded (no toggle) -
+  // for a section like Finance with several destinations (Payment In,
+  // Purchase, Report, ...) that would otherwise mean going back to a
+  // dashboard and re-picking a shortcut tile every time.
+  children?: WebNavItem[];
 }
 
 function initialsOf(name: string | null | undefined) {
@@ -51,7 +56,36 @@ export function WebSidebarShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const searchParams = useGlobalSearchParams<Record<string, string>>();
   const profile = useAuthStore((state) => state.profile);
+
+  // Several Finance sub-links share one route with a different `type` query
+  // param (Payment In/Out both go to quick-payment, Sales/Purchase/Expenses
+  // all go to transactions) - usePathname() never includes the query
+  // string, so a plain pathname match would light up both Payment In and
+  // Payment Out together. Split the query off the href and compare it
+  // against the real URL's params too, so only the one actually open highlights.
+  //
+  // usePathname() also strips route-group segments (e.g. "(reseller)"),
+  // while every href here is written the way router.push needs it, group
+  // segment included - comparing them as-is against pathname never matched
+  // anything, so nothing in this sidebar (not just the new children) ever
+  // actually highlighted. Strip the same segments from the href side before
+  // comparing.
+  function withoutGroups(path: string): string {
+    return path.replace(/\/\([^/]+\)/g, '') || '/';
+  }
+
+  function isActive(href: string): boolean {
+    const [hrefPathRaw, hrefQuery] = href.split('?');
+    const hrefPath = withoutGroups(hrefPathRaw);
+    const pathMatches = pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+    if (!pathMatches) return false;
+    if (!hrefQuery) return true;
+    return Array.from(new URLSearchParams(hrefQuery).entries()).every(
+      ([key, value]) => (searchParams[key] ?? '') === value
+    );
+  }
 
   return (
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#F9FAFB' }}>
@@ -84,30 +118,71 @@ export function WebSidebarShell({
 
         <View style={{ gap: 2 }}>
           {items.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active = isActive(item.href);
+            // A parent with children (e.g. Finance) is "active" only by its
+            // own href, not by whichever child route is open - the child
+            // rows below carry their own highlight for that instead, so the
+            // parent doesn't stay lit up while browsing an unrelated child.
             return (
-              <Pressable
-                key={item.href}
-                onPress={() => router.push(item.href as any)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  paddingVertical: 10,
-                  paddingHorizontal: 14,
-                  borderRadius: 10,
-                  backgroundColor: active ? '#EFF6FF' : 'transparent',
-                }}
-              >
-                <Ionicons
-                  name={active ? item.icon : (`${item.icon}-outline` as keyof typeof Ionicons.glyphMap)}
-                  size={19}
-                  color={active ? '#2563EB' : '#6B7280'}
-                />
-                <Text style={{ fontSize: 14, fontWeight: '600', color: active ? '#2563EB' : '#6B7280' }}>
-                  {item.label}
-                </Text>
-              </Pressable>
+              <View key={item.href}>
+                <Pressable
+                  onPress={() => router.push(item.href as any)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                    borderRadius: 10,
+                    backgroundColor: active ? '#EFF6FF' : 'transparent',
+                  }}
+                >
+                  <Ionicons
+                    name={active ? item.icon : (`${item.icon}-outline` as keyof typeof Ionicons.glyphMap)}
+                    size={19}
+                    color={active ? '#2563EB' : '#6B7280'}
+                  />
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: active ? '#2563EB' : '#6B7280' }}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+
+                {!!item.children && (
+                  <View style={{ marginTop: 2, marginBottom: 4, gap: 1 }}>
+                    {item.children.map((child) => {
+                      const childActive = isActive(child.href);
+                      return (
+                        <Pressable
+                          key={child.href}
+                          onPress={() => router.push(child.href as any)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 10,
+                            paddingVertical: 7,
+                            paddingLeft: 34,
+                            paddingRight: 14,
+                            borderRadius: 8,
+                            backgroundColor: childActive ? '#EFF6FF' : 'transparent',
+                          }}
+                        >
+                          <Ionicons
+                            name={childActive ? child.icon : (`${child.icon}-outline` as keyof typeof Ionicons.glyphMap)}
+                            size={15}
+                            color={childActive ? '#2563EB' : '#9CA3AF'}
+                          />
+                          <Text
+                            numberOfLines={1}
+                            style={{ fontSize: 13, fontWeight: '600', color: childActive ? '#2563EB' : '#6B7280' }}
+                          >
+                            {child.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
             );
           })}
         </View>

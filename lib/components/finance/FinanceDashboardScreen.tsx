@@ -66,7 +66,7 @@ function CircularProgress({
   );
 }
 
-function shortcuts(basePath: string): {
+export function shortcuts(basePath: string): {
   key: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;

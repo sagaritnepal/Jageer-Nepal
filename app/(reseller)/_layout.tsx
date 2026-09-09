@@ -6,14 +6,23 @@ import { TabIcon } from '../../lib/components/TabIcon';
 import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
+import { shortcuts as financeShortcuts } from '../../lib/components/finance/FinanceDashboardScreen';
 
 // Same 4 sections as the mobile bottom tabs below, just as a persistent
-// left rail on web instead - see WebSidebarShell.
+// left rail on web instead - see WebSidebarShell. Finance's own shortcuts
+// (Payment In, Purchase, Report, ...) are nested under it too, reusing the
+// exact same list the Finance dashboard's tiles use, so switching between
+// them never means going back to that dashboard to pick another tile.
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/dashboard', label: 'Home', icon: 'home' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
-  { href: '/(reseller)/finance', label: 'Finance', icon: 'wallet' },
+  {
+    href: '/(reseller)/finance',
+    label: 'Finance',
+    icon: 'wallet',
+    children: financeShortcuts('/(reseller)').map((s) => ({ href: s.href, label: s.label, icon: s.icon })),
+  },
 ];
 
 export default function ResellerLayout() {
