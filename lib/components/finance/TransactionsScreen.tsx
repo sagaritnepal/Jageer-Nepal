@@ -318,6 +318,81 @@ const FILTERS: { key: 'all' | BusinessTransactionType; label: string }[] = [
   { key: 'expense', label: 'Expense' },
 ];
 
+/** Small iOS-style switch used in place of the native form's text "+/close
+ * icon" toggle for Discount/VAT on the web bill layout - same on/off
+ * meaning, just a real switch affordance instead of a button that changes
+ * its own label. */
+function ToggleSwitch({ on, color }: { on: boolean; color: string }) {
+  return (
+    <View
+      style={{
+        width: 30,
+        height: 17,
+        borderRadius: 999,
+        backgroundColor: on ? color : '#D1D5DB',
+        justifyContent: 'center',
+        paddingHorizontal: 2,
+      }}
+    >
+      <View
+        style={{
+          width: 13,
+          height: 13,
+          borderRadius: 999,
+          backgroundColor: '#fff',
+          alignSelf: on ? 'flex-end' : 'flex-start',
+          shadowColor: '#000',
+          shadowOpacity: 0.25,
+          shadowRadius: 1,
+          shadowOffset: { width: 0, height: 1 },
+        }}
+      />
+    </View>
+  );
+}
+
+/** Web only: a short "what did I just enter recently" reference list below
+ * the live summary card, so a reseller can glance at their last few
+ * Sale/Purchase/Expense entries without leaving the form. Sale/Purchase/
+ * Expense all read business_transactions directly (Payment In/Out's own
+ * version of this lives in QuickPaymentScreen, over the ledger tables). */
+function RecentEntriesCard({ userId, type, color }: { userId: string; type: BusinessTransactionType; color: string }) {
+  const { data } = useSupabaseQuery('business_transactions', {
+    filters: { owner_id: userId, type },
+    orderBy: { column: 'created_at', ascending: false },
+    enabled: !!userId,
+  });
+  const recent = (data ?? []).slice(0, 5);
+
+  return (
+    <View className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+      <Text className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+        Recent {TYPE_META[type].label}s
+      </Text>
+      {recent.length === 0 ? (
+        <Text className="text-xs text-gray-400">No entries yet.</Text>
+      ) : (
+        recent.map((tx, i) => (
+          <View
+            key={tx.id}
+            className={`flex-row items-center justify-between py-2 ${i < recent.length - 1 ? 'border-b border-gray-50' : ''}`}
+          >
+            <View className="flex-1 pr-2">
+              <Text numberOfLines={1} className="text-xs font-semibold text-gray-800">
+                {tx.party_name || 'Unnamed'}
+              </Text>
+              <Text className="text-[10px] text-gray-400">{toBsHistoryLabel(tx.bill_date ?? tx.created_at)}</Text>
+            </View>
+            <Text className="text-xs font-bold" style={{ color }}>
+              NPR {tx.amount.toLocaleString()}
+            </Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
 function CategoryPickerModal({
   visible,
   categories,
@@ -1119,6 +1194,8 @@ function TransactionForm({
                 </View>
               </View>
             </LinearGradient>
+
+            <RecentEntriesCard userId={userId} type="expense" color={TYPE_META.expense.color} />
           </View>
         </View>
 
@@ -1149,6 +1226,340 @@ function TransactionForm({
           onClose={() => setShowAccountPicker(false)}
           onRename={bankAccounts.rename}
           onDelete={bankAccounts.remove}
+        />
+      </View>
+    );
+  }
+
+  // Web bill layout (Sale/Purchase): unlike Payment/Expense, a bill always
+  // belongs to exactly one party and already has its own per-item table, so
+  // this isn't a multi-party batch - it's the same single bill, just laid
+  // out in the same "top fields, main table, live summary, Save/Cancel
+  // below" shape as the rest of the redesigned web forms. Applies to
+  // editing an existing bill too (unlike Expense's new-only table), since
+  // it's still one bill either way. All state/handlers below are the exact
+  // same ones the original single-column return further down uses -
+  // nothing here is a separate calculation.
+  if (Platform.OS === 'web' && isBill) {
+    const accent = TYPE_META[type].color;
+    const accentDark = type === 'purchase' ? '#1D4ED8' : '#047857';
+    const accentShadow = type === 'purchase' ? 'rgba(37,99,235,0.35)' : 'rgba(5,150,105,0.35)';
+    const partyLabel = type === 'purchase' ? 'Vendor' : 'Customer';
+
+    return (
+      <View className="mb-4">
+        <View className="mb-4 flex-row" style={{ gap: 24 }}>
+          <View className="flex-1" style={{ minWidth: 0, maxWidth: 720 }}>
+            <View className="mb-5 flex-row items-center justify-between">
+              <Text className="text-lg font-bold" style={{ color: accent }}>
+                {initial ? `Edit ${TYPE_META[type].label}` : `New ${TYPE_META[type].label}`}
+              </Text>
+              <Pressable
+                onPress={handleScan}
+                disabled={scanning}
+                className="flex-row items-center justify-center gap-2 rounded-lg border border-blue-600 bg-blue-50 px-4 py-2.5 disabled:opacity-50"
+              >
+                <Ionicons name={scanning ? 'hourglass-outline' : 'camera-outline'} size={16} color="#2563EB" />
+                <Text className="text-sm font-semibold text-blue-700">{scanning ? 'Reading the bill…' : 'Scan Bill'}</Text>
+              </Pressable>
+            </View>
+
+            <View className="mb-5 rounded-2xl border border-gray-200 bg-white p-5">
+              <FormSection icon="person-outline" title={partyLabel} first>
+                <View className="mb-1 flex-row items-center gap-2">
+                  <Pressable
+                    onPress={() => {
+                      phoneContacts.request();
+                      setPartyPickerQuery('');
+                      setShowPartyPicker(true);
+                    }}
+                    className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+                  >
+                    <Text className={`flex-1 text-sm ${partyName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+                      {partyName || (type === 'purchase' ? 'Vendor/supplier name' : 'Party name')}
+                    </Text>
+                    <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                  </Pressable>
+                  {!!customerId && (
+                    <Pressable
+                      onPress={() => {
+                        setRenamePartyValue(partyName);
+                        setShowRenameParty(true);
+                      }}
+                      hitSlop={8}
+                      className="rounded-lg border border-gray-300 bg-white p-2.5"
+                    >
+                      <Ionicons name="pencil-outline" size={16} color="#6B7280" />
+                    </Pressable>
+                  )}
+                </View>
+                {showRenameParty && (
+                  <View className="mb-1 flex-row items-center gap-2">
+                    <TextInput
+                      value={renamePartyValue}
+                      onChangeText={setRenamePartyValue}
+                      autoFocus
+                      placeholder="Name"
+                      placeholderTextColor="#9CA3AF"
+                      className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                    <Pressable onPress={handleRenameParty} disabled={renamingParty} hitSlop={8}>
+                      <Ionicons name="checkmark-circle" size={22} color="#059669" />
+                    </Pressable>
+                    <Pressable onPress={() => setShowRenameParty(false)} hitSlop={8}>
+                      <Ionicons name="close-circle" size={22} color="#9CA3AF" />
+                    </Pressable>
+                  </View>
+                )}
+                <Text className="text-[11px] text-gray-400">
+                  Required — this bill books against their ledger. Tap to search your saved customers and phone
+                  contacts, or the pencil to fix a name.
+                </Text>
+              </FormSection>
+
+              <FormSection icon="document-text-outline" title="Details">
+                <View className="flex-row gap-3">
+                  <View className="flex-1">
+                    <Text className="mb-1 text-xs font-medium text-gray-500">Bill No.</Text>
+                    <TextInput
+                      value={billNo}
+                      onChangeText={setBillNo}
+                      placeholder="e.g. 0234"
+                      placeholderTextColor="#9CA3AF"
+                      className="rounded-lg border border-gray-300 px-3 py-3 text-sm font-semibold text-gray-900"
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="mb-1 text-xs font-medium text-gray-500">Bill date</Text>
+                    <DateField value={billDate} onChange={setBillDate} />
+                  </View>
+                </View>
+              </FormSection>
+            </View>
+
+            <View className="mb-5 rounded-2xl border border-gray-200 bg-white p-5">
+              <View className="mb-3 flex-row items-center gap-1.5">
+                <Ionicons name="cube-outline" size={13} color="#9CA3AF" />
+                <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Items</Text>
+              </View>
+              {items.length === 0 && (
+                <Text className="mb-2 text-xs text-gray-400">No items yet — tap "Add item" below.</Text>
+              )}
+              {items.map((item, index) => (
+                <View key={index} className="mb-2 flex-row items-center gap-2 rounded-lg border border-gray-200 px-3 py-2">
+                  <Pressable onPress={() => openItemPicker(index)} className="flex-1" style={{ minWidth: 0 }}>
+                    <Text
+                      numberOfLines={1}
+                      className={`text-sm font-semibold ${item.description ? 'text-gray-900' : 'text-gray-400'}`}
+                    >
+                      {item.description || 'Tap to pick an item'}
+                    </Text>
+                  </Pressable>
+                  <TextInput
+                    value={item.qty}
+                    onChangeText={(v) => updateItem(index, { ...item, qty: v })}
+                    keyboardType="numeric"
+                    placeholder="Qty"
+                    placeholderTextColor="#9CA3AF"
+                    className="w-12 rounded border border-gray-300 py-1.5 text-center text-xs text-gray-900"
+                  />
+                  <Text className="text-[10px] text-gray-400">×</Text>
+                  <TextInput
+                    value={item.rate}
+                    onChangeText={(v) => updateItem(index, { ...item, rate: v })}
+                    keyboardType="numeric"
+                    placeholder="Rate"
+                    placeholderTextColor="#9CA3AF"
+                    className="w-16 rounded border border-gray-300 py-1.5 text-center text-xs text-gray-900"
+                  />
+                  <Text className="w-20 text-right text-sm font-bold text-gray-900">
+                    {lineTotal(item).toLocaleString()}
+                  </Text>
+                  <Pressable onPress={() => removeItem(index)} hitSlop={8}>
+                    <Ionicons name="close-circle" size={16} color="#D1D5DB" />
+                  </Pressable>
+                </View>
+              ))}
+              <Pressable onPress={() => openItemPicker(null)} className="mt-1 flex-row items-center gap-1.5 self-start">
+                <Ionicons name="add-circle-outline" size={16} color={accent} />
+                <Text className="text-sm font-semibold" style={{ color: accent }}>
+                  Add item
+                </Text>
+              </Pressable>
+            </View>
+
+            <View className="rounded-2xl border border-gray-200 bg-white p-5">
+              <View className="mb-3 flex-row items-center gap-1.5">
+                <Ionicons name="calculator-outline" size={13} color="#9CA3AF" />
+                <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</Text>
+              </View>
+              <View className="mb-3 rounded-lg border border-gray-100 bg-gray-50 px-3">
+                <View className="flex-row items-center justify-between py-2.5">
+                  <Text className="text-xs text-gray-500">Subtotal</Text>
+                  <Text className="text-xs font-semibold text-gray-700">NPR {subtotal.toLocaleString()}</Text>
+                </View>
+                <View className="flex-row items-center justify-between border-t border-gray-200 py-2.5">
+                  <Pressable
+                    onPress={() => {
+                      if (showDiscount) {
+                        setShowDiscount(false);
+                        setDiscountAmountInput('0');
+                      } else {
+                        setShowDiscount(true);
+                      }
+                    }}
+                    className="flex-row items-center gap-2"
+                  >
+                    <ToggleSwitch on={showDiscount} color={accent} />
+                    <Text className="text-xs font-semibold text-gray-700">Discount</Text>
+                  </Pressable>
+                  {showDiscount && (
+                    <View className="flex-row items-center gap-2">
+                      <TextInput
+                        value={discountAmountInput}
+                        onChangeText={setDiscountAmountInput}
+                        keyboardType="numeric"
+                        className="w-14 rounded border border-gray-300 bg-white px-1 py-1 text-center text-xs text-gray-900"
+                      />
+                      <Text className="w-9 text-[10px] text-gray-400">({discountPercentDisplay.toFixed(1)}%)</Text>
+                      <Text className="w-20 text-right text-xs font-semibold text-gray-700">
+                        − NPR {discountAmount.toLocaleString()}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View className="flex-row items-center justify-between border-t border-gray-200 py-2.5">
+                  <Pressable
+                    onPress={() => {
+                      if (showVat) {
+                        setShowVat(false);
+                        setVatPercent('0');
+                      } else {
+                        setShowVat(true);
+                        setVatPercent((v) => (v === '0' ? '13' : v));
+                      }
+                    }}
+                    className="flex-row items-center gap-2"
+                  >
+                    <ToggleSwitch on={showVat} color={accent} />
+                    <Text className="text-xs font-semibold text-gray-700">VAT</Text>
+                  </Pressable>
+                  {showVat && (
+                    <View className="flex-row items-center gap-2">
+                      <TextInput
+                        value={vatPercent}
+                        onChangeText={setVatPercent}
+                        keyboardType="numeric"
+                        className="w-10 rounded border border-gray-300 bg-white px-1 py-1 text-center text-xs text-gray-900"
+                      />
+                      <Text className="w-9 text-[10px] text-gray-400">%</Text>
+                      <Text className="w-20 text-right text-xs font-semibold text-gray-700">
+                        + NPR {vatAmount.toLocaleString()}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <View className="mb-3.5 flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
+                <Text className="text-sm font-bold text-gray-900">G. Total</Text>
+                <Text className="text-base font-extrabold text-gray-900">NPR {grandTotal.toLocaleString()}</Text>
+              </View>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder="Remark (optional)"
+                placeholderTextColor="#9CA3AF"
+                className="mb-4 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+              />
+
+              <View className="flex-row gap-3 border-t border-gray-100 pt-4">
+                <Pressable onPress={onCancel} className="flex-1 items-center rounded-xl border border-gray-300 py-3">
+                  <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSave}
+                  disabled={saving}
+                  className="flex-1 items-center rounded-xl py-3 disabled:opacity-50"
+                  style={{ backgroundColor: accent }}
+                >
+                  <Text className="text-sm font-bold text-white">{saving ? 'Saving…' : 'Save'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          <View style={{ width: 320 }}>
+            <LinearGradient
+              colors={[accent, accentDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                borderRadius: 20,
+                padding: 20,
+                shadowColor: accent,
+                shadowOpacity: 0.3,
+                shadowRadius: 14,
+                shadowOffset: { width: 0, height: 8 },
+                elevation: 5,
+              }}
+            >
+              <Text className="text-xs font-bold uppercase text-white/70" style={{ letterSpacing: 0.5 }}>
+                {type === 'purchase' ? 'Purchasing' : 'Selling'}
+              </Text>
+              <Text className="mt-1 text-4xl font-extrabold text-white" numberOfLines={1}>
+                NPR {grandTotal.toLocaleString()}
+              </Text>
+
+              <View className="mt-5" style={{ gap: 10 }}>
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name="person-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  <Text className="flex-1 text-sm text-white/90" numberOfLines={1}>
+                    {partyName || `No ${partyLabel.toLowerCase()} selected`}
+                  </Text>
+                </View>
+                {!!billNo.trim() && (
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons name="document-text-outline" size={14} color="rgba(255,255,255,0.85)" />
+                    <Text className="text-sm text-white/90">Bill No. {billNo}</Text>
+                  </View>
+                )}
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  <Text className="text-sm text-white/90">{toBsLabel(billDate)}</Text>
+                </View>
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name="cube-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  <Text className="text-sm text-white/90">
+                    {items.length} {items.length === 1 ? 'item' : 'items'}
+                  </Text>
+                </View>
+              </View>
+            </LinearGradient>
+
+            <RecentEntriesCard userId={userId} type={type} color={accent} />
+          </View>
+        </View>
+
+        <ItemPickerModal
+          visible={showItemPicker}
+          products={products}
+          financeItems={financeItems ?? []}
+          onPick={handlePickProduct}
+          onPickFinanceItem={handlePickFinanceItem}
+          onPickCustom={handlePickCustomItem}
+          onClose={() => {
+            setShowItemPicker(false);
+            setEditingItemIndex(null);
+          }}
+        />
+        <ContactPickerModal
+          visible={showPartyPicker}
+          initialQuery={partyPickerQuery}
+          customers={customers}
+          phoneContacts={phoneContacts.contacts}
+          onSelectCustomer={selectCustomer}
+          onSelectNew={handleSelectPartyNew}
+          onClose={() => setShowPartyPicker(false)}
         />
       </View>
     );

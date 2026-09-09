@@ -15,7 +15,7 @@ import { ContactPickerModal } from '../ContactPickerModal';
 import { DateField } from '../DateTimeFields';
 import { FormSection } from './FormSection';
 import { showAlert, getErrorMessage } from '../../utils/alert';
-import { toBsLabel } from '../../utils/nepaliDate';
+import { toBsLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
 import type { Customer } from '../../../types/database.types';
 
 function todayIso() {
@@ -262,6 +262,20 @@ export function QuickPaymentScreen() {
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [rowPickerQuery, setRowPickerQuery] = useState('');
   const rowsTotal = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  // "What did I just enter recently" reference list below the live summary
+  // card - reuses sameDirectionEntries (already fetched for the receipt-no
+  // auto-numbering above), just re-sorted and capped to the last 5.
+  const recentEntries = useMemo(() => {
+    return [...(sameDirectionEntries ?? [])]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5);
+  }, [sameDirectionEntries]);
+
+  function recentEntryPartyName(entry: (typeof recentEntries)[number]): string {
+    const id = payTarget === 'vendor' ? (entry as any).vendor_id : (entry as any).customer_id;
+    return customers?.find((c) => c.id === id)?.name ?? 'Unnamed';
+  }
 
   function addRow() {
     setRows((prev) => [...prev, emptyPaymentRow()]);
@@ -662,6 +676,34 @@ export function QuickPaymentScreen() {
                   )}
                 </View>
               </LinearGradient>
+
+              <View className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+                <Text className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                  Recent {isOut ? 'Payments Out' : 'Payments In'}
+                </Text>
+                {recentEntries.length === 0 ? (
+                  <Text className="text-xs text-gray-400">No entries yet.</Text>
+                ) : (
+                  recentEntries.map((entry, i) => (
+                    <View
+                      key={entry.id}
+                      className={`flex-row items-center justify-between py-2 ${i < recentEntries.length - 1 ? 'border-b border-gray-50' : ''}`}
+                    >
+                      <View className="flex-1 pr-2">
+                        <Text numberOfLines={1} className="text-xs font-semibold text-gray-800">
+                          {recentEntryPartyName(entry)}
+                        </Text>
+                        <Text className="text-[10px] text-gray-400">
+                          {toBsHistoryLabel(entry.entry_date ?? entry.created_at)}
+                        </Text>
+                      </View>
+                      <Text className="text-xs font-bold" style={{ color: meta.color }}>
+                        NPR {entry.amount.toLocaleString()}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
             </View>
           </View>
         </View>
