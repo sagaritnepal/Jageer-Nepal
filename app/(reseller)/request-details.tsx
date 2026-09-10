@@ -1,6 +1,17 @@
 // app/(reseller)/request-details.tsx
-import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Image, Linking, Platform, Modal } from 'react-native';
+import { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  Image,
+  Linking,
+  Platform,
+  Modal,
+  useWindowDimensions,
+} from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,7 +21,8 @@ import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate } from '../../li
 import { supabase } from '../../lib/supabase';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
-import { FormSection } from '../../lib/components/finance/FormSection';
+import { ToggleSwitch } from '../../lib/components/ToggleSwitch';
+import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 import { pickPhoneContact } from '../../lib/utils/pickPhoneContact';
@@ -22,6 +34,8 @@ const PHOTO_SLOTS = 3;
 
 export default function ResellerRequestDetails() {
   const { category, action } = useLocalSearchParams<{ category: string; action: string }>();
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const userId = useAuthStore((state) => state.session?.user.id);
   const createRequest = useSupabaseInsert('service_requests');
   const createCustomer = useSupabaseInsert('customers');
@@ -328,173 +342,313 @@ export default function ResellerRequestDetails() {
     }
   }
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
-      <View className="mb-5 flex-row items-center gap-2.5 rounded-2xl border border-gray-200 bg-white px-3.5 py-3">
-        <CategoryBadge category={category} size={34} />
-        <Text className="flex-1 text-sm font-bold text-gray-900" numberOfLines={1}>
-          {category} · {action}
-        </Text>
-      </View>
+  const missing: string[] = [];
+  if (!customerName.trim()) missing.push('customer');
+  if (!customerPhone.trim()) missing.push('phone');
+  if (!address.trim() && !coords) missing.push('location');
+  if (!date.trim() || !time.trim()) missing.push('date & time');
+  const missingText = missing.join(', ').replace(/^./, (ch) => ch.toUpperCase());
 
-      <View className="rounded-2xl border border-gray-200 bg-white p-4">
-        <FormSection icon="person-outline" title="Customer" first>
-          <Pressable
-            onPress={() => {
-              phoneContacts.request();
-              setShowNameSuggestions(true);
-            }}
-            className="mb-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3"
-          >
-            <Text className={`flex-1 text-base ${customerName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-              {customerName || 'Who is this request for?'}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-          </Pressable>
-          <Text className="mb-1 text-xs text-gray-400">
-            Tap to search your saved customers and phone contacts.
-          </Text>
-          <Pressable onPress={openNewCustomerModal} className="mb-3 self-start">
-            <Text className="text-xs font-semibold text-blue-600">+ Add a new customer manually</Text>
-          </Pressable>
+  const cardWidth = isWideWeb ? ('calc((100% - 16px) / 2)' as unknown as number) : undefined;
 
-          <Text className="mb-1.5 text-sm font-medium text-gray-700">Customer phone</Text>
-          <TextInput
-            value={customerPhone}
-            onChangeText={setCustomerPhone}
-            placeholder="98XXXXXXXX"
-            keyboardType="phone-pad"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-          />
+  function changeService() {
+    router.replace(`/(reseller)/new-request?category=${encodeURIComponent(category ?? '')}`);
+  }
 
-          {!customerId &&
-            customerName.trim().length > 0 &&
-            (address.trim().length > 0 || coords) && (
-              <View className="mt-3 flex-row items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2">
-                <Ionicons name="person-add-outline" size={14} color="#B45309" />
-                <Text className="flex-1 text-xs font-medium text-amber-700">
-                  New customer — not in your saved list yet.
-                </Text>
-                <Pressable onPress={handleRegisterNow} disabled={registeringCustomer} hitSlop={8}>
-                  <Text className="text-xs font-bold text-amber-700">
-                    {registeringCustomer ? 'Adding…' : 'Register now'}
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-        </FormSection>
+  function cancel() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(reseller)/requests');
+  }
 
-        <FormSection icon="location-outline" title="Location">
-          <Pressable
-            onPress={handleUseMyLocation}
-            disabled={locatingMe}
-            className="mb-2.5 flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 py-2.5 disabled:opacity-50"
-          >
-            <Ionicons name="locate" size={16} color="#1D4ED8" />
-            <Text className="text-sm font-semibold text-blue-700">
-              {locatingMe ? 'Locating…' : coords ? 'Location captured — tap to refresh' : 'Use my current location'}
-            </Text>
-          </Pressable>
-          {coords && (
-            <Pressable
-              onPress={() => Linking.openURL(`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`)}
-              className="mb-2.5 overflow-hidden rounded-lg border border-gray-200"
-            >
-              <Image
-                source={{
-                  uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${coords.latitude},${coords.longitude}&zoom=15&size=600x220&markers=${coords.latitude},${coords.longitude},red-pushpin`,
-                }}
-                style={{ width: '100%', height: 160 }}
-                resizeMode="cover"
-              />
-              <Text className="px-2 py-1.5 text-xs text-blue-600">Open in Google Maps →</Text>
-            </Pressable>
+  const locationButton = (
+    <Pressable
+      onPress={handleUseMyLocation}
+      disabled={locatingMe}
+      className="flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 px-4 disabled:opacity-50"
+      style={{ minHeight: 48 }}
+    >
+      <Ionicons name="locate" size={16} color="#1D4ED8" />
+      <Text className="text-sm font-semibold text-blue-700">
+        {locatingMe ? 'Locating…' : coords ? 'Location captured — tap to refresh' : 'Use my current location'}
+      </Text>
+    </Pressable>
+  );
+
+  const photoSlots = (
+    <View className="flex-row gap-2.5">
+      {photos.map((uri, index) => (
+        <Pressable
+          key={index}
+          onPress={() => (uri ? removePhoto(index) : handlePickPhoto(index))}
+          className="items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50"
+          style={isWideWeb ? { width: 84, height: 84 } : { flex: 1, height: 88 }}
+        >
+          {uri ? (
+            <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
+          ) : (
+            <>
+              <Ionicons name="camera-outline" size={22} color="#9CA3AF" />
+              <Text className="mt-1 text-xs font-semibold text-gray-400">Add photo</Text>
+            </>
           )}
-          <TextInput
-            value={address}
-            onChangeText={setAddress}
-            placeholder="House/street, city, area"
-            multiline
-            className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-            style={{ minHeight: 60, textAlignVertical: 'top' }}
-          />
-        </FormSection>
+        </Pressable>
+      ))}
+    </View>
+  );
 
-        <FormSection icon="business-outline" title="Company">
-          <TextInput
-            value={companySameAsCustomer ? customerName : companyName}
-            onChangeText={setCompanyName}
-            editable={!companySameAsCustomer}
-            placeholder="Company / office name"
-            className={`mb-2.5 rounded-lg border border-gray-300 px-4 py-3 text-base ${companySameAsCustomer ? 'bg-gray-100 text-gray-500' : 'bg-white'}`}
-          />
+  const notesInput = (
+    <TextInput
+      value={notes}
+      onChangeText={setNotes}
+      placeholder="Anything else the technician should know?"
+      multiline
+      numberOfLines={3}
+      className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+      style={[{ minHeight: 88, textAlignVertical: 'top' }, isWideWeb ? { flex: 1 } : null]}
+    />
+  );
+
+  return (
+    <View className="flex-1 bg-gray-50">
+      <ScrollView
+        className="flex-1"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: isWideWeb ? 32 : 16, paddingTop: isWideWeb ? 24 : 16, paddingBottom: 24 }}
+      >
+        <View className="mb-3 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-3 py-2.5">
+          <CategoryBadge category={category} size={40} />
+          <View className="flex-1" style={{ gap: 3 }}>
+            <Text className="text-[15px] font-bold text-gray-900" numberOfLines={1}>
+              {category}
+            </Text>
+            <View className="self-start rounded-full border border-orange-200 bg-orange-50 px-2 py-px">
+              <Text className="text-[11px] font-semibold text-orange-700">{action}</Text>
+            </View>
+          </View>
           <Pressable
-            onPress={() => setCompanySameAsCustomer((v) => !v)}
-            className="flex-row items-center gap-2"
-            hitSlop={4}
+            onPress={changeService}
+            hitSlop={8}
+            className={isWideWeb ? 'rounded-lg border border-orange-200 px-3 py-2' : 'px-1 py-2.5'}
           >
-            <Ionicons name={companySameAsCustomer ? 'checkbox' : 'square-outline'} size={20} color="#2563EB" />
-            <Text className="text-sm text-gray-600">Same as customer name</Text>
+            <Text className="text-sm font-semibold text-orange-600">{isWideWeb ? 'Change service' : 'Change'}</Text>
           </Pressable>
-        </FormSection>
+        </View>
 
-        <FormSection icon="calendar-outline" title="Schedule">
-          <View className="flex-row gap-2.5">
-            <View className="flex-1">
-              <Text className="mb-1.5 text-sm font-medium text-gray-700">Date</Text>
-              <DateField value={date} onChange={setDate} />
-            </View>
-            <View className="flex-1">
-              <Text className="mb-1.5 text-sm font-medium text-gray-700">Time</Text>
-              <TimeField value={time} onChange={setTime} />
-            </View>
-          </View>
-        </FormSection>
-
-        <FormSection icon="camera-outline" title={`Photos (optional, up to ${PHOTO_SLOTS})`}>
-          <View className="flex-row gap-2.5">
-            {photos.map((uri, index) => (
-              <Pressable
-                key={index}
-                onPress={() => (uri ? removePhoto(index) : handlePickPhoto(index))}
-                className="h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50"
+        <View style={{ flexDirection: isWideWeb ? 'row' : 'column', flexWrap: 'wrap', gap: isWideWeb ? 16 : 12 }}>
+          <NumberedCard n={1} title="Who is it for?" subtitle="Saved customer or phone contact" wide={isWideWeb} width={cardWidth}>
+            <Pressable
+              onPress={() => {
+                phoneContacts.request();
+                setShowNameSuggestions(true);
+              }}
+              className="flex-row items-center gap-2.5 rounded-lg border border-gray-300 bg-white px-3"
+              style={{ minHeight: 48 }}
+            >
+              {customerName ? (
+                <View className="h-[30px] w-[30px] items-center justify-center rounded-full bg-orange-100">
+                  <Text className="text-xs font-bold text-orange-700">{initialsOf(customerName)}</Text>
+                </View>
+              ) : null}
+              <Text
+                className={`flex-1 text-base ${customerName ? 'font-semibold text-gray-900' : 'text-gray-400'}`}
+                numberOfLines={1}
               >
-                {uri ? (
-                  <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
-                ) : (
-                  <Ionicons name="camera-outline" size={22} color="#9CA3AF" />
-                )}
+                {customerName || 'Who is this request for?'}
+              </Text>
+              {!!customerId && (
+                <View className="rounded-full bg-emerald-50 px-2 py-0.5">
+                  <Text className="text-[11px] font-semibold text-emerald-600">Saved customer</Text>
+                </View>
+              )}
+              <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+            </Pressable>
+            <Pressable onPress={openNewCustomerModal} className="self-start py-2.5" hitSlop={4}>
+              <Text className="text-[13px] font-semibold text-blue-600">+ Add a new customer manually</Text>
+            </Pressable>
+
+            {!customerId &&
+              customerName.trim().length > 0 &&
+              (address.trim().length > 0 || coords) && (
+                <View className="mb-3 flex-row items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2">
+                  <Ionicons name="person-add-outline" size={14} color="#B45309" />
+                  <Text className="flex-1 text-xs font-medium text-amber-700">
+                    New customer — not in your saved list yet.
+                  </Text>
+                  <Pressable onPress={handleRegisterNow} disabled={registeringCustomer} hitSlop={8}>
+                    <Text className="text-xs font-bold text-amber-700">
+                      {registeringCustomer ? 'Adding…' : 'Register now'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
+            <Text className="mb-1.5 text-sm font-medium text-gray-700">Customer phone</Text>
+            <TextInput
+              value={customerPhone}
+              onChangeText={setCustomerPhone}
+              placeholder="98XXXXXXXX"
+              keyboardType="phone-pad"
+              className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+            />
+
+            <View className="mb-1.5 mt-3.5 flex-row items-center justify-between">
+              <Text className="text-sm font-medium text-gray-700">Company / office</Text>
+              <Pressable
+                onPress={() => setCompanySameAsCustomer((v) => !v)}
+                className="flex-row items-center gap-2"
+                hitSlop={8}
+              >
+                <Text className="text-[13px] text-gray-600">Same as customer</Text>
+                <ToggleSwitch on={companySameAsCustomer} color="#2563EB" />
               </Pressable>
-            ))}
+            </View>
+            <TextInput
+              value={companySameAsCustomer ? customerName : companyName}
+              onChangeText={setCompanyName}
+              editable={!companySameAsCustomer}
+              placeholder="Company / office name"
+              className={`rounded-lg border border-gray-300 px-4 py-3 text-base ${companySameAsCustomer ? 'bg-gray-100 text-gray-500' : 'bg-white'}`}
+            />
+          </NumberedCard>
+
+          <NumberedCard n={2} title="Where and when?" subtitle="Seen by the technician before accepting" wide={isWideWeb} width={cardWidth}>
+            {isWideWeb ? (
+              <View className="flex-row gap-2.5">
+                <TextInput
+                  value={address}
+                  onChangeText={setAddress}
+                  placeholder="House/street, city, area"
+                  className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+                />
+                {locationButton}
+              </View>
+            ) : (
+              <>
+                {locationButton}
+                <TextInput
+                  value={address}
+                  onChangeText={setAddress}
+                  placeholder="House/street, city, area"
+                  multiline
+                  className="mt-2.5 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+                  style={{ minHeight: 60, textAlignVertical: 'top' }}
+                />
+              </>
+            )}
+            {coords && (
+              <Pressable
+                onPress={() => Linking.openURL(`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`)}
+                className="mt-2.5 overflow-hidden rounded-lg border border-gray-200"
+              >
+                <Image
+                  source={{
+                    uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${coords.latitude},${coords.longitude}&zoom=15&size=600x220&markers=${coords.latitude},${coords.longitude},red-pushpin`,
+                  }}
+                  style={{ width: '100%', height: 140 }}
+                  resizeMode="cover"
+                />
+                <Text className="px-2 py-1.5 text-xs text-blue-600">Open in Google Maps →</Text>
+              </Pressable>
+            )}
+
+            <View className="mt-3.5 flex-row gap-2.5">
+              <View className="flex-1">
+                <Text className="mb-1.5 text-sm font-medium text-gray-700">Date</Text>
+                <DateField value={date} onChange={setDate} />
+              </View>
+              <View className="flex-1">
+                <Text className="mb-1.5 text-sm font-medium text-gray-700">Time</Text>
+                <TimeField value={time} onChange={setTime} />
+              </View>
+            </View>
+          </NumberedCard>
+
+          <NumberedCard
+            n={3}
+            title="Show the problem"
+            subtitle={`Optional — up to ${PHOTO_SLOTS} photos and notes help quoting`}
+            wide={isWideWeb}
+            width={cardWidth}
+          >
+            {isWideWeb ? (
+              <View className="flex-row gap-4">
+                {photoSlots}
+                {notesInput}
+              </View>
+            ) : (
+              <>
+                {photoSlots}
+                <View className="mt-3">{notesInput}</View>
+              </>
+            )}
+            {photos.some(Boolean) && <Text className="mt-2 text-xs text-gray-400">Tap a photo to remove it.</Text>}
+          </NumberedCard>
+
+          <NumberedCard n={4} title="Price" subtitle="Optional — leave blank to price it later" wide={isWideWeb} width={cardWidth}>
+            <View className="flex-row items-center gap-2 rounded-lg border border-gray-300 bg-white px-4">
+              <Text className="text-base font-semibold text-gray-500">NPR</Text>
+              <TextInput
+                value={quotedPrice}
+                onChangeText={setQuotedPrice}
+                placeholder="e.g. 2000"
+                keyboardType="numeric"
+                className="flex-1 py-3 text-base"
+              />
+            </View>
+            <Text className="mt-2 text-xs leading-5 text-gray-400">
+              The customer still approves the price before you can assign a technician.
+            </Text>
+          </NumberedCard>
+        </View>
+      </ScrollView>
+
+      <View
+        className="flex-row items-center gap-3 border-t border-gray-200 bg-white py-2.5"
+        style={{
+          paddingHorizontal: isWideWeb ? 32 : 16,
+          shadowColor: '#111827',
+          shadowOpacity: 0.06,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: -4 },
+          elevation: 8,
+        }}
+      >
+        {isWideWeb && (
+          <View className="flex-row items-center gap-3">
+            <CategoryBadge category={category} size={36} />
+            <View>
+              <Text className="text-sm font-bold text-gray-900">
+                {category} · {action}
+              </Text>
+              {!!customerName && <Text className="text-xs text-gray-500">{customerName}</Text>}
+            </View>
           </View>
-          {photos.some(Boolean) && <Text className="mt-2 text-xs text-gray-400">Tap a photo to remove it.</Text>}
-        </FormSection>
-
-        <FormSection icon="document-text-outline" title="Extra information (optional)">
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Anything else the technician should know?"
-            multiline
-            numberOfLines={4}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-            style={{ minHeight: 100, textAlignVertical: 'top' }}
-          />
-        </FormSection>
-
-        <FormSection icon="pricetag-outline" title="Pricing (optional)">
-          <Text className="mb-2 text-xs text-gray-400">
-            If you already know what you'd charge, add it now so the technician knows what the job is worth — the
-            customer still has to approve it before you can assign anyone. Leave it blank to price it later instead.
+        )}
+        <View className="flex-1" style={isWideWeb ? { alignItems: 'flex-end' } : undefined}>
+          <Text className={`text-[13px] font-bold ${missing.length ? 'text-amber-700' : 'text-emerald-600'}`}>
+            {missing.length ? `${missing.length} required left` : 'Ready to submit'}
           </Text>
-          <TextInput
-            value={quotedPrice}
-            onChangeText={setQuotedPrice}
-            placeholder="e.g. 2000"
-            keyboardType="numeric"
-            className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-          />
-        </FormSection>
+          <Text className="text-xs text-gray-500" numberOfLines={1}>
+            {missing.length
+              ? missingText
+              : quotedPrice.trim()
+                ? 'Customer approves the price first'
+                : 'You can add a price later'}
+          </Text>
+        </View>
+        {isWideWeb && (
+          <Pressable onPress={cancel} className="h-12 items-center justify-center rounded-lg border border-gray-300 bg-white px-5">
+            <Text className="text-base font-semibold text-gray-600">Cancel</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={handleSubmit}
+          disabled={submitting}
+          className="h-12 items-center justify-center rounded-lg bg-orange-500 px-6"
+          style={{ opacity: submitting ? 0.5 : missing.length ? 0.6 : 1 }}
+        >
+          <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
+        </Pressable>
       </View>
 
       <ContactPickerModal
@@ -575,14 +729,46 @@ export default function ResellerRequestDetails() {
           </Pressable>
         </Pressable>
       </Modal>
+    </View>
+  );
+}
 
-      <Pressable
-        onPress={handleSubmit}
-        disabled={submitting}
-        className="mt-5 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
-      >
-        <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
-      </Pressable>
-    </ScrollView>
+function initialsOf(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function NumberedCard({
+  n,
+  title,
+  subtitle,
+  wide,
+  width,
+  children,
+}: {
+  n: number;
+  title: string;
+  subtitle: string;
+  wide: boolean;
+  width?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <View className={`rounded-2xl border border-gray-200 bg-white ${wide ? 'p-5' : 'p-4'}`} style={width ? { width } : undefined}>
+      <View className="mb-3.5 flex-row items-center gap-2.5">
+        <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-orange-50">
+          <Text className="text-[13px] font-bold text-orange-700">{n}</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-base font-bold text-gray-900">{title}</Text>
+          <Text className="text-xs text-gray-400">{subtitle}</Text>
+        </View>
+      </View>
+      {children}
+    </View>
   );
 }

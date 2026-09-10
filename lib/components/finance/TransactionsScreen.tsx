@@ -14,6 +14,7 @@ import { DateField } from '../DateTimeFields';
 import { TrendChartCard } from './TrendChartCard';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { ContactPickerModal } from '../ContactPickerModal';
+import { ToggleSwitch } from '../ToggleSwitch';
 import { FormSection } from './FormSection';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { toBsLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
@@ -318,38 +319,6 @@ const FILTERS: { key: 'all' | BusinessTransactionType; label: string }[] = [
   { key: 'expense', label: 'Expense' },
 ];
 
-/** Small iOS-style switch used in place of the native form's text "+/close
- * icon" toggle for Discount/VAT on the web bill layout - same on/off
- * meaning, just a real switch affordance instead of a button that changes
- * its own label. */
-function ToggleSwitch({ on, color }: { on: boolean; color: string }) {
-  return (
-    <View
-      style={{
-        width: 30,
-        height: 17,
-        borderRadius: 999,
-        backgroundColor: on ? color : '#D1D5DB',
-        justifyContent: 'center',
-        paddingHorizontal: 2,
-      }}
-    >
-      <View
-        style={{
-          width: 13,
-          height: 13,
-          borderRadius: 999,
-          backgroundColor: '#fff',
-          alignSelf: on ? 'flex-end' : 'flex-start',
-          shadowColor: '#000',
-          shadowOpacity: 0.25,
-          shadowRadius: 1,
-          shadowOffset: { width: 0, height: 1 },
-        }}
-      />
-    </View>
-  );
-}
 
 /** Web only: a short "what did I just enter recently" reference list below
  * the live summary card, so a reseller can glance at their last few
