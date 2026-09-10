@@ -1,4 +1,5 @@
 // lib/components/web/WebSidebarShell.tsx
+import { useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,10 +9,10 @@ export interface WebNavItem {
   href: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-  // Sub-links shown nested under this item, always expanded (no toggle) -
-  // for a section like Finance with several destinations (Payment In,
-  // Purchase, Report, ...) that would otherwise mean going back to a
-  // dashboard and re-picking a shortcut tile every time.
+  // Sub-links shown nested under this item, toggled open/closed by clicking
+  // the parent row - for a section like Finance with several destinations
+  // (Payment In, Purchase, Report, ...) that would otherwise mean going back
+  // to a dashboard and re-picking a shortcut tile every time.
   children?: WebNavItem[];
 }
 
@@ -58,6 +59,11 @@ export function WebSidebarShell({
   const pathname = usePathname();
   const searchParams = useGlobalSearchParams<Record<string, string>>();
   const profile = useAuthStore((state) => state.profile);
+  // Explicit open/close per parent href, set only once the user has clicked
+  // it - until then `isExpanded` below falls back to "open if a child route
+  // is currently on screen" so landing straight on e.g. Payment In (a
+  // refresh, a bookmark) doesn't hide the submenu it belongs to.
+  const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({});
 
   // Several Finance sub-links share one route with a different `type` query
   // param (Payment In/Out both go to quick-payment, Sales/Purchase/Expenses
@@ -85,6 +91,12 @@ export function WebSidebarShell({
     return Array.from(new URLSearchParams(hrefQuery).entries()).every(
       ([key, value]) => (searchParams[key] ?? '') === value
     );
+  }
+
+  function isExpanded(item: WebNavItem): boolean {
+    const override = openOverrides[item.href];
+    if (override !== undefined) return override;
+    return !!item.children?.some((child) => isActive(child.href));
   }
 
   return (
@@ -119,6 +131,7 @@ export function WebSidebarShell({
         <View style={{ gap: 2 }}>
           {items.map((item) => {
             const active = isActive(item.href);
+            const expanded = !!item.children && isExpanded(item);
             // A parent with children (e.g. Finance) is "active" only by its
             // own href, not by whichever child route is open - the child
             // rows below carry their own highlight for that instead, so the
@@ -126,7 +139,12 @@ export function WebSidebarShell({
             return (
               <View key={item.href}>
                 <Pressable
-                  onPress={() => router.push(item.href as any)}
+                  onPress={() => {
+                    if (item.children) {
+                      setOpenOverrides((prev) => ({ ...prev, [item.href]: !expanded }));
+                    }
+                    router.push(item.href as any);
+                  }}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -142,12 +160,21 @@ export function WebSidebarShell({
                     size={19}
                     color={active ? '#2563EB' : '#6B7280'}
                   />
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: active ? '#2563EB' : '#6B7280' }}>
+                  <Text
+                    style={{ flex: 1, fontSize: 14, fontWeight: '600', color: active ? '#2563EB' : '#6B7280' }}
+                  >
                     {item.label}
                   </Text>
+                  {!!item.children && (
+                    <Ionicons
+                      name={expanded ? 'chevron-down' : 'chevron-forward'}
+                      size={14}
+                      color={active ? '#2563EB' : '#9CA3AF'}
+                    />
+                  )}
                 </Pressable>
 
-                {!!item.children && (
+                {expanded && !!item.children && (
                   <View style={{ marginTop: 2, marginBottom: 4, gap: 1 }}>
                     {item.children.map((child) => {
                       const childActive = isActive(child.href);
