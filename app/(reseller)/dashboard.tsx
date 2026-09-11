@@ -93,7 +93,7 @@ function HiringSections({ userId }: { userId: string }) {
 
       {employees.length > 0 && (
         <>
-          <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">My Employee Technicians</Text>
+          <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">My Technical Employees</Text>
           {employees.map(({ employment, profile }) => (
             <View
               key={employment.id}
@@ -250,7 +250,7 @@ export default function ResellerDashboard() {
 
                 {recentlyHiredTechnicians.length > 0 && (
                   <>
-                    <Text className="mb-3 mt-2 text-[15px] font-bold text-gray-900">Recently Hired Technicians</Text>
+                    <Text className="mb-3 mt-2 text-[15px] font-bold text-gray-900">Outsource Technicians</Text>
                     <View className="mb-2 flex-row flex-wrap gap-3">
                       {recentlyHiredTechnicians.map(({ tech, count }) => (
                         <View
@@ -356,7 +356,7 @@ export default function ResellerDashboard() {
 
           {recentlyHiredTechnicians.length > 0 && (
             <>
-              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Recently Hired Technicians</Text>
+              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Outsource Technicians</Text>
               {recentlyHiredTechnicians.map(({ tech, count }) => (
                 <View
                   key={tech.id}

@@ -215,7 +215,12 @@ export function ClientAssistantChat({ basePath }: { basePath: string }) {
             elevation: 10,
           }}
         >
-          <Image source={require('../../assets/sagar-assistant.png')} className="h-full w-full" resizeMode="cover" />
+          {/* Sized via style, not className - see FloatingAssistantChat. */}
+          <Image
+            source={require('../../assets/sagar-assistant.png')}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
         </View>
 
         <View
