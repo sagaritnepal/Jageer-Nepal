@@ -1,44 +1,44 @@
 // app/(reseller)/requests.tsx
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, ScrollView, Pressable, Platform, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { View, Text, FlatList, ScrollView, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
 import { distanceKm } from '../../lib/utils/distance';
-import { STATUS_STYLES } from '../../lib/constants/requestStatus';
-import { PersonAvatar } from '../../lib/components/PersonAvatar';
-import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
-import { OrderCard } from '../../lib/components/OrderCard';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
+import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
-import type { Order, RequestStatus, ServiceRequest } from '../../types/database.types';
+import type { Order, Product, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
 // was hard to tell what actually needed attention. Group by pipeline stage
-// instead - what the reseller should be doing right now for that job - with
-// a plain-language hint per card, rather than making them decode raw status
-// strings across the whole list. There used to be a separate "Needs your
-// action" stage covering both "claimed, still needs a quote" and "approved,
-// needs a technician" - it's gone now: the former folds into "Waiting on
-// customer" (the reseller's own next step there is just to call the
-// customer and send a quote, but the request is functionally waiting on
-// that conversation), and the latter becomes its own "My Jobs" stage,
-// positioned right before "Job in progress" since picking a technician is
-// the last thing standing between an approved job and it actually starting.
+// instead - what the reseller should be doing right now for that job. There
+// used to be a separate "Needs your action" stage covering both "claimed,
+// still needs a quote" and "approved, needs a technician" - the former now
+// folds into "Waiting on customer" (the next step there is just to call the
+// customer and send a quote), and the latter is its own "My Jobs" stage,
+// right before "Job in progress" since picking a technician is the last
+// thing standing between an approved job and it actually starting.
 type Stage = 'requests' | 'waiting_customer' | 'my_jobs' | 'in_progress' | 'awaiting_payment' | 'completed' | 'cancelled';
 
 const STAGE_ORDER: Stage[] = ['requests', 'waiting_customer', 'my_jobs', 'in_progress', 'awaiting_payment', 'completed', 'cancelled'];
+// The stages where there's still work to do - shown as the numbered pipeline
+// on web. Completed/Cancelled sit off to the side since nothing is left to do.
+const WORKING_STAGES: Stage[] = ['requests', 'waiting_customer', 'my_jobs', 'in_progress', 'awaiting_payment'];
 
-const STAGE_META: Record<Stage, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
-  requests: { label: 'Requests', icon: 'download-outline', color: '#EA580C', bg: 'bg-orange-50' },
-  waiting_customer: { label: 'Waiting on customer', icon: 'time-outline', color: '#D97706', bg: 'bg-amber-50' },
-  my_jobs: { label: 'My Jobs', icon: 'briefcase', color: '#2563eb', bg: 'bg-blue-50' },
-  in_progress: { label: 'Job in progress', icon: 'build', color: '#2563EB', bg: 'bg-blue-50' },
-  awaiting_payment: { label: 'Awaiting payment', icon: 'cash-outline', color: '#DC2626', bg: 'bg-red-50' },
-  completed: { label: 'Completed', icon: 'checkmark-done-circle', color: '#16A34A', bg: 'bg-green-50' },
-  cancelled: { label: 'Cancelled', icon: 'close-circle', color: '#9CA3AF', bg: 'bg-gray-100' },
+const STAGE_META: Record<
+  Stage,
+  { label: string; todo: string; icon: keyof typeof Ionicons.glyphMap; color: string; tint: string }
+> = {
+  requests: { label: 'Requests', todo: 'Accept or confirm', icon: 'download-outline', color: '#EA580C', tint: '#FFF7ED' },
+  waiting_customer: { label: 'Waiting on customer', todo: 'Quote & wait for approval', icon: 'time-outline', color: '#D97706', tint: '#FFFBEB' },
+  my_jobs: { label: 'My Jobs', todo: 'Assign a technician', icon: 'briefcase', color: '#2563EB', tint: '#EFF6FF' },
+  in_progress: { label: 'Job in progress', todo: 'Technician is working', icon: 'build', color: '#2563EB', tint: '#EFF6FF' },
+  awaiting_payment: { label: 'Awaiting payment', todo: 'Collect payment', icon: 'cash-outline', color: '#DC2626', tint: '#FEF2F2' },
+  completed: { label: 'Completed', todo: 'Paid & delivered', icon: 'checkmark-done-circle', color: '#16A34A', tint: '#F0FDF4' },
+  cancelled: { label: 'Cancelled', todo: 'Nothing left to do', icon: 'close-circle', color: '#9CA3AF', tint: '#F3F4F6' },
 };
 
 function stageOf(item: ServiceRequest): Stage {
@@ -48,9 +48,7 @@ function stageOf(item: ServiceRequest): Stage {
     case 'pending':
       // A self-sourced (reseller-posted) job skips the quote/approval
       // conversation entirely - SelfSourcedAssign lets the reseller pick a
-      // technician immediately, the same next step as an app request whose
-      // price was just approved, so it lands directly in "My Jobs" instead
-      // of "Waiting on customer" (there's no customer to wait on).
+      // technician immediately, so it lands directly in "My Jobs".
       return item.origin === 'reseller' ? 'my_jobs' : 'waiting_customer';
     case 'quoted':
       return 'waiting_customer';
@@ -64,12 +62,9 @@ function stageOf(item: ServiceRequest): Stage {
   }
 }
 
-// A pending order hasn't been looked at yet - same as a brand new,
-// unclaimed service request, it belongs in "Requests" until the reseller
-// confirms it. A confirmed order still needs shipping - the same "ready to
-// act on" idea "My Jobs" covers for an approved service request - and a
-// shipped one is in progress the same way an assigned job is. Once
-// delivered there's nothing left to do, same as a paid, resolved request.
+// A pending order hasn't been looked at yet (same as an unclaimed request);
+// a confirmed one still needs delivering; shipped is under way; delivered
+// means there's nothing left to do.
 function orderStageOf(order: Order): Stage {
   switch (order.status) {
     case 'pending':
@@ -89,112 +84,191 @@ function orderStageOf(order: Order): Stage {
 
 type JobItem = { kind: 'request'; id: string; request: ServiceRequest } | { kind: 'order'; id: string; order: Order };
 
-function nextStepHint(item: ServiceRequest): string | null {
-  switch (item.status) {
-    case 'pending':
-      return item.origin === 'reseller'
-        ? 'Pick a technician to assign.'
-        : 'Call the customer to verify the issue, then send them a quote.';
-    case 'quoted':
-      return `Waiting for the customer to approve NPR ${Number(item.quoted_price ?? 0).toLocaleString()}.`;
-    case 'approved':
-      return 'Customer approved the price — pick a technician to assign.';
-    case 'assigned':
-      return 'Technician assigned — job hasn’t started yet.';
-    case 'in_progress':
-      return 'Technician is on the job right now.';
-    case 'resolved':
-      return item.payment_status === 'paid' ? 'Paid in full.' : 'Job done — collect payment from the customer.';
-    case 'cancelled':
-      return 'This request was cancelled.';
-    default:
-      return null;
-  }
+type JobAction = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  primary: boolean;
+  onPress: () => void;
+};
+
+type Tag = { label: string; bg: string; fg: string };
+
+const TAGS = {
+  app: { label: 'App customer', bg: '#EFF6FF', fg: '#1D4ED8' },
+  own: { label: 'Your customer', bg: '#F5F3FF', fg: '#6D28D9' },
+  order: { label: 'Shop order', bg: '#ECFDF5', fg: '#047857' },
+  unpaid: { label: 'Unpaid', bg: '#FEF2F2', fg: '#DC2626' },
+  paid: { label: 'Paid', bg: '#F0FDF4', fg: '#15803D' },
+} satisfies Record<string, Tag>;
+
+type JobRowData = {
+  icon: ReactNode;
+  title: string;
+  who: string;
+  place: string | null;
+  when: string | null;
+  tag: Tag;
+  amount: number | null;
+  action: JobAction;
+  open: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  deleting?: boolean;
+};
+
+// Web table columns - shared by the header row and every job row.
+const COLS = { job: 2.2, where: 1.4, type: 120, amount: 110, action: 190, manage: 64 };
+
+function formatWhen(date: string | null, time: string | null): string | null {
+  if (!date && !time) return null;
+  return `${date ?? 'Date TBD'} · ${time ?? 'Time TBD'}`;
 }
 
-function StatusPill({ status }: { status: RequestStatus }) {
-  const style = STATUS_STYLES[status];
+function formatAmount(amount: number | null): string {
+  return amount != null ? `NPR ${Number(amount).toLocaleString()}` : '';
+}
+
+function ActionButton({ action, color, height }: { action: JobAction; color: string; height: number }) {
   return (
-    <View className={`rounded-full px-2 py-0.5 ${style.bg}`}>
-      <Text className={`text-[10px] font-semibold uppercase ${style.text}`}>{style.label}</Text>
+    <Pressable
+      onPress={action.onPress}
+      className="flex-row items-center justify-center gap-1.5 rounded-lg"
+      style={{
+        height,
+        paddingHorizontal: 12,
+        backgroundColor: action.primary ? color : '#FFFFFF',
+        borderWidth: action.primary ? 0 : 1,
+        borderColor: '#D1D5DB',
+      }}
+    >
+      <Ionicons name={action.icon} size={15} color={action.primary ? '#FFFFFF' : '#374151'} />
+      <Text className={`font-semibold ${action.primary ? 'text-white' : 'text-gray-700'}`} style={{ fontSize: height >= 44 ? 14.5 : 13 }}>
+        {action.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function TagPill({ tag }: { tag: Tag }) {
+  return (
+    <View className="self-start rounded-full px-2 py-0.5" style={{ backgroundColor: tag.bg }}>
+      <Text className="text-[11px] font-semibold" style={{ color: tag.fg }}>
+        {tag.label}
+      </Text>
     </View>
   );
 }
 
-
-function IncomingRequestCard({ item }: { item: ServiceRequest }) {
-  // Incoming is pre-acceptance - the customer's identity (photo, name,
-  // address) helps a reseller decide whether to take the job, but their
-  // contact number stays hidden until the reseller actually accepts it.
-  const { data: customerProfile } = useSupabaseRow('profiles', item.client_id);
-  const customerName = item.customer_name ?? customerProfile?.full_name;
-
+function ManageButtons({ data }: { data: JobRowData }) {
+  if (!data.onEdit && !data.onDelete) return null;
   return (
-    <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
-      <Pressable onPress={() => router.push(`/(reseller)/request/${item.id}`)} className="flex-row items-start gap-3">
-        <View className="items-center gap-1.5">
-          <CategoryBadge category={item.issue_type} />
-          <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
-          <PersonAvatar name={customerName} photoUrl={customerProfile?.avatar_url} size={32} bg="bg-orange-500" />
-        </View>
-        <View className="flex-1">
-          <View className="flex-row items-start justify-between gap-2">
-            <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
-            <View className="rounded-full bg-amber-50 px-2 py-0.5">
-              <Text className="text-[10px] font-semibold uppercase text-amber-600">Pending</Text>
-            </View>
+    <View className="flex-row gap-1">
+      {data.onEdit && (
+        <Pressable onPress={data.onEdit} hitSlop={6} className="h-8 w-8 items-center justify-center rounded-lg">
+          <Ionicons name="create-outline" size={17} color="#6B7280" />
+        </Pressable>
+      )}
+      {data.onDelete && (
+        <Pressable
+          onPress={data.onDelete}
+          disabled={data.deleting}
+          hitSlop={6}
+          className="h-8 w-8 items-center justify-center rounded-lg disabled:opacity-40"
+        >
+          <Ionicons name="trash-outline" size={17} color="#DC2626" />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+/** One job, rendered either as a table row (wide web) or a card (phone). */
+function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
+  const color = STAGE_META[stage].color;
+
+  if (wide) {
+    return (
+      <View className="flex-row items-center border-t border-gray-100 px-[18px] py-3.5" style={{ gap: 16 }}>
+        <Pressable onPress={data.open} className="flex-row items-center gap-3" style={{ flex: COLS.job, minWidth: 0 }}>
+          {data.icon}
+          <View className="flex-1" style={{ gap: 2 }}>
+            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+              {data.title}
+            </Text>
+            <Text className="text-[12.5px] text-gray-500" numberOfLines={1}>
+              {data.who}
+            </Text>
           </View>
-          {item.description && (
-            <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
-              {item.description}
+        </Pressable>
+        <View style={{ flex: COLS.where, minWidth: 0, gap: 2 }}>
+          <Text className="text-[13px] text-gray-600" numberOfLines={1}>
+            {data.place ?? '—'}
+          </Text>
+          {!!data.when && (
+            <Text className="text-xs text-gray-400" numberOfLines={1}>
+              {data.when}
             </Text>
           )}
-          <View className="mt-2 gap-1">
-            {customerName && (
-              <Text className="text-xs text-gray-500">
-                <Text className="font-medium text-gray-600">Customer: </Text>
-                {customerName}
-              </Text>
-            )}
-            {(item.scheduled_date || item.scheduled_time) && (
-              <Text className="text-xs text-gray-500">
-                {item.scheduled_date ?? 'Date TBD'} · {item.scheduled_time ?? 'Time TBD'}
-              </Text>
-            )}
-            {item.location_data?.address && (
-              <Text className="text-xs text-gray-500" numberOfLines={1}>
-                {item.location_data.address}
-              </Text>
-            )}
+        </View>
+        <View style={{ width: COLS.type }}>
+          <TagPill tag={data.tag} />
+        </View>
+        <Text className="text-right text-sm font-extrabold text-gray-900" style={{ width: COLS.amount }}>
+          {formatAmount(data.amount) || '—'}
+        </Text>
+        <View style={{ width: COLS.action }}>
+          <ActionButton action={data.action} color={color} height={38} />
+        </View>
+        <View style={{ width: COLS.manage, alignItems: 'flex-end' }}>
+          <ManageButtons data={data} />
+        </View>
+      </View>
+    );
+  }
+
+  const meta = [data.place, data.when].filter(Boolean).join(' · ');
+  return (
+    <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-3.5" style={{ gap: 12 }}>
+      <Pressable onPress={data.open} className="flex-row items-start gap-3">
+        {data.icon}
+        <View className="flex-1" style={{ gap: 3 }}>
+          <View className="flex-row items-start justify-between gap-2">
+            <Text className="flex-1 text-[14.5px] font-bold leading-5 text-gray-900">{data.title}</Text>
+            <ManageButtons data={data} />
+          </View>
+          <Text className="text-[13px] text-gray-600" numberOfLines={1}>
+            {data.who}
+          </Text>
+          {!!meta && (
+            <Text className="text-xs text-gray-400" numberOfLines={1}>
+              {meta}
+            </Text>
+          )}
+          <View className="mt-1 flex-row items-center gap-2">
+            <TagPill tag={data.tag} />
+            <Text className="ml-auto text-[15px] font-extrabold text-gray-900">{formatAmount(data.amount)}</Text>
           </View>
         </View>
       </Pressable>
-
-      <Pressable
-        onPress={() => router.push(`/(reseller)/request/${item.id}`)}
-        className="mt-3 flex-row items-center justify-center gap-1.5 rounded-xl bg-orange-500 py-2.5"
-      >
-        <Ionicons name="checkmark-circle" size={16} color="white" />
-        <Text className="text-sm font-semibold text-white">View &amp; Accept</Text>
-      </Pressable>
+      <ActionButton action={data.action} color={color} height={44} />
     </View>
   );
 }
 
-function MyRequestCard({ item }: { item: ServiceRequest }) {
+function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Stage; wide: boolean }) {
   // A "reseller" origin request's client_id is just the reseller's own id
-  // (there's no real customer profile behind it), so only look up a photo
-  // for real app customers.
+  // (there's no real customer profile behind it), so only look up real app
+  // customers.
   const { data: customerProfile } = useSupabaseRow('profiles', item.origin === 'app' ? item.client_id : undefined);
   const { data: technicianProfile } = useSupabaseRow('profiles', item.technician_id ?? undefined);
   const updateRequest = useSupabaseUpdate('service_requests');
-  const [cancelling, setCancelling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const customerName = item.customer_name ?? customerProfile?.full_name;
-  const customerPhone = item.customer_phone ?? customerProfile?.phone;
-  const hint = nextStepHint(item);
-  const stage = stageOf(item);
-  const stageMeta = STAGE_META[stage];
+  const isIncoming = !item.reseller_id;
+  const customerName = item.customer_name ?? customerProfile?.full_name ?? 'Customer';
+  // An unclaimed request keeps the customer's number hidden until accepted.
+  const customerPhone = isIncoming ? null : (item.customer_phone ?? customerProfile?.phone ?? null);
+  const open = () => router.push(`/(reseller)/request/${item.id}`);
 
   const distance =
     item.location_data?.latitude != null &&
@@ -207,26 +281,57 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
         )
       : null;
 
+  let action: JobAction;
+  if (isIncoming) {
+    action = { label: 'View & accept', icon: 'checkmark-circle', primary: true, onPress: open };
+  } else if (item.status === 'pending' && item.origin === 'app') {
+    action = { label: 'Send quote', icon: 'pricetag-outline', primary: true, onPress: open };
+  } else if (item.status === 'quoted') {
+    action = customerPhone
+      ? { label: 'Call customer', icon: 'call-outline', primary: false, onPress: () => Linking.openURL(`tel:${customerPhone}`) }
+      : { label: 'View request', icon: 'eye-outline', primary: false, onPress: open };
+  } else if (stage === 'my_jobs') {
+    action = { label: 'Assign technician', icon: 'person-add-outline', primary: true, onPress: open };
+  } else if (stage === 'in_progress') {
+    action = { label: 'View job', icon: 'eye-outline', primary: false, onPress: open };
+  } else if (stage === 'awaiting_payment') {
+    action = { label: 'Record payment', icon: 'cash-outline', primary: true, onPress: open };
+  } else {
+    action = { label: 'View', icon: 'eye-outline', primary: false, onPress: open };
+  }
+
+  const tag =
+    stage === 'awaiting_payment'
+      ? TAGS.unpaid
+      : stage === 'completed'
+        ? TAGS.paid
+        : item.origin === 'app'
+          ? TAGS.app
+          : TAGS.own;
+
+  const place =
+    stage === 'in_progress' && technicianProfile
+      ? `${technicianProfile.full_name ?? 'Technician'}${distance != null ? ` · ${distance.toFixed(1)} km away` : ''}`
+      : (item.location_data?.address ?? null);
+
   // Only requests the reseller sourced themselves - never a real app
-  // customer's, which isn't this reseller's to change - and only while
-  // there's still something to change: once it's paid/resolved or already
-  // cancelled, editing or cancelling it doesn't mean anything anymore.
+  // customer's - and only while there's still something to change.
   const canManage = item.origin === 'reseller' && item.status !== 'resolved' && item.status !== 'cancelled';
 
-  function handleCancel() {
+  function handleDelete() {
     showAlert('Cancel this request?', "This marks it as cancelled - it can't be undone.", [
       { text: 'Keep it', style: 'cancel' },
       {
         text: 'Cancel request',
         style: 'destructive',
         onPress: async () => {
-          setCancelling(true);
+          setDeleting(true);
           try {
             await updateRequest.mutateAsync({ id: item.id, values: { status: 'cancelled' } });
           } catch (err) {
             showAlert('Could not cancel', getErrorMessage(err));
           } finally {
-            setCancelling(false);
+            setDeleting(false);
           }
         },
       },
@@ -234,126 +339,79 @@ function MyRequestCard({ item }: { item: ServiceRequest }) {
   }
 
   return (
-    <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
-      <Pressable onPress={() => router.push(`/(reseller)/request/${item.id}`)} className="flex-row items-start gap-3">
-      <View className="items-center gap-1.5">
-        <CategoryBadge category={item.issue_type} />
-        <RequestPhotoThumb photoUrls={item.photo_urls} size={44} />
-        <PersonAvatar
-          name={customerName}
-          photoUrl={item.origin === 'app' ? customerProfile?.avatar_url : null}
-          size={32}
-          bg="bg-orange-500"
-        />
-        {technicianProfile && (
-          <PersonAvatar name={technicianProfile.full_name} photoUrl={technicianProfile.avatar_url} size={32} bg="bg-blue-600" />
-        )}
-      </View>
-      <View className="flex-1">
-        <View className="flex-row items-start justify-between gap-2">
-          <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
-          <StatusPill status={item.status} />
-        </View>
-        {item.description && (
-          <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
+    <JobRowView
+      stage={stage}
+      wide={wide}
+      data={{
+        icon: <CategoryBadge category={item.issue_type} size={wide ? 40 : 44} />,
+        title: item.issue_type,
+        who: customerName,
+        place,
+        when: formatWhen(item.scheduled_date, item.scheduled_time),
+        tag,
+        amount: item.quoted_price,
+        action,
+        open,
+        onEdit: canManage ? () => router.push(`/(reseller)/edit-request?id=${item.id}`) : undefined,
+        onDelete: canManage ? handleDelete : undefined,
+        deleting,
+      }}
+    />
+  );
+}
 
-        <View className="mt-2 flex-row flex-wrap items-center gap-2">
-          <View className={`rounded-full px-2 py-0.5 ${item.origin === 'app' ? 'bg-blue-50' : 'bg-purple-50'}`}>
-            <Text
-              className={`text-[10px] font-semibold ${item.origin === 'app' ? 'text-blue-700' : 'text-purple-700'}`}
-            >
-              {item.origin === 'app' ? 'App customer' : 'Your customer'}
-            </Text>
-          </View>
-          <View className={`rounded-full px-2 py-0.5 ${item.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
-            <Text
-              className={`text-[10px] font-semibold ${
-                item.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'
-              }`}
-            >
-              {item.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
-            </Text>
-          </View>
-          {item.chalan_urls.length > 0 && (
-            <View className="flex-row items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5">
-              <Ionicons name="document-attach" size={10} color="#0F766E" />
-              <Text className="text-[10px] font-semibold text-teal-700">Chalan attached</Text>
-            </View>
-          )}
-        </View>
+function OrderJobRow({
+  order,
+  stage,
+  wide,
+  productMap,
+}: {
+  order: Order;
+  stage: Stage;
+  wide: boolean;
+  productMap: Map<string, Product>;
+}) {
+  const { data: buyer } = useSupabaseRow('profiles', order.buyer_id);
+  const { data: orderItems } = useSupabaseQuery('order_items', { filters: { order_id: order.id } });
+  const open = () => router.push(`/(reseller)/order/${order.id}`);
 
-        <View className="mt-2.5 gap-1">
-          {(customerName || customerPhone) && (
-            <Text className="text-xs text-gray-500">
-              <Text className="font-medium text-gray-600">Customer: </Text>
-              {customerName ?? 'Unknown'}
-              {customerPhone ? ` · ${customerPhone}` : ''}
-            </Text>
-          )}
-          {technicianProfile && (
-            <Text className="text-xs text-gray-500">
-              <Text className="font-medium text-gray-600">Assigned to: </Text>
-              {technicianProfile.full_name ?? 'Unnamed'}
-              {distance != null ? ` · ${distance.toFixed(1)} km away` : ''}
-            </Text>
-          )}
-          {(item.scheduled_date || item.scheduled_time) && (
-            <Text className="text-xs text-gray-500">
-              <Text className="font-medium text-gray-600">When: </Text>
-              {item.scheduled_date ?? 'Date TBD'} · {item.scheduled_time ?? 'Time TBD'}
-            </Text>
-          )}
-          {item.location_data?.address && (
-            <Text className="text-xs text-gray-500" numberOfLines={1}>
-              <Text className="font-medium text-gray-600">Address: </Text>
-              {item.location_data.address}
-            </Text>
-          )}
-          {hint && (
-            <Text className="text-xs font-medium" style={{ color: stageMeta.color }}>
-              {hint}
-            </Text>
-          )}
-          {item.remark && (
-            <Text className="mt-1 text-xs italic text-gray-400" numberOfLines={2}>
-              "{item.remark}"
-            </Text>
-          )}
-        </View>
+  const first = orderItems?.[0];
+  const firstName = first ? `${productMap.get(first.product_id)?.name ?? 'Product'} × ${first.quantity}` : `Order #${order.id.slice(0, 8)}`;
+  const title = orderItems && orderItems.length > 1 ? `${firstName} + ${orderItems.length - 1} more` : firstName;
 
-        {item.quoted_price != null && stage !== 'in_progress' && (
-          <View className="mt-2 flex-row justify-end">
-            <Text className="text-2xl font-extrabold text-gray-900">
-              NPR {Number(item.quoted_price).toLocaleString()}
-            </Text>
-          </View>
-        )}
-      </View>
-      </Pressable>
+  const shipping = order.shipping_address as { address?: string; city?: string } | null;
+  const place = shipping ? [shipping.address, shipping.city].filter(Boolean).join(', ') || null : null;
 
-      {canManage && (
-        <View className="mt-3 flex-row gap-2">
-          <Pressable
-            onPress={() => router.push(`/(reseller)/edit-request?id=${item.id}`)}
-            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white py-2"
+  // Confirming / delivering still happens on the order page itself - the
+  // button just names what's waiting there.
+  const nextLabel = STATUS_ACTION_LABEL[order.status];
+  const action: JobAction = nextLabel
+    ? { label: nextLabel, icon: 'checkmark-circle', primary: true, onPress: open }
+    : { label: 'View order', icon: 'eye-outline', primary: false, onPress: open };
+
+  return (
+    <JobRowView
+      stage={stage}
+      wide={wide}
+      data={{
+        icon: (
+          <View
+            className="items-center justify-center bg-emerald-500"
+            style={{ width: wide ? 40 : 44, height: wide ? 40 : 44, borderRadius: 12 }}
           >
-            <Ionicons name="create-outline" size={14} color="#374151" />
-            <Text className="text-xs font-semibold text-gray-700">Edit</Text>
-          </Pressable>
-          <Pressable
-            onPress={handleCancel}
-            disabled={cancelling}
-            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 py-2 disabled:opacity-50"
-          >
-            <Ionicons name="trash-outline" size={14} color="#DC2626" />
-            <Text className="text-xs font-semibold text-red-600">{cancelling ? 'Cancelling…' : 'Delete'}</Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
+            <Ionicons name="gift" size={wide ? 18 : 20} color="white" />
+          </View>
+        ),
+        title,
+        who: buyer?.full_name ?? '…',
+        place,
+        when: null,
+        tag: TAGS.order,
+        amount: order.total_amount,
+        action,
+        open,
+      }}
+    />
   );
 }
 
@@ -361,9 +419,8 @@ export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [jobStage, setJobStage] = useState<Stage | null>(null);
   // A phone browser hitting the website is still "web" (Platform.OS ===
-  // 'web'), but the 2-column card grid and flat chip row below only make
-  // sense once the viewport is wide enough for it - same breakpoint as the
-  // sidebar shell this screen normally renders inside.
+  // 'web'), but the pipeline + table layout only makes sense once the
+  // viewport is wide enough - same breakpoint as the sidebar shell.
   const { width: screenWidth } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
 
@@ -372,10 +429,7 @@ export default function ResellerRequestQueue() {
     orderBy: { column: 'created_at', ascending: true },
   });
   // Any reseller can see a pending app request until someone claims it -
-  // once reseller_id is stamped (see AcceptIncomingRequest), it belongs to
-  // that reseller and drops out of everyone else's unclaimed pool. Unclaimed
-  // and claimed requests both land in the same "Needs your action" bucket
-  // below - accepting one is just as much an action as quoting or assigning.
+  // once reseller_id is stamped, it drops out of everyone else's pool.
   const incoming = useMemo(() => (incomingRaw ?? []).filter((r) => !r.reseller_id), [incomingRaw]);
 
   const { data: mine, isLoading: loadingMine } = useSupabaseQuery('service_requests', {
@@ -384,11 +438,8 @@ export default function ResellerRequestQueue() {
     enabled: !!userId,
   });
 
-  // Product orders from customers (Shop no longer has its own Orders tab -
-  // a new order needs the same "act on this now" attention as a new service
-  // request, so it surfaces here instead) and follow the exact same stage
-  // pipeline as a service job, not Shop Overview - that tab is for the
-  // running numbers, not the work queue.
+  // Product orders from customers follow the same stage pipeline as a
+  // service job (Shop has no separate Orders tab).
   const { data: sellingOrders } = useSupabaseQuery('orders', {
     filters: userId ? { seller_id: userId } : {},
     orderBy: { column: 'created_at', ascending: true },
@@ -399,12 +450,6 @@ export default function ResellerRequestQueue() {
 
   const isLoading = loadingIncoming || loadingMine;
 
-  // Everything - unclaimed requests, claimed jobs, and orders at every status
-  // - lives in one stage-grouped list now. "Requests" is anything brand new
-  // that hasn't been accepted/confirmed yet; "Needs your action" is only for
-  // jobs already claimed that still need a quote, assignment, or shipment.
-  // A reseller can jump straight to e.g. "Awaiting payment" instead of
-  // scrolling past every other stage.
   const myByStage = useMemo(() => {
     const groups = new Map<Stage, JobItem[]>();
     STAGE_ORDER.forEach((stage) => groups.set(stage, []));
@@ -416,11 +461,13 @@ export default function ResellerRequestQueue() {
     return groups;
   }, [incoming, mine, sellingOrders]);
 
-  const activeStage = jobStage ?? STAGE_ORDER.find((stage) => (myByStage.get(stage)?.length ?? 0) > 0) ?? 'requests';
+  const countOf = (stage: Stage) => myByStage.get(stage)?.length ?? 0;
+  const activeStage = jobStage ?? STAGE_ORDER.find((stage) => countOf(stage) > 0) ?? 'requests';
   const stageJobs = myByStage.get(activeStage) ?? [];
+  const activeMeta = STAGE_META[activeStage];
 
-  // Keep the chip strip and the job list below it in sync: whichever stage
-  // becomes active, scroll its chip into view at the same time the list swaps.
+  // Keep the phone's pill strip and the list below it in sync: whichever
+  // stage becomes active, scroll its pill into view at the same time.
   const chipScrollRef = useRef<ScrollView>(null);
   const chipLayouts = useRef<Partial<Record<Stage, { x: number; width: number }>>>({});
 
@@ -431,106 +478,169 @@ export default function ResellerRequestQueue() {
     }
   }, [activeStage]);
 
-  // Chip bar: a horizontal-scroll strip makes sense on a phone (only a few
-  // chips fit before running out of width), but on a laptop-wide screen all
-  // 7 stages fit without scrolling - flex-wrap just lays them out flat
-  // instead of hiding most of them behind a scroll gesture nobody expects
-  // on a desktop toggle bar.
-  const stageChip = (stage: Stage, withLayout: boolean) => {
-    const meta = STAGE_META[stage];
-    const count = myByStage.get(stage)?.length ?? 0;
-    const active = activeStage === stage;
-    return (
-      <Pressable
-        key={stage}
-        onPress={() => setJobStage(stage)}
-        onLayout={
-          withLayout
-            ? (e) => {
-                chipLayouts.current[stage] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
-              }
-            : undefined
-        }
-        className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
-        style={{
-          backgroundColor: active ? meta.color : '#FFFFFF',
-          borderWidth: active ? 0 : 1,
-          borderColor: '#E5E7EB',
-        }}
-      >
-        <Ionicons name={meta.icon} size={13} color={active ? 'white' : meta.color} />
-        <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>
-          {meta.label} ({count})
-        </Text>
-      </Pressable>
-    );
-  };
-
-  // Same reasoning as the Finance grid fix: a CSS calc() width sizes each
-  // card off its actual parent, so it lands at exactly `columns` across no
-  // matter how wide the sidebar/content column really is - no need to guess
-  // the screen width.
-  const CARD_GRID_GAP = 12;
-  const webCardWidth = (columns: number) =>
-    `calc((100% - ${CARD_GRID_GAP * (columns - 1)}px) / ${columns})` as unknown as number;
-
-  const jobCard = (item: JobItem) =>
+  const jobRow = (item: JobItem) =>
     item.kind === 'request' ? (
-      item.request.reseller_id ? (
-        <MyRequestCard item={item.request} />
-      ) : (
-        <IncomingRequestCard item={item.request} />
-      )
-    ) : userId ? (
-      <OrderCard order={item.order} productMap={productMap} viewerId={userId} basePath="/(reseller)" roleLabel="Selling" />
-    ) : null;
+      <RequestJobRow key={`r-${item.id}`} item={item.request} stage={activeStage} wide={isWideWeb} />
+    ) : (
+      <OrderJobRow key={`o-${item.id}`} order={item.order} stage={activeStage} wide={isWideWeb} productMap={productMap} />
+    );
 
-  return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
-      {isWideWeb ? (
-        <View className="mb-4 flex-row flex-wrap" style={{ gap: 8 }}>
-          {STAGE_ORDER.map((stage) => stageChip(stage, false))}
-        </View>
-      ) : (
-        <ScrollView
-          ref={chipScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0, flexShrink: 0 }}
-          className="mb-4"
-          contentContainerStyle={{ alignItems: 'center', gap: 8, paddingRight: 8 }}
+  const emptyText = isLoading ? 'Loading…' : 'Nothing here right now.';
+
+  if (isWideWeb) {
+    const sidePill = (stage: Stage) => {
+      const meta = STAGE_META[stage];
+      const active = activeStage === stage;
+      return (
+        <Pressable
+          key={stage}
+          onPress={() => setJobStage(stage)}
+          className="flex-row items-center gap-1.5 rounded-full bg-white px-3"
+          style={{ height: 34, borderWidth: active ? 2 : 1, borderColor: active ? meta.color : '#E5E7EB' }}
         >
-          {STAGE_ORDER.map((stage) => stageChip(stage, true))}
-        </ScrollView>
-      )}
+          <Ionicons name={meta.icon} size={14} color={meta.color} />
+          <Text className="text-[12.5px] font-semibold" style={{ color: stage === 'cancelled' ? '#6B7280' : meta.color }}>
+            {meta.label} ({countOf(stage)})
+          </Text>
+        </Pressable>
+      );
+    };
 
-      <Text className="mb-3 text-base font-bold text-gray-900">{STAGE_META[activeStage].label}</Text>
-
-      {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && stageJobs.length === 0 && <Text className="text-gray-500">Nothing here right now.</Text>}
-
-      {isWideWeb ? (
-        // Every request/order card used to render at full content-column
-        // width in a single column (a "1x1" tile per row) - way more
-        // whitespace than a laptop screen needs. Lay them out 2-across
-        // instead so more of the queue is visible without scrolling.
-        <ScrollView contentContainerStyle={{ paddingBottom: 90 }}>
-          <View className="flex-row flex-wrap" style={{ gap: CARD_GRID_GAP }}>
-            {stageJobs.map((item) => (
-              <View key={`${item.kind}-${item.id}`} style={{ width: webCardWidth(2) }}>
-                {jobCard(item)}
+    return (
+      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 32, paddingTop: 20, gap: 16 }}>
+        <View className="flex-row items-stretch" style={{ gap: 6 }}>
+          {WORKING_STAGES.map((stage, index) => {
+            const meta = STAGE_META[stage];
+            const active = activeStage === stage;
+            return (
+              <View key={stage} className="flex-1 flex-row items-stretch" style={{ gap: 6 }}>
+                <Pressable
+                  onPress={() => setJobStage(stage)}
+                  className="flex-1 flex-row items-center gap-2 rounded-xl bg-white px-3 py-3"
+                  style={{ borderWidth: active ? 2 : 1, borderColor: active ? meta.color : '#E5E7EB' }}
+                >
+                  <View className="h-7 w-7 items-center justify-center rounded-full" style={{ backgroundColor: meta.color }}>
+                    <Text className="text-[13px] font-extrabold text-white">{countOf(stage)}</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[13px] font-bold leading-4 text-gray-900" numberOfLines={2}>
+                      {meta.label}
+                    </Text>
+                    <Text className="mt-0.5 text-[11.5px] leading-4 text-gray-500" numberOfLines={2}>
+                      {meta.todo}
+                    </Text>
+                  </View>
+                </Pressable>
+                {index < WORKING_STAGES.length - 1 && (
+                  <View className="justify-center">
+                    <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                  </View>
+                )}
               </View>
+            );
+          })}
+        </View>
+
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row" style={{ gap: 8 }}>
+            {sidePill('completed')}
+            {sidePill('cancelled')}
+          </View>
+          <Pressable
+            onPress={() => router.push('/(reseller)/new-request')}
+            className="flex-row items-center gap-1.5 rounded-lg bg-orange-500 px-4"
+            style={{ height: 38 }}
+          >
+            <Ionicons name="add" size={18} color="white" />
+            <Text className="text-sm font-semibold text-white">New request</Text>
+          </Pressable>
+        </View>
+
+        <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+          <View className="flex-row items-center gap-2.5 px-[18px] py-3.5" style={{ backgroundColor: activeMeta.tint }}>
+            <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeMeta.color }} />
+            <Text className="text-[15px] font-bold text-gray-900">{activeMeta.label}</Text>
+            <Text className="text-[13px] text-gray-500">— {activeMeta.todo}</Text>
+          </View>
+          <View className="flex-row px-[18px] py-2" style={{ gap: 16 }}>
+            {(
+              [
+                ['Job', { flex: COLS.job }],
+                ['Where / when', { flex: COLS.where }],
+                ['Type', { width: COLS.type }],
+                ['Amount', { width: COLS.amount, textAlign: 'right' }],
+                ['Next step', { width: COLS.action, textAlign: 'center' }],
+                ['', { width: COLS.manage }],
+              ] as const
+            ).map(([label, style]) => (
+              <Text key={label || 'manage'} className="text-[11px] font-bold uppercase tracking-wide text-gray-400" style={style}>
+                {label}
+              </Text>
             ))}
           </View>
-        </ScrollView>
-      ) : (
-        <FlatList
-          data={stageJobs}
-          keyExtractor={(item) => `${item.kind}-${item.id}`}
-          renderItem={({ item }) => jobCard(item)}
-          contentContainerStyle={{ paddingBottom: 90 }}
-        />
-      )}
+          {stageJobs.length === 0 ? (
+            <Text className="border-t border-gray-100 px-[18px] py-6 text-sm text-gray-500">{emptyText}</Text>
+          ) : (
+            stageJobs.map(jobRow)
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-gray-50 pt-3.5">
+      <ScrollView
+        ref={chipScrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0, flexShrink: 0 }}
+        contentContainerStyle={{ alignItems: 'center', gap: 8, paddingHorizontal: 16 }}
+      >
+        {STAGE_ORDER.map((stage) => {
+          const meta = STAGE_META[stage];
+          const active = activeStage === stage;
+          return (
+            <Pressable
+              key={stage}
+              onPress={() => setJobStage(stage)}
+              onLayout={(e) => {
+                chipLayouts.current[stage] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
+              }}
+              className="flex-row items-center gap-2 rounded-full py-2 pl-2 pr-3"
+              style={{
+                backgroundColor: active ? meta.color : '#FFFFFF',
+                borderWidth: active ? 0 : 1,
+                borderColor: '#E5E7EB',
+              }}
+            >
+              <View
+                className="h-6 items-center justify-center rounded-full px-1.5"
+                style={{ minWidth: 24, backgroundColor: active ? 'rgba(255,255,255,0.25)' : meta.color }}
+              >
+                <Text className="text-xs font-extrabold text-white">{countOf(stage)}</Text>
+              </View>
+              <Text className={`text-[13px] font-bold ${active ? 'text-white' : 'text-gray-700'}`}>{meta.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View className="mx-4 mb-3 mt-2.5 flex-row items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ backgroundColor: activeMeta.tint }}>
+        <View className="h-2 w-2 rounded-full" style={{ backgroundColor: activeMeta.color }} />
+        <Text className="text-[13px] text-gray-700">
+          <Text className="font-bold text-gray-900">Next step: </Text>
+          {activeMeta.todo.toLowerCase()}
+        </Text>
+      </View>
+
+      <FlatList
+        data={stageJobs}
+        keyExtractor={(item) => `${item.kind}-${item.id}`}
+        renderItem={({ item }) => jobRow(item)}
+        ListEmptyComponent={<Text className="text-gray-500">{emptyText}</Text>}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90 }}
+      />
 
       <Pressable
         onPress={() => router.push('/(reseller)/new-request')}
