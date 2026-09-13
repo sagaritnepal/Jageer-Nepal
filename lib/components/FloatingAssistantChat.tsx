@@ -27,7 +27,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-const BUTTON_SIZE = 64;
+const BUTTON_SIZE = 52;
 
 /** The app-wide floating chat launcher: the owner's own photo in a
  * shadow-lifted circle, bottom-left, on every Finance-capable screen (see
@@ -198,13 +198,13 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
         <View
           style={{
             position: 'absolute',
-            top: 1,
-            right: 1,
-            width: 10,
-            height: 10,
+            top: 0,
+            right: 0,
+            width: 8,
+            height: 8,
             borderRadius: 999,
             backgroundColor: '#34D399',
-            borderWidth: 2,
+            borderWidth: 1.5,
             borderColor: '#fff',
           }}
         />
@@ -215,16 +215,16 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
             position: 'absolute',
             bottom: -2,
             right: -2,
-            width: 22,
-            height: 22,
+            width: 18,
+            height: 18,
             shadowColor: '#101828',
             shadowOpacity: 0.18,
-            shadowRadius: 6,
+            shadowRadius: 5,
             shadowOffset: { width: 0, height: 2 },
             elevation: 4,
           }}
         >
-          <Ionicons name="chatbubble-ellipses-outline" size={11} color="#2563EB" />
+          <Ionicons name="chatbubble-ellipses-outline" size={9} color="#2563EB" />
         </View>
       </Animated.View>
 
