@@ -8,6 +8,7 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
+import { SaveContactButton } from '../../lib/components/SaveContactButton';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import type { Profile, ServiceCategory, ServiceRequest, RequestStatus } from '../../types/database.types';
 
@@ -115,6 +116,7 @@ export default function ClientDashboard() {
                     <Text className="text-gray-400">{new Date(lastRequest.created_at).toLocaleDateString()}</Text>
                   </Text>
                   <StatusPill status={lastRequest.status} />
+                  {userId && <SaveContactButton clientId={userId} contactId={reseller.id} />}
                   <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
                 </Pressable>
               ))}

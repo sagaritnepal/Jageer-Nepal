@@ -11,6 +11,7 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(client)/dashboard', label: 'Home', icon: 'home' },
   { href: '/(client)/requests', label: 'My Requests', icon: 'clipboard' },
   { href: '/(client)/market', label: 'Market', icon: 'bag' },
+  { href: '/(client)/contacts', label: 'Contacts', icon: 'people' },
 ];
 
 export default function ClientLayout() {
@@ -42,6 +43,14 @@ export default function ClientLayout() {
           title: 'Marketplace',
           tabBarLabel: 'Market',
           tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="contacts"
+        options={{
+          title: 'Saved Contacts',
+          tabBarLabel: 'Contacts',
+          tabBarIcon: ({ color, focused }) => <TabIcon name="people" color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />

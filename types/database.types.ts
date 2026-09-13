@@ -68,6 +68,18 @@ export interface Quotation {
   updated_at: string;
 }
 
+// A client's bookmarked reseller/technician contact ("Saved Contacts"), so
+// they can find and call/message them again later without hunting through
+// old requests. contact_id points at a profiles row (role 'reseller' or
+// 'technician') - the actual name/phone/role is read from that profile.
+export interface SavedContact {
+  id: string;
+  client_id: string;
+  contact_id: string;
+  note: string | null;
+  created_at: string;
+}
+
 export interface RewardPointEvent {
   id: string;
   user_id: string;
@@ -435,6 +447,12 @@ export interface Database {
         Relationships: [];
       };
       customers: { Row: Customer; Insert: Partial<Customer>; Update: Partial<Customer>; Relationships: [] };
+      saved_contacts: {
+        Row: SavedContact;
+        Insert: Partial<SavedContact>;
+        Update: Partial<SavedContact>;
+        Relationships: [];
+      };
       finance_items: { Row: FinanceItem; Insert: Partial<FinanceItem>; Update: Partial<FinanceItem>; Relationships: [] };
       account_transfers: {
         Row: AccountTransfer;
