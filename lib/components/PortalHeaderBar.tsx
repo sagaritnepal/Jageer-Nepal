@@ -35,14 +35,7 @@ export function PortalHeaderBar({ title }: { title?: string }) {
       <Text className="flex-1 text-xl font-bold text-gray-900" numberOfLines={1}>
         {title ?? ''}
       </Text>
-      <Pressable
-        onPress={() => profileRoute && router.push(profileRoute as never)}
-        hitSlop={8}
-        className="flex-row items-center gap-2"
-      >
-        <Text className="max-w-[140px] text-sm font-medium text-gray-600" numberOfLines={1}>
-          {profile?.full_name ?? ''}
-        </Text>
+      <Pressable onPress={() => profileRoute && router.push(profileRoute as never)} hitSlop={8}>
         <View className="h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-orange-100">
           {profile?.avatar_url ? (
             <Image source={{ uri: profile.avatar_url }} className="h-full w-full" resizeMode="cover" />
