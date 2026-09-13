@@ -2,7 +2,9 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '../supabase';
+import { supabase, AUTH_STORAGE_KEY } from '../supabase';
+import { SecureAuthStorage } from '../utils/secureAuthStorage';
+import { queryClient } from '../providers/QueryProvider';
 import type { Profile, UserRole } from '../../types/database.types';
 
 interface AuthState {
@@ -27,8 +29,28 @@ export const useAuthStore = create<AuthState>((set) => ({
   // button, so wiping them on every sign-out would defeat the feature
   // entirely (see lib/utils/biometricLogin.ts - they're only cleared when
   // the saved password stops working, e.g. it was changed elsewhere).
+  //
+  // `scope: 'global'` revokes every refresh token this user has - not just
+  // this device's - so "Sign Out" actually invalidates the session in the
+  // database, not just the local app state. Best-effort: if that network
+  // call throws or the server rejects it for a real reason (not one of the
+  // already-tolerated 401/403/404/session-missing cases), supabase-js
+  // deliberately skips clearing its own persisted session (see its
+  // `_signOut`) - left alone, that session could silently resurrect on the
+  // next app launch even though this screen already shows signed out. The
+  // explicit storage removal below forces the local wipe unconditionally,
+  // and clearing the query cache stops a second account signing in on this
+  // device from briefly seeing the previous user's cached data.
   signOut: async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut({ scope: 'global' });
+    } catch {
+      // Offline or the server errored - already logged nowhere useful to
+      // surface this to the user for a Sign Out button, so fall through to
+      // the unconditional local wipe below regardless.
+    }
+    await SecureAuthStorage.removeItem(AUTH_STORAGE_KEY);
+    queryClient.clear();
     set({ session: null, profile: null });
   },
 }));

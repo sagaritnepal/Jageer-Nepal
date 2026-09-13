@@ -39,12 +39,29 @@ export default function Register() {
 
   const selectedRole = ROLES.find((r) => r.value === role)!;
 
+  // Supabase's own server-side minimum is just 6 characters with no
+  // complexity requirement, and this screen previously enforced nothing on
+  // top of that - a user could register with a password like "a". This is
+  // the app's own floor, checked before the request ever goes out.
+  function passwordIssue(value: string): string | null {
+    if (value.length < 8) return 'Use at least 8 characters.';
+    if (!/[a-zA-Z]/.test(value) || !/[0-9]/.test(value)) return 'Mix letters and numbers.';
+    return null;
+  }
+
   async function handleRegister() {
+    const trimmedEmail = email.trim().toLowerCase();
+    const issue = passwordIssue(password);
+    if (issue) {
+      showAlert('Choose a stronger password', issue);
+      return;
+    }
+
     setIsSubmitting(true);
     const { error } = await supabase.auth.signUp({
-      email,
+      email: trimmedEmail,
       password,
-      options: { data: { full_name: fullName, role } },
+      options: { data: { full_name: fullName.trim(), role } },
     });
     setIsSubmitting(false);
 
@@ -127,8 +144,9 @@ export default function Register() {
           secureTextEntry
           placeholder="••••••••"
           placeholderTextColor="#9CA3AF"
-          className="mb-6 rounded-xl border-[1.5px] border-gray-200 px-4 py-3.5 text-sm text-gray-900"
+          className="rounded-xl border-[1.5px] border-gray-200 px-4 py-3.5 text-sm text-gray-900"
         />
+        <Text className="mb-6 mt-1.5 text-[11px] text-gray-400">At least 8 characters, with letters and numbers.</Text>
 
         <Pressable
           onPress={handleRegister}

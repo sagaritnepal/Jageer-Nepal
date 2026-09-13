@@ -14,6 +14,17 @@ import {
   clearBiometricCredentials,
 } from '../../lib/utils/biometricLogin';
 
+// Slows down repeated password guessing through the app's own UI (Supabase
+// Auth rate-limits at the API level regardless, but that's no reason for the
+// app itself to let someone hammer the button with no friction at all).
+// Only kicks in after a few genuine wrong-password rejections - the first
+// couple of typos are never penalized.
+const LOCKOUT_THRESHOLD = 3;
+function lockoutSecondsFor(failedAttempts: number): number {
+  if (failedAttempts < LOCKOUT_THRESHOLD) return 0;
+  return Math.min(30, 10 * (failedAttempts - LOCKOUT_THRESHOLD + 1));
+}
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,6 +32,9 @@ export default function Login() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [showBiometricButton, setShowBiometricButton] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [lockSecondsLeft, setLockSecondsLeft] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -28,6 +42,23 @@ export default function Login() {
       setShowBiometricButton(hasCreds && hardwareReady);
     })();
   }, []);
+
+  // Ticks the countdown shown on the disabled button and clears the lock
+  // itself once it expires - a plain setTimeout for the unlock wouldn't
+  // update the displayed "Try again in Ns" text in between.
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const tick = () => {
+      const secondsLeft = Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+      setLockSecondsLeft(secondsLeft);
+      if (secondsLeft === 0) setLockedUntil(null);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [lockedUntil]);
+
+  const isLocked = lockedUntil != null && lockSecondsLeft > 0;
 
   // On some Android devices KeyboardAvoidingView's automatic resize doesn't
   // kick in (edge-to-edge layouts can make its measurement unreliable), so
@@ -77,15 +108,27 @@ export default function Login() {
   }
 
   async function handleLogin() {
+    if (isLocked) return;
+
+    const trimmedEmail = email.trim().toLowerCase();
     setIsSubmitting(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
     setIsSubmitting(false);
 
     if (error) {
-      showAlert('Login failed', error.message);
+      const nextFailedAttempts = failedAttempts + 1;
+      setFailedAttempts(nextFailedAttempts);
+      const lockSeconds = lockoutSecondsFor(nextFailedAttempts);
+      if (lockSeconds > 0) {
+        setLockedUntil(Date.now() + lockSeconds * 1000);
+        showAlert('Too many attempts', `Wait ${lockSeconds}s before trying again.`);
+      } else {
+        showAlert('Login failed', error.message);
+      }
       return;
     }
-    await offerBiometricSignIn(email, password);
+    setFailedAttempts(0);
+    await offerBiometricSignIn(trimmedEmail, password);
     router.replace('/');
   }
 
@@ -177,10 +220,12 @@ export default function Login() {
         <View className="mb-4 flex-row gap-2.5">
           <Pressable
             onPress={handleLogin}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isLocked}
             className="flex-1 items-center rounded-xl bg-orange-500 py-3.5 disabled:opacity-50"
           >
-            <Text className="text-[15px] font-bold text-white">{isSubmitting ? 'Signing in…' : 'Sign in'}</Text>
+            <Text className="text-[15px] font-bold text-white">
+              {isLocked ? `Try again in ${lockSecondsLeft}s` : isSubmitting ? 'Signing in…' : 'Sign in'}
+            </Text>
           </Pressable>
           {showBiometricButton && (
             <Pressable
