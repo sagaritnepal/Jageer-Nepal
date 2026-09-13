@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-13T00:00:00.000Z",
+  "title": "Design System: Jageer Nepal",
+  "extensions": {
+    "colorMeta": {
+      "trusted-blue": { "role": "primary", "displayName": "Trusted Blue", "canonical": "#3b82f6", "tonalRamp": ["#172554", "#1e3a8a", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe", "#eff6ff"] },
+      "neutral-canvas": { "role": "neutral", "displayName": "Neutral Canvas", "canonical": "#f9fafb", "tonalRamp": ["#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#e5e7eb", "#f3f4f6", "#f9fafb", "#ffffff"] },
+      "status-success-text": { "role": "success", "displayName": "Success Green", "canonical": "#15803d", "tonalRamp": ["#14532d", "#166534", "#15803d", "#16a34a", "#22c55e", "#4ade80", "#86efac", "#bbf7d0", "#dcfce7", "#f0fdf4"] },
+      "status-warning-text": { "role": "warning", "displayName": "Warning Amber", "canonical": "#d97706", "tonalRamp": ["#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fde68a", "#fef3c7", "#fffbeb"] },
+      "status-danger-text": { "role": "danger", "displayName": "Danger Red", "canonical": "#dc2626", "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fecaca", "#fee2e2", "#fef2f2"] }
+    },
+    "typographyMeta": {
+      "heading": { "displayName": "Heading", "purpose": "Screen titles, greetings, empty-state headlines." },
+      "title": { "displayName": "Title", "purpose": "Card and section titles, identity-band name." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, field values, helper text." },
+      "label": { "displayName": "Label", "purpose": "Status badges, grouped-list section headers, tab labels." }
+    },
+    "shadows": [
+      { "name": "floating-surface", "value": "0 -2px 8px rgba(0,0,0,0.06)", "purpose": "A scrolling panel, bottom bar, or bubble stacked above/below a fixed sibling - never an ordinary card at rest." }
+    ],
+    "motion": [
+      { "name": "count-up", "value": "Animated.timing, 700ms, native easing default", "purpose": "A numeric stat animates up into place on mount/change (rating, points) instead of appearing flat - the one authored motion moment, not scattered per-element effects." }
+    ],
+    "breakpoints": [
+      { "name": "web-frame-max", "value": "640px" },
+      { "name": "sidebar-min", "value": "768px" },
+      { "name": "content-max", "value": "1120px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one call-to-action color on a screen.",
+      "html": "<button class=\"ds-btn-primary\">Request</button>",
+      "css": ".ds-btn-primary { background: #2563eb; color: #ffffff; padding: 10px 18px; border-radius: 999px; border: none; font-weight: 700; font-size: 13px; transition: opacity 0.15s; } .ds-btn-primary:hover { opacity: 0.92; } .ds-btn-primary:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Bordered, neutral action - Cancel, Edit-adjacent actions.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { background: #ffffff; color: #4b5563; padding: 10px 18px; border-radius: 8px; border: 1px solid #d1d5db; font-weight: 600; font-size: 13px; } .ds-btn-secondary:hover { background: #f9fafb; } .ds-btn-secondary:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Soft-tint pill naming a state (resolved, pending, cancelled).",
+      "html": "<span class=\"ds-badge ds-badge-success\">RESOLVED</span>",
+      "css": ".ds-badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; } .ds-badge-success { background: #f0fdf4; color: #15803d; } .ds-badge-warning { background: #fffbeb; color: #d97706; } .ds-badge-danger { background: #fef2f2; color: #dc2626; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The standard bordered, flat content container.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Your details</div><div class=\"ds-card-body\">Content</div></div>",
+      "css": ".ds-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 20px; } .ds-card-title { font-weight: 700; font-size: 14px; color: #111827; margin-bottom: 12px; } .ds-card-body { font-size: 14px; color: #111827; }"
+    },
+    {
+      "name": "Grouped List Row",
+      "kind": "custom",
+      "refersTo": "grouped-list-row",
+      "description": "The signature settings-row unit: icon chip, label + caption, trailing accessory, stacked into one bordered container with hairline dividers between rows.",
+      "html": "<div class=\"ds-group\"><div class=\"ds-row\"><div class=\"ds-row-icon\">♥</div><div class=\"ds-row-text\"><div class=\"ds-row-label\">Biometric Unlock</div><div class=\"ds-row-caption\">Use your fingerprint or face to unlock the app.</div></div><div class=\"ds-row-chevron\">›</div></div></div>",
+      "css": ".ds-group { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; } .ds-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #f3f4f6; } .ds-row:last-child { border-bottom: none; } .ds-row-icon { width: 36px; height: 36px; border-radius: 999px; background: #eff6ff; display: flex; align-items: center; justify-content: center; color: #2563eb; flex-shrink: 0; } .ds-row-text { flex: 1; } .ds-row-label { font-weight: 600; color: #111827; font-size: 14px; } .ds-row-caption { font-size: 12px; color: #9ca3af; margin-top: 2px; } .ds-row-chevron { color: #d1d5db; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Trusted Toolbelt",
+    "overview": "Jageer Nepal reads as equipment you rely on, not a storefront you browse: confident, no-nonsense, built for getting a job done. One blue carries the whole brand - no secondary or tertiary accent competes with it - set against white surfaces and a soft gray canvas, separated by hairline borders rather than shadows. Type leans bold and heavy at every level except body copy; there is no ornamental serif, no display face, no gradient, nothing decorative standing between the visitor and the task. The system is the same across every role (client, technician, reseller, wholesaler, admin) and every platform it ships to (iOS, Android, web) - one shared toolbelt, not five branded apps wearing the same logo.",
+    "keyCharacteristics": [
+      "One brand blue, no competing accent",
+      "Generous, consistent rounding (16px cards, full-round pills/avatars) - never a sharp corner",
+      "Flat-and-bordered by default; shadow is reserved for things that float above the page",
+      "Bold/extrabold type carries hierarchy; body copy stays regular weight",
+      "Soft-tint semantic badges (light background, saturated text) for every status"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Trusted Blue is the only saturated color that carries UI meaning (action, selection, identity). Status pairs are the sole exception, and they are always soft-tint, never solid-fill.", "section": "colors" },
+      { "name": "The Soft Badge Rule", "body": "A status is always a light-tint background with saturated text of the same hue family, rounded full, never a solid-fill chip.", "section": "colors" },
+      { "name": "The Weight-Not-Family Rule", "body": "Never introduce a second font family for hierarchy or \"brand feel.\" A heavier weight of the same system sans is always the right move.", "section": "typography" },
+      { "name": "The Border-Not-Shadow Rule", "body": "A card or list row is separated from its neighbors by a 1px border, never a shadow. Shadow is earned only by an element that is actually stacked above other content.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use Trusted Blue for the one thing on a screen that means \"act\" or \"this is selected\" - not for decoration.",
+      "Do separate cards, rows, and sections with borders/hairlines, not shadows.",
+      "Do reach for a grouped list (not repeated cards) once three or more simple rows would otherwise stack.",
+      "Do carry a soft-tint status pair whenever the product needs to say pending/success/danger.",
+      "Do draw icons from Ionicons only, one consistent outline/filled pairing for inactive/active state."
+    ],
+    "donts": [
+      "Don't introduce a second accent color; status pairs are the only sanctioned exception, and they stay soft-tint.",
+      "Don't use emoji as an icon substitute anywhere in the UI.",
+      "Don't add a shadow to an element that isn't actually floating above other content.",
+      "Don't introduce a display/serif font for \"brand feel\" - hierarchy comes from weight on the one system sans.",
+      "Don't use a solid-fill red (or any solid semantic color) for a status badge or destructive button; keep destructive actions as bordered white with red text."
+    ]
+  }
+}

@@ -1,6 +1,24 @@
 // lib/components/ProfileScreen.tsx
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Image, Switch } from 'react-native';
+//
+// DIRECTION CONTRACT (impeccable, seed 78886136)
+// THESIS: identity is a fixed anchor, not a hero that scrolls away; settings
+//   are a native grouped list, never another stack of identical cards.
+// OWN-WORLD: existing NativeWind blue/white system, ROLE_ACCENT, no new
+//   palette or component language.
+// STORY: the visitor confirms who they are once, then scans compact grouped
+//   rows for the task they came to do, without re-orienting on every scroll.
+// FIRST VIEWPORT: a compact colored identity band (avatar left, name/role/
+//   stats right) pinned above an independently scrolling panel; "Your
+//   details" as its own card, then one "Account" and (technician/reseller)
+//   one "Work" grouped list replacing the old repeated-card stack.
+// FORM: dealt lead ("pinned identity, settings scroll beneath"), surface
+//   scope, seed 78886136 - donated a tactile count-up from a declined
+//   instrument-panel challenger's interaction grammar only, no material.
+// FINISH: unreviewed and undocumented is unfinished; this build ends with
+//   the finish review, the verdict, DESIGN.md, and every shipping raster
+//   carrying its provenance.
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, View, Text, Pressable, ScrollView, TextInput, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
@@ -23,6 +41,14 @@ const ROLE_BASE_PATH: Record<UserRole, string> = {
   admin: '/(admin)',
 };
 
+const ROLE_LABEL: Record<UserRole, string> = {
+  client: 'Client',
+  technician: 'Technician',
+  reseller: 'Reseller',
+  wholesaler: 'Wholesaler',
+  admin: 'Admin',
+};
+
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
   return name
@@ -31,6 +57,28 @@ function initialsOf(name: string | null | undefined) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('');
+}
+
+/** A number that counts up into place on first mount/change instead of
+ * appearing flat - the one authored motion moment on this screen (an
+ * instrument panel's tactile digit-change, borrowed as pure interaction,
+ * never its neon/glass material) rather than scattered per-element effects. */
+function AnimatedNumber({ value, decimals = 0, style }: { value: number; decimals?: number; style?: any }) {
+  const [display, setDisplay] = useState(0);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    anim.setValue(0);
+    const listener = anim.addListener(({ value: v }) => setDisplay(v));
+    Animated.timing(anim, {
+      toValue: value,
+      duration: 700,
+      useNativeDriver: false,
+    }).start();
+    return () => anim.removeListener(listener);
+  }, [value]);
+
+  return <Text style={style}>{display.toFixed(decimals)}</Text>;
 }
 
 function AvatarEditor({ profile }: { profile: Profile }) {
@@ -75,18 +123,85 @@ function AvatarEditor({ profile }: { profile: Profile }) {
   }
 
   return (
-    <Pressable onPress={handlePick} disabled={uploading} className="relative">
-      <View className="h-32 w-32 items-center justify-center overflow-hidden rounded-2xl border-2 border-white/40 bg-white/20">
+    <Pressable onPress={handlePick} disabled={uploading} className="relative" hitSlop={4}>
+      <View className="h-[68px] w-[68px] items-center justify-center overflow-hidden rounded-2xl border-2 border-white/40 bg-white/20">
         {profile.avatar_url ? (
           <Image source={{ uri: profile.avatar_url }} className="h-full w-full" resizeMode="cover" />
         ) : (
-          <Text className="text-4xl font-extrabold text-white">{initialsOf(profile.full_name)}</Text>
+          <Text className="text-2xl font-extrabold text-white">{initialsOf(profile.full_name)}</Text>
         )}
       </View>
-      <View className="absolute -bottom-1.5 -right-1.5 h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-gray-900">
-        <Ionicons name={uploading ? 'hourglass-outline' : 'camera'} size={16} color="white" />
+      <View className="absolute -bottom-1 -right-1 h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-900">
+        <Ionicons name={uploading ? 'hourglass-outline' : 'camera'} size={11} color="white" />
       </View>
     </Pressable>
+  );
+}
+
+/** The pinned identity band - fixed above the scrolling settings panel, so
+ * the visitor is never scrolled away from confirmation of who they are.
+ * Compact by design: an anchor, not the old full hero. */
+function IdentityBand({ profile }: { profile: Profile | null }) {
+  const accent = (profile && ROLE_ACCENT[profile.role]) || ROLE_ACCENT.client;
+  const { data: reviews } = useSupabaseQuery('reviews', {
+    filters: profile?.role === 'technician' ? { technician_id: profile.id } : {},
+    enabled: profile?.role === 'technician',
+  });
+  const ratingAverage = useMemo(() => {
+    if (!reviews || reviews.length === 0) return null;
+    return reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+  }, [reviews]);
+
+  return (
+    <View style={{ backgroundColor: accent }} className="flex-row items-center gap-3.5 px-6 pb-5 pt-16">
+      {profile ? (
+        <AvatarEditor profile={profile} />
+      ) : (
+        <View className="h-[68px] w-[68px] items-center justify-center rounded-2xl border-2 border-white/40 bg-white/20">
+          <Text className="text-2xl font-extrabold text-white">?</Text>
+        </View>
+      )}
+
+      <View className="flex-1">
+        <Text className="text-[17px] font-extrabold text-white" numberOfLines={1}>
+          {profile?.full_name ?? 'Your profile'}
+        </Text>
+        <View className="mt-1 flex-row items-center gap-2">
+          <View className="rounded-full bg-white/20 px-2.5 py-0.5">
+            <Text className="text-[10px] font-bold uppercase tracking-wide text-white">
+              {profile ? ROLE_LABEL[profile.role] : ''}
+            </Text>
+          </View>
+
+          {profile?.role === 'technician' && (
+            <View className="flex-row items-center gap-1">
+              <Ionicons name="star" size={11} color="#fff" />
+              <Text className="text-xs font-semibold text-white/90">
+                {ratingAverage == null ? (
+                  '— rated'
+                ) : (
+                  <>
+                    <AnimatedNumber
+                      value={ratingAverage}
+                      decimals={1}
+                      style={{ fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.9)' }}
+                    />
+                    {` (${reviews?.length ?? 0})`}
+                  </>
+                )}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {profile?.role === 'technician' && !!profile.city && (
+          <View className="mt-1 flex-row items-center gap-1">
+            <Ionicons name="location" size={11} color="rgba(255,255,255,0.75)" />
+            <Text className="text-[11px] text-white/75">{profile.city}</Text>
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -126,26 +241,34 @@ function ProfileDetails({ profile }: { profile: Profile }) {
 
   if (!editing) {
     return (
-      <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
-        <View className="mb-3 flex-row items-center justify-between">
+      <View className="rounded-2xl border border-gray-200 bg-white p-5">
+        <View className="mb-3.5 flex-row items-center justify-between">
           <Text className="text-sm font-semibold text-gray-900">Your details</Text>
-          <Pressable onPress={startEditing} className="flex-row items-center gap-1">
+          <Pressable onPress={startEditing} className="flex-row items-center gap-1" hitSlop={6}>
             <Ionicons name="pencil" size={13} color="#2563eb" />
-            <Text className="text-xs font-bold text-orange-600">Edit</Text>
+            <Text className="text-xs font-bold text-blue-600">Edit</Text>
           </Pressable>
         </View>
-        <Text className="text-sm text-gray-400">Name</Text>
-        <Text className="mb-3 text-gray-900">{profile.full_name ?? 'Not set'}</Text>
-        <Text className="text-sm text-gray-400">Address</Text>
-        <Text className="mb-3 text-gray-900">{profile.city ?? 'Not set'}</Text>
-        <Text className="text-sm text-gray-400">Contact</Text>
-        <Text className="text-gray-900">{profile.phone ?? 'Not set'}</Text>
+        <View className="flex-row">
+          <View className="flex-1">
+            <Text className="text-xs text-gray-400">Name</Text>
+            <Text className="mt-0.5 text-sm text-gray-900">{profile.full_name ?? 'Not set'}</Text>
+          </View>
+          <View className="flex-1">
+            <Text className="text-xs text-gray-400">Address</Text>
+            <Text className="mt-0.5 text-sm text-gray-900">{profile.city ?? 'Not set'}</Text>
+          </View>
+        </View>
+        <View className="mt-3.5 border-t border-gray-100 pt-3.5">
+          <Text className="text-xs text-gray-400">Contact</Text>
+          <Text className="mt-0.5 text-sm text-gray-900">{profile.phone ?? 'Not set'}</Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
+    <View className="rounded-2xl border border-gray-200 bg-white p-5">
       <Text className="mb-3 text-sm font-semibold text-gray-900">Edit your details</Text>
 
       <Text className="mb-1 text-xs font-medium text-gray-500">Name</Text>
@@ -183,7 +306,7 @@ function ProfileDetails({ profile }: { profile: Profile }) {
         <Pressable
           onPress={handleSave}
           disabled={saving}
-          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
+          className="flex-1 items-center rounded-lg bg-blue-600 py-2.5 disabled:opacity-50"
         >
           <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save'}</Text>
         </Pressable>
@@ -192,7 +315,60 @@ function ProfileDetails({ profile }: { profile: Profile }) {
   );
 }
 
-function BiometricLockToggle({ profile }: { profile: Profile }) {
+/** A single row inside a GroupedList - the settings-list unit that replaces
+ * the old "one bordered card per setting" stack (a banned same-size-card
+ * scaffold). Every group row shares this exact anatomy: icon chip, label +
+ * caption, trailing accessory. */
+function GroupRow({
+  icon,
+  iconColor = '#2563eb',
+  iconBg = 'bg-blue-50',
+  label,
+  caption,
+  onPress,
+  trailing,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+  iconBg?: string;
+  label: string;
+  caption?: string;
+  onPress?: () => void;
+  trailing?: React.ReactNode;
+}) {
+  const content = (
+    <View className="flex-row items-center gap-3 px-4 py-3.5">
+      <View className={`h-9 w-9 items-center justify-center rounded-full ${iconBg}`}>
+        <Ionicons name={icon} size={17} color={iconColor} />
+      </View>
+      <View className="flex-1">
+        <Text className="font-semibold text-gray-900">{label}</Text>
+        {!!caption && <Text className="mt-0.5 text-xs text-gray-400">{caption}</Text>}
+      </View>
+      {trailing ?? (onPress ? <Ionicons name="chevron-forward" size={18} color="#D1D5DB" /> : null)}
+    </View>
+  );
+
+  if (!onPress) return content;
+  return <Pressable onPress={onPress}>{content}</Pressable>;
+}
+
+/** Groups an array of rows into one bordered container with hairline
+ * dividers between rows (never after the last) - the native grouped/inset
+ * list this whole redesign exists to use instead of a stack of cards. */
+function GroupedList({ rows }: { rows: React.ReactNode[] }) {
+  return (
+    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+      {rows.map((row, i) => (
+        <View key={i} className={i < rows.length - 1 ? 'border-b border-gray-100' : ''}>
+          {row}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function BiometricLockRow({ profile }: { profile: Profile }) {
   const enabled = useBiometricLockStore((state) => state.enabled);
   const [hardwareReady, setHardwareReady] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -216,26 +392,20 @@ function BiometricLockToggle({ profile }: { profile: Profile }) {
 
   if (hardwareReady === false) {
     return (
-      <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
-        <Text className="font-semibold text-gray-900">Biometric Unlock</Text>
-        <Text className="mt-1 text-xs text-gray-400">
-          Set up a fingerprint or face unlock in your phone's settings to use this.
-        </Text>
-      </View>
+      <GroupRow
+        icon="finger-print-outline"
+        label="Biometric Unlock"
+        caption="Set up a fingerprint or face unlock in your phone's settings to use this."
+      />
     );
   }
 
   return (
-    <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
-      <View className="flex-row items-center justify-between">
-        <View className="flex-1 pr-3">
-          <Text className="font-semibold text-gray-900">Biometric Unlock</Text>
-          <Text className="mt-0.5 text-xs text-gray-400">
-            {enabled
-              ? "You'll unlock the app with your fingerprint or face."
-              : 'Use your fingerprint or face to unlock the app.'}
-          </Text>
-        </View>
+    <GroupRow
+      icon="finger-print-outline"
+      label="Biometric Unlock"
+      caption={enabled ? "You'll unlock the app with your fingerprint or face." : 'Use your fingerprint or face to unlock the app.'}
+      trailing={
         <Switch
           value={enabled}
           onValueChange={handleToggle}
@@ -243,30 +413,12 @@ function BiometricLockToggle({ profile }: { profile: Profile }) {
           trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
           thumbColor={enabled ? '#3b82f6' : '#F3F4F6'}
         />
-      </View>
-    </View>
+      }
+    />
   );
 }
 
-function TechnicianRatingStat({ technicianId }: { technicianId: string }) {
-  const { data: reviews } = useSupabaseQuery('reviews', { filters: { technician_id: technicianId } });
-
-  const average = useMemo(() => {
-    if (!reviews || reviews.length === 0) return null;
-    return reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
-  }, [reviews]);
-
-  return (
-    <View className="flex-1 items-center rounded-xl bg-white/15 px-2 py-2.5">
-      <Text className="text-[14.5px] font-extrabold text-white">{average == null ? '—' : `★ ${average.toFixed(1)}`}</Text>
-      <Text className="mt-0.5 text-center text-[10.5px] text-white/85">
-        {reviews?.length ?? 0} review{(reviews?.length ?? 0) === 1 ? '' : 's'}
-      </Text>
-    </View>
-  );
-}
-
-function TechnicianAvailability({ profile }: { profile: Profile }) {
+function AvailabilityRow({ profile }: { profile: Profile }) {
   const setProfile = useAuthStore((state) => state.setProfile);
   const updateProfile = useSupabaseUpdate('profiles');
   const [locating, setLocating] = useState(false);
@@ -301,43 +453,34 @@ function TechnicianAvailability({ profile }: { profile: Profile }) {
   }
 
   return (
-    <View className="mb-6 rounded-2xl border border-gray-200 bg-white p-5">
-      <View className="flex-row items-center justify-between">
-        <View className="flex-1 pr-3">
-          <Text className="font-semibold text-gray-900">My Status</Text>
-          <Text className="mt-0.5 text-xs text-gray-400">
-            {profile.is_available
-              ? "You're available — resellers can assign you jobs"
-              : "You're unavailable — resellers won't assign you jobs"}
-          </Text>
-        </View>
-        <Switch
-          value={profile.is_available}
-          onValueChange={toggleAvailable}
-          disabled={updateProfile.isPending}
-          trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
-          thumbColor={profile.is_available ? '#3b82f6' : '#F3F4F6'}
-        />
-      </View>
-
-      <Pressable
-        onPress={updateLocation}
-        disabled={locating}
-        className="mt-4 items-center rounded-lg border border-orange-500 bg-orange-50 py-2.5 disabled:opacity-50"
-      >
-        <Text className="text-sm font-semibold text-orange-600">
-          {locating
-            ? 'Locating…'
-            : profile.latitude != null
-              ? '📍 Location set — tap to update'
-              : '📍 Share my location'}
+    <View>
+      <GroupRow
+        icon={profile.is_available ? 'radio-button-on' : 'radio-button-off-outline'}
+        iconColor={profile.is_available ? '#16a34a' : '#9CA3AF'}
+        iconBg={profile.is_available ? 'bg-green-50' : 'bg-gray-100'}
+        label="My Status"
+        caption={profile.is_available ? "You're available — resellers can assign you jobs" : "You're unavailable — resellers won't assign you jobs"}
+        trailing={
+          <Switch
+            value={profile.is_available}
+            onValueChange={toggleAvailable}
+            disabled={updateProfile.isPending}
+            trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
+            thumbColor={profile.is_available ? '#3b82f6' : '#F3F4F6'}
+          />
+        }
+      />
+      <Pressable onPress={updateLocation} disabled={locating} className="flex-row items-center gap-2 px-4 pb-3.5 pt-0.5">
+        <Ionicons name="navigate-outline" size={13} color="#2563eb" />
+        <Text className="text-xs font-semibold text-blue-600">
+          {locating ? 'Locating…' : profile.latitude != null ? 'Location set — tap to update' : 'Share my location'}
         </Text>
       </Pressable>
     </View>
   );
 }
 
-function SkillsPicker({ profile }: { profile: Profile }) {
+function SkillsPickerRow({ profile }: { profile: Profile }) {
   const setProfile = useAuthStore((state) => state.setProfile);
   const updateProfile = useSupabaseUpdate('profiles');
   const { data: categories } = useSupabaseQuery('service_categories', {
@@ -392,31 +535,20 @@ function SkillsPicker({ profile }: { profile: Profile }) {
 
   if (!open) {
     return (
-      <Pressable
+      <GroupRow
+        icon="construct-outline"
+        label="My Skills"
+        caption={selectedCount > 0 ? `${selectedCount} selected — get matched to more jobs` : 'Select skills to get more related requests'}
         onPress={() => {
           setSelected(profile.skill_ids ?? []);
           setOpen(true);
         }}
-        className="mb-4 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5"
-      >
-        <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-50">
-          <Ionicons name="construct-outline" size={18} color="#2563eb" />
-        </View>
-        <View className="flex-1">
-          <Text className="font-semibold text-gray-900">My Skills</Text>
-          <Text className="mt-0.5 text-xs text-gray-400">
-            {selectedCount > 0
-              ? `${selectedCount} selected — get matched to more jobs`
-              : 'Select skills to get more related requests'}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-      </Pressable>
+      />
     );
   }
 
   return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+    <View className="p-4">
       <Text className="mb-1 text-sm font-semibold text-gray-900">Select your skills</Text>
       <Text className="mb-3 text-xs text-gray-400">
         Search and add every category you can handle — you'll show up for more matching requests and jobs.
@@ -425,7 +557,7 @@ function SkillsPicker({ profile }: { profile: Profile }) {
       {selected.length > 0 && (
         <View className="mb-3 flex-row flex-wrap gap-2">
           {selected.map((id) => (
-            <View key={id} className="flex-row items-center gap-1.5 rounded-full bg-orange-500 py-1.5 pl-3 pr-2">
+            <View key={id} className="flex-row items-center gap-1.5 rounded-full bg-blue-600 py-1.5 pl-3 pr-2">
               <Text className="text-xs font-semibold text-white">{categoryById.get(id) ?? '…'}</Text>
               <Pressable onPress={() => removeSkill(id)} hitSlop={6}>
                 <Ionicons name="close" size={13} color="white" />
@@ -476,7 +608,7 @@ function SkillsPicker({ profile }: { profile: Profile }) {
         <Pressable
           onPress={handleSave}
           disabled={saving}
-          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
+          className="flex-1 items-center rounded-lg bg-blue-600 py-2.5 disabled:opacity-50"
         >
           <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save skills'}</Text>
         </Pressable>
@@ -485,28 +617,27 @@ function SkillsPicker({ profile }: { profile: Profile }) {
   );
 }
 
-function RewardsEntryCard({ profile }: { profile: Profile }) {
+function RewardsRow({ profile }: { profile: Profile }) {
   const points = profile.reward_points ?? 0;
   return (
-    <Pressable
+    <GroupRow
+      icon="gift"
+      iconColor="#2563eb"
+      iconBg="bg-blue-50"
+      label="Rewards"
+      caption="My Rewards, Refer & Earn, Redeem"
       onPress={() => router.push(`${ROLE_BASE_PATH[profile.role]}/rewards` as any)}
-      className="mb-4 flex-row items-center gap-3 rounded-2xl bg-orange-500 px-4 py-3.5"
-    >
-      <View className="h-9 w-9 items-center justify-center rounded-full bg-white/20">
-        <Ionicons name="gift" size={18} color="white" />
-      </View>
-      <View className="flex-1">
-        <Text className="font-semibold text-white">Rewards</Text>
-        <Text className="mt-0.5 text-xs text-white/80">
-          {points} point{points === 1 ? '' : 's'} · My Rewards, Refer & Earn, Redeem
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color="white" />
-    </Pressable>
+      trailing={
+        <View className="flex-row items-center gap-1.5">
+          <AnimatedNumber value={points} style={{ fontSize: 13, fontWeight: '700', color: '#2563eb' }} />
+          <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+        </View>
+      }
+    />
   );
 }
 
-function ReportIssue({ userId }: { userId: string }) {
+function ReportIssueRow({ userId }: { userId: string }) {
   const [open, setOpen] = useState(false);
   const [subject, setSubject] = useState('');
   const insertTicket = useSupabaseInsert('support_tickets');
@@ -525,24 +656,17 @@ function ReportIssue({ userId }: { userId: string }) {
 
   if (!open) {
     return (
-      <Pressable
+      <GroupRow
+        icon="help-buoy-outline"
+        label="Report an Issue / Support"
+        caption="24/7 help desk"
         onPress={() => setOpen(true)}
-        className="mb-4 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5"
-      >
-        <View className="h-9 w-9 items-center justify-center rounded-full bg-orange-50">
-          <Ionicons name="help-buoy-outline" size={18} color="#2563eb" />
-        </View>
-        <View className="flex-1">
-          <Text className="font-semibold text-gray-900">Report an Issue / Support</Text>
-          <Text className="mt-0.5 text-xs text-gray-400">24/7 help desk</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-      </Pressable>
+      />
     );
   }
 
   return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
+    <View className="p-4">
       <Text className="mb-2 text-sm font-semibold text-gray-900">What's going wrong?</Text>
       <TextInput
         value={subject}
@@ -561,7 +685,7 @@ function ReportIssue({ userId }: { userId: string }) {
         <Pressable
           onPress={handleSubmit}
           disabled={insertTicket.isPending}
-          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
+          className="flex-1 items-center rounded-lg bg-blue-600 py-2.5 disabled:opacity-50"
         >
           <Text className="text-sm font-semibold text-white">{insertTicket.isPending ? 'Sending…' : 'Submit'}</Text>
         </Pressable>
@@ -574,56 +698,55 @@ export function ProfileScreen() {
   const profile = useAuthStore((state) => state.profile);
   const signOut = useAuthStore((state) => state.signOut);
 
-  const accent = (profile && ROLE_ACCENT[profile.role]) || ROLE_ACCENT.client;
+  const accountRows: React.ReactNode[] = [];
+  const workRows: React.ReactNode[] = [];
+
+  if (profile) {
+    accountRows.push(<BiometricLockRow key="biometric" profile={profile} />);
+    if (profile.role !== 'admin') accountRows.push(<RewardsRow key="rewards" profile={profile} />);
+    accountRows.push(<ReportIssueRow key="support" userId={profile.id} />);
+
+    if (profile.role === 'technician') workRows.push(<AvailabilityRow key="availability" profile={profile} />);
+    if (profile.role === 'technician' || profile.role === 'reseller') {
+      workRows.push(<SkillsPickerRow key="skills" profile={profile} />);
+    }
+  }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View
-        style={{ backgroundColor: accent }}
-        className="items-center rounded-b-[22px] px-6 pb-7 pt-16"
+    <View className="flex-1 bg-gray-50">
+      <IdentityBand profile={profile} />
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ padding: 24, gap: 20 }}
+        style={{
+          shadowColor: '#000',
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: -2 },
+          elevation: 3,
+        }}
       >
-        {profile ? (
-          <AvatarEditor profile={profile} />
-        ) : (
-          <View className="h-32 w-32 items-center justify-center rounded-2xl border-2 border-white/40 bg-white/20">
-            <Text className="text-4xl font-extrabold text-white">?</Text>
-          </View>
-        )}
-        <Text className="mt-2.5 text-lg font-extrabold text-white">{profile?.full_name ?? 'Your profile'}</Text>
-        <View className="mt-1.5 rounded-full bg-white/20 px-3 py-1">
-          <Text className="text-[11px] font-bold uppercase tracking-wide text-white">{profile?.role}</Text>
-        </View>
-
-        {profile?.role === 'technician' ? (
-          <View className="mt-4 w-full flex-row gap-2.5">
-            <TechnicianRatingStat technicianId={profile.id} />
-            <View className="flex-1 items-center rounded-xl bg-white/15 px-2 py-2.5">
-              <Text className="text-[14.5px] font-extrabold text-white">{profile.city ?? '—'}</Text>
-              <Text className="mt-0.5 text-[10.5px] text-white/85">Service area</Text>
-            </View>
-          </View>
-        ) : null}
-      </View>
-
-      <View className="px-6 pt-5">
         {profile && <ProfileDetails profile={profile} />}
 
-        {profile && <BiometricLockToggle profile={profile} />}
-
-        {profile && profile.role !== 'admin' && <RewardsEntryCard profile={profile} />}
-
-        {profile?.role === 'technician' && <TechnicianAvailability profile={profile} />}
-
-        {profile && (profile.role === 'technician' || profile.role === 'reseller') && (
-          <SkillsPicker profile={profile} />
+        {workRows.length > 0 && (
+          <View>
+            <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Work</Text>
+            <GroupedList rows={workRows} />
+          </View>
         )}
 
-        {profile && <ReportIssue userId={profile.id} />}
+        {accountRows.length > 0 && (
+          <View>
+            <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Account</Text>
+            <GroupedList rows={accountRows} />
+          </View>
+        )}
 
-        <Pressable onPress={signOut} className="items-center rounded-xl border border-red-300 bg-white py-3.5">
+        <Pressable onPress={signOut} className="items-center rounded-xl border border-red-200 bg-white py-3.5">
           <Text className="font-semibold text-red-600">Sign Out from Jageer Nepal</Text>
         </Pressable>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
