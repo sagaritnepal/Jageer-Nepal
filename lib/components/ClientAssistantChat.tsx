@@ -205,9 +205,16 @@ export function ClientAssistantChat({ basePath }: { basePath: string }) {
           />
         </Animated.View>
 
+        {/* No clipping wrapper: a View combining overflow:hidden, a radius and
+            elevation left the photo invisible on Android (only the ring and
+            glow showed). The photo rounds itself instead, on a white disc so
+            its transparent background doesn't show the glow through it. */}
         <View
-          className="h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white"
           style={{
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: BUTTON_SIZE / 2,
+            backgroundColor: '#FFFFFF',
             shadowColor: '#2563EB',
             shadowOpacity: 0.45,
             shadowRadius: 10,
@@ -215,10 +222,15 @@ export function ClientAssistantChat({ basePath }: { basePath: string }) {
             elevation: 8,
           }}
         >
-          {/* Exact pixel size - see FloatingAssistantChat. */}
           <Image
             source={require('../../assets/sagar-assistant.png')}
-            style={{ width: BUTTON_SIZE, height: BUTTON_SIZE }}
+            style={{
+              width: BUTTON_SIZE,
+              height: BUTTON_SIZE,
+              borderRadius: BUTTON_SIZE / 2,
+              borderWidth: 2,
+              borderColor: '#FFFFFF',
+            }}
             resizeMode="cover"
           />
         </View>

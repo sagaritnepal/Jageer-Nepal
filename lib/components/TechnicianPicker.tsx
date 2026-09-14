@@ -1,5 +1,6 @@
 // lib/components/TechnicianPicker.tsx
 import { View, Text, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { Profile } from '../../types/database.types';
 
 type RankedTechnician = Profile & { distance: number | null; isYourEmployee: boolean };
@@ -9,11 +10,13 @@ function TechnicianRow({
   onPress,
   disabled,
   actionLabel,
+  actionIcon,
 }: {
   item: RankedTechnician;
   onPress: () => void;
   disabled: boolean;
   actionLabel: string;
+  actionIcon: keyof typeof Ionicons.glyphMap;
 }) {
   return (
     <Pressable
@@ -34,7 +37,13 @@ function TechnicianRow({
           {item.distance != null ? `${item.distance.toFixed(1)} km away` : item.city ?? 'Location unknown'}
         </Text>
       </View>
-      <Text className="font-semibold text-blue-700">{actionLabel}</Text>
+      <View
+        className="ml-3 flex-row items-center gap-1.5 rounded-lg px-3.5"
+        style={{ height: 38, backgroundColor: '#2563EB' }}
+      >
+        <Ionicons name={actionIcon} size={16} color="#fff" />
+        <Text className="text-sm font-semibold text-white">{actionLabel}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -78,7 +87,8 @@ export function TechnicianPicker({
               item={item}
               onPress={() => onAssign(item.id, true)}
               disabled={disabled}
-              actionLabel="Assign →"
+              actionLabel="Assign"
+              actionIcon="person-add"
             />
           ))}
         </>
@@ -97,7 +107,8 @@ export function TechnicianPicker({
               item={item}
               onPress={() => onAssign(item.id, false)}
               disabled={disabled}
-              actionLabel="Offer →"
+              actionLabel="Offer"
+              actionIcon="paper-plane"
             />
           ))}
         </>
