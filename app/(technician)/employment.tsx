@@ -1,5 +1,5 @@
 // app/(technician)/employment.tsx
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -7,7 +7,6 @@ import {
   useMyEmployment,
   useApplyToReseller,
   useEndEmployment,
-  useUpdateWorkHours,
   useFindResellerByPhone,
 } from '../../lib/hooks/useTechnicianEmployment';
 import { TimeField } from '../../lib/components/DateTimeFields';
@@ -94,15 +93,6 @@ export default function EmploymentScreen() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { current, employer } = useMyEmployment(userId);
   const endEmployment = useEndEmployment();
-  const updateWorkHours = useUpdateWorkHours();
-  const [workStart, setWorkStart] = useState('09:00');
-  const [workEnd, setWorkEnd] = useState('17:00');
-  const [savingHours, setSavingHours] = useState(false);
-
-  useEffect(() => {
-    if (current?.work_start_time) setWorkStart(current.work_start_time.slice(0, 5));
-    if (current?.work_end_time) setWorkEnd(current.work_end_time.slice(0, 5));
-  }, [current?.work_start_time, current?.work_end_time]);
 
   async function handleCancelOrLeave() {
     if (!current) return;
@@ -110,19 +100,6 @@ export default function EmploymentScreen() {
       await endEmployment.end(current.id);
     } catch (err) {
       showAlert('Could not update', getErrorMessage(err));
-    }
-  }
-
-  async function handleSaveHours() {
-    if (!current) return;
-    setSavingHours(true);
-    try {
-      await updateWorkHours.updateHours(current.id, workStart, workEnd);
-      showAlert('Saved', 'Your work hours are updated.');
-    } catch (err) {
-      showAlert('Could not save', getErrorMessage(err));
-    } finally {
-      setSavingHours(false);
     }
   }
 
@@ -155,26 +132,15 @@ export default function EmploymentScreen() {
           </View>
 
           <Text className="mb-1 text-xs font-medium text-gray-600">Your work hours</Text>
-          <View className="mb-3 flex-row items-center gap-2">
-            <View className="flex-1">
-              <TimeField value={workStart} onChange={setWorkStart} />
-            </View>
-            <Text className="text-xs text-gray-400">to</Text>
-            <View className="flex-1">
-              <TimeField value={workEnd} onChange={setWorkEnd} />
-            </View>
+          <View className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+            <Text className="text-sm text-gray-900">
+              {(current.work_start_time?.slice(0, 5) ?? '09:00')} to {(current.work_end_time?.slice(0, 5) ?? '17:00')}
+            </Text>
           </View>
           <Text className="mb-4 text-[11px] text-gray-400">
-            Outside these hours you're free to take outsource work from other resellers too.
+            Outside these hours you're free to take outsource work from other resellers too. Contact your employer
+            to change your work hours.
           </Text>
-
-          <Pressable
-            onPress={handleSaveHours}
-            disabled={savingHours}
-            className="mb-3 items-center rounded-xl border border-orange-500 py-2.5 disabled:opacity-50"
-          >
-            <Text className="text-sm font-semibold text-orange-600">{savingHours ? 'Saving…' : 'Save work hours'}</Text>
-          </Pressable>
 
           <Pressable
             onPress={handleCancelOrLeave}

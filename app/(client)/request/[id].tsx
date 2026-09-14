@@ -7,6 +7,7 @@ import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
+import { SaveContactButtonLabeled } from '../../../lib/components/SaveContactButton';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { JobCard, ServiceRequest } from '../../../types/database.types';
 
@@ -276,6 +277,7 @@ export default function RequestDetail() {
                 <Text className="text-sm font-semibold text-gray-800">{reseller.full_name ?? 'Unnamed'}</Text>
                 {reseller.phone && <Text className="text-xs text-gray-500">{reseller.phone}</Text>}
               </View>
+              {userId && <SaveContactButtonLabeled clientId={userId} contactId={reseller.id} />}
             </View>
           )}
           {technician && (
@@ -286,6 +288,7 @@ export default function RequestDetail() {
                 <Text className="text-sm font-semibold text-gray-800">{technician.full_name ?? 'Unnamed'}</Text>
                 {technician.phone && <Text className="text-xs text-gray-500">{technician.phone}</Text>}
               </View>
+              {userId && <SaveContactButtonLabeled clientId={userId} contactId={technician.id} />}
             </View>
           )}
         </View>

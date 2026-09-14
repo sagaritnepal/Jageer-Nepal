@@ -27,7 +27,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-const BUTTON_SIZE = 116;
+const BUTTON_SIZE = 52;
 
 /** The customer-facing counterpart to FloatingAssistantChat: same photo,
  * same drag-anywhere bubble, same talk-or-type conversation pattern - but
@@ -206,13 +206,13 @@ export function ClientAssistantChat({ basePath }: { basePath: string }) {
         </Animated.View>
 
         <View
-          className="h-full w-full items-center justify-center overflow-hidden rounded-full border-[3px] border-white"
+          className="h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white"
           style={{
             shadowColor: '#2563EB',
             shadowOpacity: 0.45,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 8 },
-            elevation: 10,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 5 },
+            elevation: 8,
           }}
         >
           {/* Sized via style, not className - see FloatingAssistantChat. */}
@@ -226,13 +226,13 @@ export function ClientAssistantChat({ basePath }: { basePath: string }) {
         <View
           style={{
             position: 'absolute',
-            top: 2,
-            right: 2,
-            width: 16,
-            height: 16,
+            top: 0,
+            right: 0,
+            width: 8,
+            height: 8,
             borderRadius: 999,
             backgroundColor: '#34D399',
-            borderWidth: 3,
+            borderWidth: 1.5,
             borderColor: '#fff',
           }}
         />
@@ -241,18 +241,18 @@ export function ClientAssistantChat({ basePath }: { basePath: string }) {
           className="items-center justify-center rounded-full bg-white"
           style={{
             position: 'absolute',
-            bottom: -4,
-            right: -4,
-            width: 38,
-            height: 38,
+            bottom: -2,
+            right: -2,
+            width: 18,
+            height: 18,
             shadowColor: '#101828',
             shadowOpacity: 0.18,
-            shadowRadius: 8,
+            shadowRadius: 5,
             shadowOffset: { width: 0, height: 2 },
             elevation: 4,
           }}
         >
-          <Ionicons name="chatbubble-ellipses-outline" size={19} color="#2563EB" />
+          <Ionicons name="chatbubble-ellipses-outline" size={9} color="#2563EB" />
         </View>
       </Animated.View>
 

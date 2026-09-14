@@ -5,6 +5,7 @@ import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../../lib/constants/requestStatus';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
+import { SaveContactButtonLabeled } from '../../../lib/components/SaveContactButton';
 import type { RequestStatus } from '../../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
@@ -56,6 +57,7 @@ export default function ResellerDetail() {
           <Text className="mt-0.5 text-sm text-gray-500">{reseller.city ?? 'Nepal'}</Text>
           {reseller.phone && <Text className="mt-0.5 text-sm text-gray-500">{reseller.phone}</Text>}
         </View>
+        {userId && <SaveContactButtonLabeled clientId={userId} contactId={reseller.id} />}
       </View>
 
       <Text className="mb-3 text-[15px] font-bold text-gray-900">Work history</Text>

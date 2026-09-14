@@ -1,7 +1,7 @@
 // lib/supabase.ts
 import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { SecureAuthStorage } from './utils/secureAuthStorage';
 import type { Database } from '../types/database.types';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -13,9 +13,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// Pinned explicitly (rather than left to supabase-js's internal default)
+// so useAuth.ts's signOut can force-clear this exact key itself as a
+// belt-and-suspenders local wipe, without guessing at or depending on the
+// library's internal key-naming scheme.
+export const AUTH_STORAGE_KEY = 'jageer-nepal-auth-token';
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    // OS-keychain-backed on native (chunked - see secureAuthStorage.ts),
+    // AsyncStorage on web where SecureStore has no implementation. A leaked
+    // refresh token grants the same account access as the password, so it
+    // gets the same encrypted-at-rest storage the biometric-login password
+    // already uses, not plaintext AsyncStorage.
+    storage: SecureAuthStorage,
+    storageKey: AUTH_STORAGE_KEY,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

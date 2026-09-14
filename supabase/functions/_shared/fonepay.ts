@@ -13,14 +13,27 @@
 
 const isProduction = Deno.env.get('FONEPAY_ENV') === 'production';
 
+// In production every credential must come from a real Supabase secret - no
+// falling back to the UAT sandbox defaults below. Without this, forgetting
+// to set even one of the four (an easy deploy mistake) would silently sign
+// real Fonepay production API calls with public sandbox credentials instead
+// of failing loudly, so this throws at cold start instead.
+function requireInProduction(name: string, sandboxDefault: string): string {
+  const value = Deno.env.get(name);
+  if (isProduction && !value) {
+    throw new Error(`${name} must be set (FONEPAY_ENV=production requires real credentials, not the UAT sandbox default)`);
+  }
+  return value ?? sandboxDefault;
+}
+
 const config = {
   baseUrl: isProduction
     ? 'https://merchantapi.fonepay.com/api'
     : 'https://uat-new-merchant-api.fonepay.com/api',
-  merchantCode: Deno.env.get('FONEPAY_MERCHANT_CODE') ?? 'fonepay123',
-  secretKey: Deno.env.get('FONEPAY_SECRET_KEY') ?? 'fonepay',
-  username: Deno.env.get('FONEPAY_USERNAME') ?? 'bijayk',
-  password: Deno.env.get('FONEPAY_PASSWORD') ?? 'password',
+  merchantCode: requireInProduction('FONEPAY_MERCHANT_CODE', 'fonepay123'),
+  secretKey: requireInProduction('FONEPAY_SECRET_KEY', 'fonepay'),
+  username: requireInProduction('FONEPAY_USERNAME', 'bijayk'),
+  password: requireInProduction('FONEPAY_PASSWORD', 'password'),
 };
 
 async function hmacSha512Hex(key: string, message: string): Promise<string> {
