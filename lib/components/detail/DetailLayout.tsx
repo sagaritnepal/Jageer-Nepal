@@ -101,14 +101,24 @@ export function DetailHero({
           ...(wide ? null : { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 12 }),
         }}
       >
-        <View className={wide ? 'flex-1 flex-row items-center' : 'flex-1'} style={{ gap: wide ? 10 : 6 }}>
+        {/* Wraps rather than shrinking: four chips plus the call/message
+            buttons squeezed "CUSTOMER" down to "CUSTO / MER" on a narrower
+            window. */}
+        <View
+          className={wide ? 'flex-1 flex-row flex-wrap items-center' : 'flex-1'}
+          style={{ gap: wide ? 10 : 6 }}
+        >
           {facts.map((fact) => (
             <Pressable
               key={fact.label + fact.value}
               onPress={fact.onPress}
               disabled={!fact.onPress}
-              className={wide ? 'flex-1 flex-row items-center gap-2.5 rounded-xl px-3 py-2.5' : 'flex-row items-center gap-2'}
-              style={wide ? { backgroundColor: 'rgba(255,255,255,0.14)' } : undefined}
+              className={wide ? 'flex-row items-center gap-2.5 rounded-xl px-3 py-2.5' : 'flex-row items-center gap-2'}
+              style={
+                wide
+                  ? { backgroundColor: 'rgba(255,255,255,0.14)', flexGrow: 1, flexBasis: 190, minWidth: 190 }
+                  : undefined
+              }
             >
               {fact.photoUrl ? (
                 <Image

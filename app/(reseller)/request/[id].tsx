@@ -323,10 +323,26 @@ function JobTracking({ request }: { request: ServiceRequest }) {
       right={
         <>
           {canCollect && (
-            <NextStepCard wide={wide} title={`Collect ${money(request.quoted_price)}`}>
-              {markPaidButton}
+            <NextStepCard
+              wide={wide}
+              title={`Collect ${money(request.quoted_price)}`}
+              hint={
+                request.payment_method === 'online'
+                  ? 'Online payments update on their own once Fonepay confirms - mark cash paid only if they pay you in person.'
+                  : 'The customer pays you directly - mark it paid once you have collected it.'
+              }
+            >
+              {/* On a phone the same button is already pinned to the bottom bar. */}
+              {wide && markPaidButton}
               <DetailButton label="Show QR to pay online" icon="qr-code-outline" kind="ghost" height={42} onPress={() => setShowQr(true)} />
             </NextStepCard>
+          )}
+          {!finished && !cancelled && (
+            <NextStepCard
+              wide={wide}
+              title="Wait for the job to finish"
+              hint="You can collect payment once the technician marks the job done."
+            />
           )}
           <ProgressCard request={request} />
         </>
@@ -343,56 +359,6 @@ function JobTracking({ request }: { request: ServiceRequest }) {
         onMessage={() => setChatFocus((n) => n + 1)}
         technicianName={technician?.full_name}
       />
-
-      <DetailCard
-        wide={wide}
-        icon="cash-outline"
-        title="Payment"
-        right={
-          <View className={`rounded-full px-2.5 py-0.5 ${paid ? 'bg-green-100' : 'bg-red-50'}`}>
-            <Text className={`text-[11px] font-bold uppercase ${paid ? 'text-green-700' : 'text-red-600'}`}>
-              {paid ? 'Paid' : 'Unpaid'}
-            </Text>
-          </View>
-        }
-      >
-        <View className={`flex-row items-center gap-4 rounded-xl p-3.5 ${paid ? 'bg-green-50' : 'bg-red-50'}`}>
-          <Text className={`flex-1 text-[13px] ${paid ? 'text-green-800' : 'text-red-900'}`}>
-            {paid
-              ? 'Paid in full.'
-              : request.payment_method === 'online'
-                ? "Waiting for the customer's online payment."
-                : 'The customer pays you directly — mark it paid once you have collected it.'}
-          </Text>
-          <Text className={`text-xl font-extrabold ${paid ? 'text-green-700' : 'text-red-700'}`}>
-            {money(request.quoted_price)}
-          </Text>
-        </View>
-
-        {canCollect && (
-          <View className="mt-3.5" style={{ gap: 10 }}>
-            {/* Side by side only on a wide screen - at phone width both
-                labels get clipped to "Mark cash as …". */}
-            <View className={wide ? 'flex-row' : ''} style={{ gap: 10 }}>
-              <View className={wide ? 'flex-1' : ''}>{markPaidButton}</View>
-              <View className={wide ? 'flex-1' : ''}>
-                <DetailButton label="Show QR to pay online" icon="qr-code-outline" kind="tint" onPress={() => setShowQr(true)} />
-              </View>
-            </View>
-            {request.payment_method === 'online' && (
-              <Text className="text-center text-xs text-gray-400">
-                This updates on its own once Fonepay confirms payment — no need to tap "Mark cash as paid" unless
-                they end up paying you in person instead.
-              </Text>
-            )}
-          </View>
-        )}
-        {!paid && !finished && (
-          <Text className="mt-2.5 text-xs text-gray-400">
-            You can collect payment once the technician resolves the job.
-          </Text>
-        )}
-      </DetailCard>
 
       {!!technician && (
         <DetailCard wide={wide} icon="construct-outline" title="Technician">
