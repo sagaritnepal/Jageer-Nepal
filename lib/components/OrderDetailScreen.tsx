@@ -1,6 +1,6 @@
 // lib/components/OrderDetailScreen.tsx
 import { useMemo } from 'react';
-import { View, Text, Image, Linking } from 'react-native';
+import { View, Text, Image, Pressable, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../hooks/useAuth';
@@ -14,8 +14,6 @@ import {
   DetailTimeline,
   NextStepCard,
   DetailButton,
-  PersonRow,
-  initialsOf,
   useWideDetail,
   type TimelineStep,
 } from './detail/DetailLayout';
@@ -44,6 +42,20 @@ function orderSteps(status: OrderStatus, isOwner: boolean): TimelineStep[] {
     done: index < currentIndex || status === 'delivered',
     now: index === currentIndex && status !== 'delivered',
   }));
+}
+
+/** Small translucent action on the coloured band - call / message the
+ * customer without a separate card taking up a row of the page. */
+function HeroIconButton({ icon, onPress }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="h-10 w-10 items-center justify-center rounded-full"
+      style={{ backgroundColor: 'rgba(255,255,255,0.22)' }}
+    >
+      <Ionicons name={icon} size={18} color="#fff" />
+    </Pressable>
+  );
 }
 
 export function OrderDetailScreen() {
@@ -153,28 +165,56 @@ export function OrderDetailScreen() {
         }
         title={`Order #${order.id.slice(0, 8)}`}
         pill={STATUS_LABEL[order.status]}
-        subtitle={`${itemCount} item${itemCount === 1 ? '' : 's'} · ${counterpartyRole} ${counterparty?.full_name ?? '…'}`}
         amountLabel="Order total"
         amount={total}
         facts={[
-          { icon: 'person-outline', label: counterpartyRole, value: counterparty?.full_name ?? '…' },
+          {
+            icon: 'person-outline',
+            label: counterpartyRole,
+            value: counterparty?.full_name ?? '…',
+            sub: isAccepted ? counterparty?.phone : 'Phone unlocks when you confirm',
+            photoUrl: counterparty?.avatar_url,
+          },
           ...(shippingAddress
-            ? ([{ icon: 'location-outline', label: 'Deliver to', value: shippingAddress }] as const)
+            ? ([{ icon: 'location-outline' as const, label: 'Deliver to', value: shippingAddress }] as const)
             : []),
         ]}
+        actions={
+          isAccepted && !!counterparty?.phone ? (
+            <View className="flex-row" style={{ gap: 8 }}>
+              <HeroIconButton icon="call-outline" onPress={() => Linking.openURL(`tel:${counterparty.phone}`)} />
+              <HeroIconButton icon="chatbubble-outline" onPress={() => Linking.openURL(`sms:${counterparty.phone}`)} />
+            </View>
+          ) : null
+        }
       />
 
-      <DetailCard
-        wide={wide}
-        icon="bag-outline"
-        title="Items"
-        right={<Text className="text-xs text-gray-500">{itemCount} item{itemCount === 1 ? '' : 's'}</Text>}
-      >
+      <DetailCard wide={wide} icon="bag-outline" title="Items">
+        {/* Invoice-style columns: SN · Items · Qty · Rate · Amount. */}
+        {wide && (
+          <View className="flex-row items-center gap-3 px-3 pb-2.5">
+            <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 28 }}>
+              SN
+            </Text>
+            <View style={{ width: 48 }} />
+            <Text className="flex-1 text-[11px] font-bold uppercase tracking-wide text-gray-500">Items</Text>
+            <Text className="text-right text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 60 }}>
+              Qty
+            </Text>
+            <Text className="text-right text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 120 }}>
+              Rate
+            </Text>
+            <Text className="text-right text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 130 }}>
+              Amount
+            </Text>
+          </View>
+        )}
         <View style={{ gap: 10 }}>
-          {orderItems?.map((item) => {
+          {orderItems?.map((item, index) => {
             const product = productMap.get(item.product_id);
-            return (
-            <View key={item.id} className="flex-row items-center gap-3 rounded-xl border border-gray-100 p-3">
+            const rate = `NPR ${Number(item.unit_price).toLocaleString()}`;
+            const lineTotal = `NPR ${(Number(item.unit_price) * item.quantity).toLocaleString()}`;
+            const thumb = (
               <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
                 {product?.image_url ? (
                   <Image source={{ uri: product.image_url }} style={{ width: 48, height: 48 }} resizeMode="cover" />
@@ -182,16 +222,43 @@ export function OrderDetailScreen() {
                   <Ionicons name="cube-outline" size={22} color="#9CA3AF" />
                 )}
               </View>
-              <View className="flex-1" style={{ gap: 2 }}>
-                <Text className="text-[15px] font-semibold text-gray-900">{product?.name ?? 'Product'}</Text>
-                <Text className="text-[12.5px] text-gray-400">
-                  Qty {item.quantity} · NPR {Number(item.unit_price).toLocaleString()} each
+            );
+
+            if (wide) {
+              return (
+                <View key={item.id} className="flex-row items-center gap-3 rounded-xl border border-gray-100 p-3">
+                  <Text className="text-[13px] font-semibold text-gray-400" style={{ width: 28 }}>
+                    {index + 1}
+                  </Text>
+                  {thumb}
+                  <Text className="flex-1 text-[15px] font-semibold text-gray-900">{product?.name ?? 'Product'}</Text>
+                  <Text className="text-right text-[14px] text-gray-700" style={{ width: 60 }}>
+                    {item.quantity}
+                  </Text>
+                  <Text className="text-right text-[14px] text-gray-700" style={{ width: 120 }}>
+                    {rate}
+                  </Text>
+                  <Text className="text-right text-[15px] font-bold text-gray-900" style={{ width: 130 }}>
+                    {lineTotal}
+                  </Text>
+                </View>
+              );
+            }
+
+            return (
+              <View key={item.id} className="flex-row items-center gap-3 rounded-xl border border-gray-100 p-3">
+                <Text className="text-[13px] font-semibold text-gray-400" style={{ width: 16 }}>
+                  {index + 1}
                 </Text>
+                {thumb}
+                <View className="flex-1" style={{ gap: 2 }}>
+                  <Text className="text-[15px] font-semibold text-gray-900">{product?.name ?? 'Product'}</Text>
+                  <Text className="text-[12.5px] text-gray-400">
+                    {item.quantity} × {rate}
+                  </Text>
+                </View>
+                <Text className="text-[15px] font-bold text-gray-900">{lineTotal}</Text>
               </View>
-              <Text className="text-[15px] font-bold text-gray-900">
-                NPR {(Number(item.unit_price) * item.quantity).toLocaleString()}
-              </Text>
-            </View>
             );
           })}
         </View>
@@ -199,45 +266,6 @@ export function OrderDetailScreen() {
           <Text className="text-[15px] font-bold text-gray-900">Total</Text>
           <Text className="text-xl font-extrabold text-gray-900">{total}</Text>
         </View>
-      </DetailCard>
-
-      <DetailCard wide={wide} icon="person-outline" title={counterpartyRole}>
-        <PersonRow
-          name={counterparty?.full_name ?? 'Unknown'}
-          sub={isAccepted && counterparty?.phone ? counterparty.phone : shippingAddress}
-          initials={initialsOf(counterparty?.full_name)}
-          photoUrl={counterparty?.avatar_url}
-        />
-        {isAccepted && !!counterparty?.phone && (
-          <View className="mt-3.5 flex-row" style={{ gap: 8 }}>
-            <View className="flex-1">
-              <DetailButton
-                label="Call"
-                icon="call-outline"
-                kind="tint"
-                height={42}
-                onPress={() => Linking.openURL(`tel:${counterparty.phone}`)}
-              />
-            </View>
-            <View className="flex-1">
-              <DetailButton
-                label="Message"
-                icon="chatbubble-outline"
-                kind="ghost"
-                height={42}
-                onPress={() => Linking.openURL(`sms:${counterparty.phone}`)}
-              />
-            </View>
-          </View>
-        )}
-        {!isAccepted && (
-          <View className="mt-3 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5">
-            <Ionicons name="lock-closed-outline" size={14} color="#9CA3AF" />
-            <Text className="flex-1 text-[12.5px] text-gray-400">
-              Phone number unlocks once you confirm this order.
-            </Text>
-          </View>
-        )}
       </DetailCard>
 
       <DetailCard wide={wide} icon="chatbubble-outline" title="Messages">

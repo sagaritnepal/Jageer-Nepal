@@ -36,6 +36,7 @@ export function DetailHero({
   amount,
   amountLabel,
   facts,
+  actions,
   wide,
 }: {
   tone: keyof typeof STAGE_GRADIENT;
@@ -45,7 +46,17 @@ export function DetailHero({
   subtitle?: string | null;
   amount: string;
   amountLabel: string;
-  facts: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }[];
+  facts: {
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    value: string;
+    /** Second line under the value - a phone number, say. */
+    sub?: string | null;
+    /** Shown instead of the icon: a small photo of the person. */
+    photoUrl?: string | null;
+  }[];
+  /** Rendered at the end of the facts row - the customer's call/message buttons. */
+  actions?: ReactNode;
   wide: boolean;
 }) {
   return (
@@ -89,14 +100,22 @@ export function DetailHero({
           ...(wide ? null : { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 12 }),
         }}
       >
-        <View className={wide ? 'flex-1 flex-row' : ''} style={{ gap: wide ? 10 : 6 }}>
+        <View className={wide ? 'flex-1 flex-row items-center' : ''} style={{ gap: wide ? 10 : 6 }}>
           {facts.map((fact) => (
             <View
               key={fact.label + fact.value}
               className={wide ? 'flex-1 flex-row items-center gap-2.5 rounded-xl px-3 py-2.5' : 'flex-row items-center gap-2'}
               style={wide ? { backgroundColor: 'rgba(255,255,255,0.14)' } : undefined}
             >
-              <Ionicons name={fact.icon} size={wide ? 16 : 14} color="rgba(255,255,255,0.9)" />
+              {fact.photoUrl ? (
+                <Image
+                  source={{ uri: fact.photoUrl }}
+                  style={{ width: wide ? 34 : 26, height: wide ? 34 : 26, borderRadius: 999 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name={fact.icon} size={wide ? 16 : 14} color="rgba(255,255,255,0.9)" />
+              )}
               <View className="flex-1">
                 {wide && (
                   <Text className="text-[10.5px] uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.7)' }}>
@@ -106,9 +125,15 @@ export function DetailHero({
                 <Text className="text-[13px] font-semibold text-white" numberOfLines={1}>
                   {fact.value}
                 </Text>
+                {!!fact.sub && (
+                  <Text className="text-[12px] text-white" style={{ opacity: 0.85 }} numberOfLines={1}>
+                    {fact.sub}
+                  </Text>
+                )}
               </View>
             </View>
           ))}
+          {actions}
         </View>
         {!wide && (
           <View className="items-end">
