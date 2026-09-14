@@ -25,15 +25,12 @@ import {
   useWideDetail,
   ScrollTarget,
   useDetailScroll,
-  STAGE_GRADIENT,
   type TimelineStep,
 } from '../../../lib/components/detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { assignTechnician } from '../../../lib/utils/assignTechnician';
 import { distanceKm } from '../../../lib/utils/distance';
 import type { ServiceRequest } from '../../../types/database.types';
-
-type Tone = keyof typeof STAGE_GRADIENT;
 
 function money(value: number | null | undefined): string {
   return value != null ? `NPR ${Number(value).toLocaleString()}` : 'Not set';
@@ -69,7 +66,6 @@ function stepsFor(request: ServiceRequest): TimelineStep[] {
 
 function JobHero({
   request,
-  tone,
   pill,
   amount,
   amountLabel,
@@ -81,7 +77,6 @@ function JobHero({
   onMessage,
 }: {
   request: ServiceRequest;
-  tone: Tone;
   pill: string;
   amount: string;
   amountLabel: string;
@@ -107,7 +102,7 @@ function JobHero({
   return (
     <DetailHero
       wide={wide}
-      tone={tone}
+      tone="blue"
       icon={
         <View className="rounded-2xl bg-white p-1">
           <CategoryBadge category={request.issue_type} size={wide ? 54 : 46} />
@@ -310,7 +305,6 @@ function JobTracking({ request }: { request: ServiceRequest }) {
     refetch();
   }
 
-  const tone: Tone = cancelled ? 'gray' : paid ? 'green' : finished ? 'red' : 'blue';
   const pill = cancelled ? 'Cancelled' : paid ? 'Completed' : finished ? 'Awaiting payment' : 'Job in progress';
   const amountLabel = paid ? 'Paid' : finished ? 'To collect' : 'Job value';
 
@@ -340,7 +334,6 @@ function JobTracking({ request }: { request: ServiceRequest }) {
     >
       <JobHero
         request={request}
-        tone={tone}
         pill={pill}
         amount={money(request.quoted_price)}
         amountLabel={amountLabel}
@@ -491,7 +484,6 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
     >
       <JobHero
         request={request}
-        tone="blue"
         pill="Assign a technician"
         amount={money(request.quoted_price)}
         amountLabel="Your price"
@@ -575,7 +567,6 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
     >
       <JobHero
         request={request}
-        tone="orange"
         pill="New request"
         amount="Not set"
         amountLabel="Your price"
@@ -658,7 +649,6 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
     >
       <JobHero
         request={request}
-        tone="amber"
         pill="Needs a quote"
         amount="Not set"
         amountLabel="Your price"
@@ -732,7 +722,6 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
     >
       <JobHero
         request={request}
-        tone="amber"
         pill="Waiting on customer"
         amount={money(request.quoted_price)}
         amountLabel="Quoted"
@@ -785,7 +774,6 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
     >
       <JobHero
         request={request}
-        tone="blue"
         pill="Ready to assign"
         amount={money(request.quoted_price)}
         amountLabel="Approved price"

@@ -184,7 +184,8 @@ function ManageButtons({ data }: { data: JobRowData }) {
 
 /** One job, rendered either as a table row (wide web) or a card (phone). */
 function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
-  const color = STAGE_META[stage].color;
+  // One brand blue for every job's button, whatever stage it is in.
+  const color = '#2563EB';
 
   if (wide) {
     return (

@@ -129,7 +129,6 @@ export function OrderDetailScreen() {
   const shippingAddress = shipping ? [shipping.address, shipping.city].filter(Boolean).join(', ') : null;
   const itemCount = orderItems?.length ?? 0;
   const total = `NPR ${Number(order.total_amount).toLocaleString()}`;
-  const tone = order.status === 'cancelled' ? 'gray' : order.status === 'delivered' ? 'green' : 'emerald';
 
   const advanceButton = canAdvance ? (
     <DetailButton
@@ -184,7 +183,7 @@ export function OrderDetailScreen() {
     >
       <DetailHero
         wide={wide}
-        tone={tone}
+        tone="blue"
         icon={
           <View
             className="items-center justify-center rounded-2xl"

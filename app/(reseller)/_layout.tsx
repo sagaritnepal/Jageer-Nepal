@@ -48,7 +48,7 @@ export default function ResellerLayout() {
         <Tabs.Screen
           name="requests"
           options={{
-            title: 'My Jobs',
+            title: 'My Requests',
             tabBarLabel: 'Requests',
             tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
           }}
