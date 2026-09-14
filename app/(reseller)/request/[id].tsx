@@ -12,6 +12,7 @@ import { TechnicianPicker } from '../../../lib/components/TechnicianPicker';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
+import { ChatThread } from '../../../lib/components/ChatThread';
 import {
   DetailShell,
   DetailHero,
@@ -22,6 +23,8 @@ import {
   PersonRow,
   initialsOf,
   useWideDetail,
+  ScrollTarget,
+  useDetailScroll,
   STAGE_GRADIENT,
   type TimelineStep,
 } from '../../../lib/components/detail/DetailLayout';
@@ -119,14 +122,17 @@ function CustomerCard({
   company,
   photoUrl,
   locked,
+  onMessage,
 }: {
   name?: string | null;
   phone?: string | null;
   company?: string | null;
   photoUrl?: string | null;
   locked?: boolean;
+  onMessage?: () => void;
 }) {
   const wide = useWideDetail();
+  const { scrollTo } = useDetailScroll();
   return (
     <DetailCard wide={wide} icon="person-outline" title="Customer">
       <PersonRow
@@ -147,7 +153,16 @@ function CustomerCard({
             <DetailButton label="Call" icon="call-outline" kind="tint" height={42} onPress={() => Linking.openURL(`tel:${phone}`)} />
           </View>
           <View className="flex-1">
-            <DetailButton label="Message" icon="chatbubble-outline" kind="ghost" height={42} onPress={() => Linking.openURL(`sms:${phone}`)} />
+            <DetailButton
+              label="Message"
+              icon="chatbubble-outline"
+              kind="ghost"
+              height={42}
+              onPress={() => {
+                scrollTo('messages');
+                onMessage?.();
+              }}
+            />
           </View>
         </View>
       )}
@@ -233,6 +248,19 @@ function RemarkCard({ remark }: { remark: string | null }) {
   );
 }
 
+/** The customer chat for this job - the same thread the customer sees in
+ * their own app, so "Message" never has to leave for SMS. */
+function MessagesCard({ requestId, focusToken }: { requestId: string; focusToken: number }) {
+  const wide = useWideDetail();
+  return (
+    <ScrollTarget name="messages">
+      <DetailCard wide={wide} icon="chatbubble-outline" title="Messages">
+        <ChatThread subjectType="service_request" subjectId={requestId} focusToken={focusToken} />
+      </DetailCard>
+    </ScrollTarget>
+  );
+}
+
 function ProgressCard({ request }: { request: ServiceRequest }) {
   const wide = useWideDetail();
   return (
@@ -268,6 +296,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
   const updateRequest = useSupabaseUpdate('service_requests');
   const [showQr, setShowQr] = useState(false);
   const wide = useWideDetail();
+  const [chatFocus, setChatFocus] = useState(0);
 
   const paid = request.payment_status === 'paid';
   const finished = request.status === 'resolved';
@@ -330,6 +359,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
             </NextStepCard>
           )}
           <CustomerCard
+            onMessage={() => setChatFocus((n) => n + 1)}
             name={customerName}
             phone={customerPhone}
             company={request.company_name}
@@ -435,6 +465,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
       )}
 
       <PaymentQrModal visible={showQr} serviceRequestId={request.id} onClose={() => setShowQr(false)} onPaid={handlePaid} />
+      <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
 }
@@ -448,6 +479,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
   const wide = useWideDetail();
+  const [chatFocus, setChatFocus] = useState(0);
 
   async function handleAssign(technicianId: string, isEmployee: boolean) {
     const price = quotedPrice.trim() ? Number(quotedPrice) : null;
@@ -522,6 +554,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
           disabled={assigning}
         />
       </DetailCard>
+      <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
 }
@@ -533,6 +566,7 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
   const { data: customer } = useSupabaseRow('profiles', request.client_id);
   const updateRequest = useSupabaseUpdate('service_requests');
   const wide = useWideDetail();
+  const [chatFocus, setChatFocus] = useState(0);
 
   async function handleAccept() {
     try {
@@ -565,6 +599,7 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
             {acceptButton}
           </NextStepCard>
           <CustomerCard
+            onMessage={() => setChatFocus((n) => n + 1)}
             name={request.customer_name ?? customer?.full_name}
             company={request.company_name}
             photoUrl={customer?.avatar_url}
@@ -584,6 +619,7 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
       />
       <ProblemCard request={request} />
       <AppointmentCard request={request} />
+      <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
 }
@@ -597,6 +633,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
   const [remark, setRemark] = useState('');
   const updateRequest = useSupabaseUpdate('service_requests');
   const wide = useWideDetail();
+  const [chatFocus, setChatFocus] = useState(0);
 
   async function handleSendQuote() {
     const price = Number(quotedPrice);
@@ -647,6 +684,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
       right={
         <>
           <CustomerCard
+            onMessage={() => setChatFocus((n) => n + 1)}
             name={customer?.full_name}
             phone={customer?.phone}
             company={request.company_name}
@@ -697,6 +735,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
           />
         </View>
       </DetailCard>
+      <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
 }
@@ -704,6 +743,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
 function WaitingForApproval({ request }: { request: ServiceRequest }) {
   const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
   const wide = useWideDetail();
+  const [chatFocus, setChatFocus] = useState(0);
   const customerName = request.customer_name ?? customer?.full_name;
   const customerPhone = request.customer_phone ?? customer?.phone;
 
@@ -726,6 +766,7 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
             )}
           </NextStepCard>
           <CustomerCard
+            onMessage={() => setChatFocus((n) => n + 1)}
             name={customerName}
             phone={customerPhone}
             company={request.company_name}
@@ -746,6 +787,7 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
       <ProblemCard request={request} />
       <RemarkCard remark={request.remark} />
       <AppointmentCard request={request} />
+      <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
 }
@@ -756,6 +798,7 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
   const wide = useWideDetail();
+  const [chatFocus, setChatFocus] = useState(0);
 
   async function handleAssign(technicianId: string, isEmployee: boolean) {
     setAssigning(true);
@@ -781,6 +824,7 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
             hint={`The customer approved ${money(request.quoted_price)} — choose who does the job.`}
           />
           <CustomerCard
+            onMessage={() => setChatFocus((n) => n + 1)}
             name={request.customer_name ?? customer?.full_name}
             phone={request.customer_phone ?? customer?.phone}
             company={request.company_name}
@@ -819,6 +863,7 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
           disabled={assigning}
         />
       </DetailCard>
+      <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
 }

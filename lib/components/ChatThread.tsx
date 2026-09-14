@@ -1,5 +1,5 @@
 // lib/components/ChatThread.tsx
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
@@ -10,13 +10,21 @@ import type { Message, MessageSubjectType } from '../../types/database.types';
 interface ChatThreadProps {
   subjectType: MessageSubjectType;
   subjectId: string;
+  /** Bump this to put the cursor in the box - the customer's "Message"
+   * button scrolls here and hands over the keyboard. */
+  focusToken?: number;
 }
 
-export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
+export function ChatThread({ subjectType, subjectId, focusToken }: ChatThreadProps) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const insertMessage = useSupabaseInsert('messages');
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (focusToken) inputRef.current?.focus();
+  }, [focusToken]);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -78,6 +86,7 @@ export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
 
       <View className="mt-2 flex-row items-center gap-2">
         <TextInput
+          ref={inputRef}
           value={body}
           onChangeText={setBody}
           placeholder="Type a message…"

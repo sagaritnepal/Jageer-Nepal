@@ -1,5 +1,5 @@
 // lib/components/OrderDetailScreen.tsx
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, Image, Pressable, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { useAdvanceOrder } from '../hooks/useAdvanceOrder';
 import { ChatThread } from './ChatThread';
 import {
   DetailShell,
+  ScrollTarget,
+  useDetailScroll,
   DetailHero,
   DetailCard,
   DetailTimeline,
@@ -46,15 +48,42 @@ function orderSteps(status: OrderStatus, isOwner: boolean): TimelineStep[] {
 
 /** Small translucent action on the coloured band - call / message the
  * customer without a separate card taking up a row of the page. */
-function HeroIconButton({ icon, onPress }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+function HeroIconButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       className="h-10 w-10 items-center justify-center rounded-full"
       style={{ backgroundColor: 'rgba(255,255,255,0.22)' }}
     >
       <Ionicons name={icon} size={18} color="#fff" />
     </Pressable>
+  );
+}
+
+/** "Message" means the thread on this page, not the phone's SMS app - that
+ * is where the customer is actually writing from. Its own component so the
+ * scroll hook runs inside the shell that provides it. */
+function ChatIconButton({ onFocus }: { onFocus: () => void }) {
+  const { scrollTo } = useDetailScroll();
+  return (
+    <HeroIconButton
+      icon="chatbubble-outline"
+      label="Message customer"
+      onPress={() => {
+        scrollTo('messages');
+        onFocus();
+      }}
+    />
   );
 }
 
@@ -75,6 +104,7 @@ export function OrderDetailScreen() {
   const { data: counterparty } = useSupabaseRow('profiles', counterpartyId);
 
   const { advance, isBusy } = useAdvanceOrder();
+  const [chatFocus, setChatFocus] = useState(0);
 
   const productMap = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
 
@@ -182,8 +212,8 @@ export function OrderDetailScreen() {
         actions={
           isAccepted && !!counterparty?.phone ? (
             <View className="flex-row" style={{ gap: 8 }}>
-              <HeroIconButton icon="call-outline" onPress={() => Linking.openURL(`tel:${counterparty.phone}`)} />
-              <HeroIconButton icon="chatbubble-outline" onPress={() => Linking.openURL(`sms:${counterparty.phone}`)} />
+              <HeroIconButton icon="call-outline" label="Call customer" onPress={() => Linking.openURL(`tel:${counterparty.phone}`)} />
+              <ChatIconButton onFocus={() => setChatFocus((n) => n + 1)} />
             </View>
           ) : null
         }
@@ -268,9 +298,11 @@ export function OrderDetailScreen() {
         </View>
       </DetailCard>
 
-      <DetailCard wide={wide} icon="chatbubble-outline" title="Messages">
-        <ChatThread subjectType="order" subjectId={order.id} />
-      </DetailCard>
+      <ScrollTarget name="messages">
+        <DetailCard wide={wide} icon="chatbubble-outline" title="Messages">
+          <ChatThread subjectType="order" subjectId={order.id} focusToken={chatFocus} />
+        </DetailCard>
+      </ScrollTarget>
     </DetailShell>
   );
 }

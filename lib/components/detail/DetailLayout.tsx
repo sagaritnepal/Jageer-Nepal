@@ -1,5 +1,5 @@
 // lib/components/detail/DetailLayout.tsx
-import type { ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, type ReactNode } from 'react';
 import { View, Text, Image, Pressable, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -339,6 +339,25 @@ export function DetailButton({
   );
 }
 
+/** Lets a button elsewhere on the page bring a section into view - the
+ * customer's "Message" scrolling down to the chat, say. Measured at press
+ * time rather than tracked on layout, so it stays right whatever has grown
+ * or collapsed above it. */
+const DetailScrollContext = createContext<{
+  register: (key: string, view: View | null) => void;
+  scrollTo: (key: string) => void;
+}>({ register: () => {}, scrollTo: () => {} });
+
+export function useDetailScroll() {
+  return useContext(DetailScrollContext);
+}
+
+/** Wrap a section to make it a scroll destination. */
+export function ScrollTarget({ name, children }: { name: string; children: ReactNode }) {
+  const { register } = useDetailScroll();
+  return <View ref={(view) => register(name, view)}>{children}</View>;
+}
+
 /** Page frame: two columns side by side on a wide screen, one stacked
  * column on a phone, where `bottomBar` (if given) is pinned above the tabs
  * so the main action is always reachable without scrolling. */
@@ -352,10 +371,42 @@ export function DetailShell({
   bottomBar?: ReactNode;
 }) {
   const wide = useWideDetail();
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollY = useRef(0);
+  const targets = useRef(new Map<string, View>());
+
+  const register = useCallback((key: string, view: View | null) => {
+    if (view) targets.current.set(key, view);
+    else targets.current.delete(key);
+  }, []);
+
+  // measureInWindow on both the target and the scroller, so the offset is
+  // right no matter how deep the section sits or how far the page is
+  // already scrolled.
+  const scrollTo = useCallback((key: string) => {
+    const target = targets.current.get(key);
+    const scroller = scrollRef.current as unknown as View | null;
+    if (!target || !scroller) return;
+    scroller.measureInWindow((_sx, scrollerTop) => {
+      target.measureInWindow((_tx, targetTop) => {
+        const next = Math.max(0, scrollY.current + (targetTop - scrollerTop) - 12);
+        scrollRef.current?.scrollTo({ y: next, animated: true });
+      });
+    });
+  }, []);
+
+  const scrollProps = {
+    ref: scrollRef,
+    scrollEventThrottle: 16,
+    onScroll: (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      scrollY.current = e.nativeEvent.contentOffset.y;
+    },
+  };
 
   if (wide) {
     return (
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 32, paddingTop: 20, paddingBottom: 48 }}>
+      <DetailScrollContext.Provider value={{ register, scrollTo }}>
+      <ScrollView {...scrollProps} className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 32, paddingTop: 20, paddingBottom: 48 }}>
         <View className="flex-row items-start" style={{ gap: 20 }}>
           <View className="flex-1" style={{ gap: 16, minWidth: 0 }}>
             {children}
@@ -367,12 +418,15 @@ export function DetailShell({
           )}
         </View>
       </ScrollView>
+      </DetailScrollContext.Provider>
     );
   }
 
   return (
+    <DetailScrollContext.Provider value={{ register, scrollTo }}>
     <View className="flex-1 bg-gray-50">
       <ScrollView
+        {...scrollProps}
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}
@@ -395,6 +449,7 @@ export function DetailShell({
         </View>
       )}
     </View>
+    </DetailScrollContext.Provider>
   );
 }
 
