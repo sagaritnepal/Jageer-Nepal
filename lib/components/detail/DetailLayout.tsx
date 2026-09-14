@@ -54,6 +54,7 @@ export function DetailHero({
     sub?: string | null;
     /** Shown instead of the icon: a small photo of the person. */
     photoUrl?: string | null;
+    onPress?: () => void;
   }[];
   /** Rendered at the end of the facts row - the customer's call/message buttons. */
   actions?: ReactNode;
@@ -100,10 +101,12 @@ export function DetailHero({
           ...(wide ? null : { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 12 }),
         }}
       >
-        <View className={wide ? 'flex-1 flex-row items-center' : ''} style={{ gap: wide ? 10 : 6 }}>
+        <View className={wide ? 'flex-1 flex-row items-center' : 'flex-1'} style={{ gap: wide ? 10 : 6 }}>
           {facts.map((fact) => (
-            <View
+            <Pressable
               key={fact.label + fact.value}
+              onPress={fact.onPress}
+              disabled={!fact.onPress}
               className={wide ? 'flex-1 flex-row items-center gap-2.5 rounded-xl px-3 py-2.5' : 'flex-row items-center gap-2'}
               style={wide ? { backgroundColor: 'rgba(255,255,255,0.14)' } : undefined}
             >
@@ -131,9 +134,9 @@ export function DetailHero({
                   </Text>
                 )}
               </View>
-            </View>
+            </Pressable>
           ))}
-          {actions}
+          {wide && actions}
         </View>
         {!wide && (
           <View className="items-end">
@@ -144,6 +147,11 @@ export function DetailHero({
           </View>
         )}
       </View>
+      {!wide && !!actions && (
+        <View className="flex-row" style={{ gap: 8 }}>
+          {actions}
+        </View>
+      )}
     </LinearGradient>
   );
 }

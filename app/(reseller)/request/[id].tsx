@@ -74,7 +74,11 @@ function JobHero({
   amount,
   amountLabel,
   customerName,
+  customerPhone,
+  customerPhoto,
+  phoneLocked,
   technicianName,
+  onMessage,
 }: {
   request: ServiceRequest;
   tone: Tone;
@@ -82,13 +86,23 @@ function JobHero({
   amount: string;
   amountLabel: string;
   customerName?: string | null;
+  customerPhone?: string | null;
+  customerPhoto?: string | null;
+  /** Unclaimed requests hide the number until the job is accepted. */
+  phoneLocked?: boolean;
   technicianName?: string | null;
+  onMessage?: () => void;
 }) {
   const wide = useWideDetail();
+  const { scrollTo } = useDetailScroll();
+  const location = request.location_data;
   const when =
     request.scheduled_date || request.scheduled_time
       ? `${request.scheduled_date ?? 'Date TBD'} · ${request.scheduled_time ?? 'Time TBD'}`
       : null;
+  const hasCoords = location?.latitude != null && location?.longitude != null;
+  const showContact =
+    !!request.contact_person_name && request.contact_person_name.trim() !== (customerName ?? '').trim();
 
   return (
     <DetailHero
@@ -105,68 +119,85 @@ function JobHero({
       amount={amount}
       amountLabel={amountLabel}
       facts={[
-        ...(customerName ? [{ icon: 'person-outline' as const, label: 'Customer', value: customerName }] : []),
-        ...(technicianName ? [{ icon: 'construct-outline' as const, label: 'Technician', value: technicianName }] : []),
-        ...(when ? [{ icon: 'calendar-outline' as const, label: 'When', value: when }] : []),
-        ...(request.location_data?.address
-          ? [{ icon: 'location-outline' as const, label: 'Where', value: request.location_data.address }]
+        {
+          icon: 'person-outline' as const,
+          label: 'Customer',
+          value: customerName ?? 'Customer',
+          sub: phoneLocked ? 'Phone unlocks when you accept' : customerPhone,
+          photoUrl: customerPhoto,
+        },
+        ...(technicianName
+          ? [{ icon: 'construct-outline' as const, label: 'Technician', value: technicianName }]
           : []),
-      ].slice(0, 3)}
-    />
-  );
-}
-
-function CustomerCard({
-  name,
-  phone,
-  company,
-  photoUrl,
-  locked,
-  onMessage,
-}: {
-  name?: string | null;
-  phone?: string | null;
-  company?: string | null;
-  photoUrl?: string | null;
-  locked?: boolean;
-  onMessage?: () => void;
-}) {
-  const wide = useWideDetail();
-  const { scrollTo } = useDetailScroll();
-  return (
-    <DetailCard wide={wide} icon="person-outline" title="Customer">
-      <PersonRow
-        name={name ?? 'Customer'}
-        sub={phone ?? company ?? null}
-        initials={initialsOf(name)}
-        photoUrl={photoUrl}
-      />
-      {locked && (
-        <View className="mt-3 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5">
-          <Ionicons name="lock-closed-outline" size={14} color="#9CA3AF" />
-          <Text className="flex-1 text-[12.5px] text-gray-400">Phone number unlocks once you accept this job.</Text>
-        </View>
-      )}
-      {!!phone && (
-        <View className="mt-3.5 flex-row" style={{ gap: 8 }}>
-          <View className="flex-1">
-            <DetailButton label="Call" icon="call-outline" kind="tint" height={42} onPress={() => Linking.openURL(`tel:${phone}`)} />
-          </View>
-          <View className="flex-1">
-            <DetailButton
-              label="Message"
+        ...(when ? [{ icon: 'calendar-outline' as const, label: 'When', value: when }] : []),
+        ...(location?.address
+          ? [
+              {
+                icon: 'location-outline' as const,
+                label: 'Where',
+                value: location.address,
+                sub: request.company_name,
+                onPress: hasCoords
+                  ? () => Linking.openURL(`https://www.google.com/maps?q=${location.latitude},${location.longitude}`)
+                  : undefined,
+              },
+            ]
+          : []),
+        ...(showContact
+          ? [
+              {
+                icon: 'person-circle-outline' as const,
+                label: 'Contact',
+                value: request.contact_person_name!,
+                sub: request.contact_person_phone,
+              },
+            ]
+          : []),
+      ]}
+      actions={
+        customerPhone ? (
+          <>
+            <HeroIconButton
+              icon="call-outline"
+              label="Call customer"
+              onPress={() => Linking.openURL(`tel:${customerPhone}`)}
+            />
+            <HeroIconButton
               icon="chatbubble-outline"
-              kind="ghost"
-              height={42}
+              label="Message customer"
               onPress={() => {
                 scrollTo('messages');
                 onMessage?.();
               }}
             />
-          </View>
-        </View>
-      )}
-    </DetailCard>
+          </>
+        ) : null
+      }
+    />
+  );
+}
+
+/** Call / message on the coloured band, so the customer's details and the
+ * ways to reach them live in one place instead of a card of their own. */
+function HeroIconButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className="h-10 w-10 items-center justify-center rounded-full"
+      style={{ backgroundColor: 'rgba(255,255,255,0.22)' }}
+    >
+      <Ionicons name={icon} size={18} color="#fff" />
+    </Pressable>
   );
 }
 
@@ -179,61 +210,6 @@ function ProblemCard({ request }: { request: ServiceRequest }) {
         <Text className="text-[14.5px] leading-[22px] text-gray-700">{request.description}</Text>
       )}
       <RequestPhotos photoUrls={request.photo_urls} />
-    </DetailCard>
-  );
-}
-
-function AppointmentCard({ request }: { request: ServiceRequest }) {
-  const wide = useWideDetail();
-  const location = request.location_data;
-  const hasSchedule = !!(request.scheduled_date || request.scheduled_time);
-  const hasLocation = !!(location?.address || (location?.latitude != null && location?.longitude != null));
-  if (!hasSchedule && !hasLocation && !request.company_name) return null;
-
-  return (
-    <DetailCard wide={wide} icon="calendar-outline" title="Appointment">
-      <View style={{ gap: 10 }}>
-        {hasSchedule && (
-          <View className="flex-row items-center gap-2.5">
-            <Ionicons name="time-outline" size={16} color="#9CA3AF" />
-            <Text className="text-[14px] text-gray-700">
-              {request.scheduled_date ?? 'Date TBD'} · {request.scheduled_time ?? 'Time TBD'}
-            </Text>
-          </View>
-        )}
-        {!!request.company_name && (
-          <View className="flex-row items-center gap-2.5">
-            <Ionicons name="business-outline" size={16} color="#9CA3AF" />
-            <Text className="text-[14px] text-gray-700">{request.company_name}</Text>
-          </View>
-        )}
-        {hasLocation && (
-          <View className="flex-row items-start gap-2.5">
-            <Ionicons name="location-outline" size={16} color="#9CA3AF" />
-            <View className="flex-1">
-              {!!location?.address && <Text className="text-[14px] text-gray-700">{location.address}</Text>}
-              {location?.latitude != null && location?.longitude != null && (
-                <Pressable
-                  onPress={() =>
-                    Linking.openURL(`https://www.google.com/maps?q=${location.latitude},${location.longitude}`)
-                  }
-                >
-                  <Text className="mt-1 text-xs font-semibold text-blue-600">View on Google Maps →</Text>
-                </Pressable>
-              )}
-            </View>
-          </View>
-        )}
-        {!!request.contact_person_name && request.contact_person_name.trim() !== (request.customer_name ?? '').trim() && (
-          <View className="flex-row items-center gap-2.5">
-            <Ionicons name="person-circle-outline" size={16} color="#9CA3AF" />
-            <Text className="text-[14px] text-gray-700">
-              Contact: {request.contact_person_name}
-              {request.contact_person_phone ? ` · ${request.contact_person_phone}` : ''}
-            </Text>
-          </View>
-        )}
-      </View>
     </DetailCard>
   );
 }
@@ -358,13 +334,6 @@ function JobTracking({ request }: { request: ServiceRequest }) {
               <DetailButton label="Show QR to pay online" icon="qr-code-outline" kind="ghost" height={42} onPress={() => setShowQr(true)} />
             </NextStepCard>
           )}
-          <CustomerCard
-            onMessage={() => setChatFocus((n) => n + 1)}
-            name={customerName}
-            phone={customerPhone}
-            company={request.company_name}
-            photoUrl={customer?.avatar_url}
-          />
           <ProgressCard request={request} />
         </>
       }
@@ -376,6 +345,9 @@ function JobTracking({ request }: { request: ServiceRequest }) {
         amount={money(request.quoted_price)}
         amountLabel={amountLabel}
         customerName={customerName}
+        customerPhone={customerPhone}
+        customerPhoto={customer?.avatar_url}
+        onMessage={() => setChatFocus((n) => n + 1)}
         technicianName={technician?.full_name}
       />
 
@@ -456,7 +428,6 @@ function JobTracking({ request }: { request: ServiceRequest }) {
 
       <ProblemCard request={request} />
       <RemarkCard remark={request.remark} />
-      <AppointmentCard request={request} />
 
       {request.chalan_urls.length > 0 && (
         <DetailCard wide={wide} icon="document-attach-outline" title="Chalan">
@@ -514,7 +485,6 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
             title="Pick a technician"
             hint="Set your price first if you know it, then choose who does the job."
           />
-          <CustomerCard name={request.customer_name} phone={request.customer_phone} company={request.company_name} />
           <ProgressCard request={request} />
         </>
       }
@@ -526,10 +496,11 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
         amount={money(request.quoted_price)}
         amountLabel="Your price"
         customerName={request.customer_name}
+        customerPhone={request.customer_phone}
+        onMessage={() => setChatFocus((n) => n + 1)}
       />
 
       <ProblemCard request={request} />
-      <AppointmentCard request={request} />
 
       <DetailCard wide={wide} icon="pricetag-outline" title="Your price">
         <Text className="mb-2.5 text-xs text-gray-400">Optional — you can leave it blank and price it later.</Text>
@@ -598,13 +569,6 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
           >
             {acceptButton}
           </NextStepCard>
-          <CustomerCard
-            onMessage={() => setChatFocus((n) => n + 1)}
-            name={request.customer_name ?? customer?.full_name}
-            company={request.company_name}
-            photoUrl={customer?.avatar_url}
-            locked
-          />
           <ProgressCard request={request} />
         </>
       }
@@ -616,9 +580,11 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
         amount="Not set"
         amountLabel="Your price"
         customerName={request.customer_name ?? customer?.full_name}
+        customerPhoto={customer?.avatar_url}
+        phoneLocked
+        onMessage={() => setChatFocus((n) => n + 1)}
       />
       <ProblemCard request={request} />
-      <AppointmentCard request={request} />
       <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
@@ -683,13 +649,6 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
       bottomBar={<MobileBar hint="Send the quote">{sendButton}</MobileBar>}
       right={
         <>
-          <CustomerCard
-            onMessage={() => setChatFocus((n) => n + 1)}
-            name={customer?.full_name}
-            phone={customer?.phone}
-            company={request.company_name}
-            photoUrl={customer?.avatar_url}
-          />
           <NextStepCard wide={wide} title="Send the quote" hint="Needs the problem written down and a price.">
             {sendButton}
           </NextStepCard>
@@ -704,10 +663,12 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
         amount="Not set"
         amountLabel="Your price"
         customerName={customer?.full_name}
+        customerPhone={customer?.phone}
+        customerPhoto={customer?.avatar_url}
+        onMessage={() => setChatFocus((n) => n + 1)}
       />
 
       <ProblemCard request={request} />
-      <AppointmentCard request={request} />
 
       <DetailCard wide={wide}>
         {stepHead(1, 'Call the customer, then write what is wrong', 'The technician reads this before going')}
@@ -765,13 +726,6 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
               />
             )}
           </NextStepCard>
-          <CustomerCard
-            onMessage={() => setChatFocus((n) => n + 1)}
-            name={customerName}
-            phone={customerPhone}
-            company={request.company_name}
-            photoUrl={customer?.avatar_url}
-          />
           <ProgressCard request={request} />
         </>
       }
@@ -783,10 +737,12 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
         amount={money(request.quoted_price)}
         amountLabel="Quoted"
         customerName={customerName}
+        customerPhone={customerPhone}
+        customerPhoto={customer?.avatar_url}
+        onMessage={() => setChatFocus((n) => n + 1)}
       />
       <ProblemCard request={request} />
       <RemarkCard remark={request.remark} />
-      <AppointmentCard request={request} />
       <MessagesCard requestId={request.id} focusToken={chatFocus} />
     </DetailShell>
   );
@@ -823,13 +779,6 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
             title="Pick a technician"
             hint={`The customer approved ${money(request.quoted_price)} — choose who does the job.`}
           />
-          <CustomerCard
-            onMessage={() => setChatFocus((n) => n + 1)}
-            name={request.customer_name ?? customer?.full_name}
-            phone={request.customer_phone ?? customer?.phone}
-            company={request.company_name}
-            photoUrl={customer?.avatar_url}
-          />
           <ProgressCard request={request} />
         </>
       }
@@ -841,6 +790,9 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
         amount={money(request.quoted_price)}
         amountLabel="Approved price"
         customerName={request.customer_name ?? customer?.full_name}
+        customerPhone={request.customer_phone ?? customer?.phone}
+        customerPhoto={customer?.avatar_url}
+        onMessage={() => setChatFocus((n) => n + 1)}
       />
 
       <View className="flex-row items-center gap-2.5 rounded-2xl border border-green-200 bg-green-50 p-4">
@@ -852,7 +804,6 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
 
       <ProblemCard request={request} />
       <RemarkCard remark={request.remark} />
-      <AppointmentCard request={request} />
 
       <DetailCard wide={wide} icon="people-outline" title="Choose a technician">
         <TechnicianPicker
