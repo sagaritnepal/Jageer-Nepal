@@ -117,17 +117,24 @@ function CustomerCard({
   name,
   phone,
   company,
+  photoUrl,
   locked,
 }: {
   name?: string | null;
   phone?: string | null;
   company?: string | null;
+  photoUrl?: string | null;
   locked?: boolean;
 }) {
   const wide = useWideDetail();
   return (
     <DetailCard wide={wide} icon="person-outline" title="Customer">
-      <PersonRow name={name ?? 'Customer'} sub={phone ?? company ?? null} initials={initialsOf(name)} />
+      <PersonRow
+        name={name ?? 'Customer'}
+        sub={phone ?? company ?? null}
+        initials={initialsOf(name)}
+        photoUrl={photoUrl}
+      />
       {locked && (
         <View className="mt-3 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5">
           <Ionicons name="lock-closed-outline" size={14} color="#9CA3AF" />
@@ -322,7 +329,12 @@ function JobTracking({ request }: { request: ServiceRequest }) {
               <DetailButton label="Show QR to pay online" icon="qr-code-outline" kind="ghost" height={42} onPress={() => setShowQr(true)} />
             </NextStepCard>
           )}
-          <CustomerCard name={customerName} phone={customerPhone} company={request.company_name} />
+          <CustomerCard
+            name={customerName}
+            phone={customerPhone}
+            company={request.company_name}
+            photoUrl={customer?.avatar_url}
+          />
           <ProgressCard request={request} />
         </>
       }
@@ -393,6 +405,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
             name={technician.full_name ?? 'Technician'}
             sub={distance != null ? `${distance.toFixed(1)} km from the job` : technician.phone}
             initials={initialsOf(technician.full_name)}
+            photoUrl={technician.avatar_url}
             bg="#DCFCE7"
             fg="#15803D"
           >
@@ -551,7 +564,12 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
           >
             {acceptButton}
           </NextStepCard>
-          <CustomerCard name={request.customer_name ?? customer?.full_name} company={request.company_name} locked />
+          <CustomerCard
+            name={request.customer_name ?? customer?.full_name}
+            company={request.company_name}
+            photoUrl={customer?.avatar_url}
+            locked
+          />
           <ProgressCard request={request} />
         </>
       }
@@ -628,7 +646,12 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
       bottomBar={<MobileBar hint="Send the quote">{sendButton}</MobileBar>}
       right={
         <>
-          <CustomerCard name={customer?.full_name} phone={customer?.phone} company={request.company_name} />
+          <CustomerCard
+            name={customer?.full_name}
+            phone={customer?.phone}
+            company={request.company_name}
+            photoUrl={customer?.avatar_url}
+          />
           <NextStepCard wide={wide} title="Send the quote" hint="Needs the problem written down and a price.">
             {sendButton}
           </NextStepCard>
@@ -702,7 +725,12 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
               />
             )}
           </NextStepCard>
-          <CustomerCard name={customerName} phone={customerPhone} company={request.company_name} />
+          <CustomerCard
+            name={customerName}
+            phone={customerPhone}
+            company={request.company_name}
+            photoUrl={customer?.avatar_url}
+          />
           <ProgressCard request={request} />
         </>
       }
@@ -756,6 +784,7 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
             name={request.customer_name ?? customer?.full_name}
             phone={request.customer_phone ?? customer?.phone}
             company={request.company_name}
+            photoUrl={customer?.avatar_url}
           />
           <ProgressCard request={request} />
         </>

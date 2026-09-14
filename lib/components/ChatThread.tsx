@@ -1,5 +1,5 @@
 // lib/components/ChatThread.tsx
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
@@ -18,26 +18,21 @@ export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
   const [body, setBody] = useState('');
   const insertMessage = useSupabaseInsert('messages');
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function load() {
-      const { data } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('subject_type', subjectType)
-        .eq('subject_id', subjectId)
-        .order('created_at', { ascending: true });
-      if (isMounted) setMessages((data ?? []) as Message[]);
-    }
-    load();
-
-    const unsubscribe = subscribeToTable('messages', load, `subject_id=eq.${subjectId}`);
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('subject_type', subjectType)
+      .eq('subject_id', subjectId)
+      .order('created_at', { ascending: true });
+    setMessages((data ?? []) as Message[]);
   }, [subjectType, subjectId]);
+
+  useEffect(() => {
+    load();
+    const unsubscribe = subscribeToTable('messages', load, `subject_id=eq.${subjectId}`);
+    return unsubscribe;
+  }, [load, subjectId]);
 
   async function handleSend() {
     if (!userId || !body.trim()) return;
@@ -49,6 +44,10 @@ export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
       sender_id: userId,
       body: text,
     });
+    // Realtime only tells us about other people's messages once the table is
+    // published, and never covers our own optimistically - reload so the
+    // message you just sent shows up straight away either way.
+    await load();
   }
 
   // No card of its own - the detail page already wraps this in one.

@@ -1,6 +1,6 @@
 // lib/components/OrderDetailScreen.tsx
 import { useMemo } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Image, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../hooks/useAuth';
@@ -171,15 +171,19 @@ export function OrderDetailScreen() {
         right={<Text className="text-xs text-gray-500">{itemCount} item{itemCount === 1 ? '' : 's'}</Text>}
       >
         <View style={{ gap: 10 }}>
-          {orderItems?.map((item) => (
+          {orderItems?.map((item) => {
+            const product = productMap.get(item.product_id);
+            return (
             <View key={item.id} className="flex-row items-center gap-3 rounded-xl border border-gray-100 p-3">
-              <View className="h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
-                <Ionicons name="cube-outline" size={22} color="#9CA3AF" />
+              <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
+                {product?.image_url ? (
+                  <Image source={{ uri: product.image_url }} style={{ width: 48, height: 48 }} resizeMode="cover" />
+                ) : (
+                  <Ionicons name="cube-outline" size={22} color="#9CA3AF" />
+                )}
               </View>
               <View className="flex-1" style={{ gap: 2 }}>
-                <Text className="text-[15px] font-semibold text-gray-900">
-                  {productMap.get(item.product_id)?.name ?? 'Product'}
-                </Text>
+                <Text className="text-[15px] font-semibold text-gray-900">{product?.name ?? 'Product'}</Text>
                 <Text className="text-[12.5px] text-gray-400">
                   Qty {item.quantity} · NPR {Number(item.unit_price).toLocaleString()} each
                 </Text>
@@ -188,7 +192,8 @@ export function OrderDetailScreen() {
                 NPR {(Number(item.unit_price) * item.quantity).toLocaleString()}
               </Text>
             </View>
-          ))}
+            );
+          })}
         </View>
         <View className="mt-3.5 flex-row items-baseline justify-between border-t border-gray-100 pt-3.5">
           <Text className="text-[15px] font-bold text-gray-900">Total</Text>
@@ -201,7 +206,30 @@ export function OrderDetailScreen() {
           name={counterparty?.full_name ?? 'Unknown'}
           sub={isAccepted && counterparty?.phone ? counterparty.phone : shippingAddress}
           initials={initialsOf(counterparty?.full_name)}
+          photoUrl={counterparty?.avatar_url}
         />
+        {isAccepted && !!counterparty?.phone && (
+          <View className="mt-3.5 flex-row" style={{ gap: 8 }}>
+            <View className="flex-1">
+              <DetailButton
+                label="Call"
+                icon="call-outline"
+                kind="tint"
+                height={42}
+                onPress={() => Linking.openURL(`tel:${counterparty.phone}`)}
+              />
+            </View>
+            <View className="flex-1">
+              <DetailButton
+                label="Message"
+                icon="chatbubble-outline"
+                kind="ghost"
+                height={42}
+                onPress={() => Linking.openURL(`sms:${counterparty.phone}`)}
+              />
+            </View>
+          </View>
+        )}
         {!isAccepted && (
           <View className="mt-3 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5">
             <Ionicons name="lock-closed-outline" size={14} color="#9CA3AF" />

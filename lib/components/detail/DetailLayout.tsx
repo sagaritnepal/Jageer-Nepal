@@ -1,6 +1,6 @@
 // lib/components/detail/DetailLayout.tsx
 import type { ReactNode } from 'react';
-import { View, Text, Pressable, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, Image, Pressable, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../web/WebSidebarShell';
@@ -231,6 +231,7 @@ export function PersonRow({
   name,
   sub,
   initials,
+  photoUrl,
   bg = '#DBEAFE',
   fg = '#1D4ED8',
   children,
@@ -238,16 +239,25 @@ export function PersonRow({
   name: string;
   sub?: string | null;
   initials: string;
+  /** Their profile photo, when they have one - falls back to initials. */
+  photoUrl?: string | null;
   bg?: string;
   fg?: string;
   children?: ReactNode;
 }) {
   return (
     <View className="flex-row items-center gap-3">
-      <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: bg }}>
-        <Text className="text-[15px] font-extrabold" style={{ color: fg }}>
-          {initials}
-        </Text>
+      <View
+        className="h-11 w-11 items-center justify-center overflow-hidden rounded-full"
+        style={{ backgroundColor: bg }}
+      >
+        {photoUrl ? (
+          <Image source={{ uri: photoUrl }} style={{ width: 44, height: 44 }} resizeMode="cover" />
+        ) : (
+          <Text className="text-[15px] font-extrabold" style={{ color: fg }}>
+            {initials}
+          </Text>
+        )}
       </View>
       <View className="flex-1" style={{ gap: 2 }}>
         <Text className="text-[15px] font-bold text-gray-900" numberOfLines={1}>
