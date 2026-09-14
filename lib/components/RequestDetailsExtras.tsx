@@ -6,7 +6,7 @@ import { supabase } from '../supabase';
 import { PersonAvatar } from './PersonAvatar';
 import type { RequestLocation } from '../../types/database.types';
 
-function RequestPhotos({ photoUrls }: { photoUrls: string[] }) {
+export function RequestPhotos({ photoUrls }: { photoUrls: string[] }) {
   const [signedUrls, setSignedUrls] = useState<string[]>([]);
 
   useEffect(() => {

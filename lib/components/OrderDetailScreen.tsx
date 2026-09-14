@@ -1,60 +1,55 @@
 // lib/components/OrderDetailScreen.tsx
 import { useMemo } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseRow, useSupabaseQuery } from '../hooks/useSupabase';
 import { useAdvanceOrder } from '../hooks/useAdvanceOrder';
 import { ChatThread } from './ChatThread';
-import { PersonAvatar } from './PersonAvatar';
+import {
+  DetailShell,
+  DetailHero,
+  DetailCard,
+  DetailTimeline,
+  NextStepCard,
+  DetailButton,
+  PersonRow,
+  initialsOf,
+  useWideDetail,
+  type TimelineStep,
+} from './detail/DetailLayout';
 import { NEXT_STATUS, STATUS_ACTION_LABEL } from '../utils/orderStatus';
 import type { OrderStatus } from '../../types/database.types';
 
-const ORDER_STEPS: { status: OrderStatus; label: string }[] = [
-  { status: 'pending', label: 'Order placed' },
-  { status: 'confirmed', label: 'Confirmed' },
-  { status: 'delivered', label: 'Delivered' },
-];
+const STATUS_LABEL: Record<OrderStatus, string> = {
+  pending: 'Order placed',
+  confirmed: 'Confirmed',
+  shipped: 'On the way',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+};
 
-function OrderStatusStepper({ status }: { status: OrderStatus }) {
-  if (status === 'cancelled') {
-    return (
-      <View className="mb-6 rounded-xl border border-red-200 bg-red-50 p-5">
-        <Text className="text-sm font-semibold text-red-700">This order was cancelled.</Text>
-      </View>
-    );
-  }
-
-  const currentIndex = ORDER_STEPS.findIndex((s) => s.status === status);
-
-  return (
-    <View className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-      {ORDER_STEPS.map((step, i) => {
-        const done = i < currentIndex || (i === currentIndex && status === 'delivered');
-        const active = i === currentIndex && status !== 'delivered';
-        return (
-          <View
-            key={step.status}
-            className="flex-row items-center gap-3"
-            style={{ paddingBottom: i < ORDER_STEPS.length - 1 ? 14 : 0 }}
-          >
-            <View
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: done ? '#059669' : active ? '#3b82f6' : '#E2E8F0' }}
-            />
-            <Text className={`text-[12.5px] ${done || active ? 'font-semibold text-gray-900' : 'text-gray-400'}`}>
-              {step.label}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
+function orderSteps(status: OrderStatus, isOwner: boolean): TimelineStep[] {
+  const order: OrderStatus[] = ['pending', 'confirmed', 'delivered'];
+  const currentIndex = order.indexOf(status === 'shipped' ? 'confirmed' : status);
+  const meta = [
+    null,
+    isOwner ? 'You confirm and pack it' : 'The seller confirms it',
+    isOwner ? 'Mark delivered when handed over' : 'Handed over to you',
+  ];
+  return order.map((step, index) => ({
+    label: STATUS_LABEL[step],
+    meta: index === currentIndex && status !== 'delivered' ? meta[index] : null,
+    done: index < currentIndex || status === 'delivered',
+    now: index === currentIndex && status !== 'delivered',
+  }));
 }
 
 export function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const wide = useWideDetail();
 
   const { data: order, isLoading } = useSupabaseRow('orders', id);
   const { data: orderItems } = useSupabaseQuery('order_items', {
@@ -80,7 +75,9 @@ export function OrderDetailScreen() {
   }
 
   const nextStatus = NEXT_STATUS[order.status];
+  const nextLabel = STATUS_ACTION_LABEL[order.status];
   const isOwner = order.seller_id === userId;
+  const canAdvance = isOwner && !!nextStatus && !!nextLabel;
 
   // Same privacy rule as the order card in the list: photo, name, and
   // delivery address are always visible, but the contact number stays
@@ -88,53 +85,136 @@ export function OrderDetailScreen() {
   const isAccepted = order.status !== 'pending';
   const shipping = order.shipping_address as { address?: string; city?: string } | null;
   const shippingAddress = shipping ? [shipping.address, shipping.city].filter(Boolean).join(', ') : null;
+  const itemCount = orderItems?.length ?? 0;
+  const total = `NPR ${Number(order.total_amount).toLocaleString()}`;
+  const tone = order.status === 'cancelled' ? 'gray' : order.status === 'delivered' ? 'green' : 'emerald';
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">Order #{order.id.slice(0, 8)}</Text>
+  const advanceButton = canAdvance ? (
+    <DetailButton
+      label={isBusy ? 'Updating…' : nextLabel}
+      icon="checkmark-circle"
+      kind="green"
+      disabled={isBusy}
+      onPress={() => advance(order, orderItems, productMap)}
+    />
+  ) : null;
 
-      <OrderStatusStepper status={order.status} />
-
-      <View className="mb-6 flex-row items-center gap-3">
-        <PersonAvatar name={counterparty?.full_name} photoUrl={counterparty?.avatar_url} size={40} />
-        <View>
-          <Text className="text-[11px] uppercase tracking-wide text-gray-400">{counterpartyRole}</Text>
-          <Text className="text-sm font-semibold text-gray-800">{counterparty?.full_name ?? 'Unknown'}</Text>
-          {shippingAddress && <Text className="text-xs text-gray-500">{shippingAddress}</Text>}
-          {isAccepted && counterparty?.phone && <Text className="text-xs text-gray-500">{counterparty.phone}</Text>}
-        </View>
-      </View>
-
-      <View className="mb-6 rounded-xl bg-white p-5">
-        {orderItems?.map((item) => (
-          <View key={item.id} className="mb-1 flex-row justify-between">
-            <Text className="text-sm text-gray-700">
-              {productMap.get(item.product_id)?.name ?? 'Product'} × {item.quantity}
-            </Text>
-            <Text className="text-sm text-gray-700">
-              NPR {(Number(item.unit_price) * item.quantity).toLocaleString()}
-            </Text>
-          </View>
-        ))}
-        <View className="mt-2 flex-row justify-between border-t border-gray-100 pt-2">
-          <Text className="font-semibold text-gray-900">Total</Text>
-          <Text className="font-semibold text-gray-900">NPR {Number(order.total_amount).toLocaleString()}</Text>
-        </View>
-      </View>
-
-      {isOwner && nextStatus && (
-        <Pressable
-          onPress={() => advance(order, orderItems, productMap)}
-          disabled={isBusy}
-          className="mb-4 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
+  const rightColumn = (
+    <>
+      {canAdvance && (
+        <NextStepCard
+          wide={wide}
+          title={order.status === 'pending' ? 'Confirm this order' : 'Hand it over'}
+          hint={
+            order.status === 'pending'
+              ? 'Confirming shares your number with the customer and moves it to My Jobs.'
+              : 'Mark it delivered once the customer has the items.'
+          }
         >
-          <Text className="text-base font-semibold text-white">
-            {isBusy ? 'Updating…' : STATUS_ACTION_LABEL[order.status]}
-          </Text>
-        </Pressable>
+          {advanceButton}
+        </NextStepCard>
       )}
 
-      <ChatThread subjectType="order" subjectId={order.id} />
-    </ScrollView>
+      <DetailCard wide={wide} icon="time-outline" title="Progress">
+        {order.status === 'cancelled' ? (
+          <Text className="text-sm font-semibold text-red-600">This order was cancelled.</Text>
+        ) : (
+          <DetailTimeline steps={orderSteps(order.status, isOwner)} />
+        )}
+      </DetailCard>
+    </>
+  );
+
+  return (
+    <DetailShell
+      right={rightColumn}
+      bottomBar={
+        canAdvance ? (
+          <>
+            <View className="flex-1">
+              <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Next step</Text>
+              <Text className="text-[13.5px] font-bold text-gray-900">{nextLabel}</Text>
+            </View>
+            <View style={{ minWidth: 168 }}>{advanceButton}</View>
+          </>
+        ) : null
+      }
+    >
+      <DetailHero
+        wide={wide}
+        tone={tone}
+        icon={
+          <View
+            className="items-center justify-center rounded-2xl"
+            style={{ width: wide ? 62 : 52, height: wide ? 62 : 52, backgroundColor: 'rgba(255,255,255,0.18)' }}
+          >
+            <Ionicons name="gift" size={wide ? 30 : 26} color="#fff" />
+          </View>
+        }
+        title={`Order #${order.id.slice(0, 8)}`}
+        pill={STATUS_LABEL[order.status]}
+        subtitle={`${itemCount} item${itemCount === 1 ? '' : 's'} · ${counterpartyRole} ${counterparty?.full_name ?? '…'}`}
+        amountLabel="Order total"
+        amount={total}
+        facts={[
+          { icon: 'person-outline', label: counterpartyRole, value: counterparty?.full_name ?? '…' },
+          ...(shippingAddress
+            ? ([{ icon: 'location-outline', label: 'Deliver to', value: shippingAddress }] as const)
+            : []),
+        ]}
+      />
+
+      <DetailCard
+        wide={wide}
+        icon="bag-outline"
+        title="Items"
+        right={<Text className="text-xs text-gray-500">{itemCount} item{itemCount === 1 ? '' : 's'}</Text>}
+      >
+        <View style={{ gap: 10 }}>
+          {orderItems?.map((item) => (
+            <View key={item.id} className="flex-row items-center gap-3 rounded-xl border border-gray-100 p-3">
+              <View className="h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
+                <Ionicons name="cube-outline" size={22} color="#9CA3AF" />
+              </View>
+              <View className="flex-1" style={{ gap: 2 }}>
+                <Text className="text-[15px] font-semibold text-gray-900">
+                  {productMap.get(item.product_id)?.name ?? 'Product'}
+                </Text>
+                <Text className="text-[12.5px] text-gray-400">
+                  Qty {item.quantity} · NPR {Number(item.unit_price).toLocaleString()} each
+                </Text>
+              </View>
+              <Text className="text-[15px] font-bold text-gray-900">
+                NPR {(Number(item.unit_price) * item.quantity).toLocaleString()}
+              </Text>
+            </View>
+          ))}
+        </View>
+        <View className="mt-3.5 flex-row items-baseline justify-between border-t border-gray-100 pt-3.5">
+          <Text className="text-[15px] font-bold text-gray-900">Total</Text>
+          <Text className="text-xl font-extrabold text-gray-900">{total}</Text>
+        </View>
+      </DetailCard>
+
+      <DetailCard wide={wide} icon="person-outline" title={counterpartyRole}>
+        <PersonRow
+          name={counterparty?.full_name ?? 'Unknown'}
+          sub={isAccepted && counterparty?.phone ? counterparty.phone : shippingAddress}
+          initials={initialsOf(counterparty?.full_name)}
+        />
+        {!isAccepted && (
+          <View className="mt-3 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5">
+            <Ionicons name="lock-closed-outline" size={14} color="#9CA3AF" />
+            <Text className="flex-1 text-[12.5px] text-gray-400">
+              Phone number unlocks once you confirm this order.
+            </Text>
+          </View>
+        )}
+      </DetailCard>
+
+      <DetailCard wide={wide} icon="chatbubble-outline" title="Messages">
+        <ChatThread subjectType="order" subjectId={order.id} />
+      </DetailCard>
+    </DetailShell>
   );
 }

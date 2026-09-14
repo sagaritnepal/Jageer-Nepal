@@ -1,39 +1,285 @@
 // app/(reseller)/request/[id].tsx
-import { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { View, Text, TextInput, Pressable, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate } from '../../../lib/hooks/useSupabase';
 import { useRankedTechnicians } from '../../../lib/hooks/useTechnicianRanking';
-import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
+import { RequestPhotos } from '../../../lib/components/RequestDetailsExtras';
 import { TechnicianPicker } from '../../../lib/components/TechnicianPicker';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
+import {
+  DetailShell,
+  DetailHero,
+  DetailCard,
+  DetailTimeline,
+  NextStepCard,
+  DetailButton,
+  PersonRow,
+  initialsOf,
+  useWideDetail,
+  STAGE_GRADIENT,
+  type TimelineStep,
+} from '../../../lib/components/detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { assignTechnician } from '../../../lib/utils/assignTechnician';
+import { distanceKm } from '../../../lib/utils/distance';
 import type { ServiceRequest } from '../../../types/database.types';
 
-function RemarkBlock({ remark }: { remark: string | null }) {
-  if (!remark) return null;
+type Tone = keyof typeof STAGE_GRADIENT;
+
+function money(value: number | null | undefined): string {
+  return value != null ? `NPR ${Number(value).toLocaleString()}` : 'Not set';
+}
+
+/** How far along the job is - the same list on every state, so the reseller
+ * always sees the whole path and where it currently stands. */
+function stepsFor(request: ServiceRequest): TimelineStep[] {
+  const isApp = request.origin === 'app';
+  const s = request.status;
+  const quoted = s === 'quoted' || s === 'approved' || s === 'assigned' || s === 'in_progress' || s === 'resolved';
+  const approved = s === 'approved' || s === 'assigned' || s === 'in_progress' || s === 'resolved';
+  const assigned = s === 'assigned' || s === 'in_progress' || s === 'resolved';
+  const finished = s === 'resolved';
+  const paid = request.payment_status === 'paid';
+
+  const steps: TimelineStep[] = [{ label: 'Request created', done: true }];
+  if (isApp) {
+    steps.push(
+      { label: 'Quote sent', meta: quoted ? money(request.quoted_price) : 'Waiting on you', done: quoted, now: !quoted },
+      { label: 'Customer approved', meta: approved ? null : quoted ? 'Waiting on the customer' : null, done: approved, now: quoted && !approved }
+    );
+  } else {
+    steps.push({ label: 'Price agreed', meta: money(request.quoted_price), done: quoted || approved || assigned });
+  }
+  steps.push(
+    { label: 'Technician assigned', meta: assigned ? null : approved ? 'Waiting on you' : null, done: assigned, now: approved && !assigned },
+    { label: 'Job finished', meta: finished ? null : assigned ? 'Technician is working' : null, done: finished, now: assigned && !finished },
+    { label: 'Payment collected', meta: paid ? 'Paid in full' : finished ? 'Waiting on you' : null, done: paid, now: finished && !paid }
+  );
+  return steps;
+}
+
+function JobHero({
+  request,
+  tone,
+  pill,
+  amount,
+  amountLabel,
+  customerName,
+  technicianName,
+}: {
+  request: ServiceRequest;
+  tone: Tone;
+  pill: string;
+  amount: string;
+  amountLabel: string;
+  customerName?: string | null;
+  technicianName?: string | null;
+}) {
+  const wide = useWideDetail();
+  const when =
+    request.scheduled_date || request.scheduled_time
+      ? `${request.scheduled_date ?? 'Date TBD'} · ${request.scheduled_time ?? 'Time TBD'}`
+      : null;
+
   return (
-    <View className="mt-4 rounded-xl bg-white p-5">
-      <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Remark</Text>
-      <Text className="text-sm text-gray-700">{remark}</Text>
-    </View>
+    <DetailHero
+      wide={wide}
+      tone={tone}
+      icon={
+        <View className="rounded-2xl bg-white p-1">
+          <CategoryBadge category={request.issue_type} size={wide ? 54 : 46} />
+        </View>
+      }
+      title={request.issue_type}
+      pill={pill}
+      subtitle={request.origin === 'app' ? 'App customer' : 'Your own customer'}
+      amount={amount}
+      amountLabel={amountLabel}
+      facts={[
+        ...(customerName ? [{ icon: 'person-outline' as const, label: 'Customer', value: customerName }] : []),
+        ...(technicianName ? [{ icon: 'construct-outline' as const, label: 'Technician', value: technicianName }] : []),
+        ...(when ? [{ icon: 'calendar-outline' as const, label: 'When', value: when }] : []),
+        ...(request.location_data?.address
+          ? [{ icon: 'location-outline' as const, label: 'Where', value: request.location_data.address }]
+          : []),
+      ].slice(0, 3)}
+    />
   );
 }
+
+function CustomerCard({
+  name,
+  phone,
+  company,
+  locked,
+}: {
+  name?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  locked?: boolean;
+}) {
+  const wide = useWideDetail();
+  return (
+    <DetailCard wide={wide} icon="person-outline" title="Customer">
+      <PersonRow name={name ?? 'Customer'} sub={phone ?? company ?? null} initials={initialsOf(name)} />
+      {locked && (
+        <View className="mt-3 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5">
+          <Ionicons name="lock-closed-outline" size={14} color="#9CA3AF" />
+          <Text className="flex-1 text-[12.5px] text-gray-400">Phone number unlocks once you accept this job.</Text>
+        </View>
+      )}
+      {!!phone && (
+        <View className="mt-3.5 flex-row" style={{ gap: 8 }}>
+          <View className="flex-1">
+            <DetailButton label="Call" icon="call-outline" kind="tint" height={42} onPress={() => Linking.openURL(`tel:${phone}`)} />
+          </View>
+          <View className="flex-1">
+            <DetailButton label="Message" icon="chatbubble-outline" kind="ghost" height={42} onPress={() => Linking.openURL(`sms:${phone}`)} />
+          </View>
+        </View>
+      )}
+    </DetailCard>
+  );
+}
+
+function ProblemCard({ request }: { request: ServiceRequest }) {
+  const wide = useWideDetail();
+  if (!request.description && request.photo_urls.length === 0) return null;
+  return (
+    <DetailCard wide={wide} icon="document-text-outline" title="What the customer says">
+      {!!request.description && (
+        <Text className="text-[14.5px] leading-[22px] text-gray-700">{request.description}</Text>
+      )}
+      <RequestPhotos photoUrls={request.photo_urls} />
+    </DetailCard>
+  );
+}
+
+function AppointmentCard({ request }: { request: ServiceRequest }) {
+  const wide = useWideDetail();
+  const location = request.location_data;
+  const hasSchedule = !!(request.scheduled_date || request.scheduled_time);
+  const hasLocation = !!(location?.address || (location?.latitude != null && location?.longitude != null));
+  if (!hasSchedule && !hasLocation && !request.company_name) return null;
+
+  return (
+    <DetailCard wide={wide} icon="calendar-outline" title="Appointment">
+      <View style={{ gap: 10 }}>
+        {hasSchedule && (
+          <View className="flex-row items-center gap-2.5">
+            <Ionicons name="time-outline" size={16} color="#9CA3AF" />
+            <Text className="text-[14px] text-gray-700">
+              {request.scheduled_date ?? 'Date TBD'} · {request.scheduled_time ?? 'Time TBD'}
+            </Text>
+          </View>
+        )}
+        {!!request.company_name && (
+          <View className="flex-row items-center gap-2.5">
+            <Ionicons name="business-outline" size={16} color="#9CA3AF" />
+            <Text className="text-[14px] text-gray-700">{request.company_name}</Text>
+          </View>
+        )}
+        {hasLocation && (
+          <View className="flex-row items-start gap-2.5">
+            <Ionicons name="location-outline" size={16} color="#9CA3AF" />
+            <View className="flex-1">
+              {!!location?.address && <Text className="text-[14px] text-gray-700">{location.address}</Text>}
+              {location?.latitude != null && location?.longitude != null && (
+                <Pressable
+                  onPress={() =>
+                    Linking.openURL(`https://www.google.com/maps?q=${location.latitude},${location.longitude}`)
+                  }
+                >
+                  <Text className="mt-1 text-xs font-semibold text-blue-600">View on Google Maps →</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+        {!!request.contact_person_name && request.contact_person_name.trim() !== (request.customer_name ?? '').trim() && (
+          <View className="flex-row items-center gap-2.5">
+            <Ionicons name="person-circle-outline" size={16} color="#9CA3AF" />
+            <Text className="text-[14px] text-gray-700">
+              Contact: {request.contact_person_name}
+              {request.contact_person_phone ? ` · ${request.contact_person_phone}` : ''}
+            </Text>
+          </View>
+        )}
+      </View>
+    </DetailCard>
+  );
+}
+
+function RemarkCard({ remark }: { remark: string | null }) {
+  const wide = useWideDetail();
+  if (!remark) return null;
+  return (
+    <DetailCard wide={wide} icon="chatbox-ellipses-outline" title="Your remark for the technician">
+      <Text className="text-[14px] leading-[21px] text-gray-700">{remark}</Text>
+    </DetailCard>
+  );
+}
+
+function ProgressCard({ request }: { request: ServiceRequest }) {
+  const wide = useWideDetail();
+  return (
+    <DetailCard wide={wide} icon="time-outline" title="Progress">
+      <DetailTimeline steps={stepsFor(request)} />
+    </DetailCard>
+  );
+}
+
+function MobileBar({ hint, children }: { hint: string; children: ReactNode }) {
+  return (
+    <>
+      <View className="flex-1">
+        <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Next step</Text>
+        <Text className="text-[13.5px] font-bold text-gray-900" numberOfLines={1}>
+          {hint}
+        </Text>
+      </View>
+      <View style={{ minWidth: 168 }}>{children}</View>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- states
 
 function JobTracking({ request }: { request: ServiceRequest }) {
   // A "reseller" origin request's client_id is just the reseller's own id
   // (there's no real customer profile behind it), so only look up a photo
   // for real app customers.
   const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
+  const { data: technician } = useSupabaseRow('profiles', request.technician_id ?? undefined);
   const { refetch } = useSupabaseRow('service_requests', request.id);
   const updateRequest = useSupabaseUpdate('service_requests');
   const [showQr, setShowQr] = useState(false);
+  const wide = useWideDetail();
+
+  const paid = request.payment_status === 'paid';
+  const finished = request.status === 'resolved';
+  const cancelled = request.status === 'cancelled';
+  const canCollect = finished && !paid;
+
+  const customerName = request.customer_name ?? customer?.full_name;
+  const customerPhone = request.customer_phone ?? customer?.phone;
+
+  const distance =
+    request.location_data?.latitude != null &&
+    request.location_data?.longitude != null &&
+    technician?.latitude != null &&
+    technician?.longitude != null
+      ? distanceKm(
+          { latitude: request.location_data.latitude, longitude: request.location_data.longitude },
+          { latitude: technician.latitude, longitude: technician.longitude }
+        )
+      : null;
 
   async function handleMarkPaid() {
     try {
@@ -52,87 +298,79 @@ function JobTracking({ request }: { request: ServiceRequest }) {
     refetch();
   }
 
+  const tone: Tone = cancelled ? 'gray' : paid ? 'green' : finished ? 'red' : 'blue';
+  const pill = cancelled ? 'Cancelled' : paid ? 'Completed' : finished ? 'Awaiting payment' : 'Job in progress';
+  const amountLabel = paid ? 'Paid' : finished ? 'To collect' : 'Job value';
+
+  const markPaidButton = (
+    <DetailButton
+      label={updateRequest.isPending ? 'Updating…' : 'Mark cash as paid'}
+      icon="checkmark-circle"
+      disabled={updateRequest.isPending}
+      onPress={handleMarkPaid}
+    />
+  );
+
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
-      <Text className="mb-2 text-gray-600">{request.description}</Text>
-
-      <View className="rounded-xl bg-white p-5">
-        <Text className="text-sm uppercase tracking-wide text-gray-400">Status</Text>
-        <Text className="mt-1 text-lg font-semibold capitalize text-blue-700">
-          {request.status.replace('_', ' ')}
-        </Text>
-        {request.quoted_price != null && (
-          <Text className="mt-2 text-sm text-gray-500">
-            Quoted price: NPR {Number(request.quoted_price).toLocaleString()}
-          </Text>
-        )}
-      </View>
-
-      <RequestDetailsExtras
-        scheduledDate={request.scheduled_date}
-        scheduledTime={request.scheduled_time}
-        location={request.location_data}
-        photoUrls={request.photo_urls}
-        customerName={request.customer_name ?? customer?.full_name}
-        customerPhone={request.customer_phone ?? customer?.phone}
-        customerPhotoUrl={customer?.avatar_url}
-        contactPersonName={request.contact_person_name}
-        contactPersonPhone={request.contact_person_phone}
-        companyName={request.company_name}
+    <DetailShell
+      bottomBar={canCollect ? <MobileBar hint={`Collect ${money(request.quoted_price)}`}>{markPaidButton}</MobileBar> : null}
+      right={
+        <>
+          {canCollect && (
+            <NextStepCard wide={wide} title={`Collect ${money(request.quoted_price)}`}>
+              {markPaidButton}
+              <DetailButton label="Show QR to pay online" icon="qr-code-outline" kind="ghost" height={42} onPress={() => setShowQr(true)} />
+            </NextStepCard>
+          )}
+          <CustomerCard name={customerName} phone={customerPhone} company={request.company_name} />
+          <ProgressCard request={request} />
+        </>
+      }
+    >
+      <JobHero
+        request={request}
+        tone={tone}
+        pill={pill}
+        amount={money(request.quoted_price)}
+        amountLabel={amountLabel}
+        customerName={customerName}
+        technicianName={technician?.full_name}
       />
 
-      <RemarkBlock remark={request.remark} />
-
-      {request.chalan_urls.length > 0 && (
-        <View className="mt-4 rounded-xl bg-white p-5">
-          <ChalanPhotos
-            chalanUrls={request.chalan_urls}
-            requestId={request.id}
-            editable={false}
-            onUploaded={() => {}}
-          />
-        </View>
-      )}
-
-      <View className="mt-4 rounded-xl bg-white p-5">
-        <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Payment</Text>
-        <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-sm text-gray-600">
-            {request.payment_method === 'online'
-              ? "Waiting for the customer's online payment."
-              : "The client pays you directly — mark this paid once you've collected it."}
-          </Text>
-          <View className={`ml-2 rounded-full px-3 py-1.5 ${request.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
-            <Text
-              className={`text-xs font-bold ${
-                request.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'
-              }`}
-            >
-              {request.payment_status === 'paid' ? 'Paid' : 'Unpaid'}
+      <DetailCard
+        wide={wide}
+        icon="cash-outline"
+        title="Payment"
+        right={
+          <View className={`rounded-full px-2.5 py-0.5 ${paid ? 'bg-green-100' : 'bg-red-50'}`}>
+            <Text className={`text-[11px] font-bold uppercase ${paid ? 'text-green-700' : 'text-red-600'}`}>
+              {paid ? 'Paid' : 'Unpaid'}
             </Text>
           </View>
+        }
+      >
+        <View className={`flex-row items-center gap-4 rounded-xl p-3.5 ${paid ? 'bg-green-50' : 'bg-red-50'}`}>
+          <Text className={`flex-1 text-[13px] ${paid ? 'text-green-800' : 'text-red-900'}`}>
+            {paid
+              ? 'Paid in full.'
+              : request.payment_method === 'online'
+                ? "Waiting for the customer's online payment."
+                : 'The customer pays you directly — mark it paid once you have collected it.'}
+          </Text>
+          <Text className={`text-xl font-extrabold ${paid ? 'text-green-700' : 'text-red-700'}`}>
+            {money(request.quoted_price)}
+          </Text>
         </View>
 
-        {request.payment_status !== 'paid' && request.status === 'resolved' && (
-          <View className="gap-2">
-            <View className="flex-row gap-2">
-              <Pressable
-                onPress={handleMarkPaid}
-                disabled={updateRequest.isPending}
-                className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
-              >
-                <Text className="text-sm font-semibold text-white">
-                  {updateRequest.isPending ? 'Updating…' : 'Mark cash as paid'}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setShowQr(true)}
-                className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-orange-400 bg-orange-50 py-2.5"
-              >
-                <Ionicons name="qr-code-outline" size={16} color="#c2410c" />
-                <Text className="text-sm font-semibold text-orange-700">Show QR to pay online</Text>
-              </Pressable>
+        {canCollect && (
+          <View className="mt-3.5" style={{ gap: 10 }}>
+            {/* Side by side only on a wide screen - at phone width both
+                labels get clipped to "Mark cash as …". */}
+            <View className={wide ? 'flex-row' : ''} style={{ gap: 10 }}>
+              <View className={wide ? 'flex-1' : ''}>{markPaidButton}</View>
+              <View className={wide ? 'flex-1' : ''}>
+                <DetailButton label="Show QR to pay online" icon="qr-code-outline" kind="tint" onPress={() => setShowQr(true)} />
+              </View>
             </View>
             {request.payment_method === 'online' && (
               <Text className="text-center text-xs text-gray-400">
@@ -142,20 +380,49 @@ function JobTracking({ request }: { request: ServiceRequest }) {
             )}
           </View>
         )}
-        {request.payment_status !== 'paid' && request.status !== 'resolved' && (
-          <Text className="mt-2 text-xs text-gray-400">
+        {!paid && !finished && (
+          <Text className="mt-2.5 text-xs text-gray-400">
             You can collect payment once the technician resolves the job.
           </Text>
         )}
-      </View>
+      </DetailCard>
 
-      <PaymentQrModal
-        visible={showQr}
-        serviceRequestId={request.id}
-        onClose={() => setShowQr(false)}
-        onPaid={handlePaid}
-      />
-    </ScrollView>
+      {!!technician && (
+        <DetailCard wide={wide} icon="construct-outline" title="Technician">
+          <PersonRow
+            name={technician.full_name ?? 'Technician'}
+            sub={distance != null ? `${distance.toFixed(1)} km from the job` : technician.phone}
+            initials={initialsOf(technician.full_name)}
+            bg="#DCFCE7"
+            fg="#15803D"
+          >
+            {!!technician.phone && (
+              <View style={{ width: 110 }}>
+                <DetailButton
+                  label="Call"
+                  icon="call-outline"
+                  kind="ghost"
+                  height={40}
+                  onPress={() => Linking.openURL(`tel:${technician.phone}`)}
+                />
+              </View>
+            )}
+          </PersonRow>
+        </DetailCard>
+      )}
+
+      <ProblemCard request={request} />
+      <RemarkCard remark={request.remark} />
+      <AppointmentCard request={request} />
+
+      {request.chalan_urls.length > 0 && (
+        <DetailCard wide={wide} icon="document-attach-outline" title="Chalan">
+          <ChalanPhotos chalanUrls={request.chalan_urls} requestId={request.id} editable={false} onUploaded={() => {}} />
+        </DetailCard>
+      )}
+
+      <PaymentQrModal visible={showQr} serviceRequestId={request.id} onClose={() => setShowQr(false)} onPaid={handlePaid} />
+    </DetailShell>
   );
 }
 
@@ -163,12 +430,11 @@ function JobTracking({ request }: { request: ServiceRequest }) {
 // on the job and price directly, so there's no app-side customer to approve
 // anything. Price and technician assignment happen together in one step.
 function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userId: string }) {
-  const [quotedPrice, setQuotedPrice] = useState(
-    request.quoted_price != null ? String(request.quoted_price) : ''
-  );
+  const [quotedPrice, setQuotedPrice] = useState(request.quoted_price != null ? String(request.quoted_price) : '');
   const { rankedTechnicians, isLoading: loadingTechs } = useRankedTechnicians(request.location_data, userId);
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
+  const wide = useWideDetail();
 
   async function handleAssign(technicianId: string, isEmployee: boolean) {
     const price = quotedPrice.trim() ? Number(quotedPrice) : null;
@@ -195,52 +461,65 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
-      <Text className="mb-2 text-gray-600">{request.description}</Text>
-
-      <RequestDetailsExtras
-        scheduledDate={request.scheduled_date}
-        scheduledTime={request.scheduled_time}
-        location={request.location_data}
-        photoUrls={request.photo_urls}
+    <DetailShell
+      right={
+        <>
+          <NextStepCard
+            wide={wide}
+            title="Pick a technician"
+            hint="Set your price first if you know it, then choose who does the job."
+          />
+          <CustomerCard name={request.customer_name} phone={request.customer_phone} company={request.company_name} />
+          <ProgressCard request={request} />
+        </>
+      }
+    >
+      <JobHero
+        request={request}
+        tone="blue"
+        pill="Assign a technician"
+        amount={money(request.quoted_price)}
+        amountLabel="Your price"
         customerName={request.customer_name}
-        customerPhone={request.customer_phone}
-        contactPersonName={request.contact_person_name}
-        contactPersonPhone={request.contact_person_phone}
-        companyName={request.company_name}
       />
 
-      <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Quoted price (NPR, optional)</Text>
-      <TextInput
-        value={quotedPrice}
-        onChangeText={setQuotedPrice}
-        placeholder="e.g. 2000"
-        keyboardType="numeric"
-        className="mb-6 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm"
-      />
+      <ProblemCard request={request} />
+      <AppointmentCard request={request} />
 
-      <TechnicianPicker
-        technicians={rankedTechnicians}
-        isLoading={loadingTechs}
-        locationKnown={request.location_data?.latitude != null}
-        onAssign={handleAssign}
-        disabled={assigning}
-      />
-    </ScrollView>
+      <DetailCard wide={wide} icon="pricetag-outline" title="Your price">
+        <Text className="mb-2.5 text-xs text-gray-400">Optional — you can leave it blank and price it later.</Text>
+        <View className="flex-row items-center gap-2 rounded-lg border border-gray-300 bg-white px-4">
+          <Text className="text-base font-semibold text-gray-500">NPR</Text>
+          <TextInput
+            value={quotedPrice}
+            onChangeText={setQuotedPrice}
+            placeholder="e.g. 2000"
+            keyboardType="numeric"
+            className="flex-1 py-3 text-base"
+          />
+        </View>
+      </DetailCard>
+
+      <DetailCard wide={wide} icon="people-outline" title="Choose a technician">
+        <TechnicianPicker
+          technicians={rankedTechnicians}
+          isLoading={loadingTechs}
+          locationKnown={request.location_data?.latitude != null}
+          onAssign={handleAssign}
+          disabled={assigning}
+        />
+      </DetailCard>
+    </DetailShell>
   );
 }
 
 // Any reseller can see this pending app request in their Incoming queue, so
 // customer contact stays hidden until one of them claims it - claiming just
-// stamps reseller_id, which is enough to pull it into that reseller's My
-// Jobs tab and drop it out of everyone else's Incoming queue.
+// stamps reseller_id, which pulls it into that reseller's My Jobs tab.
 function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; userId: string }) {
-  // Every request here is unclaimed and app-origin (see the Incoming query
-  // in requests.tsx), so client_id always points at a real customer profile
-  // - safe to look up their photo and name before this reseller accepts it.
   const { data: customer } = useSupabaseRow('profiles', request.client_id);
   const updateRequest = useSupabaseUpdate('service_requests');
+  const wide = useWideDetail();
 
   async function handleAccept() {
     try {
@@ -250,61 +529,61 @@ function AcceptIncomingRequest({ request, userId }: { request: ServiceRequest; u
     }
   }
 
+  const acceptButton = (
+    <DetailButton
+      label={updateRequest.isPending ? 'Accepting…' : 'Accept this job'}
+      icon="checkmark-circle"
+      kind="green"
+      disabled={updateRequest.isPending}
+      onPress={handleAccept}
+    />
+  );
+
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="mb-4 flex-row items-center gap-3">
-        <CategoryBadge category={request.issue_type} />
-        <Text className="flex-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
-      </View>
-      <Text className="mb-6 text-gray-600">{request.description}</Text>
-
-      <View className="mb-6 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white p-4">
-        <Ionicons name="lock-closed-outline" size={16} color="#9CA3AF" />
-        <Text className="flex-1 text-xs text-gray-400">
-          Customer phone number unlocks once you accept this job.
-        </Text>
-      </View>
-
-      <RequestDetailsExtras
-        scheduledDate={request.scheduled_date}
-        scheduledTime={request.scheduled_time}
-        location={request.location_data}
-        photoUrls={request.photo_urls}
+    <DetailShell
+      bottomBar={<MobileBar hint="Accept this job">{acceptButton}</MobileBar>}
+      right={
+        <>
+          <NextStepCard
+            wide={wide}
+            title="Accept this job"
+            hint="Accepting claims it for you and unlocks the customer's phone number."
+          >
+            {acceptButton}
+          </NextStepCard>
+          <CustomerCard name={request.customer_name ?? customer?.full_name} company={request.company_name} locked />
+          <ProgressCard request={request} />
+        </>
+      }
+    >
+      <JobHero
+        request={request}
+        tone="orange"
+        pill="New request"
+        amount="Not set"
+        amountLabel="Your price"
         customerName={request.customer_name ?? customer?.full_name}
-        customerPhotoUrl={customer?.avatar_url}
-        contactPersonName={request.contact_person_name}
-        contactPersonPhone={request.contact_person_phone}
-        companyName={request.company_name}
       />
-
-      <Pressable
-        onPress={handleAccept}
-        disabled={updateRequest.isPending}
-        className="mt-6 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
-      >
-        <Text className="text-base font-semibold text-white">
-          {updateRequest.isPending ? 'Accepting…' : 'Accept Job'}
-        </Text>
-      </Pressable>
-    </ScrollView>
+      <ProblemCard request={request} />
+      <AppointmentCard request={request} />
+    </DetailShell>
   );
 }
 
-// App-sourced request: the reseller calls the customer directly (their
-// number comes from their profile since they have an app account), confirms
-// exactly what's wrong, and writes that up as a remark for the technician -
-// then the customer needs to approve the price before a technician can be
-// assigned.
+// App-sourced request: the reseller calls the customer directly, confirms
+// exactly what's wrong, writes that up as a remark for the technician - then
+// the customer approves the price before a technician can be assigned.
 function SendQuote({ request, userId }: { request: ServiceRequest; userId: string }) {
   const { data: customer } = useSupabaseRow('profiles', request.client_id);
   const [quotedPrice, setQuotedPrice] = useState('');
   const [remark, setRemark] = useState('');
   const updateRequest = useSupabaseUpdate('service_requests');
+  const wide = useWideDetail();
 
   async function handleSendQuote() {
     const price = Number(quotedPrice);
     if (!quotedPrice.trim() || Number.isNaN(price) || price <= 0) {
-      showAlert('Add a price', 'Enter what you\'d charge the customer before sending the quote.');
+      showAlert('Add a price', "Enter what you'd charge the customer before sending the quote.");
       return;
     }
     if (!remark.trim()) {
@@ -323,111 +602,132 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
     }
   }
 
+  const sendButton = (
+    <DetailButton
+      label={updateRequest.isPending ? 'Sending…' : 'Send quote to customer'}
+      icon="paper-plane-outline"
+      disabled={updateRequest.isPending}
+      onPress={handleSendQuote}
+    />
+  );
+
+  const stepHead = (n: number, title: string, hint: string) => (
+    <View className="mb-3.5 flex-row items-center gap-2.5">
+      <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-amber-50">
+        <Text className="text-[13px] font-extrabold text-amber-700">{n}</Text>
+      </View>
+      <View className="flex-1">
+        <Text className="text-base font-bold text-gray-900">{title}</Text>
+        <Text className="text-[12.5px] text-gray-400">{hint}</Text>
+      </View>
+    </View>
+  );
+
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
-      <Text className="mb-2 text-gray-600">{request.description}</Text>
-
-      <RequestDetailsExtras
-        scheduledDate={request.scheduled_date}
-        scheduledTime={request.scheduled_time}
-        location={request.location_data}
-        photoUrls={request.photo_urls}
+    <DetailShell
+      bottomBar={<MobileBar hint="Send the quote">{sendButton}</MobileBar>}
+      right={
+        <>
+          <CustomerCard name={customer?.full_name} phone={customer?.phone} company={request.company_name} />
+          <NextStepCard wide={wide} title="Send the quote" hint="Needs the problem written down and a price.">
+            {sendButton}
+          </NextStepCard>
+          <ProgressCard request={request} />
+        </>
+      }
+    >
+      <JobHero
+        request={request}
+        tone="amber"
+        pill="Needs a quote"
+        amount="Not set"
+        amountLabel="Your price"
         customerName={customer?.full_name}
-        customerPhone={customer?.phone}
-        customerPhotoUrl={customer?.avatar_url}
-        contactPersonName={request.contact_person_name}
-        contactPersonPhone={request.contact_person_phone}
-        companyName={request.company_name}
       />
 
-      <Text className="mb-1 mt-6 text-sm font-medium text-gray-700">Remark</Text>
-      <Text className="mb-2 text-xs text-gray-400">
-        Call the customer above, confirm exactly what's wrong, then write it here so the technician knows what
-        they're walking into.
-      </Text>
-      <TextInput
-        value={remark}
-        onChangeText={setRemark}
-        placeholder="e.g. Printer jams on every print, roller looks worn out"
-        multiline
-        numberOfLines={4}
-        className="mb-6 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm"
-        style={{ minHeight: 90, textAlignVertical: 'top' }}
-      />
+      <ProblemCard request={request} />
+      <AppointmentCard request={request} />
 
-      <Text className="mb-1 text-sm font-medium text-gray-700">Quoted price (NPR)</Text>
-      <Text className="mb-2 text-xs text-gray-400">
-        The customer needs to approve this price before you can assign a technician.
-      </Text>
-      <TextInput
-        value={quotedPrice}
-        onChangeText={setQuotedPrice}
-        placeholder="e.g. 2000"
-        keyboardType="numeric"
-        className="mb-4 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm"
-      />
+      <DetailCard wide={wide}>
+        {stepHead(1, 'Call the customer, then write what is wrong', 'The technician reads this before going')}
+        <TextInput
+          value={remark}
+          onChangeText={setRemark}
+          placeholder="e.g. Printer jams on every print, roller looks worn out"
+          multiline
+          numberOfLines={4}
+          className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-[15px]"
+          style={{ minHeight: 92, textAlignVertical: 'top' }}
+        />
 
-      <Pressable
-        onPress={handleSendQuote}
-        disabled={updateRequest.isPending}
-        className="items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
-      >
-        <Text className="text-base font-semibold text-white">
-          {updateRequest.isPending ? 'Sending…' : 'Send quote to customer'}
-        </Text>
-      </Pressable>
-    </ScrollView>
+        <View className="mt-5">
+          {stepHead(2, 'Set your price', 'The customer must approve it before you can assign anyone')}
+        </View>
+        <View className="w-60 flex-row items-center gap-2 rounded-lg border border-gray-300 bg-white px-4">
+          <Text className="text-base font-semibold text-gray-500">NPR</Text>
+          <TextInput
+            value={quotedPrice}
+            onChangeText={setQuotedPrice}
+            placeholder="2,000"
+            keyboardType="numeric"
+            className="flex-1 py-3 text-base"
+          />
+        </View>
+      </DetailCard>
+    </DetailShell>
   );
 }
 
 function WaitingForApproval({ request }: { request: ServiceRequest }) {
-  // A "reseller" origin request's client_id is just the reseller's own id
-  // (there's no real customer profile behind it), so only look up a photo
-  // for real app customers.
   const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
+  const wide = useWideDetail();
+  const customerName = request.customer_name ?? customer?.full_name;
+  const customerPhone = request.customer_phone ?? customer?.phone;
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
-      <Text className="mb-2 text-gray-600">{request.description}</Text>
-
-      <View className="rounded-xl bg-amber-50 border border-amber-200 p-5">
-        <Text className="text-sm uppercase tracking-wide text-amber-600">Awaiting customer approval</Text>
-        <Text className="mt-1 text-lg font-semibold text-amber-800">
-          Quoted NPR {Number(request.quoted_price).toLocaleString()}
-        </Text>
-        <Text className="mt-2 text-sm text-amber-700">
-          You'll be able to assign a technician once the customer approves this price.
-        </Text>
-      </View>
-
-      <RequestDetailsExtras
-        scheduledDate={request.scheduled_date}
-        scheduledTime={request.scheduled_time}
-        location={request.location_data}
-        photoUrls={request.photo_urls}
-        customerName={request.customer_name ?? customer?.full_name}
-        customerPhone={request.customer_phone ?? customer?.phone}
-        customerPhotoUrl={customer?.avatar_url}
-        contactPersonName={request.contact_person_name}
-        contactPersonPhone={request.contact_person_phone}
-        companyName={request.company_name}
+    <DetailShell
+      right={
+        <>
+          <NextStepCard
+            wide={wide}
+            title="Waiting on the customer"
+            hint="You can assign a technician as soon as they approve the price."
+          >
+            {!!customerPhone && (
+              <DetailButton
+                label="Call customer"
+                icon="call-outline"
+                kind="tint"
+                onPress={() => Linking.openURL(`tel:${customerPhone}`)}
+              />
+            )}
+          </NextStepCard>
+          <CustomerCard name={customerName} phone={customerPhone} company={request.company_name} />
+          <ProgressCard request={request} />
+        </>
+      }
+    >
+      <JobHero
+        request={request}
+        tone="amber"
+        pill="Waiting on customer"
+        amount={money(request.quoted_price)}
+        amountLabel="Quoted"
+        customerName={customerName}
       />
-
-      <RemarkBlock remark={request.remark} />
-    </ScrollView>
+      <ProblemCard request={request} />
+      <RemarkCard remark={request.remark} />
+      <AppointmentCard request={request} />
+    </DetailShell>
   );
 }
 
 function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId: string }) {
-  // A "reseller" origin request's client_id is just the reseller's own id
-  // (there's no real customer profile behind it), so only look up a photo
-  // for real app customers.
   const { data: customer } = useSupabaseRow('profiles', request.origin === 'app' ? request.client_id : undefined);
   const { rankedTechnicians, isLoading: loadingTechs } = useRankedTechnicians(request.location_data, userId);
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
+  const wide = useWideDetail();
 
   async function handleAssign(technicianId: string, isEmployee: boolean) {
     setAssigning(true);
@@ -444,32 +744,44 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text className="mb-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
-      <Text className="mb-2 text-gray-600">{request.description}</Text>
+    <DetailShell
+      right={
+        <>
+          <NextStepCard
+            wide={wide}
+            title="Pick a technician"
+            hint={`The customer approved ${money(request.quoted_price)} — choose who does the job.`}
+          />
+          <CustomerCard
+            name={request.customer_name ?? customer?.full_name}
+            phone={request.customer_phone ?? customer?.phone}
+            company={request.company_name}
+          />
+          <ProgressCard request={request} />
+        </>
+      }
+    >
+      <JobHero
+        request={request}
+        tone="blue"
+        pill="Ready to assign"
+        amount={money(request.quoted_price)}
+        amountLabel="Approved price"
+        customerName={request.customer_name ?? customer?.full_name}
+      />
 
-      <View className="rounded-xl bg-green-50 border border-green-200 p-4">
-        <Text className="text-sm font-semibold text-green-700">
-          Customer approved NPR {Number(request.quoted_price).toLocaleString()} — pick a technician below.
+      <View className="flex-row items-center gap-2.5 rounded-2xl border border-green-200 bg-green-50 p-4">
+        <Ionicons name="checkmark-circle" size={18} color="#15803D" />
+        <Text className="flex-1 text-sm font-semibold text-green-700">
+          Customer approved {money(request.quoted_price)} — pick a technician below.
         </Text>
       </View>
 
-      <RequestDetailsExtras
-        scheduledDate={request.scheduled_date}
-        scheduledTime={request.scheduled_time}
-        location={request.location_data}
-        photoUrls={request.photo_urls}
-        customerName={request.customer_name ?? customer?.full_name}
-        customerPhone={request.customer_phone ?? customer?.phone}
-        customerPhotoUrl={customer?.avatar_url}
-        contactPersonName={request.contact_person_name}
-        contactPersonPhone={request.contact_person_phone}
-        companyName={request.company_name}
-      />
+      <ProblemCard request={request} />
+      <RemarkCard remark={request.remark} />
+      <AppointmentCard request={request} />
 
-      <RemarkBlock remark={request.remark} />
-
-      <View className="mt-6">
+      <DetailCard wide={wide} icon="people-outline" title="Choose a technician">
         <TechnicianPicker
           technicians={rankedTechnicians}
           isLoading={loadingTechs}
@@ -477,8 +789,8 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
           onAssign={handleAssign}
           disabled={assigning}
         />
-      </View>
-    </ScrollView>
+      </DetailCard>
+    </DetailShell>
   );
 }
 

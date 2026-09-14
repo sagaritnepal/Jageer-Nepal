@@ -1,6 +1,7 @@
 // lib/components/ChatThread.tsx
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseInsert, subscribeToTable } from '../hooks/useSupabase';
@@ -50,27 +51,30 @@ export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
     });
   }
 
+  // No card of its own - the detail page already wraps this in one.
   return (
-    <View className="rounded-xl bg-white p-5">
-      <Text className="mb-3 text-sm uppercase tracking-wide text-gray-400">Messages</Text>
-
+    <View>
       {messages.length === 0 && <Text className="mb-3 text-sm text-gray-400">No messages yet.</Text>}
 
       <FlatList
         data={messages}
         keyExtractor={(item) => item.id}
         scrollEnabled={false}
-        renderItem={({ item }) => (
-          <View
-            className={`mb-2 max-w-[85%] rounded-lg px-3 py-2 ${
-              item.sender_id === userId ? 'self-end bg-orange-500' : 'self-start bg-gray-100'
-            }`}
-          >
-            <Text className={item.sender_id === userId ? 'text-sm text-white' : 'text-sm text-gray-800'}>
-              {item.body}
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const mine = item.sender_id === userId;
+          return (
+            <View
+              className={`mb-2.5 max-w-[80%] px-3.5 py-2.5 ${mine ? 'self-end bg-blue-600' : 'self-start bg-gray-100'}`}
+              style={{
+                borderRadius: 14,
+                borderBottomRightRadius: mine ? 4 : 14,
+                borderBottomLeftRadius: mine ? 14 : 4,
+              }}
+            >
+              <Text className={`text-[13px] ${mine ? 'text-white' : 'text-gray-900'}`}>{item.body}</Text>
+            </View>
+          );
+        }}
       />
 
       <View className="mt-2 flex-row items-center gap-2">
@@ -78,10 +82,15 @@ export function ChatThread({ subjectType, subjectId }: ChatThreadProps) {
           value={body}
           onChangeText={setBody}
           placeholder="Type a message…"
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="flex-1 rounded-[10px] border border-gray-300 px-3.5 text-sm"
+          style={{ height: 42 }}
         />
-        <Pressable onPress={handleSend} className="rounded-lg bg-orange-500 px-4 py-2">
-          <Text className="text-sm font-semibold text-white">Send</Text>
+        <Pressable
+          onPress={handleSend}
+          className="items-center justify-center rounded-[10px] bg-blue-500"
+          style={{ width: 42, height: 42 }}
+        >
+          <Ionicons name="send" size={17} color="#fff" />
         </Pressable>
       </View>
     </View>
