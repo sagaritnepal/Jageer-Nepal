@@ -142,13 +142,15 @@ export function OrderDetailScreen() {
 
   const rightColumn = (
     <>
-      {canAdvance && (
+      {/* On a phone the same action is already pinned to the bottom bar, so
+          this card would only repeat it underneath the chat. */}
+      {canAdvance && wide && (
         <NextStepCard
           wide={wide}
           title={order.status === 'pending' ? 'Confirm this order' : 'Hand it over'}
           hint={
             order.status === 'pending'
-              ? 'Confirming shares your number with the customer and moves it to My Jobs.'
+              ? 'Confirming shares your number with the customer and moves it to My Requests.'
               : 'Mark it delivered once the customer has the items.'
           }
         >

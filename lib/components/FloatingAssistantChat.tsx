@@ -192,12 +192,13 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
             elevation: 8,
           }}
         >
-          {/* Sized via style, not className: on web the className never reached
-              the Image, so it rendered at the photo's full 480px and the circle
-              showed only a zoomed-in crop of the middle (the mouth). */}
+          {/* An exact pixel size, not a className or "100%": on web the
+              className never reached the Image (it drew at full size, showing
+              only the mouth), and on Android a percentage resolved to nothing,
+              leaving an empty ring. The circle's overflow clips the edge. */}
           <Image
             source={require('../../assets/sagar-assistant.png')}
-            style={{ width: '100%', height: '100%' }}
+            style={{ width: BUTTON_SIZE, height: BUTTON_SIZE }}
             resizeMode="cover"
           />
         </View>
