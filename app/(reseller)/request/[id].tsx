@@ -29,6 +29,7 @@ import {
 } from '../../../lib/components/detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { assignTechnician } from '../../../lib/utils/assignTechnician';
+import { reopenCompletedJob } from '../../../lib/hooks/useJobOffers';
 import { distanceKm } from '../../../lib/utils/distance';
 import type { ServiceRequest } from '../../../types/database.types';
 
@@ -266,6 +267,32 @@ function JobTracking({ request }: { request: ServiceRequest }) {
   const { refetch } = useSupabaseRow('service_requests', request.id);
   const updateRequest = useSupabaseUpdate('service_requests');
   const [showQr, setShowQr] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const queryClient = useQueryClient();
+
+  function confirmReopen() {
+    showAlert(
+      'Reopen this job?',
+      'It goes back to "Job in progress" so the technician can finish it. You can collect payment once it is marked complete again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reopen job',
+          onPress: async () => {
+            setReopening(true);
+            try {
+              await reopenCompletedJob(request.id);
+              await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+            } catch (err) {
+              showAlert('Could not reopen', getErrorMessage(err));
+            } finally {
+              setReopening(false);
+            }
+          },
+        },
+      ]
+    );
+  }
   const wide = useWideDetail();
   const [chatFocus, setChatFocus] = useState(0);
 
@@ -335,6 +362,11 @@ function JobTracking({ request }: { request: ServiceRequest }) {
               {/* On a phone the same button is already pinned to the bottom bar. */}
               {wide && markPaidButton}
               <DetailButton label="Show QR to pay online" icon="qr-code-outline" kind="ghost" height={42} onPress={() => setShowQr(true)} />
+              <Pressable onPress={confirmReopen} disabled={reopening} className="items-center py-1.5 disabled:opacity-50">
+                <Text className="text-[12.5px] font-semibold text-amber-700">
+                  {reopening ? 'Reopening…' : 'Marked complete by mistake? Reopen job'}
+                </Text>
+              </Pressable>
             </NextStepCard>
           )}
           {!finished && !cancelled && (

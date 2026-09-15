@@ -1,5 +1,6 @@
 // app/(technician)/dashboard.tsx
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -10,6 +11,8 @@ import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { respondToJobOffer } from '../../lib/hooks/useJobOffers';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { ServiceRequest } from '../../types/database.types';
 
 function StatusPill({ status }: { status: ServiceRequest['status'] }) {
@@ -56,6 +59,33 @@ function WorkDetails({ item }: { item: ServiceRequest }) {
 }
 
 function NewJobCard({ item }: { item: ServiceRequest }) {
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  async function answer(accept: boolean) {
+    setBusy(true);
+    try {
+      await respondToJobOffer(item.id, accept);
+      await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+      if (accept) router.push(`/(technician)/job/${item.id}`);
+    } catch (err) {
+      showAlert(accept ? 'Could not accept' : 'Could not reject', getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onAnswer(accept: boolean) {
+    if (accept) {
+      answer(true);
+      return;
+    }
+    showAlert('Reject this job?', 'It goes back to the reseller so they can offer it to someone else.', [
+      { text: 'Keep it', style: 'cancel' },
+      { text: 'Reject', style: 'destructive', onPress: () => answer(false) },
+    ]);
+  }
+
   return (
     <View className="mb-3 rounded-2xl border border-orange-100 bg-white p-4">
       <Pressable onPress={() => router.push(`/(technician)/job/${item.id}`)} className="flex-row items-start gap-3">
@@ -66,13 +96,26 @@ function NewJobCard({ item }: { item: ServiceRequest }) {
         <WorkDetails item={item} />
       </Pressable>
 
-      <Pressable
-        onPress={() => router.push(`/(technician)/job/${item.id}`)}
-        className="mt-3 flex-row items-center justify-center gap-1.5 rounded-xl bg-orange-500 py-2.5"
-      >
-        <Ionicons name="checkmark-circle" size={16} color="white" />
-        <Text className="text-sm font-semibold text-white">View &amp; Accept</Text>
-      </Pressable>
+      <View className="mt-3 flex-row" style={{ gap: 8 }}>
+        <Pressable
+          onPress={() => onAnswer(false)}
+          disabled={busy}
+          className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 disabled:opacity-60"
+          style={{ backgroundColor: '#DC2626' }}
+        >
+          <Ionicons name="close" size={17} color="white" />
+          <Text className="text-sm font-semibold text-white">Reject</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => onAnswer(true)}
+          disabled={busy}
+          className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 disabled:opacity-60"
+          style={{ backgroundColor: '#16A34A' }}
+        >
+          <Ionicons name="checkmark" size={17} color="white" />
+          <Text className="text-sm font-semibold text-white">Accept</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

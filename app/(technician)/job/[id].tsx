@@ -2,7 +2,9 @@
 import { useState } from 'react';
 import { View, Text, Pressable, TextInput, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { respondToJobOffer, reopenCompletedJob } from '../../../lib/hooks/useJobOffers';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
@@ -12,13 +14,13 @@ import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import type { RequestStatus } from '../../../types/database.types';
 
+// An offered job ('assigned') is answered with Accept / Reject instead -
+// see handleRespond below.
 const NEXT_STATUS: Partial<Record<RequestStatus, RequestStatus>> = {
-  assigned: 'in_progress',
   in_progress: 'resolved',
 };
 
 const STATUS_ACTION_LABEL: Partial<Record<RequestStatus, string>> = {
-  assigned: 'Start job',
   in_progress: 'Mark resolved',
 };
 
@@ -47,6 +49,8 @@ export default function JobCard() {
 
   const [parts, setParts] = useState<PartRow[]>([{ name: '', quantity: '1', cost: '0' }]);
   const [laborCost, setLaborCost] = useState('0');
+  const [answering, setAnswering] = useState<'accept' | 'reject' | 'reopen' | null>(null);
+  const queryClient = useQueryClient();
 
   if (isLoading || !request) {
     return (
@@ -70,17 +74,58 @@ export default function JobCard() {
     setParts((prev) => prev.filter((_, i) => i !== index));
   }
 
+  async function handleRespond(accept: boolean) {
+    if (!request) return;
+    setAnswering(accept ? 'accept' : 'reject');
+    try {
+      await respondToJobOffer(request.id, accept);
+      await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+      await queryClient.invalidateQueries({ queryKey: ['job_cards'] });
+      if (!accept) router.replace('/(technician)/dashboard');
+    } catch (err) {
+      showAlert(accept ? 'Could not accept' : 'Could not reject', getErrorMessage(err));
+    } finally {
+      setAnswering(null);
+    }
+  }
+
+  function confirmReject() {
+    showAlert('Reject this job?', 'It goes back to the reseller so they can offer it to someone else.', [
+      { text: 'Keep it', style: 'cancel' },
+      { text: 'Reject', style: 'destructive', onPress: () => handleRespond(false) },
+    ]);
+  }
+
+  function confirmReopen() {
+    if (!request) return;
+    showAlert(
+      'Mark as not complete?',
+      'The job goes back to in progress so you can finish it properly. You can mark it resolved again later.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark not complete',
+          onPress: async () => {
+            setAnswering('reopen');
+            try {
+              await reopenCompletedJob(request.id);
+              await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+              await queryClient.invalidateQueries({ queryKey: ['job_cards'] });
+            } catch (err) {
+              showAlert('Could not change', getErrorMessage(err));
+            } finally {
+              setAnswering(null);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function handleAdvance() {
     if (!userId || !nextStatus || !request) return;
     try {
-      if (request.status === 'assigned') {
-        // Opens a job card to track parts/labor against once work begins.
-        await insertJobCard.mutateAsync({
-          service_request_id: request.id,
-          technician_id: userId,
-          started_at: new Date().toISOString(),
-        });
-      } else if (request.status === 'in_progress') {
+      if (request.status === 'in_progress') {
         const validParts = parts
           .filter((p) => p.name.trim())
           .map((p) => ({ name: p.name.trim(), quantity: Number(p.quantity) || 0, cost: Number(p.cost) || 0 }));
@@ -247,6 +292,29 @@ export default function JobCard() {
         </View>
       )}
 
+      {request.status === 'assigned' && (
+        <View className="mb-4 flex-row" style={{ gap: 12 }}>
+          <Pressable
+            onPress={confirmReject}
+            disabled={!!answering}
+            className="h-14 flex-1 flex-row items-center justify-center gap-2 rounded-2xl disabled:opacity-60"
+            style={{ backgroundColor: '#DC2626' }}
+          >
+            <Ionicons name="close" size={22} color="#fff" />
+            <Text className="text-base font-bold text-white">{answering === 'reject' ? 'Rejecting…' : 'Reject'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => handleRespond(true)}
+            disabled={!!answering}
+            className="h-14 flex-1 flex-row items-center justify-center gap-2 rounded-2xl disabled:opacity-60"
+            style={{ backgroundColor: '#16A34A' }}
+          >
+            <Ionicons name="checkmark" size={22} color="#fff" />
+            <Text className="text-base font-bold text-white">{answering === 'accept' ? 'Accepting…' : 'Accept'}</Text>
+          </Pressable>
+        </View>
+      )}
+
       {nextStatus && (
         <Pressable
           onPress={handleAdvance}
@@ -257,6 +325,25 @@ export default function JobCard() {
             {isSaving ? 'Updating…' : STATUS_ACTION_LABEL[request.status]}
           </Text>
         </Pressable>
+      )}
+
+      {request.status === 'resolved' && request.payment_status !== 'paid' && (
+        <View className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <Text className="text-sm font-semibold text-amber-900">Marked complete by mistake?</Text>
+          <Text className="mt-0.5 text-xs text-amber-800">
+            You can undo it while the job is still unpaid - it goes back to in progress.
+          </Text>
+          <Pressable
+            onPress={confirmReopen}
+            disabled={!!answering}
+            className="mt-3 flex-row items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white py-2.5 disabled:opacity-50"
+          >
+            <Ionicons name="arrow-undo" size={16} color="#92400E" />
+            <Text className="text-sm font-semibold text-amber-900">
+              {answering === 'reopen' ? 'Updating…' : 'Mark as not complete'}
+            </Text>
+          </Pressable>
+        </View>
       )}
     </ScrollView>
   );

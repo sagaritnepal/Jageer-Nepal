@@ -1,11 +1,13 @@
 // app/(technician)/_layout.tsx
-import { Platform, useWindowDimensions } from 'react-native';
+import { Platform, View, useWindowDimensions } from 'react-native';
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
 import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
+import { IncomingJobOffer } from '../../lib/components/IncomingJobOffer';
+import { useAuthStore } from '../../lib/hooks/useAuth';
 
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(technician)/dashboard', label: 'Home', icon: 'home' },
@@ -15,6 +17,7 @@ const NAV_ITEMS: WebNavItem[] = [
 
 export default function TechnicianLayout() {
   const { width } = useWindowDimensions();
+  const userId = useAuthStore((state) => state.session?.user.id);
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const tabs = (
     <Tabs
@@ -49,13 +52,18 @@ export default function TechnicianLayout() {
 
   return (
     <RoleGuard allow={['technician']}>
-      {isWideWeb ? (
-        <WebSidebarShell items={NAV_ITEMS} roleLabel="Technician">
-          {tabs}
-        </WebSidebarShell>
-      ) : (
-        tabs
-      )}
+      {/* The job-request overlay sits outside the tabs so it rings over
+          whichever tab (or the sidebar) is open when an offer comes in. */}
+      <View style={{ flex: 1 }}>
+        {isWideWeb ? (
+          <WebSidebarShell items={NAV_ITEMS} roleLabel="Technician">
+            {tabs}
+          </WebSidebarShell>
+        ) : (
+          tabs
+        )}
+        <IncomingJobOffer technicianId={userId} />
+      </View>
     </RoleGuard>
   );
 }
