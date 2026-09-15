@@ -59,7 +59,7 @@ function stepsFor(request: ServiceRequest): TimelineStep[] {
   }
   steps.push(
     { label: 'Technician assigned', meta: assigned ? null : approved ? 'Waiting on you' : null, done: assigned, now: approved && !assigned },
-    { label: 'Job finished', meta: finished ? null : assigned ? 'Technician is working' : null, done: finished, now: assigned && !finished },
+    { label: 'Job finished', meta: finished ? null : s === 'assigned' ? 'Waiting for the technician to accept' : assigned ? 'Technician is working' : null, done: finished, now: assigned && !finished },
     { label: 'Payment collected', meta: paid ? 'Paid in full' : finished ? 'Waiting on you' : null, done: paid, now: finished && !paid }
   );
   return steps;
@@ -443,7 +443,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
   const wide = useWideDetail();
   const [chatFocus, setChatFocus] = useState(0);
 
-  async function handleAssign(technicianId: string, isEmployee: boolean) {
+  async function handleAssign(technicianId: string) {
     const price = quotedPrice.trim() ? Number(quotedPrice) : null;
     if (price != null && (Number.isNaN(price) || price <= 0)) {
       showAlert('Invalid price', 'Enter a valid price in NPR, or leave it blank.');
@@ -454,11 +454,10 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
       await assignTechnician({
         requestId: request.id,
         technicianId,
-        isEmployee,
         extraValues: { quoted_price: price, reseller_id: userId },
       });
       queryClient.invalidateQueries({ queryKey: ['service_requests'] });
-      showAlert('Technician assigned', 'The job has been handed off.');
+      showAlert('Job sent', 'The technician gets a ringing request and can accept or reject it. You will see it move to in progress once they accept.');
       router.replace('/(reseller)/requests');
     } catch (err) {
       showAlert('Could not assign', getErrorMessage(err));
@@ -743,12 +742,12 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
   const wide = useWideDetail();
   const [chatFocus, setChatFocus] = useState(0);
 
-  async function handleAssign(technicianId: string, isEmployee: boolean) {
+  async function handleAssign(technicianId: string) {
     setAssigning(true);
     try {
-      await assignTechnician({ requestId: request.id, technicianId, isEmployee });
+      await assignTechnician({ requestId: request.id, technicianId });
       queryClient.invalidateQueries({ queryKey: ['service_requests'] });
-      showAlert('Technician assigned', 'The job has been handed off.');
+      showAlert('Job sent', 'The technician gets a ringing request and can accept or reject it. You will see it move to in progress once they accept.');
       router.replace('/(reseller)/requests');
     } catch (err) {
       showAlert('Could not assign', getErrorMessage(err));

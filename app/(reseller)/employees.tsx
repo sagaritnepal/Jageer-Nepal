@@ -273,8 +273,8 @@ export default function TechnicalEmployees() {
         <Text className="text-base font-bold text-gray-900">Invite a technician</Text>
       </View>
       <Text className="mb-4 text-xs leading-5 text-gray-500">
-        Search by name, or enter the phone number they signed up with. Once they accept, you can assign them jobs
-        straight away, and other resellers can't book them during their work hours. Invite as many as you need.
+        Search by name, or enter the phone number they signed up with. Once they accept, you can send them jobs
+        (they ring on their phone to accept), and other resellers can't book them during their work hours. Invite as many as you need.
       </Text>
 
       <Text className="mb-1.5 text-sm font-medium text-gray-700">Find a technician</Text>
