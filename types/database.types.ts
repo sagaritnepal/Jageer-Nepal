@@ -228,6 +228,23 @@ export interface Customer {
   updated_at: string;
 }
 
+/** Someone on a reseller's team who has no Jageer account - a record they
+ * keep by hand (see manual_employees). Jobs are still only sent in-app to
+ * technicians with an account. */
+export interface ManualEmployee {
+  id: string;
+  owner_id: string;
+  name: string;
+  phone: string | null;
+  job_title: string | null;
+  work_start_time: string | null;
+  work_end_time: string | null;
+  note: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type LedgerEntryType = 'debit' | 'credit';
 
 export interface CustomerLedgerEntry {
@@ -449,6 +466,12 @@ export interface Database {
         Relationships: [];
       };
       customers: { Row: Customer; Insert: Partial<Customer>; Update: Partial<Customer>; Relationships: [] };
+      manual_employees: {
+        Row: ManualEmployee;
+        Insert: Partial<ManualEmployee>;
+        Update: Partial<ManualEmployee>;
+        Relationships: [];
+      };
       saved_contacts: {
         Row: SavedContact;
         Insert: Partial<SavedContact>;

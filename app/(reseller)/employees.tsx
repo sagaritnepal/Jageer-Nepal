@@ -1,8 +1,10 @@
 // app/(reseller)/employees.tsx
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Linking } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
+import { useSupabaseQuery, useSupabaseInsert } from '../../lib/hooks/useSupabase';
 import {
   useMyEmployees,
   usePendingHires,
@@ -12,14 +14,13 @@ import {
   useSearchTechnicians,
   useRespondToHire,
   useEndEmployment,
-  useUpdateWorkHours,
 } from '../../lib/hooks/useTechnicianEmployment';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { TimeField } from '../../lib/components/DateTimeFields';
 import { useWideDetail } from '../../lib/components/detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { isValidPhone10 } from '../../lib/utils/phone';
-import type { Profile, TechnicianEmployment } from '../../types/database.types';
+import type { ManualEmployee, Profile, TechnicianEmployment } from '../../types/database.types';
 
 const BLUE = '#2563EB';
 
@@ -32,8 +33,12 @@ function useDebounced<T>(value: T, delayMs = 300): T {
   return debounced;
 }
 
-function hours(e: TechnicianEmployment) {
+function hours(e: { work_start_time: string | null; work_end_time: string | null }) {
   return `${e.work_start_time?.slice(0, 5) ?? '09:00'} to ${e.work_end_time?.slice(0, 5) ?? '17:00'}`;
+}
+
+function openEmployee(id: string, kind?: 'manual') {
+  router.push(`/(reseller)/employee/${id}${kind ? '?kind=manual' : ''}` as any);
 }
 
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
@@ -114,64 +119,52 @@ function SmallButton({ label, onPress, kind = 'primary', disabled }: { label: st
   );
 }
 
-/** Employee row with editable hours - technicians can't change their own
- * hours any more (the employer sets them), so this is where they're set. */
+/** Employee with their own account. Tapping the row opens their page,
+ * where the employer sets the work hours - technicians can't change their
+ * own (see the technician_employment_hours_guard trigger). */
 function EmployeeRow({ employment, profile, last }: { employment: TechnicianEmployment; profile: Profile; last: boolean }) {
-  const [editing, setEditing] = useState(false);
-  const [start, setStart] = useState(employment.work_start_time?.slice(0, 5) ?? '09:00');
-  const [end, setEnd] = useState(employment.work_end_time?.slice(0, 5) ?? '17:00');
-  const updateHours = useUpdateWorkHours();
-  const endEmployment = useEndEmployment();
+  return (
+    <PersonLine profile={profile} sub={`${profile.phone ?? 'No phone'} · On duty ${hours(employment)}`} last={last}>
+      {!!profile.phone && (
+        <Pressable onPress={() => Linking.openURL(`tel:${profile.phone}`)} hitSlop={6} className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+          <Ionicons name="call-outline" size={17} color={BLUE} />
+        </Pressable>
+      )}
+      <SmallButton label="Open" kind="ghost" onPress={() => openEmployee(employment.id)} />
+    </PersonLine>
+  );
+}
 
-  function handleRemove() {
-    showAlert('Remove employee?', `${profile.full_name ?? 'This technician'} will go back to being an outsource technician.`, [
-      { text: 'Keep', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await endEmployment.end(employment.id);
-          } catch (err) {
-            showAlert('Could not remove', getErrorMessage(err));
-          }
-        },
-      },
-    ]);
-  }
-
-  async function handleSaveHours() {
-    try {
-      await updateHours.updateHours(employment.id, start, end);
-      setEditing(false);
-    } catch (err) {
-      showAlert('Could not update hours', getErrorMessage(err));
-    }
-  }
+/** Someone added by hand (no Jageer account) - a record the reseller keeps
+ * so their whole team is in one place. */
+function ManualEmployeeRow({ employee, last }: { employee: ManualEmployee; last: boolean }) {
+  const sub = [
+    employee.job_title,
+    employee.phone ?? 'No phone',
+    employee.is_active ? `On duty ${hours(employee)}` : 'No longer working for you',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <View className={last ? '' : 'border-b border-gray-100'}>
-      <PersonLine profile={profile} sub={`${profile.phone ?? 'No phone'} · On duty ${hours(employment)}`} last>
-        {!!profile.phone && (
-          <Pressable onPress={() => Linking.openURL(`tel:${profile.phone}`)} hitSlop={6} className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+    <View className={`px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
+      <View className="flex-row items-center gap-3">
+        <PersonAvatar name={employee.name} size={42} bg="bg-gray-500" />
+        <View className="flex-1">
+          <Text className="font-semibold text-gray-900" numberOfLines={1}>
+            {employee.name}
+          </Text>
+          <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={2}>
+            {sub}
+          </Text>
+        </View>
+        {!!employee.phone && (
+          <Pressable onPress={() => Linking.openURL(`tel:${employee.phone}`)} hitSlop={6} className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
             <Ionicons name="call-outline" size={17} color={BLUE} />
           </Pressable>
         )}
-        <SmallButton label={editing ? 'Close' : 'Hours'} kind="ghost" onPress={() => setEditing((v) => !v)} />
-        <SmallButton label="Remove" kind="danger" onPress={handleRemove} />
-      </PersonLine>
-      {editing && (
-        <View className="flex-row items-center gap-2 px-4 pb-4">
-          <View className="flex-1">
-            <TimeField value={start} onChange={setStart} />
-          </View>
-          <Text className="text-xs text-gray-400">to</Text>
-          <View className="flex-1">
-            <TimeField value={end} onChange={setEnd} />
-          </View>
-          <SmallButton label={updateHours.isPending ? 'Saving…' : 'Save'} onPress={handleSaveHours} disabled={updateHours.isPending} />
-        </View>
-      )}
+        <SmallButton label="Edit" kind="ghost" onPress={() => openEmployee(employee.id, 'manual')} />
+      </View>
     </View>
   );
 }
@@ -186,12 +179,20 @@ export default function TechnicalEmployees() {
   const findTechnician = useFindTechnicianByPhone();
   const respond = useRespondToHire();
   const endEmployment = useEndEmployment();
+  const { data: manualEmployees } = useSupabaseQuery('manual_employees', {
+    filters: userId ? { owner_id: userId } : {},
+    orderBy: { column: 'name' },
+    enabled: !!userId,
+  });
+  const addManual = useSupabaseInsert('manual_employees');
 
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Profile | null>(null);
   const [workStart, setWorkStart] = useState('09:00');
   const [workEnd, setWorkEnd] = useState('17:00');
   const [sending, setSending] = useState(false);
+  const [manual, setManual] = useState({ name: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
+  const [addingManual, setAddingManual] = useState(false);
 
   const debouncedQuery = useDebounced(query);
   const { data: searchResults, isFetching: searching } = useSearchTechnicians(selected ? '' : debouncedQuery);
@@ -246,6 +247,32 @@ export default function TechnicalEmployees() {
       );
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleAddManual() {
+    if (!userId) return;
+    if (!manual.name.trim()) {
+      showAlert('Add a name', 'Type the name of the person you are adding to your team.');
+      return;
+    }
+    if (manual.phone.trim() && !isValidPhone10(manual.phone.trim())) {
+      showAlert('Check the phone number', 'Enter a 10-digit number, or leave it blank.');
+      return;
+    }
+    try {
+      await addManual.mutateAsync({
+        owner_id: userId,
+        name: manual.name.trim(),
+        phone: manual.phone.trim() || null,
+        job_title: manual.jobTitle.trim() || null,
+        work_start_time: manual.start,
+        work_end_time: manual.end,
+      });
+      setManual({ name: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
+      setAddingManual(false);
+    } catch (err) {
+      showAlert('Could not add', getErrorMessage(err));
     }
   }
 
@@ -356,6 +383,67 @@ export default function TechnicalEmployees() {
     </View>
   );
 
+  const manualCard = (
+    <View className="rounded-2xl border border-gray-200 bg-white p-5">
+      <Pressable onPress={() => setAddingManual((v) => !v)} className="flex-row items-center gap-2">
+        <Ionicons name="person-outline" size={18} color={BLUE} />
+        <Text className="flex-1 text-base font-bold text-gray-900">Add someone without an account</Text>
+        <Ionicons name={addingManual ? 'chevron-up' : 'chevron-down'} size={18} color="#9CA3AF" />
+      </Pressable>
+      <Text className="mt-1 text-xs leading-5 text-gray-500">
+        For staff who don't use Jageer - you keep their name, phone and work hours here and can call them from the
+        list. Jobs can only be sent in the app to a technician who has an account.
+      </Text>
+
+      {addingManual && (
+        <View className="mt-4">
+          <Text className="mb-1.5 text-sm font-medium text-gray-700">Name</Text>
+          <TextInput
+            value={manual.name}
+            onChangeText={(v) => setManual((m) => ({ ...m, name: v }))}
+            placeholder="Full name"
+            className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+          />
+          <Text className="mb-1.5 text-sm font-medium text-gray-700">Phone number (optional)</Text>
+          <TextInput
+            value={manual.phone}
+            onChangeText={(v) => setManual((m) => ({ ...m, phone: v.replace(/[^0-9]/g, '') }))}
+            placeholder="98XXXXXXXX"
+            keyboardType="phone-pad"
+            maxLength={10}
+            className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+          />
+          <Text className="mb-1.5 text-sm font-medium text-gray-700">Job title (optional)</Text>
+          <TextInput
+            value={manual.jobTitle}
+            onChangeText={(v) => setManual((m) => ({ ...m, jobTitle: v }))}
+            placeholder="CCTV technician, helper, driver…"
+            className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+          />
+          <Text className="mb-1.5 text-sm font-medium text-gray-700">Work hours</Text>
+          <View className="mb-4 flex-row items-center gap-2">
+            <View className="flex-1">
+              <TimeField value={manual.start} onChange={(v) => setManual((m) => ({ ...m, start: v }))} />
+            </View>
+            <Text className="text-xs text-gray-400">to</Text>
+            <View className="flex-1">
+              <TimeField value={manual.end} onChange={(v) => setManual((m) => ({ ...m, end: v }))} />
+            </View>
+          </View>
+          <Pressable
+            onPress={handleAddManual}
+            disabled={addManual.isPending}
+            className="h-12 flex-row items-center justify-center gap-2 rounded-lg disabled:opacity-50"
+            style={{ backgroundColor: BLUE }}
+          >
+            <Ionicons name="person-add" size={17} color="#fff" />
+            <Text className="text-base font-semibold text-white">{addManual.isPending ? 'Adding…' : 'Add to my team'}</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+
   const lists = (
     <View style={{ gap: 20 }}>
       <Section title="My technical employees" count={employees.length}>
@@ -367,6 +455,14 @@ export default function TechnicalEmployees() {
           ))
         )}
       </Section>
+
+      {(manualEmployees ?? []).length > 0 && (
+        <Section title="Added by me (no account)" count={(manualEmployees ?? []).length}>
+          {(manualEmployees ?? []).map((employee, i) => (
+            <ManualEmployeeRow key={employee.id} employee={employee} last={i === (manualEmployees ?? []).length - 1} />
+          ))}
+        </Section>
+      )}
 
       {applications.length > 0 && (
         <Section title="Asked to join you" count={applications.length}>
@@ -399,12 +495,16 @@ export default function TechnicalEmployees() {
     >
       {wide ? (
         <View className="flex-row items-start" style={{ gap: 20 }}>
-          <View style={{ width: 380 }}>{inviteCard}</View>
+          <View style={{ width: 380, gap: 20 }}>
+            {inviteCard}
+            {manualCard}
+          </View>
           <View className="flex-1">{lists}</View>
         </View>
       ) : (
         <View style={{ gap: 20 }}>
           {inviteCard}
+          {manualCard}
           {lists}
         </View>
       )}
