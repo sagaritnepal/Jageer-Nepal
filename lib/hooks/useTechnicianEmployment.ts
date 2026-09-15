@@ -189,6 +189,19 @@ export function useFindTechnicianByPhone() {
   };
 }
 
+/** Look up a technician by the email they signed up with. Sign-in emails
+ * aren't readable from the client, so this goes through the
+ * find_technician_by_email definer function (see migration 0073), which
+ * returns at most the one matching technician. */
+export function useFindTechnicianByEmail() {
+  return async (email: string): Promise<Profile | null> => {
+    const { data, error } = await (supabase as any).rpc('find_technician_by_email', { p_email: email });
+    if (error) throw error;
+    const row = (data ?? [])[0];
+    return row ? (row as Profile) : null;
+  };
+}
+
 /** Search technicians by name or phone, for a reseller browsing for someone
  * to invite instead of typing an exact phone number. `,()%` are stripped
  * from the term first - PostgREST's `.or()` filter syntax treats them as

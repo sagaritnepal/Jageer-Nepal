@@ -157,13 +157,14 @@ function ManualEmployee({ id }: { id: string }) {
   const { data: employee, isLoading } = useSupabaseRow('manual_employees', id);
   const update = useSupabaseUpdate('manual_employees');
   const remove = useSupabaseDelete('manual_employees');
-  const [form, setForm] = useState({ name: '', phone: '', jobTitle: '', note: '', start: '09:00', end: '17:00', active: true });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', jobTitle: '', note: '', start: '09:00', end: '17:00', active: true });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!employee || loaded) return;
     setForm({
       name: employee.name ?? '',
+      email: employee.email ?? '',
       phone: employee.phone ?? '',
       jobTitle: employee.job_title ?? '',
       note: employee.note ?? '',
@@ -191,6 +192,7 @@ function ManualEmployee({ id }: { id: string }) {
         id,
         values: {
           name: form.name.trim(),
+          email: form.email.trim() || null,
           phone: form.phone.trim() || null,
           job_title: form.jobTitle.trim() || null,
           note: form.note.trim() || null,
@@ -247,6 +249,15 @@ function ManualEmployee({ id }: { id: string }) {
       <View className="rounded-2xl border border-gray-200 bg-white p-4">
         <Field label="Name">
           <Input value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="Full name" />
+        </Field>
+        <Field label="Email">
+          <Input
+            value={form.email}
+            onChangeText={(v) => setForm((f) => ({ ...f, email: v }))}
+            placeholder="name@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
         </Field>
         <Field label="Phone number">
           <Input

@@ -236,6 +236,7 @@ export interface ManualEmployee {
   owner_id: string;
   name: string;
   phone: string | null;
+  email: string | null;
   job_title: string | null;
   work_start_time: string | null;
   work_end_time: string | null;

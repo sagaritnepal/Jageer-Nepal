@@ -1,6 +1,6 @@
 // app/(reseller)/employees.tsx
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Linking } from 'react-native';
+import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, Linking, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -11,6 +11,7 @@ import {
   useSentInvites,
   useInviteTechnician,
   useFindTechnicianByPhone,
+  useFindTechnicianByEmail,
   useSearchTechnicians,
   useRespondToHire,
   useEndEmployment,
@@ -23,6 +24,7 @@ import { isValidPhone10 } from '../../lib/utils/phone';
 import type { ManualEmployee, Profile, TechnicianEmployment } from '../../types/database.types';
 
 const BLUE = '#2563EB';
+const GREEN = '#059669';
 
 function useDebounced<T>(value: T, delayMs = 300): T {
   const [debounced, setDebounced] = useState(value);
@@ -39,6 +41,124 @@ function hours(e: { work_start_time: string | null; work_end_time: string | null
 
 function openEmployee(id: string, kind?: 'manual') {
   router.push(`/(reseller)/employee/${id}${kind ? '?kind=manual' : ''}` as any);
+}
+
+/** One of the two big cards at the top - each opens its own form. */
+function ActionCard({
+  icon,
+  title,
+  body,
+  color,
+  tint,
+  onPress,
+}: {
+  icon: ComponentProps<typeof Ionicons>['name'];
+  title: string;
+  body: string;
+  color: string;
+  tint: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center gap-3.5 rounded-2xl p-4"
+      style={{ backgroundColor: tint, borderWidth: 1, borderColor: `${color}33`, flexGrow: 1, flexBasis: 280 }}
+    >
+      <View className="h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: color }}>
+        <Ionicons name={icon} size={22} color="#FFFFFF" />
+      </View>
+      <View className="flex-1">
+        <Text className="text-[15px] font-bold text-gray-900">{title}</Text>
+        <Text className="mt-0.5 text-xs leading-[17px] text-gray-600">{body}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={color} />
+    </Pressable>
+  );
+}
+
+function FormModal({
+  visible,
+  title,
+  subtitle,
+  color,
+  submitLabel,
+  submitting,
+  onSubmit,
+  onClose,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  subtitle: string;
+  color: string;
+  submitLabel: string;
+  submitting: boolean;
+  onSubmit: () => void;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <Pressable className="flex-1 items-center justify-center bg-black/50 px-4" onPress={onClose}>
+          <Pressable onPress={() => {}} className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 460, maxHeight: '90%' }}>
+            <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: color }}>
+              <View className="flex-1">
+                <Text className="text-[16px] font-bold text-white">{title}</Text>
+                <Text className="mt-0.5 text-[11.5px] leading-[16px] text-white/85">{subtitle}</Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </Pressable>
+            </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20 }}>
+              {children}
+
+              <Pressable
+                onPress={onSubmit}
+                disabled={submitting}
+                className="mt-2 h-12 flex-row items-center justify-center gap-2 rounded-xl disabled:opacity-50"
+                style={{ backgroundColor: color }}
+              >
+                <Ionicons name="checkmark" size={18} color="#fff" />
+                <Text className="text-base font-semibold text-white">{submitLabel}</Text>
+              </Pressable>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <View className="mb-3.5">
+      <Text className="mb-1.5 text-sm font-medium text-gray-700">{label}</Text>
+      {children}
+      {!!hint && <Text className="mt-1 text-[11px] text-gray-400">{hint}</Text>}
+    </View>
+  );
+}
+
+function Input(props: ComponentProps<typeof TextInput>) {
+  return <TextInput {...props} className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base text-gray-900" />;
+}
+
+function HoursRow({ start, end, setStart, setEnd }: { start: string; end: string; setStart: (v: string) => void; setEnd: (v: string) => void }) {
+  return (
+    <View className="flex-row items-center gap-2">
+      <View className="flex-1">
+        <TimeField value={start} onChange={setStart} />
+      </View>
+      <Text className="text-xs text-gray-400">to</Text>
+      <View className="flex-1">
+        <TimeField value={end} onChange={setEnd} />
+      </View>
+    </View>
+  );
 }
 
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
@@ -140,7 +260,7 @@ function EmployeeRow({ employment, profile, last }: { employment: TechnicianEmpl
 function ManualEmployeeRow({ employee, last }: { employee: ManualEmployee; last: boolean }) {
   const sub = [
     employee.job_title,
-    employee.phone ?? 'No phone',
+    employee.phone ?? employee.email ?? 'No phone',
     employee.is_active ? `On duty ${hours(employee)}` : 'No longer working for you',
   ]
     .filter(Boolean)
@@ -176,7 +296,8 @@ export default function TechnicalEmployees() {
   const { data: invites } = useSentInvites(userId);
   const { data: applications } = usePendingHires(userId);
   const inviteTechnician = useInviteTechnician();
-  const findTechnician = useFindTechnicianByPhone();
+  const findByPhone = useFindTechnicianByPhone();
+  const findByEmail = useFindTechnicianByEmail();
   const respond = useRespondToHire();
   const endEmployment = useEndEmployment();
   const { data: manualEmployees } = useSupabaseQuery('manual_employees', {
@@ -186,13 +307,20 @@ export default function TechnicalEmployees() {
   });
   const addManual = useSupabaseInsert('manual_employees');
 
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<Profile | null>(null);
-  const [workStart, setWorkStart] = useState('09:00');
-  const [workEnd, setWorkEnd] = useState('17:00');
+  const [showInvite, setShowInvite] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [sending, setSending] = useState(false);
-  const [manual, setManual] = useState({ name: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
-  const [addingManual, setAddingManual] = useState(false);
+
+  // Invite form: find someone who already has a technician account.
+  const [query, setQuery] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
+  const [selected, setSelected] = useState<Profile | null>(null);
+  const [inviteStart, setInviteStart] = useState('09:00');
+  const [inviteEnd, setInviteEnd] = useState('17:00');
+
+  // Manual form: someone with no account at all.
+  const [manual, setManual] = useState({ name: '', email: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
 
   const debouncedQuery = useDebounced(query);
   const { data: searchResults, isFetching: searching } = useSearchTechnicians(selected ? '' : debouncedQuery);
@@ -205,14 +333,18 @@ export default function TechnicalEmployees() {
   );
   const results = (searchResults ?? []).filter((p) => !takenIds.has(p.id));
 
+  function resetInvite() {
+    setQuery('');
+    setInviteEmail('');
+    setInvitePhone('');
+    setSelected(null);
+    setInviteStart('09:00');
+    setInviteEnd('17:00');
+  }
+
   function handleSelect(technician: Profile) {
     setSelected(technician);
     setQuery(technician.full_name ?? technician.phone ?? '');
-  }
-
-  function handleClearSelection() {
-    setSelected(null);
-    setQuery('');
   }
 
   async function handleInvite() {
@@ -220,24 +352,35 @@ export default function TechnicalEmployees() {
     setSending(true);
     try {
       let technician = selected;
+      if (!technician && invitePhone.trim()) {
+        if (!isValidPhone10(invitePhone.trim())) {
+          showAlert('Check the phone number', 'Enter their 10-digit number, or leave it blank and use the email instead.');
+          return;
+        }
+        technician = await findByPhone(invitePhone.trim());
+      }
+      if (!technician && inviteEmail.trim()) {
+        technician = await findByEmail(inviteEmail.trim());
+      }
       if (!technician) {
-        const trimmed = query.trim();
-        if (!isValidPhone10(trimmed)) {
-          showAlert('Pick a technician', 'Search by name, or enter their 10-digit phone number.');
-          return;
-        }
-        technician = await findTechnician(trimmed);
-        if (!technician) {
-          showAlert('Not found', 'No technician is registered with that phone number. Ask them to sign up as a technician first.');
-          return;
-        }
+        showAlert(
+          'Technician not found',
+          'Search by name, or type the exact phone number or email they signed up with. If they have no account yet, use "Add a technician" instead.'
+        );
+        return;
       }
       if (employees.some((e) => e.profile.id === technician!.id)) {
         showAlert('Already your employee', `${technician.full_name ?? 'This technician'} already works for you.`);
         return;
       }
-      await inviteTechnician.invite({ technicianId: technician.id, resellerId: userId, workStartTime: workStart, workEndTime: workEnd });
-      handleClearSelection();
+      await inviteTechnician.invite({
+        technicianId: technician.id,
+        resellerId: userId,
+        workStartTime: inviteStart,
+        workEndTime: inviteEnd,
+      });
+      resetInvite();
+      setShowInvite(false);
       showAlert('Invite sent', `${technician.full_name ?? 'The technician'} will see your invite and can accept it.`);
     } catch (err) {
       const message = getErrorMessage(err);
@@ -264,13 +407,14 @@ export default function TechnicalEmployees() {
       await addManual.mutateAsync({
         owner_id: userId,
         name: manual.name.trim(),
+        email: manual.email.trim() || null,
         phone: manual.phone.trim() || null,
         job_title: manual.jobTitle.trim() || null,
         work_start_time: manual.start,
         work_end_time: manual.end,
       });
-      setManual({ name: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
-      setAddingManual(false);
+      setManual({ name: '', email: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
+      setShowAdd(false);
     } catch (err) {
       showAlert('Could not add', getErrorMessage(err));
     }
@@ -293,159 +437,33 @@ export default function TechnicalEmployees() {
     }
   }
 
-  const inviteCard = (
-    <View className="rounded-2xl border border-gray-200 bg-white p-5">
-      <View className="mb-1 flex-row items-center gap-2">
-        <Ionicons name="person-add" size={18} color={BLUE} />
-        <Text className="text-base font-bold text-gray-900">Invite a technician</Text>
-      </View>
-      <Text className="mb-4 text-xs leading-5 text-gray-500">
-        Search by name, or enter the phone number they signed up with. Once they accept, you can send them jobs
-        (they ring on their phone to accept), and other resellers can't book them during their work hours. Invite as many as you need.
-      </Text>
+  const manualList = manualEmployees ?? [];
 
-      <Text className="mb-1.5 text-sm font-medium text-gray-700">Find a technician</Text>
-      <TextInput
-        value={query}
-        onChangeText={(v) => {
-          setQuery(v);
-          if (selected) setSelected(null);
-        }}
-        placeholder="Name or 98XXXXXXXX"
-        className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-      />
-
-      <View className="mb-3.5">
-        {selected ? (
-          <View className="mt-2 flex-row items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
-            <PersonAvatar name={selected.full_name} photoUrl={selected.avatar_url} size={32} bg="bg-blue-600" />
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-                {selected.full_name ?? 'Technician'}
-              </Text>
-              <Text className="text-xs text-gray-500">{selected.phone ?? 'No phone'}</Text>
-            </View>
-            <Pressable onPress={handleClearSelection} hitSlop={6}>
-              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-            </Pressable>
-          </View>
-        ) : (
-          query.trim().length >= 2 && (
-            <View className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white">
-              {searching ? (
-                <Text className="px-3 py-2.5 text-xs text-gray-400">Searching…</Text>
-              ) : results.length === 0 ? (
-                <Text className="px-3 py-2.5 text-xs text-gray-400">
-                  No matching technicians. Try their exact phone number instead.
-                </Text>
-              ) : (
-                results.map((p, i) => (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => handleSelect(p)}
-                    className={`flex-row items-center gap-2.5 px-3 py-2.5 ${i === results.length - 1 ? '' : 'border-b border-gray-100'}`}
-                  >
-                    <PersonAvatar name={p.full_name} photoUrl={p.avatar_url} size={30} bg="bg-gray-400" />
-                    <View className="flex-1">
-                      <Text className="text-sm font-medium text-gray-900" numberOfLines={1}>
-                        {p.full_name ?? 'Technician'}
-                      </Text>
-                      <Text className="text-xs text-gray-400">{p.phone ?? p.city ?? ''}</Text>
-                    </View>
-                  </Pressable>
-                ))
-              )}
-            </View>
-          )
-        )}
+  return (
+    <ScrollView
+      className="flex-1 bg-gray-50"
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ padding: wide ? 32 : 16, paddingTop: wide ? 24 : 16, paddingBottom: 48, gap: 20 }}
+    >
+      <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+        <ActionCard
+          icon="person-add"
+          title="Invite a technician"
+          body="They already use Jageer - once they accept you can send them jobs."
+          color={BLUE}
+          tint="#EFF6FF"
+          onPress={() => setShowInvite(true)}
+        />
+        <ActionCard
+          icon="people"
+          title="Add a technician"
+          body="Staff with no Jageer account - kept here so you can call them."
+          color={GREEN}
+          tint="#ECFDF5"
+          onPress={() => setShowAdd(true)}
+        />
       </View>
 
-      <Text className="mb-1.5 text-sm font-medium text-gray-700">Work hours</Text>
-      <View className="mb-4 flex-row items-center gap-2">
-        <View className="flex-1">
-          <TimeField value={workStart} onChange={setWorkStart} />
-        </View>
-        <Text className="text-xs text-gray-400">to</Text>
-        <View className="flex-1">
-          <TimeField value={workEnd} onChange={setWorkEnd} />
-        </View>
-      </View>
-
-      <Pressable
-        onPress={handleInvite}
-        disabled={sending}
-        className="h-12 flex-row items-center justify-center gap-2 rounded-lg disabled:opacity-50"
-        style={{ backgroundColor: BLUE }}
-      >
-        <Ionicons name="paper-plane" size={17} color="#fff" />
-        <Text className="text-base font-semibold text-white">{sending ? 'Sending…' : 'Send invite'}</Text>
-      </Pressable>
-    </View>
-  );
-
-  const manualCard = (
-    <View className="rounded-2xl border border-gray-200 bg-white p-5">
-      <Pressable onPress={() => setAddingManual((v) => !v)} className="flex-row items-center gap-2">
-        <Ionicons name="person-outline" size={18} color={BLUE} />
-        <Text className="flex-1 text-base font-bold text-gray-900">Add someone without an account</Text>
-        <Ionicons name={addingManual ? 'chevron-up' : 'chevron-down'} size={18} color="#9CA3AF" />
-      </Pressable>
-      <Text className="mt-1 text-xs leading-5 text-gray-500">
-        For staff who don't use Jageer - you keep their name, phone and work hours here and can call them from the
-        list. Jobs can only be sent in the app to a technician who has an account.
-      </Text>
-
-      {addingManual && (
-        <View className="mt-4">
-          <Text className="mb-1.5 text-sm font-medium text-gray-700">Name</Text>
-          <TextInput
-            value={manual.name}
-            onChangeText={(v) => setManual((m) => ({ ...m, name: v }))}
-            placeholder="Full name"
-            className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-          />
-          <Text className="mb-1.5 text-sm font-medium text-gray-700">Phone number (optional)</Text>
-          <TextInput
-            value={manual.phone}
-            onChangeText={(v) => setManual((m) => ({ ...m, phone: v.replace(/[^0-9]/g, '') }))}
-            placeholder="98XXXXXXXX"
-            keyboardType="phone-pad"
-            maxLength={10}
-            className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-          />
-          <Text className="mb-1.5 text-sm font-medium text-gray-700">Job title (optional)</Text>
-          <TextInput
-            value={manual.jobTitle}
-            onChangeText={(v) => setManual((m) => ({ ...m, jobTitle: v }))}
-            placeholder="CCTV technician, helper, driver…"
-            className="mb-3 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-          />
-          <Text className="mb-1.5 text-sm font-medium text-gray-700">Work hours</Text>
-          <View className="mb-4 flex-row items-center gap-2">
-            <View className="flex-1">
-              <TimeField value={manual.start} onChange={(v) => setManual((m) => ({ ...m, start: v }))} />
-            </View>
-            <Text className="text-xs text-gray-400">to</Text>
-            <View className="flex-1">
-              <TimeField value={manual.end} onChange={(v) => setManual((m) => ({ ...m, end: v }))} />
-            </View>
-          </View>
-          <Pressable
-            onPress={handleAddManual}
-            disabled={addManual.isPending}
-            className="h-12 flex-row items-center justify-center gap-2 rounded-lg disabled:opacity-50"
-            style={{ backgroundColor: BLUE }}
-          >
-            <Ionicons name="person-add" size={17} color="#fff" />
-            <Text className="text-base font-semibold text-white">{addManual.isPending ? 'Adding…' : 'Add to my team'}</Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-
-  const lists = (
-    <View style={{ gap: 20 }}>
       <Section title="My technical employees" count={employees.length}>
         {employees.length === 0 ? (
           <Text className="px-4 py-5 text-sm text-gray-500">No employees yet - invite a technician to get started.</Text>
@@ -456,10 +474,10 @@ export default function TechnicalEmployees() {
         )}
       </Section>
 
-      {(manualEmployees ?? []).length > 0 && (
-        <Section title="Added by me (no account)" count={(manualEmployees ?? []).length}>
-          {(manualEmployees ?? []).map((employee, i) => (
-            <ManualEmployeeRow key={employee.id} employee={employee} last={i === (manualEmployees ?? []).length - 1} />
+      {manualList.length > 0 && (
+        <Section title="Added by me (no account)" count={manualList.length}>
+          {manualList.map((employee, i) => (
+            <ManualEmployeeRow key={employee.id} employee={employee} last={i === manualList.length - 1} />
           ))}
         </Section>
       )}
@@ -484,30 +502,141 @@ export default function TechnicalEmployees() {
           ))}
         </Section>
       )}
-    </View>
-  );
 
-  return (
-    <ScrollView
-      className="flex-1 bg-gray-50"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: wide ? 32 : 16, paddingTop: wide ? 24 : 16, paddingBottom: 48 }}
-    >
-      {wide ? (
-        <View className="flex-row items-start" style={{ gap: 20 }}>
-          <View style={{ width: 380, gap: 20 }}>
-            {inviteCard}
-            {manualCard}
-          </View>
-          <View className="flex-1">{lists}</View>
-        </View>
-      ) : (
-        <View style={{ gap: 20 }}>
-          {inviteCard}
-          {manualCard}
-          {lists}
-        </View>
-      )}
+      <FormModal
+        visible={showInvite}
+        title="Invite a technician"
+        subtitle="For someone who already has a Jageer technician account."
+        color={BLUE}
+        submitLabel={sending ? 'Sending…' : 'Send invite'}
+        submitting={sending}
+        onSubmit={handleInvite}
+        onClose={() => {
+          setShowInvite(false);
+          resetInvite();
+        }}
+      >
+        <Field label="Name" hint="Start typing and pick them from the list.">
+          <Input
+            value={query}
+            onChangeText={(v) => {
+              setQuery(v);
+              if (selected) setSelected(null);
+            }}
+            placeholder="Their name"
+          />
+          {selected ? (
+            <View className="mt-2 flex-row items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+              <PersonAvatar name={selected.full_name} photoUrl={selected.avatar_url} size={32} bg="bg-blue-600" />
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+                  {selected.full_name ?? 'Technician'}
+                </Text>
+                <Text className="text-xs text-gray-500">{selected.phone ?? 'No phone'}</Text>
+              </View>
+              <Pressable onPress={() => setSelected(null)} hitSlop={6}>
+                <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+              </Pressable>
+            </View>
+          ) : (
+            query.trim().length >= 2 && (
+              <View className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white">
+                {searching ? (
+                  <Text className="px-3 py-2.5 text-xs text-gray-400">Searching…</Text>
+                ) : results.length === 0 ? (
+                  <Text className="px-3 py-2.5 text-xs text-gray-400">
+                    No matching technicians - try their phone number or email below.
+                  </Text>
+                ) : (
+                  results.map((p, i) => (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => handleSelect(p)}
+                      className={`flex-row items-center gap-2.5 px-3 py-2.5 ${i === results.length - 1 ? '' : 'border-b border-gray-100'}`}
+                    >
+                      <PersonAvatar name={p.full_name} photoUrl={p.avatar_url} size={30} bg="bg-gray-400" />
+                      <View className="flex-1">
+                        <Text className="text-sm font-medium text-gray-900" numberOfLines={1}>
+                          {p.full_name ?? 'Technician'}
+                        </Text>
+                        <Text className="text-xs text-gray-400">{p.phone ?? p.city ?? ''}</Text>
+                      </View>
+                    </Pressable>
+                  ))
+                )}
+              </View>
+            )
+          )}
+        </Field>
+
+        <Field label="Email" hint="The address they signed up with - used if you don't pick a name above.">
+          <Input
+            value={inviteEmail}
+            onChangeText={setInviteEmail}
+            placeholder="name@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        </Field>
+
+        <Field label="Phone number">
+          <Input
+            value={invitePhone}
+            onChangeText={(v) => setInvitePhone(v.replace(/[^0-9]/g, ''))}
+            placeholder="98XXXXXXXX"
+            keyboardType="phone-pad"
+            maxLength={10}
+          />
+        </Field>
+
+        <Field label="Work hours" hint="You set these - the technician can't change them.">
+          <HoursRow start={inviteStart} end={inviteEnd} setStart={setInviteStart} setEnd={setInviteEnd} />
+        </Field>
+      </FormModal>
+
+      <FormModal
+        visible={showAdd}
+        title="Add a technician"
+        subtitle="For staff with no Jageer account. Jobs can only be sent in the app to a technician who has one."
+        color={GREEN}
+        submitLabel={addManual.isPending ? 'Adding…' : 'Add to my team'}
+        submitting={addManual.isPending}
+        onSubmit={handleAddManual}
+        onClose={() => setShowAdd(false)}
+      >
+        <Field label="Name">
+          <Input value={manual.name} onChangeText={(v) => setManual((m) => ({ ...m, name: v }))} placeholder="Full name" />
+        </Field>
+        <Field label="Email">
+          <Input
+            value={manual.email}
+            onChangeText={(v) => setManual((m) => ({ ...m, email: v }))}
+            placeholder="name@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        </Field>
+        <Field label="Phone number">
+          <Input
+            value={manual.phone}
+            onChangeText={(v) => setManual((m) => ({ ...m, phone: v.replace(/[^0-9]/g, '') }))}
+            placeholder="98XXXXXXXX"
+            keyboardType="phone-pad"
+            maxLength={10}
+          />
+        </Field>
+        <Field label="Job title">
+          <Input value={manual.jobTitle} onChangeText={(v) => setManual((m) => ({ ...m, jobTitle: v }))} placeholder="CCTV technician, helper, driver…" />
+        </Field>
+        <Field label="Work hours">
+          <HoursRow
+            start={manual.start}
+            end={manual.end}
+            setStart={(v) => setManual((m) => ({ ...m, start: v }))}
+            setEnd={(v) => setManual((m) => ({ ...m, end: v }))}
+          />
+        </Field>
+      </FormModal>
     </ScrollView>
   );
 }
