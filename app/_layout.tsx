@@ -10,6 +10,7 @@ import { useContactsSyncBootstrap } from '../lib/hooks/useContactsSyncBootstrap'
 import { BiometricLockScreen } from '../lib/components/BiometricLockScreen';
 import { FloatingAssistantChat } from '../lib/components/FloatingAssistantChat';
 import { ClientAssistantChat } from '../lib/components/ClientAssistantChat';
+import { AppAlertHost } from '../lib/components/AppAlertHost';
 import '../global.css';
 
 // Pre-login screens (login/register) are still a bare mobile-first form
@@ -104,6 +105,7 @@ export default function RootLayout() {
           </Stack>
         </AuthGate>
       </QueryProvider>
+      <AppAlertHost />
     </SafeAreaProvider>
   );
 }
