@@ -73,6 +73,7 @@ export function shortcuts(basePath: string): {
   href: string;
 }[] {
   return [
+    { key: 'daybook', label: 'Day Book', icon: 'book', href: `${basePath}/daybook` },
     { key: 'customers', label: 'Customers', icon: 'people', href: `${basePath}/customers` },
     { key: 'payment-in', label: 'Payment In', icon: 'arrow-down-circle', href: `${basePath}/quick-payment?type=in` },
     { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', href: `${basePath}/quick-payment?type=out` },
@@ -96,6 +97,7 @@ export function shortcuts(basePath: string): {
 // shortcuts() data/routing above, so restyling the grid can never touch the
 // key/label/icon/href it returns.
 const SHORTCUT_COLORS: Record<string, { bg: string; fg: string }> = {
+  daybook: { bg: '#EFF6FF', fg: '#1D4ED8' },
   customers: { bg: '#EFF6FF', fg: '#2563EB' },
   'payment-in': { bg: '#ECFDF5', fg: '#059669' },
   'payment-out': { bg: '#FEF2F2', fg: '#DC2626' },
