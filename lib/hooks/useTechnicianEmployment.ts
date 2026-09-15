@@ -189,6 +189,22 @@ export function useFindTechnicianByPhone() {
   };
 }
 
+/** Sign-in emails of this reseller's own employees (and pending invites),
+ * keyed by profile id. Emails live in auth.users, so this goes through the
+ * my_employee_emails definer function (see migration 0074). */
+export function useEmployeeEmails(resellerId: string | undefined) {
+  const { data } = useQuery({
+    queryKey: ['my-employee-emails', resellerId],
+    queryFn: async () => {
+      const { data: rows, error } = await (supabase as any).rpc('my_employee_emails');
+      if (error) throw error;
+      return (rows ?? []) as { id: string; email: string }[];
+    },
+    enabled: !!resellerId,
+  });
+  return useMemo(() => new Map((data ?? []).map((r) => [r.id, r.email])), [data]);
+}
+
 /** Look up a technician by the email they signed up with. Sign-in emails
  * aren't readable from the client, so this goes through the
  * find_technician_by_email definer function (see migration 0073), which

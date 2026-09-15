@@ -242,6 +242,9 @@ export interface ManualEmployee {
   work_end_time: string | null;
   note: string | null;
   is_active: boolean;
+  /** Set once this person signs up as a technician with a matching phone,
+   * email or (when neither was stored) name - see migration 0074. */
+  linked_profile_id: string | null;
   created_at: string;
   updated_at: string;
 }

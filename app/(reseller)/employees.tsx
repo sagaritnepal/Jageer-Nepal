@@ -12,6 +12,7 @@ import {
   useInviteTechnician,
   useFindTechnicianByPhone,
   useFindTechnicianByEmail,
+  useEmployeeEmails,
   useSearchTechnicians,
   useRespondToHire,
   useEndEmployment,
@@ -173,54 +174,27 @@ function Section({ title, count, children }: { title: string; count?: number; ch
   );
 }
 
-function PersonLine({
-  profile,
-  sub,
-  last,
-  children,
-}: {
-  profile: Profile;
-  sub: string;
-  last: boolean;
-  children?: ReactNode;
-}) {
-  const wide = useWideDetail();
-  const who = (
-    <>
-      <PersonAvatar name={profile.full_name} photoUrl={profile.avatar_url} size={42} bg="bg-blue-600" />
-      <View className="flex-1">
-        <Text className="font-semibold text-gray-900" numberOfLines={1}>
-          {profile.full_name ?? 'Technician'}
-        </Text>
-        <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={wide ? 1 : 2}>
-          {sub}
-        </Text>
-      </View>
-    </>
-  );
+const BADGE = {
+  account: { label: 'Jageer account', color: '#1D4ED8', bg: '#EFF6FF' },
+  manual: { label: 'No account', color: '#4B5563', bg: '#F3F4F6' },
+  signedUp: { label: 'Signed up · invite sent', color: '#B45309', bg: '#FFFBEB' },
+  asked: { label: 'Wants to join you', color: '#6D28D9', bg: '#F5F3FF' },
+  invited: { label: 'Invite sent', color: '#B45309', bg: '#FFFBEB' },
+};
 
-  // On a phone the buttons get their own line - beside the name they
-  // squeezed it down to "Sushant ...".
-  if (!wide) {
-    return (
-      <View className={`px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
-        <View className="flex-row items-center gap-3">{who}</View>
-        {!!children && (
-          <View className="mt-3 flex-row items-center justify-end" style={{ gap: 8 }}>
-            {children}
-          </View>
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <View className={`flex-row items-center gap-3 px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
-      {who}
-      {children}
-    </View>
-  );
-}
+type TeamMember = {
+  key: string;
+  name: string;
+  photoUrl?: string | null;
+  email: string | null;
+  phone: string | null;
+  jobTitle: string | null;
+  hours: string;
+  /** Short status chip - who they are in the system, not what they do. */
+  badge: { label: string; color: string; bg: string };
+  onOpen: () => void;
+  actions?: ReactNode;
+};
 
 function SmallButton({ label, onPress, kind = 'primary', disabled }: { label: string; onPress: () => void; kind?: 'primary' | 'ghost' | 'danger'; disabled?: boolean }) {
   const style =
@@ -239,52 +213,71 @@ function SmallButton({ label, onPress, kind = 'primary', disabled }: { label: st
   );
 }
 
-/** Employee with their own account. Tapping the row opens their page,
- * where the employer sets the work hours - technicians can't change their
- * own (see the technician_employment_hours_guard trigger). */
-function EmployeeRow({ employment, profile, last }: { employment: TechnicianEmployment; profile: Profile; last: boolean }) {
-  return (
-    <PersonLine profile={profile} sub={`${profile.phone ?? 'No phone'} · On duty ${hours(employment)}`} last={last}>
-      {!!profile.phone && (
-        <Pressable onPress={() => Linking.openURL(`tel:${profile.phone}`)} hitSlop={6} className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+/** One row shape for the whole team, whether the person has their own
+ * Jageer account or was added by hand, so every line reads the same way:
+ * name, what kind of account, email, phone, job title, work hours. */
+function TeamRow({ member, last }: { member: TeamMember; last: boolean }) {
+  const wide = useWideDetail();
+  const lines = [member.email, member.phone].filter(Boolean).join(' · ');
+  const meta = [member.jobTitle, `On duty ${member.hours}`].filter(Boolean).join(' · ');
+
+  const who = (
+    <>
+      <PersonAvatar name={member.name} photoUrl={member.photoUrl} size={42} bg={member.photoUrl ? 'bg-blue-600' : 'bg-gray-500'} />
+      <View className="flex-1">
+        <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
+          <Text className="font-semibold text-gray-900" numberOfLines={1}>
+            {member.name}
+          </Text>
+          <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: member.badge.bg }}>
+            <Text className="text-[10px] font-bold" style={{ color: member.badge.color }}>
+              {member.badge.label}
+            </Text>
+          </View>
+        </View>
+        <Text className="mt-0.5 text-xs text-gray-600" numberOfLines={wide ? 1 : 2}>
+          {lines || 'No email or phone yet'}
+        </Text>
+        <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+    </>
+  );
+
+  const buttons = (
+    <>
+      {!!member.phone && (
+        <Pressable
+          onPress={() => Linking.openURL(`tel:${member.phone}`)}
+          hitSlop={6}
+          className="h-9 w-9 items-center justify-center rounded-full bg-blue-50"
+          accessibilityLabel={`Call ${member.name}`}
+        >
           <Ionicons name="call-outline" size={17} color={BLUE} />
         </Pressable>
       )}
-      <SmallButton label="Open" kind="ghost" onPress={() => openEmployee(employment.id)} />
-    </PersonLine>
+      {member.actions ?? <SmallButton label="Open" kind="ghost" onPress={member.onOpen} />}
+    </>
   );
-}
 
-/** Someone added by hand (no Jageer account) - a record the reseller keeps
- * so their whole team is in one place. */
-function ManualEmployeeRow({ employee, last }: { employee: ManualEmployee; last: boolean }) {
-  const sub = [
-    employee.job_title,
-    employee.phone ?? employee.email ?? 'No phone',
-    employee.is_active ? `On duty ${hours(employee)}` : 'No longer working for you',
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  // On a phone the buttons get their own line - beside the name they
+  // squeezed it down to "Sushant ...".
+  if (!wide) {
+    return (
+      <View className={`px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
+        <View className="flex-row items-center gap-3">{who}</View>
+        <View className="mt-3 flex-row items-center justify-end" style={{ gap: 8 }}>
+          {buttons}
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <View className={`px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
-      <View className="flex-row items-center gap-3">
-        <PersonAvatar name={employee.name} size={42} bg="bg-gray-500" />
-        <View className="flex-1">
-          <Text className="font-semibold text-gray-900" numberOfLines={1}>
-            {employee.name}
-          </Text>
-          <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={2}>
-            {sub}
-          </Text>
-        </View>
-        {!!employee.phone && (
-          <Pressable onPress={() => Linking.openURL(`tel:${employee.phone}`)} hitSlop={6} className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-            <Ionicons name="call-outline" size={17} color={BLUE} />
-          </Pressable>
-        )}
-        <SmallButton label="Edit" kind="ghost" onPress={() => openEmployee(employee.id, 'manual')} />
-      </View>
+    <View className={`flex-row items-center gap-3 px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
+      {who}
+      {buttons}
     </View>
   );
 }
@@ -437,7 +430,41 @@ export default function TechnicalEmployees() {
     }
   }
 
+  const emailOf = useEmployeeEmails(userId);
   const manualList = manualEmployees ?? [];
+
+  // One list for the whole team: technicians with their own account and
+  // people added by hand, in the same shape. A hand-added person who has
+  // since signed up shows the account row instead, so nobody appears twice.
+  const team: TeamMember[] = useMemo(() => {
+    const accountIds = new Set(employees.map((e) => e.profile.id));
+    const fromAccounts = employees.map(({ employment, profile }) => ({
+      key: employment.id,
+      name: profile.full_name ?? 'Technician',
+      photoUrl: profile.avatar_url,
+      email: emailOf.get(profile.id) ?? null,
+      phone: profile.phone,
+      jobTitle: null,
+      hours: hours(employment),
+      badge: BADGE.account,
+      onOpen: () => openEmployee(employment.id),
+    }));
+    const fromManual = manualList
+      .filter((m) => !(m.linked_profile_id && accountIds.has(m.linked_profile_id)))
+      .map((m) => ({
+        key: m.id,
+        name: m.name,
+        photoUrl: null,
+        email: m.email,
+        phone: m.phone,
+        jobTitle: m.job_title,
+        hours: m.is_active ? hours(m) : 'no longer working for you',
+        badge: m.linked_profile_id ? BADGE.signedUp : BADGE.manual,
+        onOpen: () => openEmployee(m.id, 'manual'),
+        actions: <SmallButton label="Edit" kind="ghost" onPress={() => openEmployee(m.id, 'manual')} />,
+      }));
+    return [...fromAccounts, ...fromManual].sort((a, b) => a.name.localeCompare(b.name));
+  }, [employees, manualList, emailOf]);
 
   return (
     <ScrollView
@@ -464,31 +491,40 @@ export default function TechnicalEmployees() {
         />
       </View>
 
-      <Section title="My technical employees" count={employees.length}>
-        {employees.length === 0 ? (
-          <Text className="px-4 py-5 text-sm text-gray-500">No employees yet - invite a technician to get started.</Text>
+      <Section title="My technical employees" count={team.length}>
+        {team.length === 0 ? (
+          <Text className="px-4 py-5 text-sm text-gray-500">
+            Nobody on your team yet - invite a technician, or add someone without an account.
+          </Text>
         ) : (
-          employees.map(({ employment, profile }, i) => (
-            <EmployeeRow key={employment.id} employment={employment} profile={profile} last={i === employees.length - 1} />
-          ))
+          team.map((member, i) => <TeamRow key={member.key} member={member} last={i === team.length - 1} />)
         )}
       </Section>
-
-      {manualList.length > 0 && (
-        <Section title="Added by me (no account)" count={manualList.length}>
-          {manualList.map((employee, i) => (
-            <ManualEmployeeRow key={employee.id} employee={employee} last={i === manualList.length - 1} />
-          ))}
-        </Section>
-      )}
 
       {applications.length > 0 && (
         <Section title="Asked to join you" count={applications.length}>
           {applications.map(({ employment, profile }, i) => (
-            <PersonLine key={employment.id} profile={profile} sub={`Wants to work ${hours(employment)}`} last={i === applications.length - 1}>
-              <SmallButton label="Reject" kind="ghost" onPress={() => handleRespond(employment.id, false)} disabled={respond.isPending} />
-              <SmallButton label="Accept" onPress={() => handleRespond(employment.id, true)} disabled={respond.isPending} />
-            </PersonLine>
+            <TeamRow
+              key={employment.id}
+              last={i === applications.length - 1}
+              member={{
+                key: employment.id,
+                name: profile.full_name ?? 'Technician',
+                photoUrl: profile.avatar_url,
+                email: emailOf.get(profile.id) ?? null,
+                phone: profile.phone,
+                jobTitle: null,
+                hours: hours(employment),
+                badge: BADGE.asked,
+                onOpen: () => {},
+                actions: (
+                  <>
+                    <SmallButton label="Reject" kind="ghost" onPress={() => handleRespond(employment.id, false)} disabled={respond.isPending} />
+                    <SmallButton label="Accept" onPress={() => handleRespond(employment.id, true)} disabled={respond.isPending} />
+                  </>
+                ),
+              }}
+            />
           ))}
         </Section>
       )}
@@ -496,9 +532,22 @@ export default function TechnicalEmployees() {
       {invites.length > 0 && (
         <Section title="Invites waiting for an answer" count={invites.length}>
           {invites.map(({ employment, profile }, i) => (
-            <PersonLine key={employment.id} profile={profile} sub={`Invited · ${hours(employment)}`} last={i === invites.length - 1}>
-              <SmallButton label="Cancel" kind="ghost" onPress={() => handleCancelInvite(employment.id)} disabled={endEmployment.isPending} />
-            </PersonLine>
+            <TeamRow
+              key={employment.id}
+              last={i === invites.length - 1}
+              member={{
+                key: employment.id,
+                name: profile.full_name ?? 'Technician',
+                photoUrl: profile.avatar_url,
+                email: emailOf.get(profile.id) ?? null,
+                phone: profile.phone,
+                jobTitle: null,
+                hours: hours(employment),
+                badge: BADGE.invited,
+                onOpen: () => {},
+                actions: <SmallButton label="Cancel" kind="ghost" onPress={() => handleCancelInvite(employment.id)} disabled={endEmployment.isPending} />,
+              }}
+            />
           ))}
         </Section>
       )}
