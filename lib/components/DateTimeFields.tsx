@@ -9,9 +9,8 @@ import {
   bsDaysInMonth,
   bsToAdString,
   bsWeekdayOfFirst,
-  toAdLabel,
-  toBsLabel,
 } from '../utils/nepaliDate';
+import { dateLabels, useCalendarMode } from '../hooks/useCalendarMode';
 
 function parseDateValue(value: string): Date {
   const [y, m, d] = value.split('-').map(Number);
@@ -196,7 +195,10 @@ function YearMonthPicker({
  * string either way, since that's the shape every date column already uses. */
 export function DateField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [showPicker, setShowPicker] = useState(false);
-  const [mode, setMode] = useState<'bs' | 'ad'>('bs');
+  // The BS/AD toggle is shared app-wide (and remembered), so picking AD here
+  // switches this field's label, every other date field and date headings
+  // like the Day Book - not just the grid inside this one popup.
+  const [mode, setMode] = useCalendarMode();
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
   // bsSpec/adSpec below are computed on every render (not just while the
   // picker is open) to feed the always-visible trigger label too, so these
@@ -216,7 +218,6 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
     const ad = parseDateValue(base);
     setAdYear(ad.getFullYear());
     setAdMonth(ad.getMonth());
-    setMode('bs');
     setShowYearMonthPicker(false);
     setShowPicker(true);
   }
@@ -284,9 +285,9 @@ export function DateField({ value, onChange }: { value: string; onChange: (v: st
         className="rounded-lg border border-gray-300 bg-white px-3 py-2"
       >
         <Text className={value ? 'text-xs font-bold text-gray-900' : 'text-xs font-bold text-gray-400'}>
-          {value ? toBsLabel(value) : 'Select a date'}
+          {value ? dateLabels(value, mode)[0] : 'Select a date'}
         </Text>
-        {!!value && <Text className="mt-0.5 text-[10px] text-gray-500">{toAdLabel(value)}</Text>}
+        {!!value && <Text className="mt-0.5 text-[10px] text-gray-500">{dateLabels(value, mode)[1]}</Text>}
       </Pressable>
 
       <Modal visible={showPicker} transparent animationType="fade" onRequestClose={() => setShowPicker(false)}>
