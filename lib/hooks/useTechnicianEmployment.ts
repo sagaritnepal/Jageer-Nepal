@@ -189,6 +189,29 @@ export function useFindTechnicianByPhone() {
   };
 }
 
+/** Search technicians by name or phone, for a reseller browsing for someone
+ * to invite instead of typing an exact phone number. `,()%` are stripped
+ * from the term first - PostgREST's `.or()` filter syntax treats them as
+ * control characters, and letting a typed name reach it unescaped would let
+ * someone smuggle in extra filter clauses. */
+export function useSearchTechnicians(query: string) {
+  const term = query.trim().replace(/[,()%]/g, '');
+  return useQuery({
+    queryKey: ['technician-search', term],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from('profiles') as any)
+        .select('*')
+        .eq('role', 'technician')
+        .or(`full_name.ilike.%${term}%,phone.ilike.%${term}%`)
+        .order('full_name')
+        .limit(8);
+      if (error) throw error;
+      return (data ?? []) as Profile[];
+    },
+    enabled: term.length >= 2,
+  });
+}
+
 /** Look up a reseller by phone, for a technician applying to work for them. */
 export function useFindResellerByPhone() {
   const queryClient = useQueryClient();

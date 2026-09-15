@@ -1,5 +1,5 @@
 // app/(reseller)/employees.tsx
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -9,6 +9,7 @@ import {
   useSentInvites,
   useInviteTechnician,
   useFindTechnicianByPhone,
+  useSearchTechnicians,
   useRespondToHire,
   useEndEmployment,
   useUpdateWorkHours,
@@ -21,6 +22,15 @@ import { isValidPhone10 } from '../../lib/utils/phone';
 import type { Profile, TechnicianEmployment } from '../../types/database.types';
 
 const BLUE = '#2563EB';
+
+function useDebounced<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 function hours(e: TechnicianEmployment) {
   return `${e.work_start_time?.slice(0, 5) ?? '09:00'} to ${e.work_end_time?.slice(0, 5) ?? '17:00'}`;
@@ -177,31 +187,56 @@ export default function TechnicalEmployees() {
   const respond = useRespondToHire();
   const endEmployment = useEndEmployment();
 
-  const [phone, setPhone] = useState('');
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<Profile | null>(null);
   const [workStart, setWorkStart] = useState('09:00');
   const [workEnd, setWorkEnd] = useState('17:00');
   const [sending, setSending] = useState(false);
 
+  const debouncedQuery = useDebounced(query);
+  const { data: searchResults, isFetching: searching } = useSearchTechnicians(selected ? '' : debouncedQuery);
+
+  // Already-employed or already-invited technicians shouldn't show up as
+  // search results - there's nothing useful to do with them here.
+  const takenIds = useMemo(
+    () => new Set([...employees.map((e) => e.profile.id), ...invites.map((e) => e.profile.id)]),
+    [employees, invites]
+  );
+  const results = (searchResults ?? []).filter((p) => !takenIds.has(p.id));
+
+  function handleSelect(technician: Profile) {
+    setSelected(technician);
+    setQuery(technician.full_name ?? technician.phone ?? '');
+  }
+
+  function handleClearSelection() {
+    setSelected(null);
+    setQuery('');
+  }
+
   async function handleInvite() {
     if (!userId) return;
-    const trimmed = phone.trim();
-    if (!isValidPhone10(trimmed)) {
-      showAlert('Check the phone number', "Enter the technician's 10-digit phone number.");
-      return;
-    }
     setSending(true);
     try {
-      const technician = await findTechnician(trimmed);
+      let technician = selected;
       if (!technician) {
-        showAlert('Not found', 'No technician is registered with that phone number. Ask them to sign up as a technician first.');
-        return;
+        const trimmed = query.trim();
+        if (!isValidPhone10(trimmed)) {
+          showAlert('Pick a technician', 'Search by name, or enter their 10-digit phone number.');
+          return;
+        }
+        technician = await findTechnician(trimmed);
+        if (!technician) {
+          showAlert('Not found', 'No technician is registered with that phone number. Ask them to sign up as a technician first.');
+          return;
+        }
       }
-      if (employees.some((e) => e.profile.id === technician.id)) {
+      if (employees.some((e) => e.profile.id === technician!.id)) {
         showAlert('Already your employee', `${technician.full_name ?? 'This technician'} already works for you.`);
         return;
       }
       await inviteTechnician.invite({ technicianId: technician.id, resellerId: userId, workStartTime: workStart, workEndTime: workEnd });
-      setPhone('');
+      handleClearSelection();
       showAlert('Invite sent', `${technician.full_name ?? 'The technician'} will see your invite and can accept it.`);
     } catch (err) {
       const message = getErrorMessage(err);
@@ -238,19 +273,65 @@ export default function TechnicalEmployees() {
         <Text className="text-base font-bold text-gray-900">Invite a technician</Text>
       </View>
       <Text className="mb-4 text-xs leading-5 text-gray-500">
-        Enter the phone number they signed up with. Once they accept, you can assign them jobs straight away, and
-        other resellers can't book them during their work hours. Invite as many as you need.
+        Search by name, or enter the phone number they signed up with. Once they accept, you can assign them jobs
+        straight away, and other resellers can't book them during their work hours. Invite as many as you need.
       </Text>
 
-      <Text className="mb-1.5 text-sm font-medium text-gray-700">Technician's phone number</Text>
+      <Text className="mb-1.5 text-sm font-medium text-gray-700">Find a technician</Text>
       <TextInput
-        value={phone}
-        onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
-        placeholder="98XXXXXXXX"
-        keyboardType="phone-pad"
-        maxLength={10}
-        className="mb-3.5 rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+        value={query}
+        onChangeText={(v) => {
+          setQuery(v);
+          if (selected) setSelected(null);
+        }}
+        placeholder="Name or 98XXXXXXXX"
+        className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
       />
+
+      <View className="mb-3.5">
+        {selected ? (
+          <View className="mt-2 flex-row items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+            <PersonAvatar name={selected.full_name} photoUrl={selected.avatar_url} size={32} bg="bg-blue-600" />
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+                {selected.full_name ?? 'Technician'}
+              </Text>
+              <Text className="text-xs text-gray-500">{selected.phone ?? 'No phone'}</Text>
+            </View>
+            <Pressable onPress={handleClearSelection} hitSlop={6}>
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </Pressable>
+          </View>
+        ) : (
+          query.trim().length >= 2 && (
+            <View className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white">
+              {searching ? (
+                <Text className="px-3 py-2.5 text-xs text-gray-400">Searching…</Text>
+              ) : results.length === 0 ? (
+                <Text className="px-3 py-2.5 text-xs text-gray-400">
+                  No matching technicians. Try their exact phone number instead.
+                </Text>
+              ) : (
+                results.map((p, i) => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => handleSelect(p)}
+                    className={`flex-row items-center gap-2.5 px-3 py-2.5 ${i === results.length - 1 ? '' : 'border-b border-gray-100'}`}
+                  >
+                    <PersonAvatar name={p.full_name} photoUrl={p.avatar_url} size={30} bg="bg-gray-400" />
+                    <View className="flex-1">
+                      <Text className="text-sm font-medium text-gray-900" numberOfLines={1}>
+                        {p.full_name ?? 'Technician'}
+                      </Text>
+                      <Text className="text-xs text-gray-400">{p.phone ?? p.city ?? ''}</Text>
+                    </View>
+                  </Pressable>
+                ))
+              )}
+            </View>
+          )
+        )}
+      </View>
 
       <Text className="mb-1.5 text-sm font-medium text-gray-700">Work hours</Text>
       <View className="mb-4 flex-row items-center gap-2">

@@ -1,5 +1,5 @@
 // app/(reseller)/request-details.tsx
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Modal,
   useWindowDimensions,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -242,6 +242,32 @@ export default function ResellerRequestDetails() {
   function removePhoto(index: number) {
     setPhotos((prev) => prev.map((p, i) => (i === index ? null : p)));
   }
+
+  // request-details is a hidden tab screen (see _layout.tsx), so React
+  // Navigation keeps this component instance mounted across visits instead
+  // of remounting it - without a reset, the previous request's customer,
+  // date/time, address/photos/notes, and price would stay in state and
+  // silently prefill the next request. Resetting on submit alone isn't
+  // enough: cancelling out of a filled form leaves the same stale state
+  // for the next visit, so this resets on every focus instead - screen
+  // pickers/permission dialogs (photo, location, contacts) don't blur a
+  // Tabs screen, so an in-progress fill is never wiped out from under it.
+  useFocusEffect(
+    useCallback(() => {
+      setCustomerId(null);
+      setCustomerName('');
+      setCustomerPhone('');
+      setCompanyName('');
+      setCompanySameAsCustomer(false);
+      setDate('');
+      setTime('');
+      setAddress('');
+      setCoords(null);
+      setPhotos(Array(PHOTO_SLOTS).fill(null));
+      setNotes('');
+      setQuotedPrice('');
+    }, [])
+  );
 
   async function uploadPhoto(uri: string, index: number): Promise<string> {
     const arraybuffer = await fetch(uri).then((res) => res.arrayBuffer());
