@@ -16,8 +16,13 @@ export function useMyEmployment(technicianId: string | undefined) {
     enabled: !!technicianId,
   });
 
+  // A pending row the reseller started is an invite, not the technician's own
+  // application - that is listed separately (useMyInvites) for accept/decline.
   const current = useMemo(
-    () => (rows ?? []).find((r) => r.status === 'pending' || r.status === 'accepted') ?? null,
+    () =>
+      (rows ?? []).find(
+        (r) => r.status === 'accepted' || (r.status === 'pending' && r.initiated_by !== 'reseller')
+      ) ?? null,
     [rows]
   );
   const { data: employer } = useSupabaseQuery('profiles', {
@@ -35,10 +40,11 @@ interface EmploymentWithProfile {
 
 function useJoinedTechnicianEmployment(
   resellerId: string | undefined,
-  status: TechnicianEmployment['status']
+  status: TechnicianEmployment['status'],
+  initiatedBy?: TechnicianEmployment['initiated_by']
 ) {
   const { data: rows, isLoading } = useSupabaseQuery('technician_employment', {
-    filters: resellerId ? { reseller_id: resellerId, status } : {},
+    filters: resellerId ? { reseller_id: resellerId, status, ...(initiatedBy ? { initiated_by: initiatedBy } : {}) } : {},
     orderBy: { column: 'requested_at', ascending: false },
     enabled: !!resellerId,
   });
@@ -70,7 +76,12 @@ function useJoinedTechnicianEmployment(
 
 /** Pending applications a reseller has received from technicians. */
 export function usePendingHires(resellerId: string | undefined) {
-  return useJoinedTechnicianEmployment(resellerId, 'pending');
+  return useJoinedTechnicianEmployment(resellerId, 'pending', 'technician');
+}
+
+/** Invites a reseller has sent that the technician hasn't answered yet. */
+export function useSentInvites(resellerId: string | undefined) {
+  return useJoinedTechnicianEmployment(resellerId, 'pending', 'reseller');
 }
 
 /** A reseller's currently-accepted employee technicians. */
@@ -121,6 +132,60 @@ export function useUpdateWorkHours() {
     ...update,
     updateHours: (id: string, workStartTime: string, workEndTime: string) =>
       update.mutateAsync({ id, values: { work_start_time: workStartTime, work_end_time: workEndTime } }),
+  };
+}
+
+/** A reseller invites a technician; the technician accepts or declines. */
+export function useInviteTechnician() {
+  const insert = useSupabaseInsert('technician_employment');
+  return {
+    ...insert,
+    invite: (params: { technicianId: string; resellerId: string; workStartTime: string; workEndTime: string }) =>
+      insert.mutateAsync({
+        technician_id: params.technicianId,
+        reseller_id: params.resellerId,
+        status: 'pending',
+        initiated_by: 'reseller',
+        work_start_time: params.workStartTime,
+        work_end_time: params.workEndTime,
+      }),
+  };
+}
+
+/** Invites a technician has received from resellers, with who sent each. */
+export function useMyInvites(technicianId: string | undefined) {
+  const { data: rows, isLoading } = useSupabaseQuery('technician_employment', {
+    filters: technicianId ? { technician_id: technicianId, status: 'pending', initiated_by: 'reseller' } : {},
+    orderBy: { column: 'requested_at', ascending: false },
+    enabled: !!technicianId,
+  });
+  const resellerIds = useMemo(() => (rows ?? []).map((r) => r.reseller_id), [rows]);
+  const { data: resellers } = useQuery({
+    queryKey: ['employment-invite-resellers', resellerIds],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('*').in('id', resellerIds);
+      if (error) throw error;
+      return (data ?? []) as Profile[];
+    },
+    enabled: resellerIds.length > 0,
+  });
+  const invites = useMemo(() => {
+    const byId = new Map((resellers ?? []).map((p) => [p.id, p]));
+    return (rows ?? []).map((employment) => ({ employment, reseller: byId.get(employment.reseller_id) ?? null }));
+  }, [rows, resellers]);
+  return { data: invites, isLoading };
+}
+
+/** Look up a technician by phone, for a reseller inviting them. */
+export function useFindTechnicianByPhone() {
+  return async (phone: string): Promise<Profile | null> => {
+    const { data, error } = await (supabase.from('profiles') as any)
+      .select('*')
+      .eq('role', 'technician')
+      .eq('phone', phone)
+      .maybeSingle();
+    if (error) throw error;
+    return data as Profile | null;
   };
 }
 

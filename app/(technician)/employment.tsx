@@ -8,6 +8,8 @@ import {
   useApplyToReseller,
   useEndEmployment,
   useFindResellerByPhone,
+  useMyInvites,
+  useRespondToHire,
 } from '../../lib/hooks/useTechnicianEmployment';
 import { TimeField } from '../../lib/components/DateTimeFields';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
@@ -89,6 +91,69 @@ function ApplyForm({ technicianId }: { technicianId: string }) {
   );
 }
 
+/** Resellers who invited this technician - accepting one makes it their
+ * employer, declining just closes that invite. */
+function InvitesList({ technicianId, employed }: { technicianId: string; employed: boolean }) {
+  const { data: invites } = useMyInvites(technicianId);
+  const respond = useRespondToHire();
+
+  async function handleRespond(id: string, accept: boolean) {
+    try {
+      await respond.respond(id, accept);
+    } catch (err) {
+      const message = getErrorMessage(err);
+      showAlert(
+        'Could not update',
+        message.includes('one_active') ? 'Leave your current employer before accepting another invite.' : message
+      );
+    }
+  }
+
+  if (invites.length === 0) return null;
+
+  return (
+    <View className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+      <View className="mb-3 flex-row items-center gap-2">
+        <Ionicons name="mail-unread-outline" size={18} color="#2563EB" />
+        <Text className="text-base font-semibold text-gray-900">
+          {invites.length === 1 ? 'A reseller invited you' : `${invites.length} resellers invited you`}
+        </Text>
+      </View>
+      {employed && (
+        <Text className="mb-3 text-xs text-gray-500">You already work for a reseller - leave them first to accept.</Text>
+      )}
+      {invites.map(({ employment, reseller }) => (
+        <View key={employment.id} className="mb-2 rounded-xl border border-blue-100 bg-white p-3.5">
+          <Text className="font-semibold text-gray-900">
+            {reseller?.business_name || reseller?.full_name || 'A reseller'}
+          </Text>
+          <Text className="mt-0.5 text-xs text-gray-500">
+            {reseller?.business_name && reseller?.full_name ? `${reseller.full_name} · ` : ''}
+            Work hours {employment.work_start_time?.slice(0, 5) ?? '09:00'} to {employment.work_end_time?.slice(0, 5) ?? '17:00'}
+          </Text>
+          <View className="mt-3 flex-row gap-2">
+            <Pressable
+              onPress={() => handleRespond(employment.id, false)}
+              disabled={respond.isPending}
+              className="flex-1 items-center rounded-lg border border-gray-300 bg-white py-2.5 disabled:opacity-50"
+            >
+              <Text className="text-sm font-semibold text-gray-600">Decline</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleRespond(employment.id, true)}
+              disabled={respond.isPending || employed}
+              className="flex-1 items-center rounded-lg py-2.5 disabled:opacity-50"
+              style={{ backgroundColor: '#2563EB' }}
+            >
+              <Text className="text-sm font-semibold text-white">Accept</Text>
+            </Pressable>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function EmploymentScreen() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { current, employer } = useMyEmployment(userId);
@@ -105,6 +170,8 @@ export default function EmploymentScreen() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      {userId && <InvitesList technicianId={userId} employed={current?.status === 'accepted'} />}
+
       {!current && userId && <ApplyForm technicianId={userId} />}
 
       {current?.status === 'pending' && (

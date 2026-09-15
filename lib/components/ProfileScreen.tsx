@@ -18,6 +18,7 @@
 //   the finish review, the verdict, DESIGN.md, and every shipping raster
 //   carrying its provenance.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMyEmployees } from '../hooks/useTechnicianEmployment';
 import { Animated, View, Text, Pressable, ScrollView, TextInput, Image, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -694,6 +695,30 @@ function ReportIssueRow({ userId }: { userId: string }) {
   );
 }
 
+function CompanyRow({ profile }: { profile: Profile }) {
+  return (
+    <GroupRow
+      icon="business"
+      label="Company details"
+      caption={profile.business_name ? profile.business_name : 'Add your company name, VAT no., address and logo'}
+      onPress={() => router.push('/(reseller)/company' as any)}
+    />
+  );
+}
+
+function EmployeesRow({ profile }: { profile: Profile }) {
+  const { data: employees } = useMyEmployees(profile.id);
+  const count = employees.length;
+  return (
+    <GroupRow
+      icon="people"
+      label="Technical employees"
+      caption={count ? `${count} employee${count === 1 ? '' : 's'} · invite more` : 'Invite technicians to work for you'}
+      onPress={() => router.push('/(reseller)/employees' as any)}
+    />
+  );
+}
+
 export function ProfileScreen() {
   const profile = useAuthStore((state) => state.profile);
   const signOut = useAuthStore((state) => state.signOut);
@@ -707,6 +732,10 @@ export function ProfileScreen() {
     accountRows.push(<ReportIssueRow key="support" userId={profile.id} />);
 
     if (profile.role === 'technician') workRows.push(<AvailabilityRow key="availability" profile={profile} />);
+    if (profile.role === 'reseller') {
+      workRows.push(<CompanyRow key="company" profile={profile} />);
+      workRows.push(<EmployeesRow key="employees" profile={profile} />);
+    }
     if (profile.role === 'technician' || profile.role === 'reseller') {
       workRows.push(<SkillsPickerRow key="skills" profile={profile} />);
     }

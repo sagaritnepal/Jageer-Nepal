@@ -97,6 +97,8 @@ export interface TechnicianEmployment {
   technician_id: string;
   reseller_id: string;
   status: TechnicianEmploymentStatus;
+  /** Who started it - decides who may accept (see migration 0070). */
+  initiated_by: 'technician' | 'reseller';
   work_start_time: string | null;
   work_end_time: string | null;
   requested_at: string;
