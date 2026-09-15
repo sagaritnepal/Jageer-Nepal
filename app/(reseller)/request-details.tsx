@@ -243,6 +243,26 @@ export default function ResellerRequestDetails() {
     setPhotos((prev) => prev.map((p, i) => (i === index ? null : p)));
   }
 
+  // request-details is a hidden tab screen (see _layout.tsx), so React
+  // Navigation keeps this component instance mounted across visits instead
+  // of remounting it - without this, the previous request's customer,
+  // date/time, address/photos/notes, and price would stay in state and
+  // silently prefill the next request.
+  function resetForm() {
+    setCustomerId(null);
+    setCustomerName('');
+    setCustomerPhone('');
+    setCompanyName('');
+    setCompanySameAsCustomer(false);
+    setDate('');
+    setTime('');
+    setAddress('');
+    setCoords(null);
+    setPhotos(Array(PHOTO_SLOTS).fill(null));
+    setNotes('');
+    setQuotedPrice('');
+  }
+
   async function uploadPhoto(uri: string, index: number): Promise<string> {
     const arraybuffer = await fetch(uri).then((res) => res.arrayBuffer());
     const path = `${userId}/${Date.now()}-${index}.jpg`;
@@ -333,6 +353,7 @@ export default function ResellerRequestDetails() {
         photo_urls: photoUrls,
       });
 
+      resetForm();
       showAlert('Request submitted', 'Assign a technician from the Requests tab whenever you’re ready.');
       router.replace('/(reseller)/requests');
     } catch (err) {

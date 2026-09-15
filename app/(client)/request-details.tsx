@@ -113,6 +113,20 @@ export default function RequestDetails() {
     setPhotos((prev) => prev.map((p, i) => (i === index ? null : p)));
   }
 
+  // request-details is a hidden tab screen (see _layout.tsx), so React
+  // Navigation keeps this component instance mounted across visits instead
+  // of remounting it - without this, the previous request's date/time/
+  // address/photos/notes would stay in state and silently prefill the next
+  // request.
+  function resetForm() {
+    setDate('');
+    setTime('');
+    setAddress('');
+    setCoords(null);
+    setPhotos(Array(PHOTO_SLOTS).fill(null));
+    setNotes('');
+  }
+
   async function uploadPhoto(uri: string, index: number): Promise<string> {
     const arraybuffer = await fetch(uri).then((res) => res.arrayBuffer());
     const path = `${userId}/${Date.now()}-${index}.jpg`;
@@ -156,6 +170,7 @@ export default function RequestDetails() {
         photo_urls: photoUrls,
       });
 
+      resetForm();
       showAlert('Request submitted', 'A reseller will review it and assign a technician soon.');
       router.replace('/(client)/requests');
     } catch (err) {
