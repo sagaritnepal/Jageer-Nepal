@@ -1,15 +1,82 @@
 // lib/components/AppAlertHost.tsx
-import { Modal, View, Text, Pressable } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { View, Text, Pressable, Platform, useWindowDimensions, PanResponder, Animated } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlertStore, type AlertButton } from '../utils/alert';
 
+const AUTO_DISMISS_MS = 7500;
+const MOBILE_BREAKPOINT = 768;
+const CORNER_WIDTH = 340;
+const SWIPE_DISMISS_DISTANCE = 60;
+const SWIPE_DISMISS_VELOCITY = 0.5;
+
 // Mount once near the root (see app/_layout.tsx). Renders whatever
-// showAlert() queues up as the app's own modal, so it looks and behaves
-// the same on every platform instead of falling back to the OS dialog or
-// the browser's alert/confirm.
+// showAlert() queues up as a toast in the corner (a bottom band on
+// mobile), instead of a full-screen OS dialog or browser alert/confirm.
+// It never blocks the rest of the screen, clears itself on its own after
+// a timeout, and can be swiped away early.
 export function AppAlertHost() {
   const queue = useAlertStore((state) => state.queue);
   const dismissCurrent = useAlertStore((state) => state.dismissCurrent);
   const current = queue[0];
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isMobile = Platform.OS !== 'web' || width < MOBILE_BREAKPOINT;
+
+  // PanResponder is created once via useRef, so its handlers close over
+  // whatever `current` was at mount time. This ref is reassigned every
+  // render instead, so the handlers below always see the alert actually
+  // on screen (same trick as FloatingAssistantChat's drag handling).
+  const currentRef = useRef(current);
+  currentRef.current = current;
+
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+
+  useEffect(() => {
+    pan.setValue({ x: 0, y: 0 });
+  }, [current?.id, pan]);
+
+  useEffect(() => {
+    if (!current) return;
+    const timer = setTimeout(() => {
+      // Treat an unattended timeout like a cancel, not silence, so callers
+      // awaiting a button choice (e.g. login.tsx's offerBiometricSignIn)
+      // still resolve instead of hanging forever.
+      const cancelButton = current.buttons.find((button) => button.style === 'cancel');
+      dismissCurrent();
+      cancelButton?.onPress?.();
+    }, AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [current, dismissCurrent]);
+
+  function dismissViaGesture(dx: number, dy: number) {
+    const alert = currentRef.current;
+    Animated.timing(pan, {
+      toValue: { x: dx * 3, y: dy * 3 },
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      const cancelButton = alert?.buttons.find((button) => button.style === 'cancel');
+      dismissCurrent();
+      cancelButton?.onPress?.();
+    });
+  }
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gesture) => Math.abs(gesture.dx) > 6 || Math.abs(gesture.dy) > 6,
+      onPanResponderMove: (_evt, gesture) => pan.setValue({ x: gesture.dx, y: gesture.dy }),
+      onPanResponderRelease: (_evt, gesture) => {
+        const distance = Math.hypot(gesture.dx, gesture.dy);
+        const speed = Math.hypot(gesture.vx, gesture.vy);
+        if (distance > SWIPE_DISMISS_DISTANCE || speed > SWIPE_DISMISS_VELOCITY) {
+          dismissViaGesture(gesture.dx, gesture.dy);
+        } else {
+          Animated.spring(pan, { toValue: { x: 0, y: 0 }, friction: 6, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
 
   if (!current) return null;
 
@@ -20,47 +87,69 @@ export function AppAlertHost() {
     button.onPress?.();
   }
 
-  function handleRequestClose() {
-    // Mirrors Android back-button behavior: only dismiss without an
-    // explicit tap if there's a clear "cancel" out, so callers awaiting a
-    // button choice (e.g. login.tsx's offerBiometricSignIn) never hang.
-    const cancelButton = current.buttons.find((button) => button.style === 'cancel');
-    if (!cancelButton) return;
-    handlePress(cancelButton);
-  }
-
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={handleRequestClose}>
-      <View className="flex-1 items-center justify-center bg-black/50 px-6">
-        <View className="w-full max-w-sm rounded-2xl bg-white p-5">
-          <Text className="text-lg font-bold text-gray-900">{current.title}</Text>
-          {current.message ? <Text className="mt-2 text-sm text-gray-600">{current.message}</Text> : null}
+    <View pointerEvents="box-none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
+      <Animated.View
+        pointerEvents="auto"
+        {...panResponder.panHandlers}
+        style={[
+          isMobile
+            ? {
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: height * 0.2,
+                paddingBottom: insets.bottom,
+              }
+            : {
+                position: 'absolute',
+                right: 16 + insets.right,
+                bottom: 16 + insets.bottom,
+                width: CORNER_WIDTH,
+                maxWidth: '90%',
+              },
+          { transform: pan.getTranslateTransform() },
+        ]}
+        className={
+          isMobile
+            ? 'flex-1 justify-center rounded-t-2xl border border-gray-100 bg-white px-5 shadow-lg'
+            : 'rounded-2xl border border-gray-100 bg-white p-4 shadow-lg'
+        }
+      >
+        <Text className="text-base font-bold text-gray-900" numberOfLines={2}>
+          {current.title}
+        </Text>
+        {current.message ? (
+          <Text className="mt-1 text-sm text-gray-600" numberOfLines={isMobile ? 3 : 4}>
+            {current.message}
+          </Text>
+        ) : null}
 
-          <View className={isMultiButton ? 'mt-5 flex-row justify-end gap-2' : 'mt-5'}>
-            {current.buttons.map((button, index) => (
-              <Pressable
-                key={index}
-                onPress={() => handlePress(button)}
-                className={isMultiButton ? 'rounded-lg px-4 py-2' : 'items-center rounded-lg bg-orange-600 px-4 py-3'}
+        <View className={isMultiButton ? 'mt-3 flex-row justify-end gap-2' : 'mt-3'}>
+          {current.buttons.map((button, index) => (
+            <Pressable
+              key={index}
+              onPress={() => handlePress(button)}
+              className={isMultiButton ? 'rounded-lg px-3 py-1.5' : 'self-start rounded-lg bg-orange-600 px-3 py-1.5'}
+            >
+              <Text
+                className={
+                  isMultiButton
+                    ? button.style === 'destructive'
+                      ? 'text-sm font-semibold text-red-600'
+                      : button.style === 'cancel'
+                        ? 'text-sm font-semibold text-gray-500'
+                        : 'text-sm font-semibold text-orange-600'
+                    : 'text-sm font-semibold text-white'
+                }
               >
-                <Text
-                  className={
-                    isMultiButton
-                      ? button.style === 'destructive'
-                        ? 'text-sm font-semibold text-red-600'
-                        : button.style === 'cancel'
-                          ? 'text-sm font-semibold text-gray-500'
-                          : 'text-sm font-semibold text-orange-600'
-                      : 'text-sm font-semibold text-white'
-                  }
-                >
-                  {button.text}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+                {button.text}
+              </Text>
+            </Pressable>
+          ))}
         </View>
-      </View>
-    </Modal>
+      </Animated.View>
+    </View>
   );
 }

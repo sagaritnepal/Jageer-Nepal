@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import { Stack } from 'expo-router';
-import { ActivityIndicator, Platform, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryProvider } from '../lib/providers/QueryProvider';
@@ -77,7 +77,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   // Signed-in role layouts manage their own web width (WebSidebarShell);
   // only the pre-login state gets the generic centered letterbox.
-  const content = userId ? <>{children}</> : <WebFrame>{children}</WebFrame>;
+  //
+  // Most authenticated screens are a plain ScrollView with no keyboard
+  // handling of their own, so on iOS (which never resizes the window for
+  // the keyboard, only overlays it) a field near the bottom had nothing
+  // to scroll into view and just stayed hidden. Login/register already
+  // manage this themselves and aren't wrapped here to avoid double
+  // padding; screens rendered inside a <Modal> (chat, pickers, etc.) are
+  // also unaffected since Modal portals outside this tree. Android's fix
+  // is a native window setting - see app.json's softwareKeyboardLayoutMode.
+  const content = userId ? (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {children}
+    </KeyboardAvoidingView>
+  ) : (
+    <WebFrame>{children}</WebFrame>
+  );
 
   return (
     <>
