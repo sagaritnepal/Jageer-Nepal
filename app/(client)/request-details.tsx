@@ -1,7 +1,7 @@
 // app/(client)/request-details.tsx
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image, Linking } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -47,6 +47,23 @@ export default function RequestDetails() {
   const [photos, setPhotos] = useState<(string | null)[]>(Array(PHOTO_SLOTS).fill(null));
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // request-details is a hidden tab screen (see _layout.tsx), so React
+  // Navigation keeps this component instance mounted across visits instead
+  // of remounting it - without a reset, the previous request's date/time/
+  // address/photos/notes would stay in state and silently prefill the next
+  // request. This runs before the assistant-params effect below (hook
+  // order), so an incoming assistant prefill still lands after the clear.
+  useFocusEffect(
+    useCallback(() => {
+      setDate('');
+      setTime('');
+      setAddress('');
+      setCoords(null);
+      setPhotos(Array(PHOTO_SLOTS).fill(null));
+      setNotes('');
+    }, [])
+  );
 
   // Depends on the actual param values (not just "on mount") since Expo
   // Router doesn't always have them hydrated on a freshly-pushed route's
@@ -113,20 +130,6 @@ export default function RequestDetails() {
     setPhotos((prev) => prev.map((p, i) => (i === index ? null : p)));
   }
 
-  // request-details is a hidden tab screen (see _layout.tsx), so React
-  // Navigation keeps this component instance mounted across visits instead
-  // of remounting it - without this, the previous request's date/time/
-  // address/photos/notes would stay in state and silently prefill the next
-  // request.
-  function resetForm() {
-    setDate('');
-    setTime('');
-    setAddress('');
-    setCoords(null);
-    setPhotos(Array(PHOTO_SLOTS).fill(null));
-    setNotes('');
-  }
-
   async function uploadPhoto(uri: string, index: number): Promise<string> {
     const arraybuffer = await fetch(uri).then((res) => res.arrayBuffer());
     const path = `${userId}/${Date.now()}-${index}.jpg`;
@@ -170,7 +173,6 @@ export default function RequestDetails() {
         photo_urls: photoUrls,
       });
 
-      resetForm();
       showAlert('Request submitted', 'A reseller will review it and assign a technician soon.');
       router.replace('/(client)/requests');
     } catch (err) {
