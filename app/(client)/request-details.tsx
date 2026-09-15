@@ -1,5 +1,5 @@
 // app/(client)/request-details.tsx
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image, Linking } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,30 +52,24 @@ export default function RequestDetails() {
   // Navigation keeps this component instance mounted across visits instead
   // of remounting it - without a reset, the previous request's date/time/
   // address/photos/notes would stay in state and silently prefill the next
-  // request. This runs before the assistant-params effect below (hook
-  // order), so an incoming assistant prefill still lands after the clear.
+  // request.
+  //
+  // The assistant prefill is applied in the same callback, right after the
+  // clear - a separate effect can run before the focus event and get wiped,
+  // and wouldn't re-run at all when the assistant sends identical details
+  // twice. The callback depends on the param values, so it also re-runs if
+  // Expo Router hydrates them a render late (see the Finance voice command's
+  // version of that bug).
   useFocusEffect(
     useCallback(() => {
-      setDate('');
-      setTime('');
-      setAddress('');
+      setDate(assistantDate ?? '');
+      setTime(assistantTime ?? '');
+      setAddress(assistantAddress ?? '');
       setCoords(null);
       setPhotos(Array(PHOTO_SLOTS).fill(null));
-      setNotes('');
-    }, [])
+      setNotes(assistantNotes ?? '');
+    }, [assistantNotes, assistantDate, assistantTime, assistantAddress])
   );
-
-  // Depends on the actual param values (not just "on mount") since Expo
-  // Router doesn't always have them hydrated on a freshly-pushed route's
-  // very first render - a `[]` effect would fire once while they were
-  // still undefined and never get a second chance (see the Finance voice
-  // command's version of this same bug).
-  useEffect(() => {
-    if (assistantNotes) setNotes(assistantNotes);
-    if (assistantDate) setDate(assistantDate);
-    if (assistantTime) setTime(assistantTime);
-    if (assistantAddress) setAddress(assistantAddress);
-  }, [assistantNotes, assistantDate, assistantTime, assistantAddress]);
 
   async function handleUseMyLocation() {
     setLocatingMe(true);
