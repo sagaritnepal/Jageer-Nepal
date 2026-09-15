@@ -444,7 +444,7 @@ export default function TechnicalEmployees() {
       photoUrl: profile.avatar_url,
       email: emailOf.get(profile.id) ?? null,
       phone: profile.phone,
-      jobTitle: null,
+      jobTitle: employment.job_title,
       hours: hours(employment),
       badge: BADGE.account,
       onOpen: () => openEmployee(employment.id),
@@ -461,7 +461,6 @@ export default function TechnicalEmployees() {
         hours: m.is_active ? hours(m) : 'no longer working for you',
         badge: m.linked_profile_id ? BADGE.signedUp : BADGE.manual,
         onOpen: () => openEmployee(m.id, 'manual'),
-        actions: <SmallButton label="Edit" kind="ghost" onPress={() => openEmployee(m.id, 'manual')} />,
       }));
     return [...fromAccounts, ...fromManual].sort((a, b) => a.name.localeCompare(b.name));
   }, [employees, manualList, emailOf]);

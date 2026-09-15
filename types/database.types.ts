@@ -104,6 +104,9 @@ export interface TechnicianEmployment {
   requested_at: string;
   responded_at: string | null;
   ended_at: string | null;
+  /** The employer's own label and private note for this employee. */
+  job_title: string | null;
+  employer_note: string | null;
 }
 
 export interface RequestLocation {

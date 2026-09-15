@@ -126,12 +126,14 @@ export function useEndEmployment() {
   };
 }
 
-export function useUpdateWorkHours() {
+/** The employer's fields on an employment row - work hours, job title and
+ * their private note. Technicians are blocked from changing these in the
+ * database (technician_employment_hours_guard). */
+export function useUpdateEmployment() {
   const update = useSupabaseUpdate('technician_employment');
   return {
     ...update,
-    updateHours: (id: string, workStartTime: string, workEndTime: string) =>
-      update.mutateAsync({ id, values: { work_start_time: workStartTime, work_end_time: workEndTime } }),
+    save: (id: string, values: Partial<TechnicianEmployment>) => update.mutateAsync({ id, values }),
   };
 }
 
