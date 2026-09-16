@@ -1,8 +1,10 @@
 // app/(technician)/jobs.tsx
+import { useEffect } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
@@ -88,6 +90,19 @@ export default function TechnicianJobs() {
     orderBy: { column: 'created_at', ascending: false },
     enabled: !!userId,
   });
+
+  // A reseller assigning a new job (or a job's status changing under this
+  // technician, e.g. someone else updating it from the web) should land
+  // here right away, not just whenever this screen next happens to remount.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToTable(
+      'service_requests',
+      () => queryClient.invalidateQueries({ queryKey: ['service_requests'] }),
+      `technician_id=eq.${userId}`
+    );
+  }, [userId]);
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">

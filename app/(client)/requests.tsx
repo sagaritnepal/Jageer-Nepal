@@ -1,9 +1,10 @@
 // app/(client)/requests.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { OrderCard } from '../../lib/components/OrderCard';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
@@ -140,6 +141,29 @@ export default function ClientRequests() {
   });
   const { data: products } = useSupabaseQuery('products', {});
   const productMap = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
+
+  // A reseller sending a quote, or a technician moving a job to in_progress
+  // /resolved, should update this list the moment it happens - this is the
+  // list a client actually watches while waiting on a job, not just the
+  // single-request detail screen (which already had its own realtime sync).
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!userId) return;
+    const unsubRequests = subscribeToTable(
+      'service_requests',
+      () => queryClient.invalidateQueries({ queryKey: ['service_requests'] }),
+      `client_id=eq.${userId}`
+    );
+    const unsubOrders = subscribeToTable(
+      'orders',
+      () => queryClient.invalidateQueries({ queryKey: ['orders'] }),
+      `buyer_id=eq.${userId}`
+    );
+    return () => {
+      unsubRequests();
+      unsubOrders();
+    };
+  }, [userId]);
 
   const combined = useMemo(() => {
     const services: CombinedItem[] = (requests ?? [])

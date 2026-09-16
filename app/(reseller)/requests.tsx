@@ -3,8 +3,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, FlatList, ScrollView, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { distanceKm } from '../../lib/utils/distance';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
@@ -448,6 +449,40 @@ export default function ResellerRequestQueue() {
   });
   const { data: allProducts } = useSupabaseQuery('products', {});
   const productMap = useMemo(() => new Map((allProducts ?? []).map((p) => [p.id, p])), [allProducts]);
+
+  // This is the front door of the whole customer -> reseller handoff: a new
+  // app request (or one the customer just approved a quote on) needs to
+  // show up here without the reseller having to background/foreground the
+  // app or bounce off the tab first. Three separate subscriptions, one per
+  // slice this screen actually reads, rather than one unfiltered listener
+  // on the whole (large, multi-tenant) table.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const unsubIncoming = subscribeToTable(
+      'service_requests',
+      () => queryClient.invalidateQueries({ queryKey: ['service_requests'] }),
+      'status=eq.pending'
+    );
+    const unsubMine = userId
+      ? subscribeToTable(
+          'service_requests',
+          () => queryClient.invalidateQueries({ queryKey: ['service_requests'] }),
+          `reseller_id=eq.${userId}`
+        )
+      : undefined;
+    const unsubOrders = userId
+      ? subscribeToTable(
+          'orders',
+          () => queryClient.invalidateQueries({ queryKey: ['orders'] }),
+          `seller_id=eq.${userId}`
+        )
+      : undefined;
+    return () => {
+      unsubIncoming();
+      unsubMine?.();
+      unsubOrders?.();
+    };
+  }, [userId]);
 
   const isLoading = loadingIncoming || loadingMine;
 

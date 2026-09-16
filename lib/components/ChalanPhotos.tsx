@@ -24,7 +24,7 @@ export function ChalanPhotos({
   requestId: string;
   userId?: string;
   editable: boolean;
-  onUploaded: (urls: string[]) => void;
+  onUploaded: (urls: string[]) => void | Promise<unknown>;
 }) {
   const [signedUrls, setSignedUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -58,7 +58,11 @@ export function ChalanPhotos({
         .from('request-photos')
         .upload(path, arraybuffer, { contentType: 'image/jpeg' });
       if (error) throw error;
-      onUploaded([...chalanUrls, path]);
+      // The storage upload above already succeeded at this point - awaiting
+      // this lets a failure saving the row (e.g. a network drop) still land
+      // in the same catch/alert below instead of failing silently, so the
+      // technician isn't left thinking the chalan attached when it didn't.
+      await onUploaded([...chalanUrls, path]);
     } catch (err) {
       showAlert('Could not add chalan', getErrorMessage(err));
     } finally {
