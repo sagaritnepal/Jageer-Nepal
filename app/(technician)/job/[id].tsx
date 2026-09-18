@@ -21,8 +21,52 @@ const NEXT_STATUS: Partial<Record<RequestStatus, RequestStatus>> = {
 };
 
 const STATUS_ACTION_LABEL: Partial<Record<RequestStatus, string>> = {
-  in_progress: 'Mark resolved',
+  in_progress: 'Mark job complete',
 };
+
+// The four stages of a job as the technician lives them: they accept an
+// offer, work on it, mark it complete, and it closes once the reseller has
+// collected the money. Shown as a strip so it's always obvious which one
+// the job is in - accepting a job starts the work, it does not finish it.
+const STAGES = ['Accepted', 'Work in progress', 'Completed', 'Paid'] as const;
+
+function currentStageIndex(status: RequestStatus, paid: boolean): number {
+  if (paid) return 3;
+  if (status === 'resolved') return 2;
+  if (status === 'in_progress') return 1;
+  return 0;
+}
+
+function StageStrip({ status, paid }: { status: RequestStatus; paid: boolean }) {
+  const current = currentStageIndex(status, paid);
+  return (
+    <View className="mb-6 rounded-xl bg-white p-4">
+      <Text className="mb-3 text-sm uppercase tracking-wide text-gray-400">Progress</Text>
+      <View className="flex-row" style={{ gap: 6 }}>
+        {STAGES.map((label, i) => {
+          const done = i < current;
+          const now = i === current;
+          const color = done ? '#16A34A' : now ? '#2563EB' : '#D1D5DB';
+          return (
+            <View key={label} className="flex-1" style={{ gap: 6 }}>
+              <View style={{ height: 4, borderRadius: 2, backgroundColor: color }} />
+              <View className="flex-row items-center" style={{ gap: 3 }}>
+                {done && <Ionicons name="checkmark-circle" size={12} color={color} />}
+                <Text
+                  className={`text-[11px] ${now ? 'font-bold' : 'font-medium'}`}
+                  style={{ color: done ? '#15803D' : now ? '#1D4ED8' : '#9CA3AF' }}
+                  numberOfLines={2}
+                >
+                  {label}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 interface PartRow {
   name: string;
@@ -166,11 +210,26 @@ export default function JobCard() {
       </View>
       <Text className="mb-6 text-gray-600">{request.description}</Text>
 
+      <StageStrip status={request.status} paid={request.payment_status === 'paid'} />
+
       <View className="mb-6 rounded-xl bg-white p-5">
         <Text className="text-sm uppercase tracking-wide text-gray-400">Current status</Text>
-        <Text className="mt-1 text-lg font-semibold capitalize text-orange-600">
-          {request.status.replace('_', ' ')}
+        <Text className="mt-1 text-lg font-semibold text-gray-900">
+          {request.status === 'assigned'
+            ? 'Offered to you - accept or reject'
+            : request.status === 'in_progress'
+              ? 'Work in progress'
+              : request.status === 'resolved'
+                ? request.payment_status === 'paid'
+                  ? 'Completed and paid'
+                  : 'Completed - waiting for payment'
+                : request.status.replace('_', ' ')}
         </Text>
+        {request.status === 'in_progress' && (
+          <Text className="mt-1 text-xs text-gray-500">
+            Finish the work, then tap "Mark job complete" at the bottom of this page.
+          </Text>
+        )}
         {request.quoted_price != null && (
           <Text className="mt-2 text-sm text-gray-500">
             Quoted price: NPR {Number(request.quoted_price).toLocaleString()}
@@ -325,6 +384,22 @@ export default function JobCard() {
             {isSaving ? 'Updating…' : STATUS_ACTION_LABEL[request.status]}
           </Text>
         </Pressable>
+      )}
+
+      {request.status === 'resolved' && request.payment_status !== 'paid' && (
+        <View className="mb-4 flex-row items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <Ionicons name="cash-outline" size={18} color="#1D4ED8" />
+          <Text className="flex-1 text-xs leading-[17px] text-blue-900">
+            Job marked complete. It closes once the reseller collects the payment.
+          </Text>
+        </View>
+      )}
+
+      {request.status === 'resolved' && request.payment_status === 'paid' && (
+        <View className="mb-4 flex-row items-center gap-2.5 rounded-xl border border-green-200 bg-green-50 p-4">
+          <Ionicons name="checkmark-done-circle" size={18} color="#15803D" />
+          <Text className="flex-1 text-xs leading-[17px] text-green-900">Paid - this job is closed.</Text>
+        </View>
       )}
 
       {request.status === 'resolved' && request.payment_status !== 'paid' && (
