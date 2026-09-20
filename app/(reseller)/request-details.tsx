@@ -13,7 +13,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -23,6 +22,7 @@ import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { ToggleSwitch } from '../../lib/components/ToggleSwitch';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
+import { LocationPickerModal, type Coords } from '../../lib/components/LocationPickerModal';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 import { pickPhoneContact } from '../../lib/utils/pickPhoneContact';
@@ -53,8 +53,8 @@ export default function ResellerRequestDetails() {
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
-  const [newCustCoords, setNewCustCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locatingNewCust, setLocatingNewCust] = useState(false);
+  const [newCustCoords, setNewCustCoords] = useState<Coords | null>(null);
+  const [showNewCustLocationPicker, setShowNewCustLocationPicker] = useState(false);
   const [savingNewCustomer, setSavingNewCustomer] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -63,74 +63,13 @@ export default function ResellerRequestDetails() {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [address, setAddress] = useState('');
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locatingMe, setLocatingMe] = useState(false);
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [photos, setPhotos] = useState<(string | null)[]>(Array(PHOTO_SLOTS).fill(null));
   const [notes, setNotes] = useState('');
   const [quotedPrice, setQuotedPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [registeringCustomer, setRegisteringCustomer] = useState(false);
-
-  async function handleUseMyLocation() {
-    setLocatingMe(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Location permission needed', 'Allow location access to attach your position.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = position.coords;
-      setCoords({ latitude, longitude });
-
-      try {
-        // expo-location's reverseGeocodeAsync isn't supported on web, so we
-        // use OpenStreetMap's free Nominatim API (no key needed) instead -
-        // it works the same way on every platform since it's a plain fetch.
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-          { headers: { Accept: 'application/json' } }
-        );
-        const data = await res.json();
-        if (data?.display_name) setAddress(data.display_name);
-      } catch {
-        // The reseller can still type the address manually if this fails.
-      }
-    } catch (err) {
-      showAlert('Could not get location', getErrorMessage(err));
-    } finally {
-      setLocatingMe(false);
-    }
-  }
-
-  async function handleUseMyLocationForNewCust() {
-    setLocatingNewCust(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Location permission needed', 'Allow location access to attach a position.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = position.coords;
-      setNewCustCoords({ latitude, longitude });
-
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-          { headers: { Accept: 'application/json' } }
-        );
-        const data = await res.json();
-        if (data?.display_name) setNewCustAddress(data.display_name);
-      } catch {
-        // The reseller can still type the address manually if this fails.
-      }
-    } catch (err) {
-      showAlert('Could not get location', getErrorMessage(err));
-    } finally {
-      setLocatingNewCust(false);
-    }
-  }
 
   async function handlePickNewCustFromContacts() {
     const picked = await pickPhoneContact();
@@ -388,14 +327,13 @@ export default function ResellerRequestDetails() {
 
   const locationButton = (
     <Pressable
-      onPress={handleUseMyLocation}
-      disabled={locatingMe}
-      className="flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 px-4 disabled:opacity-50"
+      onPress={() => setShowLocationPicker(true)}
+      className="flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 px-4"
       style={{ minHeight: 48 }}
     >
       <Ionicons name="locate" size={16} color="#1D4ED8" />
       <Text className="text-sm font-semibold text-blue-700">
-        {locatingMe ? 'Locating…' : coords ? 'Location captured — tap to refresh' : 'Use my current location'}
+        {coords ? 'Location set — tap to change' : 'Select location'}
       </Text>
     </Pressable>
   );
@@ -723,13 +661,12 @@ export default function ResellerRequestDetails() {
             />
             <Text className="mb-1 text-xs font-medium text-gray-600">Location</Text>
             <Pressable
-              onPress={handleUseMyLocationForNewCust}
-              disabled={locatingNewCust}
-              className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2 disabled:opacity-50"
+              onPress={() => setShowNewCustLocationPicker(true)}
+              className="mb-2 flex-row items-center justify-center gap-1.5 rounded-lg border border-blue-700 bg-blue-50 py-2"
             >
               <Ionicons name="locate" size={14} color="#1D4ED8" />
               <Text className="text-xs font-semibold text-blue-700">
-                {locatingNewCust ? 'Locating…' : newCustCoords ? 'Location captured — tap to refresh' : 'Use my current location'}
+                {newCustCoords ? 'Location set — tap to change' : 'Select location'}
               </Text>
             </Pressable>
             <TextInput
@@ -755,6 +692,28 @@ export default function ResellerRequestDetails() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <LocationPickerModal
+        visible={showLocationPicker}
+        initialCoords={coords}
+        onConfirm={(nextCoords, nextAddress) => {
+          setCoords(nextCoords);
+          if (nextAddress) setAddress(nextAddress);
+          setShowLocationPicker(false);
+        }}
+        onClose={() => setShowLocationPicker(false)}
+      />
+
+      <LocationPickerModal
+        visible={showNewCustLocationPicker}
+        initialCoords={newCustCoords}
+        onConfirm={(nextCoords, nextAddress) => {
+          setNewCustCoords(nextCoords);
+          if (nextAddress) setNewCustAddress(nextAddress);
+          setShowNewCustLocationPicker(false);
+        }}
+        onClose={() => setShowNewCustLocationPicker(false)}
+      />
     </View>
   );
 }

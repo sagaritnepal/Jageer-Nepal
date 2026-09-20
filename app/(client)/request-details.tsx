@@ -3,7 +3,6 @@ import { useCallback, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image, Linking } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
@@ -11,6 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { FormSection } from '../../lib/components/finance/FormSection';
+import { LocationPickerModal, type Coords } from '../../lib/components/LocationPickerModal';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 
@@ -42,8 +42,8 @@ export default function RequestDetails() {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [address, setAddress] = useState('');
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locatingMe, setLocatingMe] = useState(false);
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [photos, setPhotos] = useState<(string | null)[]>(Array(PHOTO_SLOTS).fill(null));
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -70,38 +70,6 @@ export default function RequestDetails() {
       setNotes(assistantNotes ?? '');
     }, [assistantNotes, assistantDate, assistantTime, assistantAddress])
   );
-
-  async function handleUseMyLocation() {
-    setLocatingMe(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Location permission needed', 'Allow location access to attach your position.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = position.coords;
-      setCoords({ latitude, longitude });
-
-      try {
-        // expo-location's reverseGeocodeAsync isn't supported on web, so we
-        // use OpenStreetMap's free Nominatim API (no key needed) instead -
-        // it works the same way on every platform since it's a plain fetch.
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-          { headers: { Accept: 'application/json' } }
-        );
-        const data = await res.json();
-        if (data?.display_name) setAddress(data.display_name);
-      } catch {
-        // The client can still type the address manually if this fails.
-      }
-    } catch (err) {
-      showAlert('Could not get location', getErrorMessage(err));
-    } finally {
-      setLocatingMe(false);
-    }
-  }
 
   async function handlePickPhoto(index: number) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -201,13 +169,12 @@ export default function RequestDetails() {
 
         <FormSection icon="location-outline" title="Location">
           <Pressable
-            onPress={handleUseMyLocation}
-            disabled={locatingMe}
-            className="mb-2.5 flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 py-2.5 disabled:opacity-50"
+            onPress={() => setShowLocationPicker(true)}
+            className="mb-2.5 flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
           >
             <Ionicons name="locate" size={16} color="#1D4ED8" />
             <Text className="text-sm font-semibold text-blue-700">
-              {locatingMe ? 'Locating…' : coords ? 'Location captured — tap to refresh' : 'Use my current location'}
+              {coords ? 'Location set — tap to change' : 'Select location'}
             </Text>
           </Pressable>
           {coords && (
@@ -274,6 +241,17 @@ export default function RequestDetails() {
       >
         <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
       </Pressable>
+
+      <LocationPickerModal
+        visible={showLocationPicker}
+        initialCoords={coords}
+        onConfirm={(nextCoords, nextAddress) => {
+          setCoords(nextCoords);
+          if (nextAddress) setAddress(nextAddress);
+          setShowLocationPicker(false);
+        }}
+        onClose={() => setShowLocationPicker(false)}
+      />
     </ScrollView>
   );
 }
