@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   Image,
-  Linking,
   Platform,
   Modal,
   useWindowDimensions,
@@ -23,6 +22,7 @@ import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { ToggleSwitch } from '../../lib/components/ToggleSwitch';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { LocationPickerModal, type Coords } from '../../lib/components/LocationPickerModal';
+import { MapPreview } from '../../lib/components/MapPreview';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 import { pickPhoneContact } from '../../lib/utils/pickPhoneContact';
@@ -499,21 +499,7 @@ export default function ResellerRequestDetails() {
                 />
               </>
             )}
-            {coords && (
-              <Pressable
-                onPress={() => Linking.openURL(`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`)}
-                className="mt-2.5 overflow-hidden rounded-lg border border-gray-200"
-              >
-                <Image
-                  source={{
-                    uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${coords.latitude},${coords.longitude}&zoom=15&size=600x220&markers=${coords.latitude},${coords.longitude},red-pushpin`,
-                  }}
-                  style={{ width: '100%', height: 140 }}
-                  resizeMode="cover"
-                />
-                <Text className="px-2 py-1.5 text-xs text-blue-600">Open in Google Maps →</Text>
-              </Pressable>
-            )}
+            {coords && <View className="mt-2.5"><MapPreview coords={coords} height={140} /></View>}
 
             <View className="mt-3.5 flex-row gap-2.5">
               <View className="flex-1">

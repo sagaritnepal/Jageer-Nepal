@@ -1,6 +1,6 @@
 // app/(client)/request-details.tsx
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Image, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +11,7 @@ import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { FormSection } from '../../lib/components/finance/FormSection';
 import { LocationPickerModal, type Coords } from '../../lib/components/LocationPickerModal';
+import { MapPreview } from '../../lib/components/MapPreview';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 
@@ -177,21 +178,7 @@ export default function RequestDetails() {
               {coords ? 'Location set — tap to change' : 'Select location'}
             </Text>
           </Pressable>
-          {coords && (
-            <Pressable
-              onPress={() => Linking.openURL(`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`)}
-              className="mb-2.5 overflow-hidden rounded-lg border border-gray-200"
-            >
-              <Image
-                source={{
-                  uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${coords.latitude},${coords.longitude}&zoom=15&size=600x220&markers=${coords.latitude},${coords.longitude},red-pushpin`,
-                }}
-                style={{ width: '100%', height: 160 }}
-                resizeMode="cover"
-              />
-              <Text className="px-2 py-1.5 text-xs text-blue-600">Open in Google Maps →</Text>
-            </Pressable>
-          )}
+          {coords && <View className="mb-2.5"><MapPreview coords={coords} /></View>}
           <TextInput
             value={address}
             onChangeText={setAddress}

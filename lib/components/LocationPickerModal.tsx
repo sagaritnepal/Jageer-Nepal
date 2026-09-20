@@ -5,9 +5,7 @@ import {
   Text,
   TextInput,
   Pressable,
-  Image,
   Modal,
-  Linking,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { showAlert, getErrorMessage } from '../utils/alert';
+import { MapPreview } from './MapPreview';
 
 export type Coords = { latitude: number; longitude: number };
 
@@ -180,21 +179,7 @@ export function LocationPickerModal({
               </Text>
             </Pressable>
 
-            {coords && (
-              <Pressable
-                onPress={() => Linking.openURL(`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`)}
-                className="mb-2.5 overflow-hidden rounded-lg border border-gray-200"
-              >
-                <Image
-                  source={{
-                    uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${coords.latitude},${coords.longitude}&zoom=15&size=600x220&markers=${coords.latitude},${coords.longitude},red-pushpin`,
-                  }}
-                  style={{ width: '100%', height: 160 }}
-                  resizeMode="cover"
-                />
-                <Text className="px-2 py-1.5 text-xs text-blue-600">Open in Google Maps →</Text>
-              </Pressable>
-            )}
+            {coords && <View className="mb-2.5"><MapPreview coords={coords} height={180} /></View>}
 
             {!!address && <Text className="mb-3 text-xs text-gray-500" numberOfLines={3}>{address}</Text>}
 
