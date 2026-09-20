@@ -1,6 +1,6 @@
 // app/(technician)/statement.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { jobCardAmount, type JobCardWithQuote } from './earnings';
@@ -13,6 +13,17 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: 'month', label: 'This month' },
   { key: 'all', label: 'All time' },
 ];
+
+// Matches the screen's own bg-gray-50 - the zigzag "teeth" are drawn in
+// this color so they read as notches torn out of the white receipt, not as
+// gray diamonds sitting on top of it.
+const PAGE_BG = '#F3F4F6';
+
+const MONO = Platform.select({
+  ios: 'Courier',
+  android: 'monospace',
+  default: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+}) as string;
 
 function rangeStart(key: RangeKey, now: Date): Date | null {
   switch (key) {
@@ -33,7 +44,47 @@ function rangeStart(key: RangeKey, now: Date): Date | null {
   }
 }
 
+function rangeLabel(key: RangeKey, now: Date): string {
+  const fmt = (d: Date) => d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const start = rangeStart(key, now);
+  return start ? `${fmt(start)} – ${fmt(now)}` : 'All time';
+}
+
+function money(amount: number) {
+  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// A row of small squares, rotated 45deg and colored like the page behind
+// the receipt, clipped to half height - the classic torn/perforated-edge
+// look, without needing web-only CSS gradients (works on native too).
+function ZigzagEdge({ flip }: { flip?: boolean }) {
+  const TOOTH = 26;
+  const teeth = 20;
+  return (
+    <View style={{ flexDirection: 'row', height: TOOTH / 2, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+      {Array.from({ length: teeth }).map((_, i) => (
+        <View
+          key={i}
+          style={{
+            width: TOOTH,
+            height: TOOTH,
+            backgroundColor: PAGE_BG,
+            transform: [{ rotate: '45deg' }],
+            marginLeft: i === 0 ? -TOOTH / 2 : -TOOTH * 0.15,
+            marginTop: flip ? -TOOTH / 2 : 0,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+function DashedRule() {
+  return <View style={{ borderBottomWidth: 1.5, borderStyle: 'dashed', borderColor: '#D1D5DB' }} />;
+}
+
 export default function TechnicianStatement() {
+  const profile = useAuthStore((state) => state.profile);
   const userId = useAuthStore((state) => state.session?.user.id);
   const [range, setRange] = useState<RangeKey>('30d');
 
@@ -76,13 +127,10 @@ export default function TechnicianStatement() {
     return { rows: [...filtered].reverse(), periodTotal, lifetimeTotal };
   }, [jobCards, range]);
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="mb-5 rounded-2xl bg-[#0D9488] p-5">
-        <Text className="text-[12.5px] font-semibold text-white/85">Lifetime earnings</Text>
-        <Text className="mt-1 text-[28px] font-extrabold text-white">NPR {lifetimeTotal.toLocaleString()}</Text>
-      </View>
+  const now = new Date();
 
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: PAGE_BG }} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
       <View className="mb-4 flex-row" style={{ gap: 8 }}>
         {RANGES.map((r) => {
           const active = range === r.key;
@@ -99,32 +147,87 @@ export default function TechnicianStatement() {
         })}
       </View>
 
-      <View className="mb-5 flex-row items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
-        <Text className="text-sm text-gray-600">Earned in this period</Text>
-        <Text className="text-[15px] font-extrabold text-gray-900">NPR {periodTotal.toLocaleString()}</Text>
-      </View>
+      {/* The receipt itself */}
+      <View style={{ shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 }}>
+        <ZigzagEdge />
+        <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 22, paddingVertical: 20 }}>
+          <Text style={{ fontFamily: MONO, letterSpacing: 2 }} className="text-center text-[15px] font-extrabold text-gray-900">
+            STATEMENT OF EARNINGS
+          </Text>
+          <Text style={{ fontFamily: MONO }} className="mt-1.5 text-center text-[12px] text-gray-600">
+            {profile?.full_name ?? 'Technician'}
+          </Text>
+          <Text style={{ fontFamily: MONO }} className="text-center text-[11px] text-gray-400">
+            {rangeLabel(range, now)}
+          </Text>
 
-      <Text className="mb-3 text-[15px] font-bold text-gray-900">Transactions</Text>
-
-      {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && rows.length === 0 && <Text className="text-gray-500">No transactions in this period.</Text>}
-
-      {rows.map((row) => (
-        <View key={row.id} className="mb-2.5 rounded-xl border border-gray-200 bg-white px-4 py-3.5">
-          <View className="flex-row items-center justify-between">
-            <Text className="flex-1 pr-2 text-sm font-semibold text-gray-900" numberOfLines={1}>
-              {row.title}
-            </Text>
-            <Text className="text-[13.5px] font-extrabold text-[#0D9488]">+NPR {row.amount.toLocaleString()}</Text>
+          <View className="my-4">
+            <DashedRule />
           </View>
-          <View className="mt-1 flex-row items-center justify-between">
-            <Text className="text-xs text-gray-400">
-              {row.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+
+          <View className="flex-row">
+            <Text style={{ fontFamily: MONO, width: 52 }} className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+              Date
             </Text>
-            <Text className="text-xs text-gray-400">Balance: NPR {row.balance.toLocaleString()}</Text>
+            <Text style={{ fontFamily: MONO }} className="flex-1 text-[10px] font-bold uppercase tracking-wide text-gray-400">
+              Job
+            </Text>
+            <Text style={{ fontFamily: MONO }} className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+              Amount
+            </Text>
           </View>
+
+          <View className="mt-2">
+            <DashedRule />
+          </View>
+
+          {isLoading && (
+            <Text style={{ fontFamily: MONO }} className="py-6 text-center text-[12px] text-gray-400">
+              loading...
+            </Text>
+          )}
+          {!isLoading && rows.length === 0 && (
+            <Text style={{ fontFamily: MONO }} className="py-6 text-center text-[12px] text-gray-400">
+              -- no transactions --
+            </Text>
+          )}
+
+          {rows.map((row) => (
+            <View key={row.id} className="flex-row items-start py-2" style={{ gap: 4 }}>
+              <Text style={{ fontFamily: MONO, width: 52 }} className="text-[11px] text-gray-500">
+                {row.date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+              </Text>
+              <Text style={{ fontFamily: MONO }} className="flex-1 pr-2 text-[12px] text-gray-800" numberOfLines={1}>
+                {row.title}
+              </Text>
+              <Text style={{ fontFamily: MONO }} className="text-[12px] font-semibold text-gray-900">
+                {money(row.amount)}
+              </Text>
+            </View>
+          ))}
+
+          <View className="mt-2">
+            <DashedRule />
+          </View>
+
+          <View className="mt-2.5 flex-row items-center justify-between border-t-2 border-gray-900 pt-2.5">
+            <Text style={{ fontFamily: MONO, letterSpacing: 1 }} className="text-[13px] font-extrabold text-gray-900">
+              TOTAL
+            </Text>
+            <Text style={{ fontFamily: MONO }} className="text-[17px] font-extrabold text-gray-900">
+              NPR {money(periodTotal)}
+            </Text>
+          </View>
+
+          <Text style={{ fontFamily: MONO }} className="mt-4 text-center text-[10px] text-gray-400">
+            {rows.length} item{rows.length === 1 ? '' : 's'} {'·'} lifetime balance NPR {money(lifetimeTotal)}
+          </Text>
+          <Text style={{ fontFamily: MONO }} className="mt-2 text-center text-[10px] text-gray-300">
+            * * * * * * * * * * * * * *
+          </Text>
         </View>
-      ))}
+        <ZigzagEdge flip />
+      </View>
     </ScrollView>
   );
 }
