@@ -13,9 +13,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { showAlert, getErrorMessage } from '../utils/alert';
-import { MapPreview } from './MapPreview';
+import { LocationMapPicker, type LocationMapPickerHandle, type Coords } from './LocationMapPicker';
 
-export type Coords = { latitude: number; longitude: number };
+export type { Coords };
+
+const MAP_HEIGHT = 220;
 
 type SearchResult = { place_id: number; display_name: string; lat: string; lon: string };
 
@@ -42,8 +44,11 @@ async function reverseGeocode(coords: Coords): Promise<string | null> {
 
 /** Lets the person confirm the device's current position or search for a
  * different place/landmark (e.g. to simulate an order coming from elsewhere)
- * before it's attached to the request. Opens defaulted to the device's GPS
- * position; search results move the preview pin instead. */
+ * before it's attached to the request. Selection is drag-the-map: a fixed
+ * pin sits at the center of the view and whatever the map is centered on
+ * is the chosen point, rather than a marker dropped on a static preview -
+ * "Use my current location" and picking a search result both just move the
+ * map underneath the same fixed pin. */
 export function LocationPickerModal({
   visible,
   initialCoords,
@@ -61,19 +66,43 @@ export function LocationPickerModal({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [mapMountKey, setMapMountKey] = useState(0);
   const searchSeq = useRef(0);
+  const geocodeSeq = useRef(0);
+  const lastGeocodedKey = useRef<string | null>(null);
+  const mapRef = useRef<LocationMapPickerHandle>(null);
+
+  // Applies a new center everywhere it needs to land: the coords the
+  // confirm button will submit, and (deduped, so panning back over the
+  // same spot doesn't re-fetch) the address text underneath the map.
+  function syncCenter(next: Coords) {
+    setCoords(next);
+    const key = `${next.latitude.toFixed(5)},${next.longitude.toFixed(5)}`;
+    if (lastGeocodedKey.current === key) return;
+    lastGeocodedKey.current = key;
+    const seq = ++geocodeSeq.current;
+    reverseGeocode(next)
+      .then((display) => {
+        if (geocodeSeq.current !== seq) return;
+        if (display) setAddress(display);
+      })
+      .catch(() => {});
+  }
 
   useEffect(() => {
     if (!visible) return;
     setQuery('');
     setResults([]);
+    lastGeocodedKey.current = null;
+    setMapMountKey((k) => k + 1);
     if (initialCoords) {
-      setCoords(initialCoords);
+      syncCenter(initialCoords);
     } else {
+      setCoords(null);
       locateDevice();
     }
     // Only re-run when the modal opens, not on every initialCoords change
-    // from the parent (which would fight the search results below).
+    // from the parent (which would fight the map's own state below).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
@@ -107,9 +136,15 @@ export function LocationPickerModal({
       }
       const position = await Location.getCurrentPositionAsync({});
       const next = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-      setCoords(next);
-      const display = await reverseGeocode(next).catch(() => null);
-      if (display) setAddress(display);
+      if (mapRef.current) {
+        // Map's already up (this was a manual re-tap) - pan it and let the
+        // map's own moveend -> onCenterChange call syncCenter.
+        mapRef.current.recenterTo(next);
+      } else {
+        // First open, before the map has mounted - this coords value
+        // becomes its initial center directly.
+        syncCenter(next);
+      }
     } catch (err) {
       showAlert('Could not get location', getErrorMessage(err));
     } finally {
@@ -118,10 +153,14 @@ export function LocationPickerModal({
   }
 
   function selectResult(result: SearchResult) {
-    setCoords({ latitude: Number(result.lat), longitude: Number(result.lon) });
-    setAddress(result.display_name);
+    const next = { latitude: Number(result.lat), longitude: Number(result.lon) };
     setQuery('');
     setResults([]);
+    if (mapRef.current) {
+      mapRef.current.recenterTo(next);
+    } else {
+      syncCenter(next);
+    }
   }
 
   function confirm() {
@@ -179,7 +218,24 @@ export function LocationPickerModal({
               </Text>
             </Pressable>
 
-            {coords && <View className="mb-2.5"><MapPreview coords={coords} height={180} /></View>}
+            {coords ? (
+              <LocationMapPicker
+                key={mapMountKey}
+                ref={mapRef}
+                initialCoords={coords}
+                onCenterChange={syncCenter}
+                height={MAP_HEIGHT}
+              />
+            ) : (
+              <View
+                className="items-center justify-center rounded-lg border border-gray-200 bg-gray-50"
+                style={{ height: MAP_HEIGHT }}
+              >
+                <ActivityIndicator color="#9CA3AF" />
+                <Text className="mt-2 text-xs text-gray-400">Getting your location…</Text>
+              </View>
+            )}
+            <Text className="mb-1 mt-1.5 text-center text-[11px] text-gray-400">Drag the map to move the pin</Text>
 
             {!!address && <Text className="mb-3 text-xs text-gray-500" numberOfLines={3}>{address}</Text>}
 
