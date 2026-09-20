@@ -1,12 +1,21 @@
 // app/(technician)/earnings.tsx
 import { useMemo } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { BarChart } from '../../lib/components/BarChart';
 import type { JobCard } from '../../types/database.types';
+
+// On web, navigating away leaves DOM focus sitting on the button that was
+// just pressed - and since that button's screen gets marked aria-hidden
+// once it's no longer the active route, the browser complains about hidden
+// focus. Blurring before navigating avoids that.
+function blurActiveElement() {
+  if (Platform.OS !== 'web') return;
+  (document.activeElement as HTMLElement | null)?.blur();
+}
 
 function startOfDay(date: Date) {
   const d = new Date(date);
@@ -203,7 +212,13 @@ export default function TechnicianEarnings() {
 
       <View className="mb-3 flex-row items-center justify-between">
         <Text className="text-[15px] font-bold text-gray-900">Recent payouts</Text>
-        <Pressable onPress={() => router.push('/(technician)/statement')} className="flex-row items-center gap-1">
+        <Pressable
+          onPress={() => {
+            blurActiveElement();
+            router.push('/(technician)/statement');
+          }}
+          className="flex-row items-center gap-1"
+        >
           <Text className="text-[12.5px] font-semibold text-[#0D9488]">Full statement</Text>
           <Ionicons name="chevron-forward" size={13} color="#0D9488" />
         </Pressable>
