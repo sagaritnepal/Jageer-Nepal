@@ -1,5 +1,5 @@
 // app/(technician)/jobs.tsx
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -81,8 +81,25 @@ function JobListCard({ item }: { item: ServiceRequest }) {
   );
 }
 
+type JobsTab = 'in_progress' | 'resolved';
+
+function TabPill({ label, count, active, onPress }: { label: string; count: number; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-2"
+      style={{ backgroundColor: active ? '#2563EB' : '#FFFFFF', borderWidth: active ? 0 : 1, borderColor: '#E5E7EB' }}
+    >
+      <Text className={`text-[13px] font-bold ${active ? 'text-white' : 'text-gray-700'}`}>
+        {label} ({count})
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function TechnicianJobs() {
   const userId = useAuthStore((state) => state.session?.user.id);
+  const [tab, setTab] = useState<JobsTab>('in_progress');
 
   const { data: jobs, isLoading } = useSupabaseQuery('service_requests', {
     filters: userId ? { technician_id: userId } : {},
@@ -91,11 +108,12 @@ export default function TechnicianJobs() {
   });
 
   // This tab is for work the technician has actually started or finished -
-  // new offers awaiting a response live on the dashboard instead.
-  const myJobs = useMemo(
-    () => (jobs ?? []).filter((j) => j.status === 'in_progress' || j.status === 'resolved'),
-    [jobs]
-  );
+  // new offers awaiting a response live on the dashboard instead. Split
+  // into two lists rather than one flat one so "what's still open" and
+  // "what's done" don't get mixed together.
+  const inProgressJobs = useMemo(() => (jobs ?? []).filter((j) => j.status === 'in_progress'), [jobs]);
+  const completedJobs = useMemo(() => (jobs ?? []).filter((j) => j.status === 'resolved'), [jobs]);
+  const activeJobs = tab === 'in_progress' ? inProgressJobs : completedJobs;
 
   // A reseller assigning a new job (or a job's status changing under this
   // technician, e.g. someone else updating it from the web) should land
@@ -107,10 +125,17 @@ export default function TechnicianJobs() {
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && myJobs.length === 0 && <Text className="text-gray-500">No jobs in progress or completed yet.</Text>}
+      <View className="mb-4 flex-row" style={{ gap: 8 }}>
+        <TabPill label="In progress" count={inProgressJobs.length} active={tab === 'in_progress'} onPress={() => setTab('in_progress')} />
+        <TabPill label="Completed" count={completedJobs.length} active={tab === 'resolved'} onPress={() => setTab('resolved')} />
+      </View>
 
-      <FlatList data={myJobs} keyExtractor={(item) => item.id} renderItem={({ item }) => <JobListCard item={item} />} />
+      {isLoading && <Text className="text-gray-500">Loading…</Text>}
+      {!isLoading && activeJobs.length === 0 && (
+        <Text className="text-gray-500">{tab === 'in_progress' ? 'No jobs in progress.' : 'No completed jobs yet.'}</Text>
+      )}
+
+      <FlatList data={activeJobs} keyExtractor={(item) => item.id} renderItem={({ item }) => <JobListCard item={item} />} />
     </View>
   );
 }
