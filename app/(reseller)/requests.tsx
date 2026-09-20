@@ -1,8 +1,8 @@
 // app/(reseller)/requests.tsx
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, FlatList, ScrollView, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, subscribeToTable } from '../../lib/hooks/useSupabase';
@@ -420,6 +420,20 @@ function OrderJobRow({
 export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [jobStage, setJobStage] = useState<Stage | null>(null);
+
+  // This tab screen stays mounted across tab switches (React Navigation
+  // doesn't unmount an unfocused tab), so a manually-picked pill (e.g.
+  // "Completed", from browsing paid jobs earlier) would otherwise stay
+  // selected forever. That's what made a job you just assigned seem to
+  // "become Completed" after switching tabs and back: the screen was still
+  // filtered to the stale "Completed" pill instead of the "Job in progress"
+  // stage the new job actually landed in. Clearing the manual pick on every
+  // focus makes it re-pick whichever stage most needs attention right now.
+  useFocusEffect(
+    useCallback(() => {
+      setJobStage(null);
+    }, [])
+  );
   // A phone browser hitting the website is still "web" (Platform.OS ===
   // 'web'), but the pipeline + table layout only makes sense once the
   // viewport is wide enough - same breakpoint as the sidebar shell.
