@@ -1,6 +1,8 @@
 // app/(technician)/earnings.tsx
 import { useMemo } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { BarChart } from '../../lib/components/BarChart';
@@ -39,12 +41,12 @@ function addToHourBuckets(buckets: number[], startedAt: string, completedAt: str
   }
 }
 
-type JobCardWithQuote = JobCard & { service_requests: { quoted_price: number | null } | null };
+export type JobCardWithQuote = JobCard & { service_requests: { quoted_price: number | null; issue_type: string } | null };
 
 // A job_card total of 0 means the technician never filled in real costs
 // (defaults to 0 on resolve) - fall back to the request's quoted price
 // rather than showing what looks like an unpaid/zero-value job.
-function jobCardAmount(c: JobCardWithQuote) {
+export function jobCardAmount(c: JobCardWithQuote) {
   const jobTotal = Number(c.labor_cost) + Number(c.parts_cost);
   return jobTotal > 0 ? jobTotal : Number(c.service_requests?.quoted_price ?? 0);
 }
@@ -55,7 +57,7 @@ export default function TechnicianEarnings() {
   const { data: jobCards, isLoading } = useSupabaseQuery('job_cards', {
     filters: userId ? { technician_id: userId } : {},
     orderBy: { column: 'created_at', ascending: false },
-    columns: '*, service_requests(quoted_price)',
+    columns: '*, service_requests(quoted_price, issue_type)',
     enabled: !!userId,
   }) as { data: JobCardWithQuote[] | undefined; isLoading: boolean };
 
@@ -199,7 +201,13 @@ export default function TechnicianEarnings() {
         />
       </View>
 
-      <Text className="mb-3 text-[15px] font-bold text-gray-900">Recent payouts</Text>
+      <View className="mb-3 flex-row items-center justify-between">
+        <Text className="text-[15px] font-bold text-gray-900">Recent payouts</Text>
+        <Pressable onPress={() => router.push('/(technician)/statement')} className="flex-row items-center gap-1">
+          <Text className="text-[12.5px] font-semibold text-[#0D9488]">Full statement</Text>
+          <Ionicons name="chevron-forward" size={13} color="#0D9488" />
+        </Pressable>
+      </View>
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && stats.payoutHistory.length === 0 && (
