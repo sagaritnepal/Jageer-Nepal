@@ -1,10 +1,9 @@
 // app/(technician)/jobs.tsx
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
 import { router } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
@@ -91,25 +90,27 @@ export default function TechnicianJobs() {
     enabled: !!userId,
   });
 
+  // This tab is for work the technician has actually started or finished -
+  // new offers awaiting a response live on the dashboard instead.
+  const myJobs = useMemo(
+    () => (jobs ?? []).filter((j) => j.status === 'in_progress' || j.status === 'resolved'),
+    [jobs]
+  );
+
   // A reseller assigning a new job (or a job's status changing under this
   // technician, e.g. someone else updating it from the web) should land
-  // here right away, not just whenever this screen next happens to remount.
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!userId) return;
-    return subscribeToTable(
-      'service_requests',
-      () => queryClient.invalidateQueries({ queryKey: ['service_requests'] }),
-      `technician_id=eq.${userId}`
-    );
-  }, [userId]);
+  // here right away. useJobOffers's realtime subscription (mounted for the
+  // whole technician portal via IncomingJobOffer in _layout.tsx) already
+  // invalidates this same ['service_requests'] query key on every change,
+  // so a second subscription here isn't needed - and would throw, since
+  // Supabase reuses the already-joined channel for the same table+filter.
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
-      {!isLoading && jobs?.length === 0 && <Text className="text-gray-500">No jobs assigned yet.</Text>}
+      {!isLoading && myJobs.length === 0 && <Text className="text-gray-500">No jobs in progress or completed yet.</Text>}
 
-      <FlatList data={jobs} keyExtractor={(item) => item.id} renderItem={({ item }) => <JobListCard item={item} />} />
+      <FlatList data={myJobs} keyExtractor={(item) => item.id} renderItem={({ item }) => <JobListCard item={item} />} />
     </View>
   );
 }
