@@ -1,6 +1,7 @@
 // app/_layout.tsx
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryProvider } from '../lib/providers/QueryProvider';
@@ -44,6 +45,39 @@ function WebFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Most authenticated screens are a plain ScrollView with no keyboard
+// handling of their own, so the keyboard just overlaid the screen with
+// nothing shrinking to scroll a bottom field (or a fixed footer bar) into
+// view. KeyboardAvoidingView's own auto-resize measurement (behavior=
+// "height"/"padding") is what login.tsx's screen already found unreliable
+// on some Android devices - same reasoning as that screen's own fix:
+// track the keyboard's real height directly via Keyboard events and apply
+// it as bottom padding instead of trusting the built-in component's
+// internal Android measurement. iOS's "padding" behavior isn't known to
+// have that problem, so it keeps using the plain component there.
+function KeyboardSafeArea({ children }: { children: React.ReactNode }) {
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setAndroidKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setAndroidKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  if (Platform.OS === 'android') {
+    return <View style={{ flex: 1, paddingBottom: androidKeyboardHeight }}>{children}</View>;
+  }
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {children}
+    </KeyboardAvoidingView>
+  );
+}
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   useAuthListener();
   const isLoading = useAuthStore((state) => state.isLoading);
@@ -76,23 +110,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const showClientAssistant = userId && role === 'client';
 
   // Signed-in role layouts manage their own web width (WebSidebarShell);
-  // only the pre-login state gets the generic centered letterbox.
-  //
-  // Most authenticated screens are a plain ScrollView with no keyboard
-  // handling of their own, so on iOS (which never resizes the window for
-  // the keyboard, only overlays it) a field near the bottom had nothing
-  // to scroll into view and just stayed hidden. Login/register already
-  // manage this themselves and aren't wrapped here to avoid double
-  // padding; screens rendered inside a <Modal> (chat, pickers, etc.) are
-  // also unaffected since Modal portals outside this tree. Android's fix
-  // is a native window setting - see app.json's softwareKeyboardLayoutMode.
-  const content = userId ? (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {children}
-    </KeyboardAvoidingView>
-  ) : (
-    <WebFrame>{children}</WebFrame>
-  );
+  // only the pre-login state gets the generic centered letterbox. See
+  // KeyboardSafeArea above for why authenticated screens need this at all.
+  // Login/register already manage their own keyboard handling and aren't
+  // wrapped here to avoid double padding; screens rendered inside a
+  // <Modal> (chat, pickers, etc.) are also unaffected since Modal portals
+  // outside this tree.
+  const content = userId ? <KeyboardSafeArea>{children}</KeyboardSafeArea> : <WebFrame>{children}</WebFrame>;
 
   return (
     <>
