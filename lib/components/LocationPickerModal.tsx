@@ -62,6 +62,7 @@ export function LocationPickerModal({
 }) {
   const [coords, setCoords] = useState<Coords | null>(initialCoords);
   const [address, setAddress] = useState('');
+  const [addressLoading, setAddressLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -74,19 +75,23 @@ export function LocationPickerModal({
 
   // Applies a new center everywhere it needs to land: the coords the
   // confirm button will submit, and (deduped, so panning back over the
-  // same spot doesn't re-fetch) the address text underneath the map.
+  // same spot doesn't re-fetch) the address shown in the pin's popup.
   function syncCenter(next: Coords) {
     setCoords(next);
     const key = `${next.latitude.toFixed(5)},${next.longitude.toFixed(5)}`;
     if (lastGeocodedKey.current === key) return;
     lastGeocodedKey.current = key;
     const seq = ++geocodeSeq.current;
+    setAddressLoading(true);
     reverseGeocode(next)
       .then((display) => {
         if (geocodeSeq.current !== seq) return;
         if (display) setAddress(display);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (geocodeSeq.current === seq) setAddressLoading(false);
+      });
   }
 
   useEffect(() => {
@@ -225,6 +230,8 @@ export function LocationPickerModal({
                 initialCoords={coords}
                 onCenterChange={syncCenter}
                 height={MAP_HEIGHT}
+                address={address}
+                addressLoading={addressLoading}
               />
             ) : (
               <View
@@ -235,9 +242,7 @@ export function LocationPickerModal({
                 <Text className="mt-2 text-xs text-gray-400">Getting your location…</Text>
               </View>
             )}
-            <Text className="mb-1 mt-1.5 text-center text-[11px] text-gray-400">Drag the map to move the pin</Text>
-
-            {!!address && <Text className="mb-3 text-xs text-gray-500" numberOfLines={3}>{address}</Text>}
+            <Text className="mb-3 mt-1.5 text-center text-[11px] text-gray-400">Drag the map to move the pin</Text>
 
             <View className="flex-row gap-2">
               <Pressable onPress={onClose} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
