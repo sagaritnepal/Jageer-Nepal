@@ -46,11 +46,11 @@ function AvailabilityToggle() {
   }
 
   return (
-    <View className="flex-row items-center gap-2">
-      <View className={`h-9 w-9 items-center justify-center rounded-full ${profile.is_available ? 'bg-green-50' : 'bg-gray-100'}`}>
+    <View className="flex-row items-center gap-1.5">
+      <View className={`h-8 w-8 items-center justify-center rounded-full ${profile.is_available ? 'bg-green-50' : 'bg-gray-100'}`}>
         <Ionicons
           name={profile.is_available ? 'radio-button-on' : 'radio-button-off-outline'}
-          size={17}
+          size={14}
           color={profile.is_available ? '#16a34a' : '#9CA3AF'}
         />
       </View>
@@ -60,6 +60,7 @@ function AvailabilityToggle() {
         disabled={updateProfile.isPending}
         trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
         thumbColor={profile.is_available ? '#3b82f6' : '#F3F4F6'}
+        style={{ transform: [{ scale: 0.85 }] }}
       />
     </View>
   );
