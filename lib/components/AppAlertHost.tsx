@@ -111,43 +111,52 @@ export function AppAlertHost() {
               },
           { transform: pan.getTranslateTransform() },
         ]}
-        className={
-          isMobile
-            ? 'flex-1 justify-center rounded-t-2xl border border-gray-100 bg-white px-5 shadow-lg'
-            : 'rounded-2xl border border-gray-100 bg-white p-4 shadow-lg'
-        }
       >
-        <Text className="text-base font-bold text-gray-900" numberOfLines={2}>
-          {current.title}
-        </Text>
-        {current.message ? (
-          <Text className="mt-1 text-sm text-gray-600" numberOfLines={isMobile ? 3 : 4}>
-            {current.message}
+        {/* NativeWind's className styling doesn't reliably apply straight on
+            Animated.View (this is the only place in the app that tried it) -
+            it silently dropped the background/border/shadow, leaving a fully
+            see-through band that whatever's underneath showed straight
+            through. A plain View underneath carries the visible "card"
+            styling instead; Animated.View above only handles position/drag. */}
+        <View
+          className={
+            isMobile
+              ? 'flex-1 justify-center rounded-t-2xl border border-gray-100 bg-white px-5 shadow-lg'
+              : 'rounded-2xl border border-gray-100 bg-white p-4 shadow-lg'
+          }
+        >
+          <Text className="text-base font-bold text-gray-900" numberOfLines={2}>
+            {current.title}
           </Text>
-        ) : null}
+          {current.message ? (
+            <Text className="mt-1 text-sm text-gray-600" numberOfLines={isMobile ? 3 : 4}>
+              {current.message}
+            </Text>
+          ) : null}
 
-        <View className={isMultiButton ? 'mt-3 flex-row justify-end gap-2' : 'mt-3'}>
-          {current.buttons.map((button, index) => (
-            <Pressable
-              key={index}
-              onPress={() => handlePress(button)}
-              className={isMultiButton ? 'rounded-lg px-3 py-1.5' : 'self-start rounded-lg bg-orange-600 px-3 py-1.5'}
-            >
-              <Text
-                className={
-                  isMultiButton
-                    ? button.style === 'destructive'
-                      ? 'text-sm font-semibold text-red-600'
-                      : button.style === 'cancel'
-                        ? 'text-sm font-semibold text-gray-500'
-                        : 'text-sm font-semibold text-orange-600'
-                    : 'text-sm font-semibold text-white'
-                }
+          <View className={isMultiButton ? 'mt-3 flex-row justify-end gap-2' : 'mt-3'}>
+            {current.buttons.map((button, index) => (
+              <Pressable
+                key={index}
+                onPress={() => handlePress(button)}
+                className={isMultiButton ? 'rounded-lg px-3 py-1.5' : 'self-start rounded-lg bg-orange-600 px-3 py-1.5'}
               >
-                {button.text}
-              </Text>
-            </Pressable>
-          ))}
+                <Text
+                  className={
+                    isMultiButton
+                      ? button.style === 'destructive'
+                        ? 'text-sm font-semibold text-red-600'
+                        : button.style === 'cancel'
+                          ? 'text-sm font-semibold text-gray-500'
+                          : 'text-sm font-semibold text-orange-600'
+                      : 'text-sm font-semibold text-white'
+                  }
+                >
+                  {button.text}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </Animated.View>
     </View>
