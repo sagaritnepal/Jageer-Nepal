@@ -30,7 +30,13 @@ export default function TechnicianLayout() {
     >
       <Tabs.Screen
         name="dashboard"
-        options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} /> }}
+        options={{
+          title: 'Home',
+          // Only the dashboard's own header gets the availability toggle -
+          // every other tab keeps the plain header from screenOptions above.
+          header: () => <PortalHeaderBar title="Home" showAvailabilityToggle />,
+          tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} />,
+        }}
       />
       <Tabs.Screen
         name="jobs"

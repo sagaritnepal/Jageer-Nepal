@@ -419,19 +419,15 @@ function BiometricLockRow({ profile }: { profile: Profile }) {
   );
 }
 
-function AvailabilityRow({ profile }: { profile: Profile }) {
+// "My Status" (available/unavailable) used to live here as its own toggle
+// row - it now lives in the technician dashboard's header (PortalHeaderBar)
+// instead, so resellers-facing availability is right where a technician
+// already looks first. This row keeps the still-needed, unrelated location
+// sharing action.
+function LocationRow({ profile }: { profile: Profile }) {
   const setProfile = useAuthStore((state) => state.setProfile);
   const updateProfile = useSupabaseUpdate('profiles');
   const [locating, setLocating] = useState(false);
-
-  async function toggleAvailable(is_available: boolean) {
-    try {
-      await updateProfile.mutateAsync({ id: profile.id, values: { is_available } });
-      setProfile({ ...profile, is_available });
-    } catch (err) {
-      showAlert('Could not update', getErrorMessage(err));
-    }
-  }
 
   async function updateLocation() {
     setLocating(true);
@@ -454,30 +450,12 @@ function AvailabilityRow({ profile }: { profile: Profile }) {
   }
 
   return (
-    <View>
-      <GroupRow
-        icon={profile.is_available ? 'radio-button-on' : 'radio-button-off-outline'}
-        iconColor={profile.is_available ? '#16a34a' : '#9CA3AF'}
-        iconBg={profile.is_available ? 'bg-green-50' : 'bg-gray-100'}
-        label="My Status"
-        caption={profile.is_available ? "You're available — resellers can assign you jobs" : "You're unavailable — resellers won't assign you jobs"}
-        trailing={
-          <Switch
-            value={profile.is_available}
-            onValueChange={toggleAvailable}
-            disabled={updateProfile.isPending}
-            trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
-            thumbColor={profile.is_available ? '#3b82f6' : '#F3F4F6'}
-          />
-        }
-      />
-      <Pressable onPress={updateLocation} disabled={locating} className="flex-row items-center gap-2 px-4 pb-3.5 pt-0.5">
-        <Ionicons name="navigate-outline" size={13} color="#2563eb" />
-        <Text className="text-xs font-semibold text-blue-600">
-          {locating ? 'Locating…' : profile.latitude != null ? 'Location set — tap to update' : 'Share my location'}
-        </Text>
-      </Pressable>
-    </View>
+    <GroupRow
+      icon="navigate-outline"
+      label="My location"
+      caption={locating ? 'Locating…' : profile.latitude != null ? 'Location set — tap to update' : 'Share my location'}
+      onPress={locating ? undefined : updateLocation}
+    />
   );
 }
 
@@ -731,7 +709,7 @@ export function ProfileScreen() {
     if (profile.role !== 'admin') accountRows.push(<RewardsRow key="rewards" profile={profile} />);
     accountRows.push(<ReportIssueRow key="support" userId={profile.id} />);
 
-    if (profile.role === 'technician') workRows.push(<AvailabilityRow key="availability" profile={profile} />);
+    if (profile.role === 'technician') workRows.push(<LocationRow key="location" profile={profile} />);
     if (profile.role === 'reseller') {
       workRows.push(<CompanyRow key="company" profile={profile} />);
       workRows.push(<EmployeesRow key="employees" profile={profile} />);
