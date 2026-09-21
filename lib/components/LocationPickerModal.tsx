@@ -19,7 +19,7 @@ export type { Coords };
 
 const MAP_HEIGHT = 220;
 
-type SearchResult = { place_id: number; display_name: string; lat: string; lon: string };
+type SearchResult = { place_id: number; display_name: string; lat: string; lon: string; isCoordinate?: boolean };
 
 // Nominatim (OpenStreetMap) is free and keyless, so this reuses it for both
 // directions instead of adding a Google Places dependency - reverse lookup
@@ -31,6 +31,20 @@ async function searchPlaces(query: string): Promise<SearchResult[]> {
     { headers: { Accept: 'application/json' } }
   );
   return res.json();
+}
+
+// Lets someone paste/type exact coordinates (e.g. "27.7172, 85.3240", the
+// format Google Maps' own long-press copy uses) instead of only being able
+// to find places Nominatim happens to know by name - handled locally, no
+// network round-trip needed since the numbers are already precise.
+function parseCoordinateInput(text: string): Coords | null {
+  const match = text.match(/^(-?\d{1,3}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)$/);
+  if (!match) return null;
+  const latitude = Number(match[1]);
+  const longitude = Number(match[2]);
+  if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
 }
 
 async function reverseGeocode(coords: Coords): Promise<string | null> {
@@ -112,7 +126,27 @@ export function LocationPickerModal({
   }, [visible]);
 
   useEffect(() => {
-    if (!query.trim() || query.trim().length < 3) {
+    const trimmed = query.trim();
+
+    const asCoordinate = parseCoordinateInput(trimmed);
+    if (asCoordinate) {
+      // No network round-trip needed - an exact coordinate doesn't need to
+      // be "found", so this shows instantly instead of waiting on the same
+      // debounce as a place-name search.
+      setSearching(false);
+      setResults([
+        {
+          place_id: -1,
+          display_name: `Pin at ${asCoordinate.latitude.toFixed(5)}, ${asCoordinate.longitude.toFixed(5)}`,
+          lat: String(asCoordinate.latitude),
+          lon: String(asCoordinate.longitude),
+          isCoordinate: true,
+        },
+      ]);
+      return;
+    }
+
+    if (!trimmed || trimmed.length < 3) {
       setResults([]);
       return;
     }
@@ -120,7 +154,7 @@ export function LocationPickerModal({
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const found = await searchPlaces(query.trim());
+        const found = await searchPlaces(trimmed);
         if (searchSeq.current === seq) setResults(found);
       } catch {
         if (searchSeq.current === seq) setResults([]);
@@ -190,7 +224,7 @@ export function LocationPickerModal({
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search a place or landmark"
+                placeholder="Search a place, or enter lat, lng"
                 className="flex-1 px-2 py-2.5 text-sm"
               />
               {searching && <ActivityIndicator size="small" color="#9CA3AF" />}
@@ -202,9 +236,14 @@ export function LocationPickerModal({
                   <Pressable
                     key={r.place_id}
                     onPress={() => selectResult(r)}
-                    className="border-b border-gray-100 px-3 py-2.5"
+                    className="flex-row items-center gap-2 border-b border-gray-100 px-3 py-2.5"
                   >
-                    <Text className="text-sm text-gray-800" numberOfLines={2}>
+                    <Ionicons
+                      name={r.isCoordinate ? 'locate' : 'location-outline'}
+                      size={14}
+                      color={r.isCoordinate ? '#1D4ED8' : '#9CA3AF'}
+                    />
+                    <Text className="flex-1 text-sm text-gray-800" numberOfLines={2}>
                       {r.display_name}
                     </Text>
                   </Pressable>
