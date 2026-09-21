@@ -85,7 +85,7 @@ export default function ClientDashboard() {
           </View>
 
           <Pressable
-            onPress={() => router.push('/(client)/new-request')}
+            onPress={() => router.push('/(client)/new-request?from=dashboard')}
             className="mb-5 flex-row items-center justify-between rounded-2xl bg-orange-500 px-4 py-3.5"
           >
             <View>

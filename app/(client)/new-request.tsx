@@ -7,7 +7,9 @@ import { CategoryBadge } from '../../lib/components/CategoryBadge';
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
 export default function NewRequest() {
-  const { category: presetCategory } = useLocalSearchParams<{ category?: string }>();
+  // `from` is the tab this form was opened from - carried through so
+  // finishing the request lands back there (see returnPathOr).
+  const { category: presetCategory, from } = useLocalSearchParams<{ category?: string; from?: string }>();
 
   const { data: categories, isLoading: loadingCategories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
@@ -16,7 +18,8 @@ export default function NewRequest() {
 
   function goToDetails(category: string, action: (typeof SERVICE_ACTIONS)[number]) {
     router.push(
-      `/(client)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}`
+      `/(client)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}` +
+        (from ? `&from=${encodeURIComponent(from)}` : '')
     );
   }
 

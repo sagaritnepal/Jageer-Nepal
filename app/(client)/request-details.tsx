@@ -14,6 +14,7 @@ import { LocationPickerModal, type Coords } from '../../lib/components/LocationP
 import { MapPreview } from '../../lib/components/MapPreview';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
+import { returnPathOr } from '../../lib/utils/returnPath';
 
 const PHOTO_SLOTS = 3;
 
@@ -29,9 +30,12 @@ export default function RequestDetails() {
     assistantDate,
     assistantTime,
     assistantAddress,
+    from,
   } = useLocalSearchParams<{
     category: string;
     action: string;
+    /** The tab this form was opened from, so submitting returns there. */
+    from?: string;
     assistantNotes?: string;
     assistantDate?: string;
     assistantTime?: string;
@@ -137,7 +141,7 @@ export default function RequestDetails() {
       });
 
       showAlert('Request submitted', 'A reseller will review it and assign a technician soon.');
-      router.replace('/(client)/requests');
+      router.replace(returnPathOr('/(client)', from, 'requests'));
     } catch (err) {
       showAlert('Something went wrong', getErrorMessage(err));
     } finally {

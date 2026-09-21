@@ -21,7 +21,10 @@ function gridColumns(width: number, isWideWeb: boolean): number {
 }
 
 export default function ResellerNewRequest() {
-  const { category: presetCategory } = useLocalSearchParams<{ category?: string }>();
+  // `from` is the tab this form was opened from, carried through to the
+  // details step so finishing (or cancelling) lands back there - see
+  // returnPathOr in lib/utils/returnPath.ts.
+  const { category: presetCategory, from } = useLocalSearchParams<{ category?: string; from?: string }>();
   const { width } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const columns = gridColumns(width, isWideWeb);
@@ -44,7 +47,8 @@ export default function ResellerNewRequest() {
 
   function goToDetails(category: string) {
     router.push(
-      `/(reseller)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}`
+      `/(reseller)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}` +
+        (from ? `&from=${encodeURIComponent(from)}` : '')
     );
   }
 

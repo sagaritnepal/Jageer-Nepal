@@ -212,7 +212,7 @@ export default function ResellerDashboard() {
   if (Platform.OS === 'web') {
     const needTechnicianCard = (
       <Pressable
-        onPress={() => router.push('/(reseller)/new-request')}
+        onPress={() => router.push('/(reseller)/new-request?from=dashboard')}
         className="rounded-2xl bg-blue-50 p-4"
       >
         <Text className="text-[13.5px] font-bold text-blue-700">Need a technician?</Text>
@@ -339,7 +339,7 @@ export default function ResellerDashboard() {
           </View>
 
           <Pressable
-            onPress={() => router.push('/(reseller)/new-request')}
+            onPress={() => router.push('/(reseller)/new-request?from=dashboard')}
             className="mb-5 flex-row items-center justify-between rounded-2xl bg-orange-500 px-4 py-3.5"
           >
             <View>

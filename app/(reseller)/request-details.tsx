@@ -25,6 +25,7 @@ import { LocationPickerModal, type Coords } from '../../lib/components/LocationP
 import { MapPreview } from '../../lib/components/MapPreview';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
+import { returnPathOr } from '../../lib/utils/returnPath';
 import { pickPhoneContact } from '../../lib/utils/pickPhoneContact';
 import { usePhoneContacts } from '../../lib/hooks/usePhoneContacts';
 import { ContactPickerModal } from '../../lib/components/ContactPickerModal';
@@ -33,7 +34,9 @@ import type { Customer } from '../../types/database.types';
 const PHOTO_SLOTS = 3;
 
 export default function ResellerRequestDetails() {
-  const { category, action } = useLocalSearchParams<{ category: string; action: string }>();
+  const { category, action, from } = useLocalSearchParams<{ category: string; action: string; from?: string }>();
+  // Back to whichever tab opened this form, not always Requests.
+  const returnPath = returnPathOr('/(reseller)', from, 'requests');
   const { width } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -299,7 +302,7 @@ export default function ResellerRequestDetails() {
       });
 
       showAlert('Request submitted', 'Assign a technician from the Requests tab whenever you’re ready.');
-      router.replace('/(reseller)/requests');
+      router.replace(returnPath);
     } catch (err) {
       showAlert('Something went wrong', getErrorMessage(err));
     } finally {
@@ -317,12 +320,13 @@ export default function ResellerRequestDetails() {
   const cardWidth = isWideWeb ? ('calc((100% - 16px) / 2)' as unknown as number) : undefined;
 
   function changeService() {
-    router.replace(`/(reseller)/new-request?category=${encodeURIComponent(category ?? '')}`);
+    router.replace(
+      `/(reseller)/new-request?category=${encodeURIComponent(category ?? '')}` + (from ? `&from=${encodeURIComponent(from)}` : '')
+    );
   }
 
   function cancel() {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(reseller)/requests');
+    router.replace(returnPath);
   }
 
   const locationButton = (

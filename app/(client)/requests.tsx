@@ -192,7 +192,7 @@ export default function ClientRequests() {
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
       <View className="mb-4 flex-row items-center justify-end">
-        <Pressable onPress={() => router.push('/(client)/new-request')} className="rounded-lg bg-orange-500 px-4 py-2">
+        <Pressable onPress={() => router.push('/(client)/new-request?from=requests')} className="rounded-lg bg-orange-500 px-4 py-2">
           <Text className="font-semibold text-white">+ New</Text>
         </Pressable>
       </View>
