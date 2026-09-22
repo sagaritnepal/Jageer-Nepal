@@ -15,6 +15,84 @@ import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } f
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { Customer, Profile } from '../../../types/database.types';
 
+function money(n: number): string {
+  return Math.round(n).toLocaleString();
+}
+
+/** What a party owes this business (receivable) and what the business owes
+ * them (payable). The two live in opposite tables with opposite polarity -
+ * customer_ledger_entries for money coming in, vendor_ledger_entries for
+ * money going out (see 0059_vendor_ledger.sql) - and one person can be both
+ * a customer and a supplier, so they are kept apart rather than netted into
+ * a single number that would hide half the story. */
+type Balance = { receivable: number; payable: number };
+
+function useLedgerBalances(userId: string | undefined) {
+  const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
+  const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
+
+  return useMemo(() => {
+    const byParty = new Map<string, Balance>();
+    const at = (id: string) => {
+      const found = byParty.get(id) ?? { receivable: 0, payable: 0 };
+      byParty.set(id, found);
+      return found;
+    };
+    for (const e of customerEntries ?? []) {
+      const row = at(e.customer_id);
+      row.receivable += e.entry_type === 'debit' ? e.amount : -e.amount;
+    }
+    for (const e of vendorEntries ?? []) {
+      const row = at(e.vendor_id);
+      row.payable += e.entry_type === 'debit' ? e.amount : -e.amount;
+    }
+
+    let totalReceivable = 0;
+    let totalPayable = 0;
+    for (const row of byParty.values()) {
+      if (row.receivable > 0) totalReceivable += row.receivable;
+      if (row.payable > 0) totalPayable += row.payable;
+    }
+    return { byParty, totalReceivable, totalPayable };
+  }, [customerEntries, vendorEntries]);
+}
+
+/** The one line that says where a party stands. Anything at zero (or in
+ * credit both ways) reads as settled rather than as a confusing 0. */
+function BalanceLine({ balance }: { balance: Balance | undefined }) {
+  const receivable = balance && balance.receivable > 0 ? balance.receivable : 0;
+  const payable = balance && balance.payable > 0 ? balance.payable : 0;
+
+  if (!receivable && !payable) {
+    return <Text className="mt-1.5 text-[11.5px] font-medium text-gray-400">Settled</Text>;
+  }
+
+  return (
+    <View className="mt-1.5 flex-row flex-wrap items-center" style={{ gap: 8 }}>
+      {receivable > 0 && (
+        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#ECFDF5' }}>
+          <Text className="text-[11.5px] font-bold" style={{ color: '#047857' }}>
+            To receive NPR {money(receivable)}
+          </Text>
+        </View>
+      )}
+      {payable > 0 && (
+        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#FEF2F2' }}>
+          <Text className="text-[11.5px] font-bold" style={{ color: '#B91C1C' }}>
+            To pay NPR {money(payable)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 /** Id of the existing customer already using `phone` for this owner, if any. */
 async function findExistingCustomerByPhone(ownerId: string, phone: string, excludeCustomerId?: string) {
   let query = supabase.from('customers').select('id').eq('owner_id', ownerId).eq('phone', phone);
@@ -154,7 +232,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
   );
 }
 
-function CustomerRow({ customer, basePath, isApp }: { customer: Customer; basePath: string; isApp: boolean }) {
+function CustomerRow({ customer, basePath, isApp, balance }: { customer: Customer; basePath: string; isApp: boolean; balance: Balance | undefined }) {
   return (
     <Pressable
       onPress={() => router.push(`${basePath}/customer/${customer.id}` as any)}
@@ -181,6 +259,7 @@ function CustomerRow({ customer, basePath, isApp }: { customer: Customer; basePa
           <Ionicons name="location-outline" size={11} color="#9CA3AF" /> {customer.address}
         </Text>
       )}
+      <BalanceLine balance={balance} />
     </Pressable>
   );
 }
@@ -350,6 +429,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     enabled: !!userId,
   });
   const appCustomers = useAppCustomers(userId);
+  const { byParty, totalReceivable, totalPayable } = useLedgerBalances(userId);
 
   // A saved customer whose phone matches a registered app user is marked
   // "APP" on their existing row instead of being listed twice; an app user
@@ -400,6 +480,34 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
         </Pressable>
       </View>
 
+      {/* What every ledger adds up to, before the names themselves. */}
+      <View className="mb-3 flex-row" style={{ gap: 10 }}>
+        <Pressable
+          onPress={() => router.push(`${basePath}/to-receive` as any)}
+          className="flex-1 rounded-2xl border p-3.5"
+          style={{ backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }}
+        >
+          <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#047857' }}>
+            To receive
+          </Text>
+          <Text className="mt-0.5 text-[19px] font-extrabold" style={{ color: '#047857' }}>
+            NPR {money(totalReceivable)}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push(`${basePath}/to-give` as any)}
+          className="flex-1 rounded-2xl border p-3.5"
+          style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}
+        >
+          <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#B91C1C' }}>
+            To pay
+          </Text>
+          <Text className="mt-0.5 text-[19px] font-extrabold" style={{ color: '#B91C1C' }}>
+            NPR {money(totalPayable)}
+          </Text>
+        </Pressable>
+      </View>
+
       {userId && <PhoneContactsSyncButton userId={userId} />}
 
       {showAddForm && userId && <AddCustomerForm userId={userId} basePath={basePath} onDone={() => setShowAddForm(false)} />}
@@ -409,7 +517,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
         keyExtractor={(item) => `${item.kind}-${item.id}`}
         renderItem={({ item }) =>
           item.kind === 'customer' ? (
-            <CustomerRow customer={item.customer} basePath={basePath} isApp={item.isApp} />
+            <CustomerRow customer={item.customer} basePath={basePath} isApp={item.isApp} balance={byParty.get(item.id)} />
           ) : (
             <AppCustomerRow entry={item.entry} />
           )

@@ -55,7 +55,7 @@ export default function WholesalerLayout() {
       <Tabs.Screen name="product/[id]" options={{ href: null, title: 'Bulk Pricing' }} />
       <Tabs.Screen name="catalog/[id]" options={{ href: null, title: 'Product Details' }} />
       <Tabs.Screen name="order/[id]" options={{ href: null, title: 'Order Detail' }} />
-      <Tabs.Screen name="customers" options={{ href: null, title: 'My Customers' }} />
+      <Tabs.Screen name="customers" options={{ href: null, title: 'Ledger' }} />
       <Tabs.Screen name="customer/[id]" options={{ href: null, title: 'Customer' }} />
       <Tabs.Screen name="transactions" options={{ href: null, title: 'Transactions' }} />
       <Tabs.Screen name="quick-payment" options={{ href: null, title: 'Quick Payment' }} />
