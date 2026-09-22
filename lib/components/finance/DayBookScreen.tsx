@@ -1,13 +1,15 @@
 // lib/components/finance/DayBookScreen.tsx
-import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../hooks/useAuth';
-import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
 import { DateField } from '../DateTimeFields';
 import { useWideDetail } from '../detail/DetailLayout';
+import { showAlert, getErrorMessage } from '../../utils/alert';
 
 type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer';
 
@@ -27,6 +29,25 @@ type BookRow = {
   balance: number | null;
   sortKey: string;
   href?: string;
+  /** What this row actually is in the database, so it can be edited here. */
+  edit?: EditTarget;
+};
+
+type EditTable = 'business_transactions' | 'customer_ledger_entries' | 'vendor_ledger_entries' | 'account_transfers';
+
+type EditValues = { date: string; amount: string; party: string; billNo: string; discount: string; receiptNo: string; note: string };
+
+type EditTarget = {
+  table: EditTable;
+  id: string;
+  title: string;
+  /** Set when the entry belongs to something else (a job's payment, say) -
+   * it is then shown read-only, since a change here would just be
+   * overwritten by whatever created it. */
+  lockedReason?: string;
+  /** Which fields this kind of entry has. */
+  fields: { party?: boolean; billNo?: boolean; discount?: boolean; receiptNo?: boolean };
+  values: EditValues;
 };
 
 const KIND: Record<Kind, { label: string; color: string; bg: string }> = {
@@ -60,6 +81,10 @@ function money(n: number | null | undefined): string {
   return n == null ? '—' : Math.round(n).toLocaleString();
 }
 
+function amountText(n: number | null | undefined): string {
+  return n == null ? '' : String(n);
+}
+
 // Full-table column widths; Transaction details takes the rest. All nine
 // columns need about this much window to fit beside the sidebar - narrower
 // than that and the table falls back to the compact four-column form rather
@@ -82,7 +107,7 @@ function TypePill({ kind }: { kind: Kind }) {
  * balance first, then cash in / paid out / expenses (which move the running
  * balance) mixed with the day's sales and purchase bills and transfers
  * (which don't), closing balance last. */
-function DayBookTable({ rows, opening, totalIn, totalOut, closing, full }: {
+function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenRow }: {
   rows: BookRow[];
   opening: number;
   totalIn: number;
@@ -90,6 +115,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full }: {
   closing: number;
   /** Show every column; otherwise Time | Details | Amount | Balance. */
   full: boolean;
+  onOpenRow: (row: BookRow) => void;
 }) {
   const cell = 'px-2.5 py-2 border-r border-gray-200';
   const headCell = (label: string, style: object, right = false) => (
@@ -105,7 +131,9 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full }: {
       {value == null ? '—' : money(value)}
     </Text>
   );
-  const open = (r: BookRow) => (r.href ? () => router.push(r.href as any) : undefined);
+  // Tapping an entry opens it for editing; the opening-balance line and
+  // anything without a record behind it stays inert.
+  const open = (r: BookRow) => (r.edit ? () => onOpenRow(r) : r.href ? () => router.push(r.href as any) : undefined);
 
   if (!full) {
     // Narrow: Time | Details (type, notes, invoice) | Amount | Balance.
@@ -124,7 +152,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full }: {
           const amountText = r.cashIn != null ? `+${money(r.cashIn)}` : r.cashOut != null ? `−${money(r.cashOut)}` : money(r.amount);
           const amountColor = r.cashIn != null ? '#047857' : r.cashOut != null ? '#B91C1C' : '#6B7280';
           return (
-            <Pressable key={r.id} onPress={open(r)} disabled={!r.href} className="flex-row border-b border-gray-200">
+            <Pressable key={r.id} onPress={open(r)} disabled={!r.edit && !r.href} className="flex-row border-b border-gray-200">
               <Text className={`${cell} text-[11.5px] text-gray-500`} style={{ width: 50 }} numberOfLines={1}>
                 {r.time}
               </Text>
@@ -194,7 +222,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full }: {
             <Pressable
               key={r.id}
               onPress={open(r)}
-              disabled={!r.href}
+              disabled={!r.edit && !r.href}
               className="flex-row border-b border-gray-200"
               style={r.kind === 'opening' ? { backgroundColor: '#FAFAFA' } : undefined}
             >
@@ -250,6 +278,258 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full }: {
   );
 }
 
+function EditField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <View className="mb-3.5">
+      <Text className="mb-1.5 text-sm font-medium text-gray-700">{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function EditInput(props: ComponentProps<typeof TextInput>) {
+  return (
+    <TextInput
+      {...props}
+      className={`rounded-lg border px-4 py-3 text-base ${props.editable === false ? 'border-gray-200 bg-gray-50 text-gray-500' : 'border-gray-300 bg-white text-gray-900'}`}
+    />
+  );
+}
+
+/** Edit or delete one entry without leaving the Day Book. Writes go to the
+ * row's own table, so the ledgers, balances and the rest of Finance follow
+ * along - a sale's customer debit, for one, is kept in step by a database
+ * trigger. */
+function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const updates = {
+    business_transactions: useSupabaseUpdate('business_transactions'),
+    customer_ledger_entries: useSupabaseUpdate('customer_ledger_entries'),
+    vendor_ledger_entries: useSupabaseUpdate('vendor_ledger_entries'),
+    account_transfers: useSupabaseUpdate('account_transfers'),
+  };
+  const removals = {
+    business_transactions: useSupabaseDelete('business_transactions'),
+    customer_ledger_entries: useSupabaseDelete('customer_ledger_entries'),
+    vendor_ledger_entries: useSupabaseDelete('vendor_ledger_entries'),
+    account_transfers: useSupabaseDelete('account_transfers'),
+  };
+  const [form, setForm] = useState<EditValues | undefined>(target?.values);
+  const [busy, setBusy] = useState(false);
+  // Deleting asks a second time in the sheet itself rather than through a
+  // pop-up: the confirmation sits under the reader's finger, right where
+  // the first tap was, and can't be missed behind this window.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  useEffect(() => {
+    setForm(target?.values);
+    setConfirmingDelete(false);
+  }, [target]);
+
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    const timer = setTimeout(() => setConfirmingDelete(false), 5000);
+    return () => clearTimeout(timer);
+  }, [confirmingDelete]);
+
+  if (!target || !form) return null;
+  const locked = !!target.lockedReason;
+  const set = (key: keyof EditValues) => (value: string) => setForm((f) => (f ? { ...f, [key]: value } : f));
+
+  // Each table keeps its own column names; the Day Book only ever changes
+  // what is actually visible on the row.
+  function valuesFor(values: EditValues): Record<string, unknown> {
+    const amount = Number(values.amount);
+    const note = values.note.trim() || null;
+    switch (target!.table) {
+      case 'business_transactions':
+        return {
+          bill_date: values.date,
+          amount,
+          discount_amount: values.discount.trim() ? Number(values.discount) : 0,
+          party_name: values.party.trim() || null,
+          bill_no: values.billNo.trim() || null,
+          note,
+        };
+      case 'customer_ledger_entries':
+      case 'vendor_ledger_entries':
+        return { entry_date: values.date, amount, receipt_no: values.receiptNo.trim() || null, note };
+      case 'account_transfers':
+        return { transfer_date: values.date, amount, note };
+    }
+  }
+
+  async function refreshEverything() {
+    // A bill's trigger writes to the ledgers, so refresh all of them.
+    await Promise.all(
+      ['business_transactions', 'customer_ledger_entries', 'vendor_ledger_entries', 'account_transfers'].map((t) =>
+        queryClient.invalidateQueries({ queryKey: [t] })
+      )
+    );
+  }
+
+  async function handleSave() {
+    const values = form!;
+    const amount = Number(values.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showAlert('Check the amount', 'Enter an amount greater than zero.');
+      return;
+    }
+    if (!values.date) {
+      showAlert('Pick a date', 'Every entry needs a date.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await updates[target!.table].mutateAsync({ id: target!.id, values: valuesFor(values) as never });
+      await refreshEverything();
+      onClose();
+    } catch (err) {
+      showAlert('Could not save', getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await removals[target!.table].mutateAsync(target!.id);
+      await refreshEverything();
+      onClose();
+    } catch (err) {
+      showAlert('Could not delete', getErrorMessage(err));
+    } finally {
+      setBusy(false);
+      setConfirmingDelete(false);
+    }
+  }
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <Pressable className="flex-1 items-center justify-center bg-black/50 px-4" onPress={onClose}>
+          <Pressable onPress={() => {}} className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 460, maxHeight: '90%' }}>
+            <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: '#1D4ED8' }}>
+              <View className="flex-1">
+                <Text className="text-[16px] font-bold text-white">{locked ? 'Entry details' : 'Edit entry'}</Text>
+                <Text className="mt-0.5 text-[11.5px] text-white/85">{target.title}</Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </Pressable>
+            </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20 }}>
+              {locked && (
+                <View className="mb-4 flex-row items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
+                  <Ionicons name="lock-closed-outline" size={16} color="#B45309" />
+                  <Text className="flex-1 text-xs leading-[17px] text-amber-900">{target.lockedReason}</Text>
+                </View>
+              )}
+
+              <EditField label="Date">
+                {locked ? (
+                  <EditInput value={form.date} editable={false} />
+                ) : (
+                  <DateField value={form.date} onChange={(v) => v && set('date')(v)} />
+                )}
+              </EditField>
+
+              {target.fields.party && (
+                <EditField label="Name">
+                  <EditInput value={form.party} onChangeText={set('party')} placeholder="Customer or supplier" editable={!locked} />
+                </EditField>
+              )}
+
+              {target.fields.billNo && (
+                <EditField label="Bill number">
+                  <EditInput value={form.billNo} onChangeText={set('billNo')} placeholder="Optional" editable={!locked} />
+                </EditField>
+              )}
+
+              {target.fields.receiptNo && (
+                <EditField label="Receipt number">
+                  <EditInput value={form.receiptNo} onChangeText={set('receiptNo')} placeholder="Optional" editable={!locked} />
+                </EditField>
+              )}
+
+              <EditField label="Amount (NPR)">
+                <EditInput
+                  value={form.amount}
+                  onChangeText={(v) => set('amount')(v.replace(/[^0-9.]/g, ''))}
+                  keyboardType="decimal-pad"
+                  editable={!locked}
+                />
+              </EditField>
+
+              {target.fields.discount && (
+                <EditField label="Discount (NPR)">
+                  <EditInput
+                    value={form.discount}
+                    onChangeText={(v) => set('discount')(v.replace(/[^0-9.]/g, ''))}
+                    keyboardType="decimal-pad"
+                    editable={!locked}
+                  />
+                </EditField>
+              )}
+
+              <EditField label="Note">
+                <EditInput
+                  value={form.note}
+                  onChangeText={set('note')}
+                  placeholder="What this was for"
+                  multiline
+                  style={{ minHeight: 70, textAlignVertical: 'top' }}
+                  editable={!locked}
+                />
+              </EditField>
+
+              {!locked && (
+                <>
+                  <Pressable
+                    onPress={handleSave}
+                    disabled={busy}
+                    className="h-12 flex-row items-center justify-center gap-2 rounded-xl disabled:opacity-50"
+                    style={{ backgroundColor: '#1D4ED8' }}
+                  >
+                    <Ionicons name="checkmark" size={18} color="#fff" />
+                    <Text className="text-base font-semibold text-white">{busy ? 'Saving...' : 'Save changes'}</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleDelete}
+                    disabled={busy}
+                    className="mt-3 flex-row items-center justify-center gap-2 rounded-xl py-3 disabled:opacity-50"
+                    style={
+                      confirmingDelete
+                        ? { backgroundColor: '#DC2626' }
+                        : { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }
+                    }
+                  >
+                    <Ionicons name="trash-outline" size={17} color={confirmingDelete ? '#FFFFFF' : '#DC2626'} />
+                    <Text className={`text-sm font-semibold ${confirmingDelete ? 'text-white' : 'text-red-600'}`}>
+                      {confirmingDelete ? 'Tap again to delete for good' : 'Delete entry'}
+                    </Text>
+                  </Pressable>
+                  {confirmingDelete && (
+                    <Text className="mt-2 text-center text-[11px] text-gray-400">
+                      It disappears from the Day Book and from every total that counted it.
+                    </Text>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <View className="rounded-xl border border-gray-200 bg-white px-3.5 py-2.5" style={{ flexGrow: 1, flexBasis: 140 }}>
@@ -276,6 +556,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const [calendarMode] = useCalendarMode();
   const today = localDay(new Date().toISOString());
   const [day, setDay] = useState(today);
+  const [editing, setEditing] = useState<EditTarget | null>(null);
 
   const owner: Record<string, string> = userId ? { owner_id: userId } : {};
   const { data: transactions, isLoading } = useSupabaseQuery('business_transactions', { filters: owner, enabled: !!userId });
@@ -328,7 +609,21 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         amount: isExpense ? null : t.amount,
         cashOut: isExpense ? t.amount : null,
         sortKey: t.created_at,
-        href: `${basePath}/transactions?type=${t.type}`,
+        edit: {
+          table: 'business_transactions',
+          id: t.id,
+          title: `${isExpense ? 'Expense' : t.type === 'sale' ? 'Sale bill' : 'Purchase bill'} · ${t.party_name ?? 'no name'}`,
+          fields: { party: true, billNo: true, discount: true },
+          values: {
+            date,
+            amount: amountText(t.amount),
+            party: t.party_name ?? '',
+            billNo: t.bill_no ?? '',
+            discount: amountText(t.discount_amount ?? 0),
+            receiptNo: '',
+            note: t.note ?? '',
+          },
+        },
       });
     }
 
@@ -349,7 +644,25 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         cashIn: isIn ? e.amount : null,
         cashOut: isIn ? null : e.amount,
         sortKey: e.created_at,
-        href: `${basePath}/customer/${e.customer_id}`,
+        edit: {
+          table: 'customer_ledger_entries',
+          id: e.id,
+          title: `${isIn ? 'Received from' : 'Paid to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
+          lockedReason:
+            e.source === 'manual'
+              ? undefined
+              : 'This was recorded by a job when its payment was collected. Change it on the job, and this entry follows.',
+          fields: { receiptNo: true },
+          values: {
+            date,
+            amount: amountText(e.amount),
+            party: '',
+            billNo: '',
+            discount: '',
+            receiptNo: e.receipt_no ?? '',
+            note: e.note ?? '',
+          },
+        },
       });
     }
 
@@ -368,7 +681,25 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, via(e.bank_account_id), e.note].filter(Boolean).join(' · ') || null,
         cashOut: e.amount,
         sortKey: e.created_at,
-        href: `${basePath}/customer/${e.vendor_id}`,
+        edit: {
+          table: 'vendor_ledger_entries',
+          id: e.id,
+          title: `Paid to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
+          lockedReason:
+            e.source === 'manual'
+              ? undefined
+              : 'This was recorded by a purchase bill. Edit the bill and this entry follows.',
+          fields: { receiptNo: true },
+          values: {
+            date,
+            amount: amountText(e.amount),
+            party: '',
+            billNo: '',
+            discount: '',
+            receiptNo: e.receipt_no ?? '',
+            note: e.note ?? '',
+          },
+        },
       });
     }
 
@@ -385,7 +716,21 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         sub: tr.note,
         amount: tr.amount,
         sortKey: tr.created_at,
-        href: `${basePath}/bank-accounts`,
+        edit: {
+          table: 'account_transfers',
+          id: tr.id,
+          title: `${via(tr.from_account_id)} to ${via(tr.to_account_id)}`,
+          fields: {},
+          values: {
+            date: tr.transfer_date ?? localDay(tr.created_at),
+            amount: amountText(tr.amount),
+            party: '',
+            billNo: '',
+            discount: '',
+            receiptNo: '',
+            note: tr.note ?? '',
+          },
+        },
       });
     }
 
@@ -502,15 +847,19 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             totalOut={book.totalOut}
             closing={book.closing}
             full={fullTable}
+            onOpenRow={(row) => row.edit && setEditing(row.edit)}
           />
+
+          <EditEntryModal target={editing} onClose={() => setEditing(null)} />
 
           {book.entryCount === 0 && (
             <Text className="px-1 text-[13px] text-gray-500">No entries on this day.</Text>
           )}
 
           <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-            Sale and purchase bills show what was billed that day - they don't change the balance until the money is
-            received or paid, which appears as its own Cash in or Paid out row. Tap any row to open it.
+            Tap any entry to edit, save or delete it. Sale and purchase bills show what was billed that day - they
+            don't change the balance until the money is received or paid, which appears as its own Cash in or Paid
+            out row.
           </Text>
         </>
       )}
