@@ -75,7 +75,7 @@ export function shortcuts(basePath: string): {
   return [
     { key: 'daybook', label: 'Day Book', icon: 'book', href: `${basePath}/daybook` },
     { key: 'customers', label: 'Customers', icon: 'people', href: `${basePath}/customers` },
-    { key: 'payment-in', label: 'Payment In', icon: 'arrow-down-circle', href: `${basePath}/quick-payment?type=in` },
+    { key: 'payment-in', label: 'Received', icon: 'arrow-down-circle', href: `${basePath}/quick-payment?type=in` },
     { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', href: `${basePath}/quick-payment?type=out` },
     { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale&add=1` },
     { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase&add=1` },

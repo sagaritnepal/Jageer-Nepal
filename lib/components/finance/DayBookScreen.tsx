@@ -605,6 +605,61 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
   );
 }
 
+/** The five things a day can gain, behind one button - the same forms the
+ * Finance menu opens, without leaving the Day Book to find them. */
+const NEW_ENTRY_KINDS: { key: string; label: string; icon: ComponentProps<typeof Ionicons>['name']; color: string; path: string }[] = [
+  { key: 'received', label: 'Received', icon: 'arrow-down-circle', color: '#059669', path: '/quick-payment?type=in' },
+  { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', color: '#DC2626', path: '/quick-payment?type=out' },
+  { key: 'sale', label: 'Sale', icon: 'trending-up', color: '#059669', path: '/transactions?type=sale&add=1' },
+  { key: 'purchase', label: 'Purchase', icon: 'cart', color: '#2563EB', path: '/transactions?type=purchase&add=1' },
+  { key: 'expense', label: 'Expense', icon: 'receipt', color: '#DC2626', path: '/transactions?type=expense&add=1' },
+];
+
+function NewEntryMenu({ basePath }: { basePath: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        className="h-10 flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
+        style={{ backgroundColor: '#1D4ED8' }}
+      >
+        <Ionicons name="add" size={17} color="#FFFFFF" />
+        <Text className="text-sm font-semibold text-white">New entry</Text>
+        <Ionicons name="chevron-down" size={14} color="#FFFFFF" />
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable className="flex-1 items-center justify-center bg-black/50 px-4" onPress={() => setOpen(false)}>
+          <Pressable onPress={() => {}} className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 380 }}>
+            <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: '#1D4ED8' }}>
+              <Text className="flex-1 text-[16px] font-bold text-white">What are you recording?</Text>
+              <Pressable onPress={() => setOpen(false)} hitSlop={8} accessibilityLabel="Close">
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </Pressable>
+            </View>
+            {NEW_ENTRY_KINDS.map((kind, i) => (
+              <Pressable
+                key={kind.key}
+                onPress={() => {
+                  setOpen(false);
+                  router.push(`${basePath}${kind.path}` as any);
+                }}
+                className={`flex-row items-center gap-3 px-5 py-3.5 ${i === NEW_ENTRY_KINDS.length - 1 ? '' : 'border-b border-gray-100'}`}
+              >
+                <Ionicons name={kind.icon} size={20} color={kind.color} />
+                <Text className="flex-1 text-[15px] font-semibold text-gray-900">{kind.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <View className="rounded-xl border border-gray-200 bg-white px-3.5 py-2.5" style={{ flexGrow: 1, flexBasis: 140 }}>
@@ -904,6 +959,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
               <Text className="text-sm font-semibold text-blue-700">Today</Text>
             </Pressable>
           )}
+          <NewEntryMenu basePath={basePath} />
         </View>
       </View>
     </View>

@@ -382,7 +382,7 @@ export function QuickPaymentScreen() {
 
   const meta = isOut
     ? { label: 'Payment Out', color: '#DC2626', gradient: ['#DC2626', '#B91C1C'] as const, bg: 'bg-red-50', icon: 'arrow-up-circle' as const }
-    : { label: 'Payment In', color: '#059669', gradient: ['#059669', '#047857'] as const, bg: 'bg-emerald-50', icon: 'arrow-down-circle' as const };
+    : { label: 'Received', color: '#059669', gradient: ['#059669', '#047857'] as const, bg: 'bg-emerald-50', icon: 'arrow-down-circle' as const };
 
   const scanBillButton = (
     <Pressable
@@ -636,7 +636,7 @@ export function QuickPaymentScreen() {
             <View style={{ width: 320 }}>
               <View className="rounded-2xl border border-gray-200 bg-white p-4">
                 <Text className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
-                  Recent {isOut ? 'Payments Out' : 'Payments In'}
+                  Recent {isOut ? 'payments out' : 'received'}
                 </Text>
                 {recentEntries.length === 0 ? (
                   <Text className="text-xs text-gray-400">No entries yet.</Text>

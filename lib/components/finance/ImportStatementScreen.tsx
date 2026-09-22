@@ -15,7 +15,7 @@ const TYPE_META: Record<StatementAction, { label: string; color: string; bg: str
   payment_out: { label: 'Payment Out', color: '#DC2626', bg: '#FEF2F2' },
   expense: { label: 'Expense', color: '#D97706', bg: '#FFFBEB' },
   withdraw: { label: 'Withdraw', color: '#4B5563', bg: '#F3F4F6' },
-  payment_in: { label: 'Payment In', color: '#059669', bg: '#ECFDF5' },
+  payment_in: { label: 'Received', color: '#059669', bg: '#ECFDF5' },
   deposit: { label: 'Deposit', color: '#0D9488', bg: '#F0FDFA' },
 };
 
