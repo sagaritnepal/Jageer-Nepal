@@ -7,7 +7,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
+import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { DateField } from '../DateTimeFields';
+import { FormSection } from './FormSection';
+import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 
@@ -35,7 +38,17 @@ type BookRow = {
 
 type EditTable = 'business_transactions' | 'customer_ledger_entries' | 'vendor_ledger_entries' | 'account_transfers';
 
-type EditValues = { date: string; amount: string; party: string; billNo: string; discount: string; receiptNo: string; note: string };
+type EditValues = {
+  date: string;
+  amount: string;
+  party: string;
+  billNo: string;
+  discount: string;
+  receiptNo: string;
+  note: string;
+  /** null means cash, like the Payment In form's method picker. */
+  bankAccountId: string | null;
+};
 
 type EditTarget = {
   table: EditTable;
@@ -46,7 +59,13 @@ type EditTarget = {
    * overwritten by whatever created it. */
   lockedReason?: string;
   /** Which fields this kind of entry has. */
-  fields: { party?: boolean; billNo?: boolean; discount?: boolean; receiptNo?: boolean };
+  fields: { party?: boolean; billNo?: boolean; discount?: boolean; receiptNo?: boolean; method?: boolean };
+  /** Heading for the name section - "Customer", "Vendor", "Paid to"... */
+  partyLabel?: string;
+  /** Name to show when it isn't typed here but on the customer's own record. */
+  subtitleParty?: string;
+  /** Wording for the numbered field, as Payment In words it. */
+  numberLabel?: string;
   values: EditValues;
 };
 
@@ -302,6 +321,9 @@ function EditInput(props: ComponentProps<typeof TextInput>) {
  * trigger. */
 function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.session?.user.id);
+  const bankAccounts = useBankAccounts(userId);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
   const updates = {
     business_transactions: useSupabaseUpdate('business_transactions'),
     customer_ledger_entries: useSupabaseUpdate('customer_ledger_entries'),
@@ -334,6 +356,9 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
 
   if (!target || !form) return null;
   const locked = !!target.lockedReason;
+  const accountName = form.bankAccountId
+    ? (bankAccounts.accounts.find((a) => a.id === form.bankAccountId)?.name ?? 'Bank')
+    : 'Cash';
   const set = (key: keyof EditValues) => (value: string) => setForm((f) => (f ? { ...f, [key]: value } : f));
 
   // Each table keeps its own column names; the Day Book only ever changes
@@ -349,11 +374,18 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
           discount_amount: values.discount.trim() ? Number(values.discount) : 0,
           party_name: values.party.trim() || null,
           bill_no: values.billNo.trim() || null,
+          bank_account_id: values.bankAccountId,
           note,
         };
       case 'customer_ledger_entries':
       case 'vendor_ledger_entries':
-        return { entry_date: values.date, amount, receipt_no: values.receiptNo.trim() || null, note };
+        return {
+          entry_date: values.date,
+          amount,
+          receipt_no: values.receiptNo.trim() || null,
+          bank_account_id: values.bankAccountId,
+          note,
+        };
       case 'account_transfers':
         return { transfer_date: values.date, amount, note };
     }
@@ -432,62 +464,95 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
                 </View>
               )}
 
-              <EditField label="Date">
-                {locked ? (
-                  <EditInput value={form.date} editable={false} />
-                ) : (
-                  <DateField value={form.date} onChange={(v) => v && set('date')(v)} />
-                )}
-              </EditField>
+              {/* Same order and the same field blocks as the Payment In
+                  form, so an entry reads the way it was written. */}
+              <FormSection icon="document-text-outline" title="Details" first>
+                <View className="flex-row" style={{ gap: 10 }}>
+                  <View className="flex-1">
+                    <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
+                    {locked ? (
+                      <EditInput value={form.date} editable={false} />
+                    ) : (
+                      <DateField value={form.date} onChange={(v) => v && set('date')(v)} />
+                    )}
+                  </View>
+                  {(target.fields.receiptNo || target.fields.billNo) && (
+                    <View className="flex-1">
+                      <Text className="mb-1 text-xs font-medium text-gray-500">{target.numberLabel ?? 'Receipt No.'}</Text>
+                      <EditInput
+                        value={target.fields.billNo ? form.billNo : form.receiptNo}
+                        onChangeText={target.fields.billNo ? set('billNo') : set('receiptNo')}
+                        placeholder="Optional"
+                        editable={!locked}
+                      />
+                    </View>
+                  )}
+                </View>
+              </FormSection>
+
+              {target.fields.method && (
+                <FormSection icon="wallet-outline" title="Payment method">
+                  <Pressable
+                    onPress={() => !locked && setShowAccountPicker(true)}
+                    disabled={locked}
+                    className={`flex-row items-center justify-between rounded-lg border px-3 py-2.5 ${locked ? 'border-gray-200 bg-gray-50' : 'border-gray-300 bg-white'}`}
+                  >
+                    <View className="flex-row items-center gap-2">
+                      <Ionicons name={form.bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
+                      <Text className={`text-sm ${locked ? 'text-gray-500' : 'text-gray-900'}`}>{accountName}</Text>
+                    </View>
+                    {!locked && <Ionicons name="chevron-down" size={16} color="#9CA3AF" />}
+                  </Pressable>
+                </FormSection>
+              )}
 
               {target.fields.party && (
-                <EditField label="Name">
-                  <EditInput value={form.party} onChangeText={set('party')} placeholder="Customer or supplier" editable={!locked} />
-                </EditField>
+                <FormSection icon="person-outline" title={target.partyLabel ?? 'Customer'}>
+                  <EditInput value={form.party} onChangeText={set('party')} placeholder="Name" editable={!locked} />
+                </FormSection>
               )}
 
-              {target.fields.billNo && (
-                <EditField label="Bill number">
-                  <EditInput value={form.billNo} onChangeText={set('billNo')} placeholder="Optional" editable={!locked} />
-                </EditField>
+              {!target.fields.party && !!target.subtitleParty && (
+                <FormSection icon="person-outline" title={target.partyLabel ?? 'Customer'}>
+                  <EditInput value={target.subtitleParty} editable={false} />
+                </FormSection>
               )}
 
-              {target.fields.receiptNo && (
-                <EditField label="Receipt number">
-                  <EditInput value={form.receiptNo} onChangeText={set('receiptNo')} placeholder="Optional" editable={!locked} />
-                </EditField>
-              )}
-
-              <EditField label="Amount (NPR)">
-                <EditInput
-                  value={form.amount}
-                  onChangeText={(v) => set('amount')(v.replace(/[^0-9.]/g, ''))}
-                  keyboardType="decimal-pad"
-                  editable={!locked}
-                />
-              </EditField>
-
-              {target.fields.discount && (
-                <EditField label="Discount (NPR)">
+              <FormSection icon="cash-outline" title="Amount">
+                <View className="flex-row" style={{ gap: 10 }}>
+                  <View className="flex-1">
+                    <Text className="mb-1 text-xs font-medium text-gray-500">Amount (NPR)</Text>
+                    <EditInput
+                      value={form.amount}
+                      onChangeText={(v) => set('amount')(v.replace(/[^0-9.]/g, ''))}
+                      keyboardType="decimal-pad"
+                      editable={!locked}
+                    />
+                  </View>
+                  {target.fields.discount && (
+                    <View className="flex-1">
+                      <Text className="mb-1 text-xs font-medium text-gray-500">Discount (NPR)</Text>
+                      <EditInput
+                        value={form.discount}
+                        onChangeText={(v) => set('discount')(v.replace(/[^0-9.]/g, ''))}
+                        keyboardType="decimal-pad"
+                        editable={!locked}
+                      />
+                    </View>
+                  )}
+                </View>
+                <View className="mt-3">
+                  <Text className="mb-1 text-xs font-medium text-gray-500">Note</Text>
                   <EditInput
-                    value={form.discount}
-                    onChangeText={(v) => set('discount')(v.replace(/[^0-9.]/g, ''))}
-                    keyboardType="decimal-pad"
+                    value={form.note}
+                    onChangeText={set('note')}
+                    placeholder="Optional"
+                    multiline
+                    style={{ minHeight: 70, textAlignVertical: 'top' }}
                     editable={!locked}
                   />
-                </EditField>
-              )}
-
-              <EditField label="Note">
-                <EditInput
-                  value={form.note}
-                  onChangeText={set('note')}
-                  placeholder="What this was for"
-                  multiline
-                  style={{ minHeight: 70, textAlignVertical: 'top' }}
-                  editable={!locked}
-                />
-              </EditField>
+                </View>
+              </FormSection>
 
               {!locked && (
                 <>
@@ -526,6 +591,16 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
           </Pressable>
         </Pressable>
       </KeyboardAvoidingView>
+
+      <BankAccountPickerModal
+        visible={showAccountPicker}
+        accounts={bankAccounts.accounts}
+        selectedId={form.bankAccountId}
+        onSelect={(id) => setForm((f) => (f ? { ...f, bankAccountId: id } : f))}
+        onClose={() => setShowAccountPicker(false)}
+        onRename={bankAccounts.rename}
+        onDelete={bankAccounts.remove}
+      />
     </Modal>
   );
 }
@@ -613,7 +688,9 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           table: 'business_transactions',
           id: t.id,
           title: `${isExpense ? 'Expense' : t.type === 'sale' ? 'Sale bill' : 'Purchase bill'} · ${t.party_name ?? 'no name'}`,
-          fields: { party: true, billNo: true, discount: true },
+          fields: { party: true, billNo: true, discount: true, method: true },
+          partyLabel: isExpense ? 'Paid to' : t.type === 'sale' ? 'Customer' : 'Vendor',
+          numberLabel: 'Bill No.',
           values: {
             date,
             amount: amountText(t.amount),
@@ -622,6 +699,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             discount: amountText(t.discount_amount ?? 0),
             receiptNo: '',
             note: t.note ?? '',
+            bankAccountId: t.bank_account_id ?? null,
           },
         },
       });
@@ -652,7 +730,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             e.source === 'manual'
               ? undefined
               : 'This was recorded by a job when its payment was collected. Change it on the job, and this entry follows.',
-          fields: { receiptNo: true },
+          fields: { receiptNo: true, method: true },
+          partyLabel: 'Customer',
+          numberLabel: isIn ? 'Receipt No.' : 'Payment No.',
+          subtitleParty: contactName.get(e.customer_id) ?? 'Customer',
           values: {
             date,
             amount: amountText(e.amount),
@@ -661,6 +742,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             discount: '',
             receiptNo: e.receipt_no ?? '',
             note: e.note ?? '',
+            bankAccountId: e.bank_account_id ?? null,
           },
         },
       });
@@ -689,7 +771,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             e.source === 'manual'
               ? undefined
               : 'This was recorded by a purchase bill. Edit the bill and this entry follows.',
-          fields: { receiptNo: true },
+          fields: { receiptNo: true, method: true },
+          partyLabel: 'Vendor',
+          numberLabel: 'Payment No.',
+          subtitleParty: contactName.get(e.vendor_id) ?? 'Vendor',
           values: {
             date,
             amount: amountText(e.amount),
@@ -698,6 +783,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             discount: '',
             receiptNo: e.receipt_no ?? '',
             note: e.note ?? '',
+            bankAccountId: e.bank_account_id ?? null,
           },
         },
       });
@@ -721,6 +807,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           id: tr.id,
           title: `${via(tr.from_account_id)} to ${via(tr.to_account_id)}`,
           fields: {},
+          partyLabel: 'Between accounts',
+          subtitleParty: `${via(tr.from_account_id)} to ${via(tr.to_account_id)}`,
           values: {
             date: tr.transfer_date ?? localDay(tr.created_at),
             amount: amountText(tr.amount),
@@ -729,6 +817,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             discount: '',
             receiptNo: '',
             note: tr.note ?? '',
+            bankAccountId: null,
           },
         },
       });
