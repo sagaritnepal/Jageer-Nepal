@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -635,49 +634,7 @@ export function QuickPaymentScreen() {
             </View>
 
             <View style={{ width: 320 }}>
-              <LinearGradient
-                colors={meta.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                  borderRadius: 20,
-                  padding: 20,
-                  shadowColor: meta.color,
-                  shadowOpacity: 0.3,
-                  shadowRadius: 14,
-                  shadowOffset: { width: 0, height: 8 },
-                  elevation: 5,
-                }}
-              >
-                <Text className="text-xs font-bold uppercase text-white/70" style={{ letterSpacing: 0.5 }}>
-                  {isOut ? 'Paying out' : 'Receiving'} · {rows.filter((r) => r.customerName.trim() && Number(r.amount) > 0).length}{' '}
-                  {rows.filter((r) => r.customerName.trim() && Number(r.amount) > 0).length === 1 ? 'person' : 'people'}
-                </Text>
-                <Text className="mt-1 text-4xl font-extrabold text-white" numberOfLines={1}>
-                  NPR {rowsTotal.toLocaleString()}
-                </Text>
-
-                <View className="mt-5" style={{ gap: 10 }}>
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
-                    <Text className="text-sm text-white/90">{toBsLabel(date)}</Text>
-                  </View>
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={14} color="rgba(255,255,255,0.85)" />
-                    <Text className="text-sm text-white/90">{selectedAccountName}</Text>
-                  </View>
-                  {!!receiptNo.trim() && (
-                    <View className="flex-row items-center gap-2">
-                      <Ionicons name="document-text-outline" size={14} color="rgba(255,255,255,0.85)" />
-                      <Text className="text-sm text-white/90">
-                        {isOut ? 'Payment No.' : 'Receipt No.'} {receiptNo}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </LinearGradient>
-
-              <View className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+              <View className="rounded-2xl border border-gray-200 bg-white p-4">
                 <Text className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
                   Recent {isOut ? 'Payments Out' : 'Payments In'}
                 </Text>

@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, View, Text, TextInput, Pressable, Modal, ScrollView, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { KeyboardAwareSectionList } from 'react-native-keyboard-aware-scroll-view';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
@@ -1130,40 +1129,6 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 320 }}>
-            <LinearGradient
-              colors={['#DC2626', '#B91C1C']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                borderRadius: 20,
-                padding: 20,
-                shadowColor: '#DC2626',
-                shadowOpacity: 0.3,
-                shadowRadius: 14,
-                shadowOffset: { width: 0, height: 8 },
-                elevation: 5,
-              }}
-            >
-              <Text className="text-xs font-bold uppercase text-white/70" style={{ letterSpacing: 0.5 }}>
-                Spending · {expenseRows.filter((r) => Number(r.amount) > 0).length}{' '}
-                {expenseRows.filter((r) => Number(r.amount) > 0).length === 1 ? 'expense' : 'expenses'}
-              </Text>
-              <Text className="mt-1 text-4xl font-extrabold text-white" numberOfLines={1}>
-                NPR {expenseRowsTotal.toLocaleString()}
-              </Text>
-
-              <View className="mt-5" style={{ gap: 10 }}>
-                <View className="flex-row items-center gap-2">
-                  <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
-                  <Text className="text-sm text-white/90">{toBsLabel(expenseDate)}</Text>
-                </View>
-                <View className="flex-row items-center gap-2">
-                  <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={14} color="rgba(255,255,255,0.85)" />
-                  <Text className="text-sm text-white/90">{selectedAccountName}</Text>
-                </View>
-              </View>
-            </LinearGradient>
-
             <RecentEntriesCard userId={userId} type="expense" color={TYPE_META.expense.color} />
           </View>
         </View>
@@ -1458,53 +1423,6 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 320 }}>
-            <LinearGradient
-              colors={[accent, accentDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                borderRadius: 20,
-                padding: 20,
-                shadowColor: accent,
-                shadowOpacity: 0.3,
-                shadowRadius: 14,
-                shadowOffset: { width: 0, height: 8 },
-                elevation: 5,
-              }}
-            >
-              <Text className="text-xs font-bold uppercase text-white/70" style={{ letterSpacing: 0.5 }}>
-                {type === 'purchase' ? 'Purchasing' : 'Selling'}
-              </Text>
-              <Text className="mt-1 text-4xl font-extrabold text-white" numberOfLines={1}>
-                NPR {grandTotal.toLocaleString()}
-              </Text>
-
-              <View className="mt-5" style={{ gap: 10 }}>
-                <View className="flex-row items-center gap-2">
-                  <Ionicons name="person-outline" size={14} color="rgba(255,255,255,0.85)" />
-                  <Text className="flex-1 text-sm text-white/90" numberOfLines={1}>
-                    {partyName || `No ${partyLabel.toLowerCase()} selected`}
-                  </Text>
-                </View>
-                {!!billNo.trim() && (
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name="document-text-outline" size={14} color="rgba(255,255,255,0.85)" />
-                    <Text className="text-sm text-white/90">Bill No. {billNo}</Text>
-                  </View>
-                )}
-                <View className="flex-row items-center gap-2">
-                  <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
-                  <Text className="text-sm text-white/90">{toBsLabel(billDate)}</Text>
-                </View>
-                <View className="flex-row items-center gap-2">
-                  <Ionicons name="cube-outline" size={14} color="rgba(255,255,255,0.85)" />
-                  <Text className="text-sm text-white/90">
-                    {items.length} {items.length === 1 ? 'item' : 'items'}
-                  </Text>
-                </View>
-              </View>
-            </LinearGradient>
-
             <RecentEntriesCard userId={userId} type={type} color={accent} />
           </View>
         </View>
@@ -2446,6 +2364,11 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     return groups;
   }, [feed]);
 
+  // On web the open form already lists recent entries down its right side,
+  // so repeating the whole history underneath it showed the same statement
+  // twice - see RecentEntriesCard.
+  const hideFeed = showForm && Platform.OS === 'web';
+
   function handleDelete(tx: BusinessTransaction) {
     showAlert('Delete this transaction?', undefined, [
       { text: 'Cancel', style: 'cancel' },
@@ -2459,7 +2382,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         ref={listRef}
         enableOnAndroid
         extraScrollHeight={20}
-        sections={sections}
+        sections={hideFeed ? [] : sections}
         keyExtractor={(item) => `${item.kind}-${item.id}`}
         ListHeaderComponent={
           <>
@@ -2568,10 +2491,15 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
-          <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
-            <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
-            <Text className="mt-2 text-gray-500">No transactions yet.</Text>
-          </View>
+          // While the web form is open the list is deliberately empty (the
+          // form's own right column carries the recent entries), so there's
+          // nothing missing to announce.
+          hideFeed ? null : (
+            <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
+              <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
+              <Text className="mt-2 text-gray-500">No transactions yet.</Text>
+            </View>
+          )
         }
       />
 
