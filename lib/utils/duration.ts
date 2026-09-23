@@ -18,3 +18,15 @@ export function formatDurationBetween(startIso: string, endIso: string | Date = 
   const end = typeof endIso === 'string' ? new Date(endIso) : endIso;
   return formatDuration(end.getTime() - new Date(startIso).getTime());
 }
+
+// A specific moment (job accepted / completed), spelled out in full so it
+// reads as a point in time rather than being mistaken for a duration.
+export function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}

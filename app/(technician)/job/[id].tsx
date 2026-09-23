@@ -14,7 +14,7 @@ import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { HoldRequestModal } from '../../../lib/components/HoldRequestModal';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
-import { formatDuration } from '../../../lib/utils/duration';
+import { formatDuration, formatTimestamp } from '../../../lib/utils/duration';
 import type { RequestStatus } from '../../../types/database.types';
 
 // Ticks once a minute - jobs run from minutes to days, so second-level
@@ -277,18 +277,28 @@ export default function JobCard() {
           </Text>
         )}
         {request.status === 'in_progress' && jobCard?.started_at && (
-          <View className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-blue-50 px-3 py-1.5">
-            <Ionicons name="time-outline" size={14} color="#1D4ED8" />
-            <Text className="text-xs font-semibold text-blue-700">
-              Time on job: {formatDuration(now - new Date(jobCard.started_at).getTime())}
+          <View className="mt-3 rounded-lg bg-blue-50 p-3">
+            <Text className="text-xs text-blue-900">
+              <Text className="font-semibold">Accepted at: </Text>
+              {formatTimestamp(jobCard.started_at)}
+            </Text>
+            <Text className="mt-1 text-xs font-bold text-blue-700">
+              Time elapsed: {formatDuration(now - new Date(jobCard.started_at).getTime())}
             </Text>
           </View>
         )}
         {request.status === 'resolved' && jobCard?.started_at && jobCard?.completed_at && (
-          <View className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-gray-100 px-3 py-1.5">
-            <Ionicons name="time-outline" size={14} color="#4B5563" />
-            <Text className="text-xs font-semibold text-gray-600">
-              Total time: {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())}
+          <View className="mt-3 rounded-lg bg-gray-100 p-3">
+            <Text className="text-xs text-gray-700">
+              <Text className="font-semibold">Accepted at: </Text>
+              {formatTimestamp(jobCard.started_at)}
+            </Text>
+            <Text className="mt-1 text-xs text-gray-700">
+              <Text className="font-semibold">Completed at: </Text>
+              {formatTimestamp(jobCard.completed_at)}
+            </Text>
+            <Text className="mt-1 text-xs font-bold text-gray-800">
+              Time elapsed: {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())}
             </Text>
           </View>
         )}

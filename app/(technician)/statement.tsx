@@ -4,7 +4,7 @@ import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { jobCardAmount, type JobCardWithQuote } from './earnings';
-import { formatDuration } from '../../lib/utils/duration';
+import { formatDuration, formatTimestamp } from '../../lib/utils/duration';
 import type { JobCard } from '../../types/database.types';
 
 type RangeKey = '7d' | '30d' | 'month' | 'all';
@@ -108,6 +108,8 @@ type JobRow = {
   description: string | null;
   resellerId: string | null;
   amount: number;
+  acceptedAt: string | null;
+  completedAt: string;
   duration: string | null;
 };
 
@@ -136,8 +138,9 @@ function JobReceiptCard({ row, technicianName }: { row: JobRow; technicianName: 
           <DashedRule />
         </View>
 
-        <DetailRow label="Date" value={row.date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} />
-        {row.duration && <DetailRow label="Duration" value={row.duration} />}
+        {row.acceptedAt && <DetailRow label="Accepted at" value={formatTimestamp(row.acceptedAt)} />}
+        <DetailRow label="Completed at" value={formatTimestamp(row.completedAt)} />
+        {row.duration && <DetailRow label="Time elapsed" value={row.duration} />}
         <DetailRow label="Reseller" value={resellerName} />
         <DetailRow label="Technician" value={technicianName} />
 
@@ -197,6 +200,8 @@ export default function TechnicianStatement() {
         description: c.service_requests?.description ?? null,
         resellerId: c.service_requests?.reseller_id ?? null,
         amount: jobCardAmount(c),
+        acceptedAt: c.started_at,
+        completedAt: c.completed_at,
         duration: c.started_at ? formatDuration(new Date(c.completed_at).getTime() - new Date(c.started_at).getTime()) : null,
       }))
       .sort((a, b) => b.date.getTime() - a.date.getTime());

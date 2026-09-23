@@ -8,7 +8,7 @@ import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
-import { formatDuration } from '../../lib/utils/duration';
+import { formatDuration, formatTimestamp } from '../../lib/utils/duration';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import type { ServiceRequest } from '../../types/database.types';
 
@@ -35,10 +35,13 @@ function JobElapsedBadge({ requestId, status }: { requestId: string; status: Ser
 
   if (status === 'in_progress') {
     return (
-      <View className="mt-1.5 flex-row items-center gap-1 self-start rounded-full bg-blue-50 px-2 py-0.5">
-        <Ionicons name="time-outline" size={11} color="#1D4ED8" />
-        <Text className="text-[10px] font-semibold text-blue-700">
-          {formatDuration(now - new Date(jobCard.started_at).getTime())} elapsed
+      <View className="mt-1.5 rounded-lg bg-blue-50 px-2 py-1.5">
+        <Text className="text-[10px] text-blue-900">
+          <Text className="font-semibold">Accepted at: </Text>
+          {formatTimestamp(jobCard.started_at)}
+        </Text>
+        <Text className="mt-0.5 text-[10px] font-bold text-blue-700">
+          Time elapsed: {formatDuration(now - new Date(jobCard.started_at).getTime())}
         </Text>
       </View>
     );
@@ -46,10 +49,17 @@ function JobElapsedBadge({ requestId, status }: { requestId: string; status: Ser
 
   if (status === 'resolved' && jobCard.completed_at) {
     return (
-      <View className="mt-1.5 flex-row items-center gap-1 self-start rounded-full bg-gray-100 px-2 py-0.5">
-        <Ionicons name="time-outline" size={11} color="#4B5563" />
-        <Text className="text-[10px] font-semibold text-gray-600">
-          {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())} total
+      <View className="mt-1.5 rounded-lg bg-gray-100 px-2 py-1.5">
+        <Text className="text-[10px] text-gray-700">
+          <Text className="font-semibold">Accepted at: </Text>
+          {formatTimestamp(jobCard.started_at)}
+        </Text>
+        <Text className="mt-0.5 text-[10px] text-gray-700">
+          <Text className="font-semibold">Completed at: </Text>
+          {formatTimestamp(jobCard.completed_at)}
+        </Text>
+        <Text className="mt-0.5 text-[10px] font-bold text-gray-800">
+          Time elapsed: {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())}
         </Text>
       </View>
     );
