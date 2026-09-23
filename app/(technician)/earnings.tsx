@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { BarChart } from '../../lib/components/BarChart';
-import { formatDuration } from '../../lib/utils/duration';
+import { formatDuration, formatTimestamp } from '../../lib/utils/duration';
 import type { JobCard } from '../../types/database.types';
 
 // On web, navigating away leaves DOM focus sitting on the button that was
@@ -102,7 +102,14 @@ export default function TechnicianEarnings() {
       totalEarnings += amount;
       if (c.started_at) addToHourBuckets(hourBuckets, c.started_at, c.completed_at);
 
-      return { id: c.id, amount, date: completedDate, durationLabel: durationMs != null ? formatDuration(durationMs) : null };
+      return {
+        id: c.id,
+        amount,
+        date: completedDate,
+        acceptedAt: c.started_at,
+        completedAt: c.completed_at,
+        durationLabel: durationMs != null ? formatDuration(durationMs) : null,
+      };
     });
 
     payoutHistory.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -233,12 +240,21 @@ export default function TechnicianEarnings() {
           key={item.id}
           className="mb-2.5 flex-row items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3.5"
         >
-          <View>
-            <Text className="text-xs text-gray-400">
-              {item.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          <View className="flex-1 pr-3">
+            {item.acceptedAt && (
+              <Text className="text-[10.5px] text-gray-500">
+                <Text className="font-semibold text-gray-600">Accepted at: </Text>
+                {formatTimestamp(item.acceptedAt)}
+              </Text>
+            )}
+            <Text className="mt-0.5 text-[10.5px] text-gray-500">
+              <Text className="font-semibold text-gray-600">Completed at: </Text>
+              {formatTimestamp(item.completedAt)}
             </Text>
             {item.durationLabel != null && (
-              <Text className="mt-0.5 text-[11px] text-gray-400">{item.durationLabel} worked</Text>
+              <Text className="mt-0.5 text-[10.5px] font-semibold text-gray-700">
+                Time elapsed: {item.durationLabel}
+              </Text>
             )}
           </View>
           <Text className="text-[13.5px] font-extrabold text-[#0D9488]">NPR {item.amount.toLocaleString()}</Text>

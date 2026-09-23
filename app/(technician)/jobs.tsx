@@ -31,9 +31,14 @@ function JobElapsedBadge({ requestId, status }: { requestId: string; status: Ser
   const jobCard = jobCards?.[0];
   const now = useNow(status === 'in_progress' && !!jobCard?.started_at);
 
-  if (!jobCard?.started_at) return null;
+  // A job_cards row created via the "no job card was opened (older data)"
+  // fallback in job/[id].tsx's handleAdvance has completed_at but no
+  // started_at - requiring both here used to hide the whole badge (and the
+  // Completed tab's "Completed at" line with it) for those jobs. Each field
+  // is now shown only if it's actually there.
+  if (!jobCard || (!jobCard.started_at && !jobCard.completed_at)) return null;
 
-  if (status === 'in_progress') {
+  if (status === 'in_progress' && jobCard.started_at) {
     return (
       <View className="mt-1.5 rounded-lg bg-blue-50 px-2 py-1.5">
         <Text className="text-[10px] text-blue-900">
@@ -50,17 +55,21 @@ function JobElapsedBadge({ requestId, status }: { requestId: string; status: Ser
   if (status === 'resolved' && jobCard.completed_at) {
     return (
       <View className="mt-1.5 rounded-lg bg-gray-100 px-2 py-1.5">
-        <Text className="text-[10px] text-gray-700">
-          <Text className="font-semibold">Accepted at: </Text>
-          {formatTimestamp(jobCard.started_at)}
-        </Text>
+        {jobCard.started_at && (
+          <Text className="text-[10px] text-gray-700">
+            <Text className="font-semibold">Accepted at: </Text>
+            {formatTimestamp(jobCard.started_at)}
+          </Text>
+        )}
         <Text className="mt-0.5 text-[10px] text-gray-700">
           <Text className="font-semibold">Completed at: </Text>
           {formatTimestamp(jobCard.completed_at)}
         </Text>
-        <Text className="mt-0.5 text-[10px] font-bold text-gray-800">
-          Time elapsed: {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())}
-        </Text>
+        {jobCard.started_at && (
+          <Text className="mt-0.5 text-[10px] font-bold text-gray-800">
+            Time elapsed: {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())}
+          </Text>
+        )}
       </View>
     );
   }
