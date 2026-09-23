@@ -1,5 +1,5 @@
 // app/(technician)/job/[id].tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, Pressable, TextInput, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -12,7 +12,20 @@ import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
+import { formatDuration } from '../../../lib/utils/duration';
 import type { RequestStatus } from '../../../types/database.types';
+
+// Ticks once a minute - jobs run from minutes to days, so second-level
+// precision would just cause unnecessary re-renders for no visible benefit.
+function useNow(enabled: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [enabled]);
+  return now;
+}
 
 // An offered job ('assigned') is answered with Accept / Reject instead -
 // see handleRespond below.
@@ -95,6 +108,7 @@ export default function JobCard() {
   const [laborCost, setLaborCost] = useState('0');
   const [answering, setAnswering] = useState<'accept' | 'reject' | 'reopen' | null>(null);
   const queryClient = useQueryClient();
+  const now = useNow(request?.status === 'in_progress' && !!jobCard?.started_at);
 
   if (isLoading || !request) {
     return (
@@ -229,6 +243,22 @@ export default function JobCard() {
           <Text className="mt-1 text-xs text-gray-500">
             Finish the work, then tap "Mark job complete" at the bottom of this page.
           </Text>
+        )}
+        {request.status === 'in_progress' && jobCard?.started_at && (
+          <View className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-blue-50 px-3 py-1.5">
+            <Ionicons name="time-outline" size={14} color="#1D4ED8" />
+            <Text className="text-xs font-semibold text-blue-700">
+              Time on job: {formatDuration(now - new Date(jobCard.started_at).getTime())}
+            </Text>
+          </View>
+        )}
+        {request.status === 'resolved' && jobCard?.started_at && jobCard?.completed_at && (
+          <View className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-gray-100 px-3 py-1.5">
+            <Ionicons name="time-outline" size={14} color="#4B5563" />
+            <Text className="text-xs font-semibold text-gray-600">
+              Total time: {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())}
+            </Text>
+          </View>
         )}
         {request.quoted_price != null && (
           <Text className="mt-2 text-sm text-gray-500">

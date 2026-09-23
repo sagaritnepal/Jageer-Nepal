@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { BarChart } from '../../lib/components/BarChart';
+import { formatDuration } from '../../lib/utils/duration';
 import type { JobCard } from '../../types/database.types';
 
 // On web, navigating away leaves DOM focus sitting on the button that was
@@ -88,9 +89,7 @@ export default function TechnicianEarnings() {
     const payoutHistory = completed.map((c) => {
       const amount = jobCardAmount(c);
       const completedDate = new Date(c.completed_at);
-      const durationHours = c.started_at
-        ? (completedDate.getTime() - new Date(c.started_at).getTime()) / 3600000
-        : null;
+      const durationMs = c.started_at ? completedDate.getTime() - new Date(c.started_at).getTime() : null;
 
       if (completedDate >= weekStart) {
         weekTotal += amount;
@@ -99,11 +98,11 @@ export default function TechnicianEarnings() {
       if (completedDate >= todayStart) {
         today += amount;
       }
-      totalHours += durationHours ?? 0;
+      totalHours += (durationMs ?? 0) / 3600000;
       totalEarnings += amount;
       if (c.started_at) addToHourBuckets(hourBuckets, c.started_at, c.completed_at);
 
-      return { id: c.id, amount, date: completedDate, durationHours };
+      return { id: c.id, amount, date: completedDate, durationLabel: durationMs != null ? formatDuration(durationMs) : null };
     });
 
     payoutHistory.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -238,8 +237,8 @@ export default function TechnicianEarnings() {
             <Text className="text-xs text-gray-400">
               {item.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
             </Text>
-            {item.durationHours != null && (
-              <Text className="mt-0.5 text-[11px] text-gray-400">{item.durationHours.toFixed(1)}h worked</Text>
+            {item.durationLabel != null && (
+              <Text className="mt-0.5 text-[11px] text-gray-400">{item.durationLabel} worked</Text>
             )}
           </View>
           <Text className="text-[13.5px] font-extrabold text-[#0D9488]">NPR {item.amount.toLocaleString()}</Text>

@@ -1,13 +1,61 @@
 // app/(technician)/jobs.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { formatDuration } from '../../lib/utils/duration';
 import type { ServiceRequest } from '../../types/database.types';
+
+// Ticks once a minute - jobs run from minutes to days, so second-level
+// precision would just cause unnecessary re-renders for no visible benefit.
+function useNow(enabled: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [enabled]);
+  return now;
+}
+
+function JobElapsedBadge({ requestId, status }: { requestId: string; status: ServiceRequest['status'] }) {
+  const { data: jobCards } = useSupabaseQuery('job_cards', {
+    filters: { service_request_id: requestId },
+  });
+  const jobCard = jobCards?.[0];
+  const now = useNow(status === 'in_progress' && !!jobCard?.started_at);
+
+  if (!jobCard?.started_at) return null;
+
+  if (status === 'in_progress') {
+    return (
+      <View className="mt-1.5 flex-row items-center gap-1 self-start rounded-full bg-blue-50 px-2 py-0.5">
+        <Ionicons name="time-outline" size={11} color="#1D4ED8" />
+        <Text className="text-[10px] font-semibold text-blue-700">
+          {formatDuration(now - new Date(jobCard.started_at).getTime())} elapsed
+        </Text>
+      </View>
+    );
+  }
+
+  if (status === 'resolved' && jobCard.completed_at) {
+    return (
+      <View className="mt-1.5 flex-row items-center gap-1 self-start rounded-full bg-gray-100 px-2 py-0.5">
+        <Ionicons name="time-outline" size={11} color="#4B5563" />
+        <Text className="text-[10px] font-semibold text-gray-600">
+          {formatDuration(new Date(jobCard.completed_at).getTime() - new Date(jobCard.started_at).getTime())} total
+        </Text>
+      </View>
+    );
+  }
+
+  return null;
+}
 
 function StatusPill({ status }: { status: ServiceRequest['status'] }) {
   const style = STATUS_STYLES[status];
@@ -38,6 +86,7 @@ function JobListCard({ item }: { item: ServiceRequest }) {
         <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
         <StatusPill status={item.status} />
       </View>
+      <JobElapsedBadge requestId={item.id} status={item.status} />
       {item.description && (
         <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
           {item.description}
