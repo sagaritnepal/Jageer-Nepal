@@ -1,6 +1,6 @@
 // app/(reseller)/dashboard.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Platform } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -9,6 +9,7 @@ import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { usePendingHires, useMyEmployees, useRespondToHire, useEndEmployment } from '../../lib/hooks/useTechnicianEmployment';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
+import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import type { Profile, ServiceCategory } from '../../types/database.types';
 
 function initialsOf(name: string | null | undefined) {
@@ -125,6 +126,14 @@ export default function ResellerDashboard() {
   const [search, setSearch] = useState('');
   const [pickerCategory, setPickerCategory] = useState<ServiceCategory | null>(null);
 
+  // A phone browser hitting the website is still Platform.OS === 'web', so
+  // that alone can't pick the desktop layout below - its fixed-width search
+  // box and 8-column category grid only make sense once there's actually
+  // room for them. Same breakpoint as the sidebar shell and the requests
+  // pipeline screen.
+  const { width: screenWidth } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
+
   const { data: categories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
     orderBy: { column: 'sort_order' },
@@ -204,12 +213,12 @@ export default function ResellerDashboard() {
     />
   );
 
-  // Web gets its own reflowed arrangement (wider category grid, a right
-  // rail for secondary content) instead of one long mobile-width scroll -
-  // see WebSidebarShell. Kept as a fully separate branch below rather than
-  // one JSX tree with conditional classes, so the native layout stays
-  // byte-for-byte what it already was.
-  if (Platform.OS === 'web') {
+  // Wide web gets its own reflowed arrangement (wider category grid, a
+  // right rail for secondary content) instead of one long mobile-width
+  // scroll - see WebSidebarShell. Kept as a fully separate branch below
+  // rather than one JSX tree with conditional classes, so the native/narrow
+  // layout stays byte-for-byte what it already was.
+  if (isWideWeb) {
     const needTechnicianCard = (
       <Pressable
         onPress={() => router.push('/(reseller)/new-request?from=dashboard')}
