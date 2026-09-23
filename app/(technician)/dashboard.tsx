@@ -13,6 +13,7 @@ import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { respondToJobOffer } from '../../lib/hooks/useJobOffers';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
+import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import type { ServiceRequest } from '../../types/database.types';
 
 function StatusPill({ status }: { status: ServiceRequest['status'] }) {
@@ -39,8 +40,7 @@ function WorkDetails({ item }: { item: ServiceRequest }) {
       <View className="mt-2 gap-1">
         {(item.scheduled_date || item.scheduled_time) && (
           <Text className="text-xs text-gray-500">
-            <Ionicons name="calendar-outline" size={11} color="#9CA3AF" /> {item.scheduled_date ?? 'Date TBD'} ·{' '}
-            {item.scheduled_time ?? 'Time TBD'}
+            <Ionicons name="calendar-outline" size={11} color="#9CA3AF" /> Scheduled {formatScheduledWhen(item.scheduled_date, item.scheduled_time)}
           </Text>
         )}
         {item.location_data?.address && (

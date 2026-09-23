@@ -9,6 +9,7 @@ import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { formatDuration } from '../../lib/utils/duration';
+import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import type { ServiceRequest } from '../../types/database.types';
 
 // Ticks once a minute - jobs run from minutes to days, so second-level
@@ -66,6 +67,18 @@ function StatusPill({ status }: { status: ServiceRequest['status'] }) {
   );
 }
 
+function HoldPill({ holdStatus }: { holdStatus: ServiceRequest['hold_status'] }) {
+  if (holdStatus === 'none') return null;
+  return (
+    <View className="mt-1.5 flex-row items-center gap-1 self-start rounded-full bg-amber-50 px-2 py-0.5">
+      <Ionicons name="pause-circle" size={11} color="#92400E" />
+      <Text className="text-[10px] font-semibold text-amber-800">
+        {holdStatus === 'requested' ? 'Hold requested' : 'On hold'}
+      </Text>
+    </View>
+  );
+}
+
 function JobListCard({ item }: { item: ServiceRequest }) {
   const needsCustomerLookup = !item.customer_name;
   const { data: customer } = useSupabaseRow('profiles', needsCustomerLookup ? item.client_id : undefined);
@@ -87,6 +100,7 @@ function JobListCard({ item }: { item: ServiceRequest }) {
         <StatusPill status={item.status} />
       </View>
       <JobElapsedBadge requestId={item.id} status={item.status} />
+      <HoldPill holdStatus={item.hold_status} />
       {item.description && (
         <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
           {item.description}
@@ -103,8 +117,8 @@ function JobListCard({ item }: { item: ServiceRequest }) {
         )}
         {(item.scheduled_date || item.scheduled_time) && (
           <Text className="text-xs text-gray-500">
-            <Text className="font-medium text-gray-600">When: </Text>
-            {item.scheduled_date ?? 'Date TBD'} · {item.scheduled_time ?? 'Time TBD'}
+            <Text className="font-medium text-gray-600">Scheduled visit: </Text>
+            {formatScheduledWhen(item.scheduled_date, item.scheduled_time)}
           </Text>
         )}
         {item.location_data?.address && (

@@ -9,6 +9,7 @@ import { useJobOffers, respondToJobOffer } from '../hooks/useJobOffers';
 import { CategoryBadge } from './CategoryBadge';
 import { useWideDetail } from './detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../utils/alert';
+import { formatScheduledWhen } from '../utils/scheduledTime';
 
 const GREEN = '#16A34A';
 const RED = '#DC2626';
@@ -140,10 +141,7 @@ export function IncomingJobOffer({ technicianId }: { technicianId: string | unde
     );
   }
 
-  const when =
-    offer.scheduled_date || offer.scheduled_time
-      ? `${offer.scheduled_date ?? 'Date TBD'} · ${offer.scheduled_time ?? 'Time TBD'}`
-      : null;
+  const when = formatScheduledWhen(offer.scheduled_date, offer.scheduled_time);
 
   return (
     <View

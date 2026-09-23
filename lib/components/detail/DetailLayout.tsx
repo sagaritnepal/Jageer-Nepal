@@ -317,7 +317,7 @@ export function PersonRow({
   );
 }
 
-type ButtonKind = 'primary' | 'green' | 'ghost' | 'tint';
+type ButtonKind = 'primary' | 'green' | 'ghost' | 'tint' | 'red';
 
 /** The one button style used across both detail pages. */
 export function DetailButton({
@@ -340,6 +340,7 @@ export function DetailButton({
     green: { bg: '#16A34A', fg: '#FFFFFF' },
     ghost: { bg: '#FFFFFF', fg: '#374151', border: '#D1D5DB' },
     tint: { bg: '#EFF6FF', fg: '#1D4ED8', border: '#BFDBFE' },
+    red: { bg: '#DC2626', fg: '#FFFFFF' },
   };
   const style = styles[kind];
   return (

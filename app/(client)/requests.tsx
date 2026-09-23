@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
+import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { OrderCard } from '../../lib/components/OrderCard';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
@@ -98,8 +99,8 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
       <View className="mt-3 gap-1">
         {(item.scheduled_date || item.scheduled_time) && (
           <Text className="text-xs text-gray-500">
-            <Text className="font-medium text-gray-600">When: </Text>
-            {item.scheduled_date ?? 'Date TBD'} · {item.scheduled_time ?? 'Time TBD'}
+            <Text className="font-medium text-gray-600">Scheduled visit: </Text>
+            {formatScheduledWhen(item.scheduled_date, item.scheduled_time)}
           </Text>
         )}
         {item.location_data?.address && (

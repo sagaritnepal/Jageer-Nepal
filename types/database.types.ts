@@ -117,6 +117,7 @@ export interface RequestLocation {
 
 export type PaymentStatus = 'unpaid' | 'paid';
 export type PaymentMethod = 'cash' | 'online';
+export type HoldStatus = 'none' | 'requested' | 'on_hold';
 
 export interface ServiceRequest {
   id: string;
@@ -148,6 +149,10 @@ export interface ServiceRequest {
   company_name: string | null;
   origin: RequestOrigin;
   remark: string | null;
+  hold_status: HoldStatus;
+  hold_note: string | null;
+  hold_requested_at: string | null;
+  hold_resolved_at: string | null;
   created_at: string;
   updated_at: string;
 }

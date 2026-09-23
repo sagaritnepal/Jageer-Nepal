@@ -4,6 +4,7 @@ import { View, Text, Image, Pressable, Linking, ScrollView } from 'react-native'
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import { PersonAvatar } from './PersonAvatar';
+import { formatScheduledWhen } from '../utils/scheduledTime';
 import type { RequestLocation } from '../../types/database.types';
 
 export function RequestPhotos({ photoUrls }: { photoUrls: string[] }) {
@@ -127,9 +128,7 @@ export function RequestDetailsExtras({
       <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Appointment</Text>
 
       {hasSchedule && (
-        <Text className="text-sm text-gray-700">
-          {scheduledDate ?? 'Date TBD'} · {scheduledTime ?? 'Time TBD'}
-        </Text>
+        <Text className="text-sm text-gray-700">{formatScheduledWhen(scheduledDate, scheduledTime)}</Text>
       )}
 
       {hasLocation && (

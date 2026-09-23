@@ -13,6 +13,7 @@ import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
 import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
 import { ChatThread } from '../../../lib/components/ChatThread';
+import { formatScheduledWhen } from '../../../lib/utils/scheduledTime';
 import {
   DetailShell,
   DetailHero,
@@ -30,6 +31,7 @@ import {
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { assignTechnician } from '../../../lib/utils/assignTechnician';
 import { reopenCompletedJob } from '../../../lib/hooks/useJobOffers';
+import { respondToJobHold } from '../../../lib/hooks/useJobHold';
 import { distanceKm } from '../../../lib/utils/distance';
 import type { ServiceRequest } from '../../../types/database.types';
 
@@ -92,10 +94,7 @@ function JobHero({
   const wide = useWideDetail();
   const { scrollTo } = useDetailScroll();
   const location = request.location_data;
-  const when =
-    request.scheduled_date || request.scheduled_time
-      ? `${request.scheduled_date ?? 'Date TBD'} · ${request.scheduled_time ?? 'Time TBD'}`
-      : null;
+  const when = formatScheduledWhen(request.scheduled_date, request.scheduled_time);
   const hasCoords = location?.latitude != null && location?.longitude != null;
   const showContact =
     !!request.contact_person_name && request.contact_person_name.trim() !== (customerName ?? '').trim();
@@ -231,6 +230,62 @@ function MessagesCard({ requestId, focusToken }: { requestId: string; focusToken
       </DetailCard>
     </ScrollTarget>
   );
+}
+
+function HoldCard({ request }: { request: ServiceRequest }) {
+  const wide = useWideDetail();
+  const queryClient = useQueryClient();
+  const [responding, setResponding] = useState(false);
+
+  async function respond(approve: boolean) {
+    setResponding(true);
+    try {
+      await respondToJobHold(request.id, approve);
+      await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+    } catch (err) {
+      showAlert('Could not respond', getErrorMessage(err));
+    } finally {
+      setResponding(false);
+    }
+  }
+
+  if (request.hold_status === 'requested') {
+    return (
+      <DetailCard wide={wide} icon="pause-circle-outline" title="Hold request">
+        <Text className="text-[13.5px] leading-5 text-gray-700">
+          The technician wants to pause this job{request.hold_note ? ':' : '.'}
+        </Text>
+        {!!request.hold_note && (
+          <Text className="mt-1.5 text-[13.5px] italic leading-5 text-gray-600">"{request.hold_note}"</Text>
+        )}
+        <View className="mt-3.5 flex-row gap-2">
+          <DetailButton label="Reject" icon="close" kind="red" disabled={responding} onPress={() => respond(false)} />
+          <DetailButton
+            label={responding ? 'Working…' : 'Accept hold'}
+            icon="checkmark"
+            kind="primary"
+            disabled={responding}
+            onPress={() => respond(true)}
+          />
+        </View>
+      </DetailCard>
+    );
+  }
+
+  if (request.hold_status === 'on_hold') {
+    return (
+      <DetailCard wide={wide} icon="pause-circle-outline" title="On hold">
+        <Text className="text-[13.5px] leading-5 text-gray-700">
+          You approved this hold - the technician will resume work on their own.
+        </Text>
+        {!!request.hold_note && (
+          <Text className="mt-1.5 text-[13.5px] italic leading-5 text-gray-600">"{request.hold_note}"</Text>
+        )}
+      </DetailCard>
+    );
+  }
+
+  return null;
 }
 
 function ProgressCard({ request }: { request: ServiceRequest }) {
@@ -391,6 +446,8 @@ function JobTracking({ request }: { request: ServiceRequest }) {
         onMessage={() => setChatFocus((n) => n + 1)}
         technicianName={technician?.full_name}
       />
+
+      <HoldCard request={request} />
 
       {!!technician && (
         <DetailCard wide={wide} icon="construct-outline" title="Technician">

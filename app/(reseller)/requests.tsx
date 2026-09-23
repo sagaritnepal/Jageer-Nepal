@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { distanceKm } from '../../lib/utils/distance';
+import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
@@ -100,6 +101,8 @@ const TAGS = {
   order: { label: 'Shop order', bg: '#ECFDF5', fg: '#047857' },
   unpaid: { label: 'Unpaid', bg: '#FEF2F2', fg: '#DC2626' },
   paid: { label: 'Paid', bg: '#F0FDF4', fg: '#15803D' },
+  holdRequested: { label: 'Hold requested', bg: '#FFFBEB', fg: '#92400E' },
+  onHold: { label: 'On hold', bg: '#FFFBEB', fg: '#92400E' },
 } satisfies Record<string, Tag>;
 
 type JobRowData = {
@@ -119,11 +122,6 @@ type JobRowData = {
 
 // Web table columns - shared by the header row and every job row.
 const COLS = { job: 2.2, where: 1.4, type: 120, amount: 110, action: 190, manage: 64 };
-
-function formatWhen(date: string | null, time: string | null): string | null {
-  if (!date && !time) return null;
-  return `${date ?? 'Date TBD'} · ${time ?? 'Time TBD'}`;
-}
 
 function formatAmount(amount: number | null): string {
   return amount != null ? `NPR ${Number(amount).toLocaleString()}` : '';
@@ -294,6 +292,8 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
       : { label: 'View request', icon: 'eye-outline', primary: false, onPress: open };
   } else if (stage === 'my_jobs') {
     action = { label: 'Assign technician', icon: 'person-add-outline', primary: true, onPress: open };
+  } else if (stage === 'in_progress' && item.hold_status === 'requested') {
+    action = { label: 'Review hold request', icon: 'pause-circle-outline', primary: true, onPress: open };
   } else if (stage === 'in_progress') {
     action = { label: 'View job', icon: 'eye-outline', primary: false, onPress: open };
   } else if (stage === 'awaiting_payment') {
@@ -303,13 +303,17 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
   }
 
   const tag =
-    stage === 'awaiting_payment'
-      ? TAGS.unpaid
-      : stage === 'completed'
-        ? TAGS.paid
-        : item.origin === 'app'
-          ? TAGS.app
-          : TAGS.own;
+    stage === 'in_progress' && item.hold_status === 'requested'
+      ? TAGS.holdRequested
+      : stage === 'in_progress' && item.hold_status === 'on_hold'
+        ? TAGS.onHold
+        : stage === 'awaiting_payment'
+          ? TAGS.unpaid
+          : stage === 'completed'
+            ? TAGS.paid
+            : item.origin === 'app'
+              ? TAGS.app
+              : TAGS.own;
 
   const place =
     stage === 'in_progress' && technicianProfile
@@ -349,7 +353,7 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
         title: item.issue_type,
         who: customerName,
         place,
-        when: formatWhen(item.scheduled_date, item.scheduled_time),
+        when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
         tag,
         amount: item.quoted_price,
         action,

@@ -5,12 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { respondToJobOffer, reopenCompletedJob } from '../../../lib/hooks/useJobOffers';
+import { requestJobHold, resumeJobHold } from '../../../lib/hooks/useJobHold';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
 import { ChalanPhotos } from '../../../lib/components/ChalanPhotos';
+import { HoldRequestModal } from '../../../lib/components/HoldRequestModal';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { formatDuration } from '../../../lib/utils/duration';
 import type { RequestStatus } from '../../../types/database.types';
@@ -107,6 +109,9 @@ export default function JobCard() {
   const [parts, setParts] = useState<PartRow[]>([{ name: '', quantity: '1', cost: '0' }]);
   const [laborCost, setLaborCost] = useState('0');
   const [answering, setAnswering] = useState<'accept' | 'reject' | 'reopen' | null>(null);
+  const [showHoldModal, setShowHoldModal] = useState(false);
+  const [holdSubmitting, setHoldSubmitting] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const queryClient = useQueryClient();
   const now = useNow(request?.status === 'in_progress' && !!jobCard?.started_at);
 
@@ -178,6 +183,33 @@ export default function JobCard() {
         },
       ]
     );
+  }
+
+  async function handleRequestHold(note: string) {
+    if (!request || !note.trim()) return;
+    setHoldSubmitting(true);
+    try {
+      await requestJobHold(request.id, note.trim());
+      await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+      setShowHoldModal(false);
+    } catch (err) {
+      showAlert('Could not request hold', getErrorMessage(err));
+    } finally {
+      setHoldSubmitting(false);
+    }
+  }
+
+  async function handleResume() {
+    if (!request) return;
+    setResuming(true);
+    try {
+      await resumeJobHold(request.id);
+      await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+    } catch (err) {
+      showAlert('Could not resume', getErrorMessage(err));
+    } finally {
+      setResuming(false);
+    }
   }
 
   async function handleAdvance() {
@@ -266,6 +298,34 @@ export default function JobCard() {
           </Text>
         )}
       </View>
+
+      {request.hold_status === 'requested' && (
+        <View className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <View className="flex-row items-center gap-2">
+            <Ionicons name="pause-circle" size={18} color="#92400E" />
+            <Text className="text-sm font-semibold text-amber-900">Hold requested - waiting for the reseller</Text>
+          </View>
+          {!!request.hold_note && <Text className="mt-2 text-xs italic leading-[17px] text-amber-800">"{request.hold_note}"</Text>}
+        </View>
+      )}
+
+      {request.hold_status === 'on_hold' && (
+        <View className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <View className="flex-row items-center gap-2">
+            <Ionicons name="pause-circle" size={18} color="#92400E" />
+            <Text className="text-sm font-semibold text-amber-900">Job on hold</Text>
+          </View>
+          {!!request.hold_note && <Text className="mt-2 text-xs italic leading-[17px] text-amber-800">"{request.hold_note}"</Text>}
+          <Pressable
+            onPress={handleResume}
+            disabled={resuming}
+            className="mt-3 flex-row items-center justify-center gap-2 rounded-lg bg-amber-600 py-2.5 disabled:opacity-50"
+          >
+            <Ionicons name="play" size={16} color="#fff" />
+            <Text className="text-sm font-semibold text-white">{resuming ? 'Resuming…' : 'Resume work'}</Text>
+          </Pressable>
+        </View>
+      )}
 
       {hasResellerContact && (
         <View className="mb-6 rounded-xl bg-white p-5">
@@ -404,7 +464,7 @@ export default function JobCard() {
         </View>
       )}
 
-      {nextStatus && (
+      {nextStatus && request.hold_status !== 'on_hold' && (
         <Pressable
           onPress={handleAdvance}
           disabled={isSaving}
@@ -415,6 +475,23 @@ export default function JobCard() {
           </Text>
         </Pressable>
       )}
+
+      {request.status === 'in_progress' && request.hold_status === 'none' && (
+        <Pressable
+          onPress={() => setShowHoldModal(true)}
+          className="mb-4 flex-row items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white py-3"
+        >
+          <Ionicons name="pause-circle-outline" size={18} color="#92400E" />
+          <Text className="text-base font-semibold text-amber-900">Hold</Text>
+        </Pressable>
+      )}
+
+      <HoldRequestModal
+        visible={showHoldModal}
+        submitting={holdSubmitting}
+        onSubmit={handleRequestHold}
+        onClose={() => setShowHoldModal(false)}
+      />
 
       {request.status === 'resolved' && request.payment_status !== 'paid' && (
         <View className="mb-4 flex-row items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-4">
