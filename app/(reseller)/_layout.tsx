@@ -1,11 +1,13 @@
 // app/(reseller)/_layout.tsx
-import { Platform, useWindowDimensions } from 'react-native';
+import { Platform, View, useWindowDimensions } from 'react-native';
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { TabIcon } from '../../lib/components/TabIcon';
 import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
+import { ResellerHoldNotice } from '../../lib/components/HoldNotice';
+import { useAuthStore } from '../../lib/hooks/useAuth';
 import { shortcuts as financeShortcuts } from '../../lib/components/finance/FinanceDashboardScreen';
 
 // Same 4 sections as the mobile bottom tabs below, just as a persistent
@@ -27,6 +29,7 @@ const NAV_ITEMS: WebNavItem[] = [
 
 export default function ResellerLayout() {
   const { width } = useWindowDimensions();
+  const userId = useAuthStore((state) => state.session?.user.id);
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const tabs = (
     <Tabs
@@ -92,13 +95,18 @@ export default function ResellerLayout() {
 
   return (
     <RoleGuard allow={['reseller']}>
-      {isWideWeb ? (
-        <WebSidebarShell items={NAV_ITEMS} roleLabel="Reseller">
-          {tabs}
-        </WebSidebarShell>
-      ) : (
-        tabs
-      )}
+      {/* The hold-request capsule sits outside the tabs so it shows over
+          whichever tab (or the sidebar) is open. */}
+      <View style={{ flex: 1 }}>
+        {isWideWeb ? (
+          <WebSidebarShell items={NAV_ITEMS} roleLabel="Reseller">
+            {tabs}
+          </WebSidebarShell>
+        ) : (
+          tabs
+        )}
+        <ResellerHoldNotice resellerId={userId} />
+      </View>
     </RoleGuard>
   );
 }

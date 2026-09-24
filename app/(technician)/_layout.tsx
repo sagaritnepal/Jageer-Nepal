@@ -7,6 +7,7 @@ import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
 import { IncomingJobOffer } from '../../lib/components/IncomingJobOffer';
+import { TechnicianHoldNotice } from '../../lib/components/HoldNotice';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 
 const NAV_ITEMS: WebNavItem[] = [
@@ -69,6 +70,7 @@ export default function TechnicianLayout() {
         ) : (
           tabs
         )}
+        <TechnicianHoldNotice technicianId={userId} />
         <IncomingJobOffer technicianId={userId} />
       </View>
     </RoleGuard>
