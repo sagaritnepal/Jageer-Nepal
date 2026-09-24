@@ -66,7 +66,18 @@ function AvailabilityToggle() {
   );
 }
 
-export function PortalHeaderBar({ title, showAvailabilityToggle }: { title?: string; showAvailabilityToggle?: boolean }) {
+/** `backTo` turns on a back button for a screen opened from somewhere else
+ * (not a tab): it goes back through history, or to `backTo` when there is
+ * none - a web deep link or a refreshed page. */
+export function PortalHeaderBar({
+  title,
+  showAvailabilityToggle,
+  backTo,
+}: {
+  title?: string;
+  showAvailabilityToggle?: boolean;
+  backTo?: string;
+}) {
   const profile = useAuthStore((state) => state.profile);
   const profileRoute = profile?.role ? PROFILE_ROUTE[profile.role] : undefined;
   const insets = useSafeAreaInsets();
@@ -76,6 +87,17 @@ export function PortalHeaderBar({ title, showAvailabilityToggle }: { title?: str
       className="flex-row items-center justify-between gap-3 border-b border-gray-100 bg-white px-6 pb-2.5"
       style={{ paddingTop: insets.top + 16 }}
     >
+      {!!backTo && (
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace(backTo as never))}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          className="-my-1 -ml-3 -mr-1 h-11 w-11 items-center justify-center rounded-full active:bg-gray-100"
+        >
+          <Ionicons name="chevron-back" size={24} color="#111827" />
+        </Pressable>
+      )}
       <Text className="flex-1 text-xl font-bold text-gray-900" numberOfLines={1}>
         {title ?? ''}
       </Text>

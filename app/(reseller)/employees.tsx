@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseInsert } from '../../lib/hooks/useSupabase';
+import { useFormDraft, formatDraftTime } from '../../lib/hooks/useFormDraft';
 import {
   useMyEmployees,
   usePendingHires,
@@ -19,6 +20,7 @@ import {
 } from '../../lib/hooks/useTechnicianEmployment';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { TimeField } from '../../lib/components/DateTimeFields';
+import { AssignJobSheet } from '../../lib/components/AssignJobToEmployee';
 import { useWideDetail } from '../../lib/components/detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { isValidPhone10 } from '../../lib/utils/phone';
@@ -39,6 +41,8 @@ function useDebounced<T>(value: T, delayMs = 300): T {
 function hours(e: { work_start_time: string | null; work_end_time: string | null }) {
   return `${e.work_start_time?.slice(0, 5) ?? '09:00'} to ${e.work_end_time?.slice(0, 5) ?? '17:00'}`;
 }
+
+const EMPTY_MANUAL = { name: '', email: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' };
 
 function openEmployee(id: string, kind?: 'manual') {
   router.push(`/(reseller)/employee/${id}${kind ? '?kind=manual' : ''}` as any);
@@ -87,6 +91,8 @@ function FormModal({
   submitting,
   onSubmit,
   onClose,
+  onSaveDraft,
+  draftNote,
   children,
 }: {
   visible: boolean;
@@ -97,6 +103,9 @@ function FormModal({
   submitting: boolean;
   onSubmit: () => void;
   onClose: () => void;
+  /** Shows a "Save draft" button beside the submit button. */
+  onSaveDraft?: () => void;
+  draftNote?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -117,15 +126,33 @@ function FormModal({
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20 }}>
               {children}
 
-              <Pressable
-                onPress={onSubmit}
-                disabled={submitting}
-                className="mt-2 h-12 flex-row items-center justify-center gap-2 rounded-xl disabled:opacity-50"
-                style={{ backgroundColor: color }}
-              >
-                <Ionicons name="checkmark" size={18} color="#fff" />
-                <Text className="text-base font-semibold text-white">{submitLabel}</Text>
-              </Pressable>
+              {!!draftNote && (
+                <View className="mb-2 flex-row items-center gap-1.5">
+                  <Ionicons name="bookmark" size={12} color="#B45309" />
+                  <Text className="text-xs font-medium text-amber-700">{draftNote}</Text>
+                </View>
+              )}
+              <View className="mt-2 flex-row" style={{ gap: 10 }}>
+                {onSaveDraft && (
+                  <Pressable
+                    onPress={onSaveDraft}
+                    disabled={submitting}
+                    className="h-12 flex-row items-center justify-center gap-1.5 rounded-xl border border-gray-300 bg-white px-4 disabled:opacity-50"
+                  >
+                    <Ionicons name="bookmark-outline" size={17} color="#374151" />
+                    <Text className="text-[15px] font-semibold text-gray-700">Save draft</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={onSubmit}
+                  disabled={submitting}
+                  className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-xl disabled:opacity-50"
+                  style={{ backgroundColor: color }}
+                >
+                  <Ionicons name="checkmark" size={18} color="#fff" />
+                  <Text className="text-base font-semibold text-white">{submitLabel}</Text>
+                </Pressable>
+              </View>
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -192,11 +219,26 @@ type TeamMember = {
   hours: string;
   /** Short status chip - who they are in the system, not what they do. */
   badge: { label: string; color: string; bg: string };
-  onOpen: () => void;
+  /** Opens their page to view and edit - the whole row is the target. */
+  onOpen?: () => void;
+  /** Only people with their own account can be sent a job in the app. */
+  onAssign?: () => void;
   actions?: ReactNode;
 };
 
-function SmallButton({ label, onPress, kind = 'primary', disabled }: { label: string; onPress: () => void; kind?: 'primary' | 'ghost' | 'danger'; disabled?: boolean }) {
+function SmallButton({
+  label,
+  icon,
+  onPress,
+  kind = 'primary',
+  disabled,
+}: {
+  label: string;
+  icon?: ComponentProps<typeof Ionicons>['name'];
+  onPress: () => void;
+  kind?: 'primary' | 'ghost' | 'danger';
+  disabled?: boolean;
+}) {
   const style =
     kind === 'primary'
       ? { backgroundColor: BLUE, borderWidth: 0 }
@@ -205,7 +247,13 @@ function SmallButton({ label, onPress, kind = 'primary', disabled }: { label: st
         : { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#D1D5DB' };
   const color = kind === 'primary' ? '#FFFFFF' : kind === 'danger' ? '#DC2626' : '#374151';
   return (
-    <Pressable onPress={onPress} disabled={disabled} className="h-9 items-center justify-center rounded-lg px-3 disabled:opacity-50" style={style}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg px-3 disabled:opacity-50"
+      style={style}
+    >
+      {!!icon && <Ionicons name={icon} size={14} color={color} />}
       <Text className="text-xs font-semibold" style={{ color }}>
         {label}
       </Text>
@@ -257,28 +305,40 @@ function TeamRow({ member, last }: { member: TeamMember; last: boolean }) {
           <Ionicons name="call-outline" size={17} color={BLUE} />
         </Pressable>
       )}
-      {member.actions ?? <SmallButton label="Open" kind="ghost" onPress={member.onOpen} />}
+      {member.actions ?? (
+        <>
+          {member.onOpen && <SmallButton label="Edit" icon="create-outline" kind="ghost" onPress={member.onOpen} />}
+          {member.onAssign && <SmallButton label="Assign job" icon="paper-plane" onPress={member.onAssign} />}
+        </>
+      )}
     </>
   );
+
+  // The whole row opens their page, not just the Edit button; the buttons
+  // inside it still take their own taps first.
+  const Row = member.onOpen ? Pressable : View;
+  const rowProps = member.onOpen
+    ? { onPress: member.onOpen, accessibilityRole: 'button' as const, accessibilityLabel: `Edit ${member.name}` }
+    : {};
 
   // On a phone the buttons get their own line - beside the name they
   // squeezed it down to "Sushant ...".
   if (!wide) {
     return (
-      <View className={`px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
+      <Row {...rowProps} className={`px-4 py-3.5 active:bg-gray-50 ${last ? '' : 'border-b border-gray-100'}`}>
         <View className="flex-row items-center gap-3">{who}</View>
         <View className="mt-3 flex-row items-center justify-end" style={{ gap: 8 }}>
           {buttons}
         </View>
-      </View>
+      </Row>
     );
   }
 
   return (
-    <View className={`flex-row items-center gap-3 px-4 py-3.5 ${last ? '' : 'border-b border-gray-100'}`}>
+    <Row {...rowProps} className={`flex-row items-center gap-3 px-4 py-3.5 active:bg-gray-50 ${last ? '' : 'border-b border-gray-100'}`}>
       {who}
       {buttons}
-    </View>
+    </Row>
   );
 }
 
@@ -303,6 +363,7 @@ export default function TechnicalEmployees() {
   const [showInvite, setShowInvite] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [sending, setSending] = useState(false);
+  const [assignTo, setAssignTo] = useState<{ id: string; name: string } | null>(null);
 
   // Invite form: find someone who already has a technician account.
   const [query, setQuery] = useState('');
@@ -312,8 +373,25 @@ export default function TechnicalEmployees() {
   const [inviteStart, setInviteStart] = useState('09:00');
   const [inviteEnd, setInviteEnd] = useState('17:00');
 
-  // Manual form: someone with no account at all.
-  const [manual, setManual] = useState({ name: '', email: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
+  // Manual form: someone with no account at all. Half-filled, it's kept as
+  // a draft on this device - closing the form or leaving the page doesn't
+  // throw away what was typed.
+  const [manual, setManual] = useState(EMPTY_MANUAL);
+  const addDraft = useFormDraft<typeof EMPTY_MANUAL>(userId ? `add-employee:${userId}` : null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  useEffect(() => {
+    if (!addDraft.loaded || draftRestored) return;
+    if (addDraft.draft) setManual(addDraft.draft.values);
+    setDraftRestored(true);
+  }, [addDraft.loaded, addDraft.draft, draftRestored]);
+  const manualHasInput = JSON.stringify(manual) !== JSON.stringify(EMPTY_MANUAL);
+  const manualDrafted = !!addDraft.draft && JSON.stringify(addDraft.draft.values) === JSON.stringify(manual);
+
+  function closeAddForm() {
+    // Leaving with something typed keeps it rather than asking.
+    if (manualHasInput && !manualDrafted) addDraft.saveDraft(manual);
+    setShowAdd(false);
+  }
 
   const debouncedQuery = useDebounced(query);
   const { data: searchResults, isFetching: searching } = useSearchTechnicians(selected ? '' : debouncedQuery);
@@ -406,7 +484,8 @@ export default function TechnicalEmployees() {
         work_start_time: manual.start,
         work_end_time: manual.end,
       });
-      setManual({ name: '', email: '', phone: '', jobTitle: '', start: '09:00', end: '17:00' });
+      setManual(EMPTY_MANUAL);
+      addDraft.clearDraft();
       setShowAdd(false);
     } catch (err) {
       showAlert('Could not add', getErrorMessage(err));
@@ -448,6 +527,7 @@ export default function TechnicalEmployees() {
       hours: hours(employment),
       badge: BADGE.account,
       onOpen: () => openEmployee(employment.id),
+      onAssign: () => setAssignTo({ id: profile.id, name: profile.full_name ?? 'Technician' }),
     }));
     const fromManual = manualList
       .filter((m) => !(m.linked_profile_id && accountIds.has(m.linked_profile_id)))
@@ -483,7 +563,11 @@ export default function TechnicalEmployees() {
         <ActionCard
           icon="people"
           title="Add a technician"
-          body="Staff with no Jageer account - kept here so you can call them."
+          body={
+            addDraft.draft
+              ? `Draft saved ${formatDraftTime(addDraft.draft.savedAt)} - tap to finish adding ${addDraft.draft.values.name.trim() || 'them'}.`
+              : 'Staff with no Jageer account - kept here so you can call them.'
+          }
           color={GREEN}
           tint="#ECFDF5"
           onPress={() => setShowAdd(true)}
@@ -515,7 +599,6 @@ export default function TechnicalEmployees() {
                 jobTitle: null,
                 hours: hours(employment),
                 badge: BADGE.asked,
-                onOpen: () => {},
                 actions: (
                   <>
                     <SmallButton label="Reject" kind="ghost" onPress={() => handleRespond(employment.id, false)} disabled={respond.isPending} />
@@ -543,13 +626,19 @@ export default function TechnicalEmployees() {
                 jobTitle: null,
                 hours: hours(employment),
                 badge: BADGE.invited,
-                onOpen: () => {},
                 actions: <SmallButton label="Cancel" kind="ghost" onPress={() => handleCancelInvite(employment.id)} disabled={endEmployment.isPending} />,
               }}
             />
           ))}
         </Section>
       )}
+
+      <AssignJobSheet
+        visible={!!assignTo}
+        technicianId={assignTo?.id ?? ''}
+        technicianName={assignTo?.name ?? ''}
+        onClose={() => setAssignTo(null)}
+      />
 
       <FormModal
         visible={showInvite}
@@ -650,7 +739,21 @@ export default function TechnicalEmployees() {
         submitLabel={addManual.isPending ? 'Adding…' : 'Add to my team'}
         submitting={addManual.isPending}
         onSubmit={handleAddManual}
-        onClose={() => setShowAdd(false)}
+        onClose={closeAddForm}
+        onSaveDraft={() => {
+          if (!manualHasInput) {
+            showAlert('Nothing to save yet', 'Type at least a name or number first.');
+            return;
+          }
+          addDraft.saveDraft(manual);
+        }}
+        draftNote={
+          manualDrafted && addDraft.draft
+            ? `Draft saved ${formatDraftTime(addDraft.draft.savedAt)}`
+            : manualHasInput
+              ? 'Not saved yet - closing keeps it as a draft'
+              : null
+        }
       >
         <Field label="Name">
           <Input value={manual.name} onChangeText={(v) => setManual((m) => ({ ...m, name: v }))} placeholder="Full name" />

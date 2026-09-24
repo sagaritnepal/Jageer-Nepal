@@ -29,7 +29,7 @@ import {
   type TimelineStep,
 } from '../../../lib/components/detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
-import { assignTechnician } from '../../../lib/utils/assignTechnician';
+import { assignTechnician, showJobSentAlert } from '../../../lib/utils/assignTechnician';
 import { reopenCompletedJob } from '../../../lib/hooks/useJobOffers';
 import { respondToJobHold } from '../../../lib/hooks/useJobHold';
 import { distanceKm } from '../../../lib/utils/distance';
@@ -514,7 +514,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
         extraValues: { quoted_price: price, reseller_id: userId },
       });
       queryClient.invalidateQueries({ queryKey: ['service_requests'] });
-      showAlert('Job sent', 'The technician gets a ringing request and can accept or reject it. You will see it move to in progress once they accept.');
+      showJobSentAlert(rankedTechnicians.find((t) => t.id === technicianId)?.full_name);
       router.replace('/(reseller)/requests');
     } catch (err) {
       showAlert('Could not assign', getErrorMessage(err));
@@ -804,7 +804,7 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
     try {
       await assignTechnician({ requestId: request.id, technicianId });
       queryClient.invalidateQueries({ queryKey: ['service_requests'] });
-      showAlert('Job sent', 'The technician gets a ringing request and can accept or reject it. You will see it move to in progress once they accept.');
+      showJobSentAlert(rankedTechnicians.find((t) => t.id === technicianId)?.full_name);
       router.replace('/(reseller)/requests');
     } catch (err) {
       showAlert('Could not assign', getErrorMessage(err));

@@ -99,7 +99,7 @@ export function AppAlertHost() {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: height * 0.2,
+                minHeight: height * 0.2,
                 paddingBottom: insets.bottom,
               }
             : {
@@ -121,7 +121,7 @@ export function AppAlertHost() {
         <View
           className={
             isMobile
-              ? 'flex-1 justify-center rounded-t-2xl border border-gray-100 bg-white px-5 shadow-lg'
+              ? 'flex-1 justify-center rounded-t-2xl border border-gray-100 bg-white px-5 py-4 shadow-lg'
               : 'rounded-2xl border border-gray-100 bg-white p-4 shadow-lg'
           }
         >
@@ -134,12 +134,18 @@ export function AppAlertHost() {
             </Text>
           ) : null}
 
-          <View className={isMultiButton ? 'mt-3 flex-row justify-end gap-2' : 'mt-3'}>
+          {/* A lone acknowledgement (OK) sits centred under the message, as
+              a system dialog would; a choice keeps its buttons on the right. */}
+          <View className={isMultiButton ? 'mt-3 flex-row justify-end gap-2' : 'mt-3.5 items-center'}>
             {current.buttons.map((button, index) => (
               <Pressable
                 key={index}
                 onPress={() => handlePress(button)}
-                className={isMultiButton ? 'rounded-lg px-3 py-1.5' : 'self-start rounded-lg bg-orange-600 px-3 py-1.5'}
+                className={
+                  isMultiButton
+                    ? 'rounded-lg px-3 py-1.5'
+                    : 'h-11 min-w-[128px] items-center justify-center rounded-xl bg-orange-600 px-6'
+                }
               >
                 <Text
                   className={
@@ -149,7 +155,7 @@ export function AppAlertHost() {
                         : button.style === 'cancel'
                           ? 'text-sm font-semibold text-gray-500'
                           : 'text-sm font-semibold text-orange-600'
-                      : 'text-sm font-semibold text-white'
+                      : 'text-[15px] font-bold text-white'
                   }
                 >
                   {button.text}

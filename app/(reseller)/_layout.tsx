@@ -62,8 +62,22 @@ export default function ResellerLayout() {
         />
         <Tabs.Screen name="profile" options={{ href: null, title: 'Profile' }} />
         <Tabs.Screen name="company" options={{ href: null, title: 'Company Details' }} />
-        <Tabs.Screen name="employees" options={{ href: null, title: 'Technical Employees' }} />
-        <Tabs.Screen name="employee/[id]" options={{ href: null, title: 'Employee' }} />
+        <Tabs.Screen
+          name="employees"
+          options={{
+            href: null,
+            title: 'Technical Employees',
+            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/profile" />,
+          }}
+        />
+        <Tabs.Screen
+          name="employee/[id]"
+          options={{
+            href: null,
+            title: 'Employee',
+            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/employees" />,
+          }}
+        />
         <Tabs.Screen name="rewards" options={{ href: null, title: 'Rewards' }} />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Service Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a technician' }} />

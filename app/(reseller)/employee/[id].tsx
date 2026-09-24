@@ -1,8 +1,9 @@
 // app/(reseller)/employee/[id].tsx
-import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Linking } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseDelete } from '../../../lib/hooks/useSupabase';
 import {
@@ -11,13 +12,16 @@ import {
   useEndEmployment,
   useUpdateEmployment,
 } from '../../../lib/hooks/useTechnicianEmployment';
+import { useFormDraft, formatDraftTime } from '../../../lib/hooks/useFormDraft';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { TimeField } from '../../../lib/components/DateTimeFields';
+import { AssignJobList } from '../../../lib/components/AssignJobToEmployee';
 import { useWideDetail } from '../../../lib/components/detail/DetailLayout';
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { isValidPhone10 } from '../../../lib/utils/phone';
 
 const BLUE = '#2563EB';
+const MAX_WIDTH = 620;
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -60,7 +64,7 @@ function HoursRow({ start, end, setStart, setEnd }: { start: string; end: string
 
 function Header({ name, subtitle, photoUrl, phone }: { name: string; subtitle: string; photoUrl?: string | null; phone: string | null }) {
   return (
-    <View className="mb-4 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+    <View className="flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
       <PersonAvatar name={name} photoUrl={photoUrl} size={54} bg={photoUrl ? 'bg-blue-600' : 'bg-gray-500'} />
       <View className="flex-1">
         <Text className="text-lg font-bold text-gray-900" numberOfLines={1}>
@@ -81,17 +85,15 @@ function Header({ name, subtitle, photoUrl, phone }: { name: string; subtitle: s
   );
 }
 
-function SaveButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+function Card({ icon, title, children }: { icon: ComponentProps<typeof Ionicons>['name']; title: string; children: ReactNode }) {
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      className="h-12 flex-row items-center justify-center gap-2 rounded-xl disabled:opacity-50"
-      style={{ backgroundColor: BLUE }}
-    >
-      <Ionicons name="checkmark" size={18} color="#fff" />
-      <Text className="text-base font-semibold text-white">{label}</Text>
-    </Pressable>
+    <View className="rounded-2xl border border-gray-200 bg-white p-4">
+      <View className="mb-3 flex-row items-center gap-2">
+        <Ionicons name={icon} size={17} color={BLUE} />
+        <Text className="text-[15px] font-bold text-gray-900">{title}</Text>
+      </View>
+      {children}
+    </View>
   );
 }
 
@@ -100,7 +102,7 @@ function RemoveButton({ label, onPress, disabled }: { label: string; onPress: ()
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      className="mt-4 flex-row items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 py-3 disabled:opacity-50"
+      className="flex-row items-center justify-center gap-2 rounded-xl border border-red-200 bg-white py-3 disabled:opacity-50"
     >
       <Ionicons name="person-remove-outline" size={17} color="#DC2626" />
       <Text className="text-sm font-semibold text-red-600">{label}</Text>
@@ -108,10 +110,179 @@ function RemoveButton({ label, onPress, disabled }: { label: string; onPress: ()
   );
 }
 
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** The edit form's state plus its draft: starts from the saved record (or a
+ * draft left on this device, if one differs from it), knows whether there
+ * are unsaved edits, and quietly keeps them as a draft whenever the reseller
+ * leaves the page - back button, hardware back, another tab - so nothing
+ * typed is ever lost to a mis-tap. */
+function useEmployeeEditor<T>(draftKey: string, saved: T | null, name: string) {
+  const draft = useFormDraft<T>(draftKey);
+  const [form, setForm] = useState<T | null>(null);
+  const [baseline, setBaseline] = useState<T | null>(null);
+  const [restoredAt, setRestoredAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (form || !saved || !draft.loaded) return;
+    setBaseline(saved);
+    if (draft.draft && !same(draft.draft.values, saved)) {
+      setForm(draft.draft.values);
+      setRestoredAt(draft.draft.savedAt);
+    } else {
+      setForm(saved);
+      if (draft.draft) draft.clearDraft();
+    }
+  }, [form, saved, draft.loaded, draft.draft, draft.clearDraft]);
+
+  const dirty = !!form && !!baseline && !same(form, baseline);
+  const drafted = dirty && !!draft.draft && same(draft.draft.values, form);
+
+  // Refs so the blur handler below sees the latest values, not the ones
+  // from when the screen first got focus.
+  const latest = useRef({ form, dirty, drafted, name, removed: false, saveDraft: draft.saveDraft });
+  latest.current = { ...latest.current, form, dirty, drafted, name, saveDraft: draft.saveDraft };
+
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        const { form: f, dirty: d, drafted: kept, removed, saveDraft, name: n } = latest.current;
+        if (!f || !d || kept || removed) return;
+        saveDraft(f);
+        showAlert('Draft saved', `Your unsaved changes to ${n || 'this employee'} are kept - open them again to finish.`);
+      },
+      []
+    )
+  );
+
+  return {
+    form,
+    setForm: (update: (f: T) => T) => setForm((f) => (f ? update(f) : f)),
+    dirty,
+    drafted,
+    draftSavedAt: drafted ? draft.draft!.savedAt : null,
+    restoredAt: dirty ? restoredAt : null,
+    saveDraft: () => form && draft.saveDraft(form),
+    discardDraft: () => {
+      draft.clearDraft();
+      setForm(baseline);
+      setRestoredAt(null);
+    },
+    markSaved: () => {
+      draft.clearDraft();
+      setBaseline(form);
+      setRestoredAt(null);
+    },
+    markRemoved: () => {
+      latest.current.removed = true;
+      draft.clearDraft();
+    },
+  };
+}
+
+type Editor = ReturnType<typeof useEmployeeEditor<unknown>>;
+
+function RestoredDraftBanner({ at, onDiscard }: { at: string; onDiscard: () => void }) {
+  return (
+    <View className="flex-row items-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+      <Ionicons name="bookmark" size={17} color="#B45309" />
+      <Text className="flex-1 text-[13px] leading-[18px] text-amber-900">
+        Picked up your draft from {formatDraftTime(at)} - it isn't saved to the team yet.
+      </Text>
+      <Pressable onPress={onDiscard} hitSlop={6} className="rounded-lg px-2 py-1.5 active:bg-amber-100">
+        <Text className="text-[13px] font-bold text-amber-800">Discard</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Pinned under the form: where the edits stand, and the two ways to keep
+ * them - a draft on this device, or saved for real. */
+function SaveBar({ editor, saving, onSave }: { editor: Pick<Editor, 'dirty' | 'drafted' | 'draftSavedAt' | 'saveDraft'>; saving: boolean; onSave: () => void }) {
+  const insets = useSafeAreaInsets();
+  const status = !editor.dirty
+    ? { icon: 'checkmark-circle' as const, color: '#15803D', text: 'All changes saved' }
+    : editor.drafted
+      ? { icon: 'bookmark' as const, color: '#B45309', text: `Draft saved ${formatDraftTime(editor.draftSavedAt!)} · not on the team yet` }
+      : { icon: 'ellipse' as const, color: '#D97706', text: 'Unsaved changes' };
+
+  return (
+    <View
+      className="border-t border-gray-200 bg-white px-4 pt-2.5"
+      style={{
+        paddingBottom: Math.max(insets.bottom, 12),
+        shadowColor: '#000',
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: -2 },
+        elevation: 8,
+      }}
+    >
+      <View style={{ maxWidth: MAX_WIDTH, width: '100%', alignSelf: 'center' }}>
+        <View className="mb-2 flex-row items-center gap-1.5">
+          <Ionicons name={status.icon} size={status.icon === 'ellipse' ? 8 : 13} color={status.color} />
+          <Text className="text-xs font-medium" style={{ color: status.color }} numberOfLines={1}>
+            {status.text}
+          </Text>
+        </View>
+        <View className="flex-row" style={{ gap: 10 }}>
+          <Pressable
+            onPress={editor.saveDraft}
+            disabled={!editor.dirty || editor.drafted || saving}
+            className="h-12 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-gray-300 bg-white disabled:opacity-40"
+          >
+            <Ionicons name="bookmark-outline" size={17} color="#374151" />
+            <Text className="text-[15px] font-semibold text-gray-700">Save draft</Text>
+          </Pressable>
+          <Pressable
+            onPress={onSave}
+            disabled={!editor.dirty || saving}
+            className="h-12 flex-[1.4] flex-row items-center justify-center gap-2 rounded-xl disabled:opacity-40"
+            style={{ backgroundColor: BLUE }}
+          >
+            <Ionicons name="checkmark" size={18} color="#fff" />
+            <Text className="text-[15px] font-bold text-white">{saving ? 'Saving…' : 'Save changes'}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function Page({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+  const wide = useWideDetail();
+  return (
+    <View className="flex-1 bg-gray-50">
+      <ScrollView
+        className="flex-1"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: wide ? 32 : 16, paddingBottom: 32, maxWidth: MAX_WIDTH, width: '100%', alignSelf: 'center', gap: 16 }}
+      >
+        {children}
+      </ScrollView>
+      {footer}
+    </View>
+  );
+}
+
+function Loading({ text }: { text: string }) {
+  return (
+    <Page>
+      <Text className="px-1 text-sm text-gray-500">{text}</Text>
+    </Page>
+  );
+}
+
+function leave() {
+  if (router.canGoBack()) router.back();
+  else router.replace('/(reseller)/employees' as any);
+}
+
 /** An employee with their own Jageer account. Same fields as a hand-added
  * person, except name, email and phone belong to their account - the
  * employer owns the job title, work hours and note (enforced by the
- * technician_employment_hours_guard trigger). */
+ * technician_employment_hours_guard trigger). They can also be sent a job
+ * straight from here. */
 function TechnicianEmployee({ employmentId }: { employmentId: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: employees } = useMyEmployees(userId);
@@ -119,25 +290,29 @@ function TechnicianEmployee({ employmentId }: { employmentId: string }) {
   const match = employees.find((e) => e.employment.id === employmentId);
   const update = useUpdateEmployment();
   const endEmployment = useEndEmployment();
-  const [form, setForm] = useState({ jobTitle: '', note: '', start: '09:00', end: '17:00' });
-  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    if (!match || loaded) return;
-    setForm({
-      jobTitle: match.employment.job_title ?? '',
-      note: match.employment.employer_note ?? '',
-      start: match.employment.work_start_time?.slice(0, 5) ?? '09:00',
-      end: match.employment.work_end_time?.slice(0, 5) ?? '17:00',
-    });
-    setLoaded(true);
-  }, [match, loaded]);
+  const saved = useMemo(
+    () =>
+      match
+        ? {
+            jobTitle: match.employment.job_title ?? '',
+            note: match.employment.employer_note ?? '',
+            start: match.employment.work_start_time?.slice(0, 5) ?? '09:00',
+            end: match.employment.work_end_time?.slice(0, 5) ?? '17:00',
+          }
+        : null,
+    [match?.employment]
+  );
+  const name = match?.profile.full_name ?? 'Technician';
+  const editor = useEmployeeEditor(`employee:${employmentId}`, saved, name);
+  const { form, setForm } = editor;
 
-  if (!match) return <Text className="px-1 text-sm text-gray-500">Loading…</Text>;
+  if (!match || !form) return <Loading text="Loading…" />;
   const { profile } = match;
   const email = emailOf.get(profile.id) ?? null;
 
   async function handleSave() {
+    if (!form) return;
     try {
       await update.save(employmentId, {
         job_title: form.jobTitle.trim() || null,
@@ -145,14 +320,15 @@ function TechnicianEmployee({ employmentId }: { employmentId: string }) {
         work_start_time: form.start,
         work_end_time: form.end,
       });
-      showAlert('Saved', 'Employee details updated.');
+      editor.markSaved();
+      showAlert('Saved', `${name}'s details are updated.`);
     } catch (err) {
       showAlert('Could not save', getErrorMessage(err));
     }
   }
 
   function handleRemove() {
-    showAlert('Remove from your team?', `${profile.full_name ?? 'This technician'} will go back to being an outsource technician.`, [
+    showAlert('Remove from your team?', `${name} will go back to being an outsource technician.`, [
       { text: 'Keep', style: 'cancel' },
       {
         text: 'Remove',
@@ -160,7 +336,8 @@ function TechnicianEmployee({ employmentId }: { employmentId: string }) {
         onPress: async () => {
           try {
             await endEmployment.end(employmentId);
-            router.back();
+            editor.markRemoved();
+            leave();
           } catch (err) {
             showAlert('Could not remove', getErrorMessage(err));
           }
@@ -170,15 +347,21 @@ function TechnicianEmployee({ employmentId }: { employmentId: string }) {
   }
 
   return (
-    <>
+    <Page footer={<SaveBar editor={editor} saving={update.isPending} onSave={handleSave} />}>
       <Header
-        name={profile.full_name ?? 'Technician'}
+        name={name}
         subtitle={`Has a Jageer account${form.jobTitle ? ` · ${form.jobTitle}` : ''}`}
         photoUrl={profile.avatar_url}
         phone={profile.phone}
       />
 
-      <View className="rounded-2xl border border-gray-200 bg-white p-4">
+      <Card icon="paper-plane-outline" title="Assign a job">
+        <AssignJobList technicianId={profile.id} technicianName={name} />
+      </Card>
+
+      {!!editor.restoredAt && <RestoredDraftBanner at={editor.restoredAt} onDiscard={editor.discardDraft} />}
+
+      <Card icon="create-outline" title="Details">
         <Field label="Name" hint="From their own account - only they can change it.">
           <ReadOnlyValue value={profile.full_name} empty="No name yet" />
         </Field>
@@ -208,12 +391,10 @@ function TechnicianEmployee({ employmentId }: { employmentId: string }) {
             style={{ minHeight: 76, textAlignVertical: 'top' }}
           />
         </Field>
-
-        <SaveButton label={update.isPending ? 'Saving…' : 'Save changes'} onPress={handleSave} disabled={update.isPending} />
-      </View>
+      </Card>
 
       <RemoveButton label="Remove from my team" onPress={handleRemove} disabled={endEmployment.isPending} />
-    </>
+    </Page>
   );
 }
 
@@ -222,28 +403,32 @@ function ManualEmployee({ id }: { id: string }) {
   const { data: employee, isLoading } = useSupabaseRow('manual_employees', id);
   const update = useSupabaseUpdate('manual_employees');
   const remove = useSupabaseDelete('manual_employees');
-  const [form, setForm] = useState({ name: '', email: '', phone: '', jobTitle: '', note: '', start: '09:00', end: '17:00', active: true });
-  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    if (!employee || loaded) return;
-    setForm({
-      name: employee.name ?? '',
-      email: employee.email ?? '',
-      phone: employee.phone ?? '',
-      jobTitle: employee.job_title ?? '',
-      note: employee.note ?? '',
-      start: employee.work_start_time?.slice(0, 5) ?? '09:00',
-      end: employee.work_end_time?.slice(0, 5) ?? '17:00',
-      active: employee.is_active,
-    });
-    setLoaded(true);
-  }, [employee, loaded]);
+  const saved = useMemo(
+    () =>
+      employee
+        ? {
+            name: employee.name ?? '',
+            email: employee.email ?? '',
+            phone: employee.phone ?? '',
+            jobTitle: employee.job_title ?? '',
+            note: employee.note ?? '',
+            start: employee.work_start_time?.slice(0, 5) ?? '09:00',
+            end: employee.work_end_time?.slice(0, 5) ?? '17:00',
+            active: employee.is_active,
+          }
+        : null,
+    [employee]
+  );
+  const editor = useEmployeeEditor(`manual-employee:${id}`, saved, employee?.name ?? '');
+  const { form, setForm } = editor;
 
-  if (isLoading && !employee) return <Text className="px-1 text-sm text-gray-500">Loading…</Text>;
-  if (!employee) return <Text className="px-1 text-sm text-gray-500">This employee is no longer on your team.</Text>;
+  if (isLoading && !employee) return <Loading text="Loading…" />;
+  if (!employee) return <Loading text="This employee is no longer on your team." />;
+  if (!form) return <Loading text="Loading…" />;
 
   async function handleSave() {
+    if (!form) return;
     if (!form.name.trim()) {
       showAlert('Add a name', 'Type the name of the person you are keeping on your team.');
       return;
@@ -266,14 +451,15 @@ function ManualEmployee({ id }: { id: string }) {
           is_active: form.active,
         },
       });
-      showAlert('Saved', 'Employee details updated.');
+      editor.markSaved();
+      showAlert('Saved', `${form.name.trim()}'s details are updated.`);
     } catch (err) {
       showAlert('Could not save', getErrorMessage(err));
     }
   }
 
   function handleRemove() {
-    showAlert('Remove from your team?', `${form.name || 'This person'} will be deleted from your team list.`, [
+    showAlert('Remove from your team?', `${form?.name || 'This person'} will be deleted from your team list.`, [
       { text: 'Keep', style: 'cancel' },
       {
         text: 'Remove',
@@ -281,7 +467,8 @@ function ManualEmployee({ id }: { id: string }) {
         onPress: async () => {
           try {
             await remove.mutateAsync(id);
-            router.back();
+            editor.markRemoved();
+            leave();
           } catch (err) {
             showAlert('Could not remove', getErrorMessage(err));
           }
@@ -291,18 +478,16 @@ function ManualEmployee({ id }: { id: string }) {
   }
 
   return (
-    <>
-      <Header
-        name={form.name}
-        subtitle={`Added by you${form.jobTitle ? ` · ${form.jobTitle}` : ''}`}
-        phone={form.phone || null}
-      />
+    <Page footer={<SaveBar editor={editor} saving={update.isPending} onSave={handleSave} />}>
+      <Header name={form.name} subtitle={`Added by you${form.jobTitle ? ` · ${form.jobTitle}` : ''}`} phone={form.phone || null} />
 
-      <View className="rounded-2xl border border-gray-200 bg-white p-4">
+      {!!editor.restoredAt && <RestoredDraftBanner at={editor.restoredAt} onDiscard={editor.discardDraft} />}
+
+      <Card icon="create-outline" title="Details">
         <Field label="Name">
           <Input value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="Full name" />
         </Field>
-        <Field label="Email" hint="If they sign up with this address, they link to your team automatically.">
+        <Field label="Email" hint="If they sign up with this address, they link to your team automatically - then you can send them jobs.">
           <Input
             value={form.email}
             onChangeText={(v) => setForm((f) => ({ ...f, email: v }))}
@@ -343,36 +528,26 @@ function ManualEmployee({ id }: { id: string }) {
 
         <Pressable
           onPress={() => setForm((f) => ({ ...f, active: !f.active }))}
-          className="mb-4 flex-row items-center gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3"
+          className="flex-row items-center gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3"
         >
           <Ionicons name={form.active ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={form.active ? '#059669' : '#9CA3AF'} />
           <Text className="flex-1 text-sm font-medium text-gray-800">
             {form.active ? 'Currently working for you' : 'No longer working for you'}
           </Text>
         </Pressable>
-
-        <SaveButton label={update.isPending ? 'Saving…' : 'Save changes'} onPress={handleSave} disabled={update.isPending} />
-      </View>
+      </Card>
 
       <RemoveButton label="Remove from my team" onPress={handleRemove} disabled={remove.isPending} />
-    </>
+    </Page>
   );
 }
 
 /** One employee's page. `kind=manual` opens a hand-added person; anything
  * else is an employment row for a technician with their own account. Both
- * show the same fields in the same order. */
+ * show the same fields in the same order. Keyed by id: this tab screen stays
+ * mounted between visits, so opening a second employee must start a fresh
+ * form rather than keep showing the first one's. */
 export default function EmployeeDetail() {
   const { id, kind } = useLocalSearchParams<{ id: string; kind?: string }>();
-  const wide = useWideDetail();
-
-  return (
-    <ScrollView
-      className="flex-1 bg-gray-50"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: wide ? 32 : 16, paddingBottom: 48, maxWidth: 620, width: '100%', alignSelf: 'center' }}
-    >
-      {kind === 'manual' ? <ManualEmployee id={id} /> : <TechnicianEmployee employmentId={id} />}
-    </ScrollView>
-  );
+  return kind === 'manual' ? <ManualEmployee key={`manual:${id}`} id={id} /> : <TechnicianEmployee key={`account:${id}`} employmentId={id} />;
 }

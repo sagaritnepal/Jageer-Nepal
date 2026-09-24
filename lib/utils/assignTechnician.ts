@@ -1,5 +1,6 @@
 // lib/utils/assignTechnician.ts
 import { supabase } from '../supabase';
+import { showAlert } from './alert';
 
 /** Offers a service request to a technician. Every technician - employee or
  * outsource - gets it as `assigned`, which rings on their phone/web
@@ -27,4 +28,15 @@ export async function assignTechnician(params: {
     })
     .eq('id', requestId);
   if (error) throw error;
+}
+
+/** The confirmation every "send this job" path shows, naming who it went to
+ * so the reseller can see at a glance they picked the right person. */
+export function showJobSentAlert(technicianName: string | null | undefined) {
+  const name = technicianName?.trim();
+  const firstName = name?.split(/\s+/)[0];
+  showAlert(
+    name ? `Job sent to ${name}` : 'Job sent',
+    `${firstName ?? 'The technician'} gets a ringing request and can accept or reject it. You'll see it move to in progress once they accept.`
+  );
 }
