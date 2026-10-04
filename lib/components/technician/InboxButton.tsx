@@ -6,9 +6,10 @@ import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useOpenTeamJobs } from '../../hooks/useJobOffers';
 
-/** Opens the technician's Inbox - job offers to answer, open team work to
- * take and the employment link, which used to be the Home tab. Shows how
- * many things are waiting there. */
+/** The notification bell in a technician's header: opens the Inbox - job
+ * offers to answer, open team work to take and the employment link, which
+ * used to be the Home tab. Shows how many things are waiting there, and the
+ * bell fills in and turns blue while something is. */
 export function InboxButton() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: offers } = useSupabaseQuery('service_requests', {
@@ -24,10 +25,14 @@ export function InboxButton() {
       onPress={() => router.push('/(technician)/inbox')}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={waiting > 0 ? `Inbox, ${waiting} waiting` : 'Inbox'}
+      accessibilityLabel={waiting > 0 ? `Notifications, ${waiting} waiting` : 'Notifications'}
       className="h-9 w-9 items-center justify-center rounded-full bg-gray-100 active:bg-gray-200"
     >
-      <Ionicons name="file-tray-full-outline" size={19} color="#374151" />
+      <Ionicons
+        name={waiting > 0 ? 'notifications' : 'notifications-outline'}
+        size={19}
+        color={waiting > 0 ? '#2563EB' : '#374151'}
+      />
       {waiting > 0 && (
         <View
           className="absolute items-center justify-center rounded-full bg-blue-600"

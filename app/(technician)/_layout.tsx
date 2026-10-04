@@ -51,7 +51,9 @@ export default function TechnicianLayout() {
     <Tabs
       backBehavior="history"
       screenOptions={{
-        header: ({ options }) => <PortalHeaderBar title={options.title} />,
+        // The notification bell is on every technician page, not just the
+        // dashboard; the Inbox it opens has its own header (no bell).
+        header: ({ options }) => <PortalHeaderBar title={options.title} showInbox />,
         tabBarActiveTintColor: ROLE_ACCENT.technician,
         ...(isWideWeb ? { tabBarStyle: { display: 'none' } } : null),
       }}
@@ -60,9 +62,8 @@ export default function TechnicianLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-          // Only the dashboard's own header gets the availability toggle and
-          // the Inbox button - every other tab keeps the plain header from
-          // screenOptions above.
+          // Only the dashboard's own header gets the availability toggle -
+          // every other screen uses the header from screenOptions above.
           header: () => <PortalHeaderBar title="Dashboard" showAvailabilityToggle showInbox />,
           tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} />,
         }}

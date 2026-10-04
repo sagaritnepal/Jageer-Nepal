@@ -5,6 +5,7 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { resolveVisualKey } from '../../lib/constants/categoryIcons';
 import { TechnicianDashboardView } from '../../lib/components/technician/TechnicianDashboardView';
+import { WorkingNowCard } from '../../lib/components/technician/WorkingNowCard';
 import { isoOfLocalDate, type Completion } from '../../lib/utils/dashboardStats';
 import { jobCardAmount, type JobCardWithQuote } from './earnings';
 
@@ -56,6 +57,8 @@ export default function TechnicianDashboard() {
         router.push({ pathname: '/(technician)/jobs', params: { tab: 'completed', t: String(Date.now()) } })
       }
       onOpenEarnings={() => router.push('/(technician)/earnings')}
+      // What they are working on right now sits just under the two big tiles.
+      workingNow={userId ? <WorkingNowCard technicianId={userId} /> : null}
     />
   );
 }

@@ -1,5 +1,5 @@
 // lib/components/technician/TechnicianDashboardView.tsx
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CategoryBadge } from '../CategoryBadge';
@@ -159,11 +159,15 @@ export function TechnicianDashboardView({
   loading,
   onOpenCompleted,
   onOpenEarnings,
+  workingNow,
 }: {
   completions: Completion[];
   loading: boolean;
   onOpenCompleted: () => void;
   onOpenEarnings: () => void;
+  /** The "working on now" card: right under the Jobs completed and Earnings
+   * tiles, and still shown (in the tiles' place) before there are any stats. */
+  workingNow?: ReactNode;
 }) {
   const { width: windowWidth } = useWindowDimensions();
   // The layout follows the room this screen really has (a web sidebar takes
@@ -392,9 +396,15 @@ export function TechnicianDashboardView({
       <View className="flex-1 bg-gray-50" onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 40 }}>
           {loading ? (
-            <Skeleton wide />
+            <>
+              <Skeleton wide />
+              {workingNow}
+            </>
           ) : completions.length === 0 ? (
-            <Rise index={next()}>{empty}</Rise>
+            <>
+              <Rise index={next()}>{empty}</Rise>
+              {workingNow}
+            </>
           ) : (
             <>
               <Rise index={next()}>
@@ -409,6 +419,7 @@ export function TechnicianDashboardView({
                 </View>
               </Rise>
               <Rise index={next()}>{tiles}</Rise>
+              {workingNow ? <Rise index={next()}>{workingNow}</Rise> : null}
               <Rise index={next()}>
                 <View style={{ flexDirection: split ? 'row' : 'column', gap: 16, alignItems: split ? 'flex-start' : 'stretch' }}>
                   <View style={{ flex: split ? 2 : undefined, minWidth: 0 }}>{chartCard}</View>
@@ -441,16 +452,19 @@ export function TechnicianDashboardView({
           <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 12 }}>
             <Text className="text-center text-[13px] font-medium text-gray-500">{rangeText}</Text>
             <Rise index={next()}>{tiles}</Rise>
+            {workingNow ? <Rise index={next()}>{workingNow}</Rise> : null}
             <Rise index={next()}>{chartCard}</Rise>
             <Rise index={next()}>{listCard}</Rise>
           </View>
         ) : loading ? (
-          <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 12 }}>
             <Skeleton wide={false} />
+            {workingNow}
           </View>
         ) : (
-          <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 16, gap: 12 }}>
             <Rise index={next()}>{empty}</Rise>
+            {workingNow}
           </View>
         )}
       </ScrollView>
