@@ -217,7 +217,7 @@ export function CatalogProductDetail({
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="px-6 pt-16">
+      <View className="px-6 pt-4">
         {imageBox}
         {info}
       </View>

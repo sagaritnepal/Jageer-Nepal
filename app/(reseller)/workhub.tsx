@@ -822,9 +822,11 @@ export default function WorkHub() {
     </>
   );
 
+  // On a phone the title and the buttons are stacked: in one row, the five
+  // buttons took all the width and squeezed the title to a one-letter column.
   const header = (
-    <View className="flex-row items-center gap-2.5">
-      <View className="flex-1">
+    <View className={wide ? 'flex-row items-center gap-2.5' : ''} style={wide ? undefined : { gap: 10 }}>
+      <View className={wide ? 'flex-1' : ''}>
         <Text className="text-[15px] font-bold text-gray-900">
           {live.length} job{live.length === 1 ? '' : 's'} in play
         </Text>
@@ -833,67 +835,69 @@ export default function WorkHub() {
           {overdueCount > 0 ? ` · ${overdueCount} overdue` : ''}
         </Text>
       </View>
-      {view === 'sheet' && (
-        <Pressable
-          onPress={() => setMaximised(true)}
-          className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
-          accessibilityLabel="Full screen"
-        >
-          <Ionicons name="expand-outline" size={15} color="#374151" />
-          <Text className="text-[12.5px] font-semibold text-gray-700">Full screen</Text>
-        </Pressable>
-      )}
-
-      <Pressable
-        onPress={() => router.push('/(reseller)/new-request?from=workhub' as any)}
-        className="h-9 flex-row items-center gap-1.5 rounded-lg px-3"
-        style={{ backgroundColor: BLUE }}
-      >
-        <Ionicons name="add" size={16} color="#FFFFFF" />
-        <Text className="text-[12.5px] font-semibold text-white">Add work</Text>
-      </Pressable>
-
-      {view === 'sheet' && (
-        <>
+      <View className="flex-row flex-wrap items-center" style={{ gap: 10 }}>
+        {view === 'sheet' && (
           <Pressable
-            onPress={() => saveRecord('pdf')}
-            disabled={!!exporting}
-            className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 disabled:opacity-50"
+            onPress={() => setMaximised(true)}
+            className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
+            accessibilityLabel="Full screen"
           >
-            <Ionicons name="document-text-outline" size={15} color="#B91C1C" />
-            <Text className="text-[12.5px] font-semibold text-gray-700">
-              {exporting === 'pdf' ? 'Saving…' : 'PDF'}
-            </Text>
+            <Ionicons name="expand-outline" size={15} color="#374151" />
+            <Text className="text-[12.5px] font-semibold text-gray-700">Full screen</Text>
           </Pressable>
-          <Pressable
-            onPress={() => saveRecord('xlsx')}
-            disabled={!!exporting}
-            className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 disabled:opacity-50"
-          >
-            <Ionicons name="grid-outline" size={15} color="#047857" />
-            <Text className="text-[12.5px] font-semibold text-gray-700">
-              {exporting === 'xlsx' ? 'Saving…' : 'Excel'}
-            </Text>
-          </Pressable>
-        </>
-      )}
+        )}
 
-      {view === 'board' && (
         <Pressable
-          onPress={() => setView('sheet')}
+          onPress={() => router.push('/(reseller)/new-request?from=workhub' as any)}
+          className="h-9 flex-row items-center gap-1.5 rounded-lg px-3"
+          style={{ backgroundColor: BLUE }}
+        >
+          <Ionicons name="add" size={16} color="#FFFFFF" />
+          <Text className="text-[12.5px] font-semibold text-white">Add work</Text>
+        </Pressable>
+
+        {view === 'sheet' && (
+          <>
+            <Pressable
+              onPress={() => saveRecord('pdf')}
+              disabled={!!exporting}
+              className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 disabled:opacity-50"
+            >
+              <Ionicons name="document-text-outline" size={15} color="#B91C1C" />
+              <Text className="text-[12.5px] font-semibold text-gray-700">
+                {exporting === 'pdf' ? 'Saving…' : 'PDF'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => saveRecord('xlsx')}
+              disabled={!!exporting}
+              className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 disabled:opacity-50"
+            >
+              <Ionicons name="grid-outline" size={15} color="#047857" />
+              <Text className="text-[12.5px] font-semibold text-gray-700">
+                {exporting === 'xlsx' ? 'Saving…' : 'Excel'}
+              </Text>
+            </Pressable>
+          </>
+        )}
+
+        {view === 'board' && (
+          <Pressable
+            onPress={() => setView('sheet')}
+            className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
+          >
+            <Ionicons name="list-outline" size={15} color="#374151" />
+            <Text className="text-[12.5px] font-semibold text-gray-700">Back to list</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={() => router.push('/(reseller)/employees' as any)}
           className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
         >
-          <Ionicons name="list-outline" size={15} color="#374151" />
-          <Text className="text-[12.5px] font-semibold text-gray-700">Back to list</Text>
+          <Ionicons name="people-outline" size={15} color="#374151" />
+          <Text className="text-[12.5px] font-semibold text-gray-700">My team</Text>
         </Pressable>
-      )}
-      <Pressable
-        onPress={() => router.push('/(reseller)/employees' as any)}
-        className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
-      >
-        <Ionicons name="people-outline" size={15} color="#374151" />
-        <Text className="text-[12.5px] font-semibold text-gray-700">My team</Text>
-      </Pressable>
+      </View>
     </View>
   );
 

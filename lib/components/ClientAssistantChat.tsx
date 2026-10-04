@@ -22,6 +22,7 @@ import * as Speech from 'expo-speech';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery } from '../hooks/useSupabase';
 import { useClientAssistant, type ClientChatTurnResult } from '../hooks/useClientAssistant';
+import { assistantStartPosition } from '../utils/assistantBubble';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -73,10 +74,9 @@ export function ClientAssistantChat({ basePath }: { basePath: string }) {
   const glowScale = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
   const glowOpacity = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.9] });
 
-  const [basePos, setBasePos] = useState(() => ({
-    x: 20,
-    y: screenHeight - 28 - BUTTON_SIZE - insets.bottom,
-  }));
+  const [basePos, setBasePos] = useState(() =>
+    assistantStartPosition({ screenWidth, screenHeight, insetBottom: insets.bottom, size: BUTTON_SIZE })
+  );
   const drag = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const dragged = useRef(false);
   const panResponder = useRef(

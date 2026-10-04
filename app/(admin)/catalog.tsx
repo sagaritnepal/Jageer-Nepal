@@ -50,12 +50,15 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
   }
 
   return (
+    // On a phone the buttons drop under the item instead of squeezing its name
+    // into a one-word-per-line column: the item keeps at least 220px, and the
+    // buttons wrap onto their own line when there is not room beside it.
     <View
-      className={`mb-2.5 flex-row items-center justify-between rounded-xl border bg-white p-4 ${
+      className={`mb-2.5 flex-row flex-wrap items-center justify-between gap-2.5 rounded-xl border bg-white p-4 ${
         item.is_active ? 'border-gray-200' : 'border-gray-200 opacity-50'
       }`}
     >
-      <View className="flex-1 flex-row items-center gap-3">
+      <View className="flex-row items-center gap-3" style={{ flexGrow: 1, flexShrink: 1, flexBasis: 220 }}>
         <Pressable
           onPress={handleReplacePhoto}
           disabled={uploading}
@@ -68,7 +71,7 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
           )}
         </Pressable>
         <View className="flex-1">
-          <View className="flex-row items-center gap-1.5">
+          <View className="flex-row flex-wrap items-center gap-1.5">
             <Text className="font-semibold text-gray-900">{item.name}</Text>
             {isPendingSubmission && (
               <View className="rounded-full bg-amber-100 px-2 py-0.5">
@@ -85,7 +88,7 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
           )}
         </View>
       </View>
-      <View className="flex-row items-center gap-2">
+      <View className="flex-row items-center gap-2" style={{ marginLeft: 'auto' }}>
         <Pressable
           onPress={() => updateItem.mutate({ id: item.id, values: { is_active: !item.is_active } })}
           disabled={updateItem.isPending}

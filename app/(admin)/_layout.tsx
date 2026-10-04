@@ -41,6 +41,11 @@ export default function AdminLayout() {
       screenOptions={{
         header: ({ options }) => <PortalHeaderBar title={options.title} />,
         tabBarActiveTintColor: ROLE_ACCENT.admin,
+        // Admin has 8 tabs, so each gets under 50px on a phone: a slightly
+        // smaller label and no side padding keep "Overview" and "Requests"
+        // from being cut off.
+        tabBarLabelStyle: { fontSize: 9.5 },
+        tabBarItemStyle: { paddingHorizontal: 0 },
         ...(isWideWeb ? { tabBarStyle: { display: 'none' } } : null),
       }}
     >
@@ -48,7 +53,8 @@ export default function AdminLayout() {
         name="dashboard"
         options={{
           title: 'Platform Overview',
-          tabBarLabel: 'Overview',
+          // Short on purpose: with 8 tabs, "Overview" does not fit on a phone.
+          tabBarLabel: 'Home',
           tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} />,
         }}
       />
@@ -76,7 +82,7 @@ export default function AdminLayout() {
         name="categories"
         options={{
           title: 'Service Categories',
-          tabBarLabel: 'Categories',
+          tabBarLabel: 'Services',
           tabBarIcon: ({ color, focused }) => <TabIcon name="pricetag" color={color} focused={focused} />,
         }}
       />

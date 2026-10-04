@@ -8,6 +8,7 @@ import { useAuthStore, useRole } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { useScreenHeader } from '../../hooks/useScreenHeader';
+import { useIsWideWeb } from '../../hooks/useWideGrid';
 import { usePhoneContacts } from '../../hooks/usePhoneContacts';
 import { useScanBill } from '../../hooks/useScanBill';
 import { DateField } from '../DateTimeFields';
@@ -541,6 +542,9 @@ function TransactionForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  // The keyboard-driven desk layout is for a wide web screen; a phone (or a
+  // phone browser) gets the same touch form the native app does.
+  const desktopWeb = useIsWideWeb();
   const createTx = useSupabaseInsert('business_transactions');
   const { confirm: confirmSave, dialog: confirmDialog } = useConfirmSave();
   const updateTx = useSupabaseUpdate('business_transactions');
@@ -593,7 +597,7 @@ function TransactionForm({
   // amount - whichever was typed last drives the other, so a percent keeps
   // following the subtotal as items change. Native only ever uses the amount.
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>(
-    Platform.OS === 'web' && !initial ? 'percent' : 'amount'
+    desktopWeb && !initial ? 'percent' : 'amount'
   );
   const [discountPercentInput, setDiscountPercentInput] = useState('');
   // Defaults to 0 (not 13) for a brand-new bill - the VAT row itself starts
@@ -843,7 +847,7 @@ function TransactionForm({
         // The typeahead lets an item be typed straight into the bill; one
         // that isn't in the catalog yet is remembered for next time, like
         // "Add as new item" in the picker popup does.
-        if (Platform.OS === 'web') {
+        if (desktopWeb) {
           const known = new Set([
             ...products.map((p) => p.name.trim().toLowerCase()),
             ...(financeItems ?? []).map((f) => f.name.trim().toLowerCase()),
@@ -1153,12 +1157,12 @@ function TransactionForm({
   );
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || !isBill) return;
+    if (!desktopWeb || !isBill) return;
     const last = items[items.length - 1];
     if (!last || last.description.trim() || last.qty.trim() || last.rate.trim()) {
       setItems((prev) => [...prev, { description: '', qty: '', rate: '' }]);
     }
-  }, [items, isBill]);
+  }, [items, isBill, desktopWeb]);
 
   // On web the form's name and its Scan Bill button live in the top bar; the
   // heading row that used to repeat the name under it is gone.
@@ -1166,7 +1170,7 @@ function TransactionForm({
   const scanRef = useRef<() => void>(() => {});
   scanRef.current = newExpenses ? handleScanForExpenseRow : handleScan;
   useScreenHeader(
-    Platform.OS === 'web'
+    desktopWeb
       ? {
           title: newExpenses ? 'New Expenses' : `${initial ? 'Edit' : 'New'} ${TYPE_META[type].label}`,
           resetTitle: 'Statement',
@@ -1186,7 +1190,7 @@ function TransactionForm({
     [type, initial?.id, scanning]
   );
 
-  if (Platform.OS === 'web' && type === 'expense' && !initial) {
+  if (desktopWeb && type === 'expense' && !initial) {
     return (
       <View className="mb-4">
         <View className="mb-4 flex-row" style={{ gap: 24 }}>
@@ -1344,7 +1348,7 @@ function TransactionForm({
   // it's still one bill either way. All state/handlers below are the exact
   // same ones the original single-column return further down uses -
   // nothing here is a separate calculation.
-  if (Platform.OS === 'web' && isBill) {
+  if (desktopWeb && isBill) {
     const accent = FINANCE_ENTRY_ACCENT;
     const accentShadow = FINANCE_ENTRY_SHADOW;
     const partyLabel = type === 'purchase' ? 'Vendor' : 'Customer';
@@ -2342,6 +2346,7 @@ function TransferFeedRow({
 }
 
 export function TransactionsScreen({ basePath }: { basePath?: string }) {
+  const desktopWeb = useIsWideWeb();
   // voice* params arrive from Sagar AI Assistant (see FloatingAssistantChat)
   // - a spoken or typed command gets routed here the same way a Shortcuts
   // tap does (?type=...&add=1), just with these extra fields for
@@ -2585,7 +2590,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   // On web the open form already lists recent entries down its right side,
   // so repeating the whole history underneath it showed the same statement
   // twice - see RecentEntriesCard.
-  const hideFeed = showForm && Platform.OS === 'web';
+  const hideFeed = showForm && desktopWeb;
 
   function handleDelete(tx: BusinessTransaction) {
     showAlert('Delete this transaction?', undefined, [
@@ -2645,7 +2650,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         ListHeaderComponent={
           <>
             {/* On web the top bar already carries the name. */}
-            {Platform.OS !== 'web' && (
+            {!desktopWeb && (
             <View className="mb-3 flex-row items-center justify-between">
               {isLockedToType ? (
                 <View className="flex-row items-center gap-2">
@@ -2715,7 +2720,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                   // Entering several bills in a row is the whole point of
                   // the web entry screen: stay on it with a blank form and a
                   // quick confirmation, rather than dropping back to history.
-                  if (Platform.OS === 'web' && isQuickAddFlow) {
+                  if (desktopWeb && isQuickAddFlow) {
                     showAlert(`${TYPE_META[initialFilter].label} saved`, 'The form is ready for the next entry.');
                     setFormKey((k) => k + 1);
                     setTimeout(() => listRef.current?.scrollToPosition(0, 0, true), 0);

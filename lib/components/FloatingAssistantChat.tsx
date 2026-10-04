@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Speech from 'expo-speech';
 import { useAuthStore } from '../hooks/useAuth';
 import { useChatAssistant, type ChatTurnResult } from '../hooks/useChatAssistant';
+import { assistantStartPosition } from '../utils/assistantBubble';
 import { FINANCE_ACTION_META, buildFinancePrefillRoute } from '../utils/financeVoiceActions';
 
 function clamp(value: number, min: number, max: number) {
@@ -68,10 +69,9 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
   // release, so dragging feels smooth without ever reading Animated's
   // private internals. A release that barely moved (a real tap) opens the
   // chat instead of "dropping" the bubble in place.
-  const [basePos, setBasePos] = useState(() => ({
-    x: 20,
-    y: screenHeight - 28 - BUTTON_SIZE - insets.bottom,
-  }));
+  const [basePos, setBasePos] = useState(() =>
+    assistantStartPosition({ screenWidth, screenHeight, insetBottom: insets.bottom, size: BUTTON_SIZE })
+  );
   const drag = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const dragged = useRef(false);
   const panResponder = useRef(

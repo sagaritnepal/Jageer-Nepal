@@ -1,6 +1,7 @@
 // lib/components/finance/QuickPaymentScreen.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
+import { useIsWideWeb } from '../../hooks/useWideGrid';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +49,9 @@ export function QuickPaymentScreen() {
 }
 
 function QuickPaymentForm() {
+  // The keyboard-driven desk layout is for a wide web screen; a phone (or a
+  // phone browser) gets the same touch form the native app does.
+  const desktopWeb = useIsWideWeb();
   // voice* params arrive from the Finance dashboard's voice-command button,
   // routed here the same way a Shortcuts tap is (?type=in/out) - applied
   // once on mount below, same "review before save" rule as Scan Bill.
@@ -582,7 +586,7 @@ function QuickPaymentForm() {
   const scanRowRef = useRef<() => void>(() => {});
   scanRowRef.current = handleScanForRow;
   useScreenHeader(
-    Platform.OS === 'web'
+    desktopWeb
       ? {
           title: meta.label,
           resetTitle: 'Quick Payment',
@@ -602,7 +606,7 @@ function QuickPaymentForm() {
     [meta.label, scanning]
   );
 
-  if (Platform.OS === 'web') {
+  if (desktopWeb) {
     const accent = FINANCE_ENTRY_ACCENT;
     return (
       <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
