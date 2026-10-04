@@ -469,6 +469,33 @@ export interface ServiceCategory {
   created_at: string;
 }
 
+// Written by the database (migration 0082), never by the app: one row per
+// thing someone should hear about - a technician accepting, declining or
+// finishing a job, a payment, a reseller cancelling work. The app only reads
+// them and marks its own as read.
+export type NotificationKind =
+  | 'job_accepted'
+  | 'job_declined'
+  | 'hold_requested'
+  | 'hold_resumed'
+  | 'job_completed'
+  | 'job_reopened'
+  | 'payment_recorded'
+  | 'chalan_added'
+  | 'work_cancelled';
+
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  kind: NotificationKind;
+  request_id: string | null;
+  actor_id: string | null;
+  title: string;
+  body: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
 // Minimal shape expected by Supabase's generated Database type.
 // Expand this if/when you swap in the CLI-generated version.
 export interface Database {
@@ -486,6 +513,12 @@ export interface Database {
       orders: { Row: Order; Insert: Partial<Order>; Update: Partial<Order>; Relationships: [] };
       order_items: { Row: OrderItem; Insert: Partial<OrderItem>; Update: Partial<OrderItem>; Relationships: [] };
       job_cards: { Row: JobCard; Insert: Partial<JobCard>; Update: Partial<JobCard>; Relationships: [] };
+      notifications: {
+        Row: AppNotification;
+        Insert: Partial<AppNotification>;
+        Update: Partial<AppNotification>;
+        Relationships: [];
+      };
       reviews: { Row: Review; Insert: Partial<Review>; Update: Partial<Review>; Relationships: [] };
       messages: { Row: Message; Insert: Partial<Message>; Update: Partial<Message>; Relationships: [] };
       support_tickets: {

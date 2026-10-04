@@ -5,11 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, subscribeToTable } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
+import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
 import { distanceKm } from '../../lib/utils/distance';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
-import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import type { Order, Product, ServiceRequest } from '../../types/database.types';
@@ -195,9 +195,11 @@ function ManageButtons({ data }: { data: JobRowData }) {
           onPress={data.onDelete}
           disabled={data.deleting}
           hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel work"
           className="h-8 w-8 items-center justify-center rounded-lg disabled:opacity-40"
         >
-          <Ionicons name="trash-outline" size={17} color="#DC2626" />
+          <Ionicons name="close-circle-outline" size={19} color="#DC2626" />
         </Pressable>
       )}
     </View>
@@ -291,8 +293,8 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
     isIncoming ? 'id, full_name, avatar_url' : '*'
   );
   const { data: technicianProfile } = useSupabaseRow('profiles', item.technician_id ?? undefined);
-  const updateRequest = useSupabaseUpdate('service_requests');
-  const [deleting, setDeleting] = useState(false);
+  const { confirmCancelWork, busyId } = useCancelWork();
+  const deleting = busyId === item.id;
 
   const customerName = item.customer_name ?? customerProfile?.full_name ?? 'Customer';
   // An unclaimed request keeps the customer's number hidden until accepted.
@@ -352,28 +354,8 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
   // Any job this reseller owns can be cancelled while it's still open (a
   // no-show app customer included); only their own walk-in jobs can be
   // edited - an app customer's details and approved price are theirs.
-  const canCancel = !isIncoming && item.status !== 'resolved' && item.status !== 'cancelled';
+  const canCancel = !isIncoming && canCancelWork(item);
   const canEdit = canCancel && item.origin === 'reseller';
-
-  function handleDelete() {
-    showAlert('Cancel this request?', "This marks it as cancelled - it can't be undone.", [
-      { text: 'Keep it', style: 'cancel' },
-      {
-        text: 'Cancel request',
-        style: 'destructive',
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            await updateRequest.mutateAsync({ id: item.id, values: { status: 'cancelled' } });
-          } catch (err) {
-            showAlert('Could not cancel', getErrorMessage(err));
-          } finally {
-            setDeleting(false);
-          }
-        },
-      },
-    ]);
-  }
 
   return (
     <JobRowView
@@ -390,7 +372,7 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
         action,
         open,
         onEdit: canEdit ? () => router.push(`/(reseller)/edit-request?id=${item.id}`) : undefined,
-        onDelete: canCancel ? handleDelete : undefined,
+        onDelete: canCancel ? () => confirmCancelWork(item) : undefined,
         deleting,
       }}
     />

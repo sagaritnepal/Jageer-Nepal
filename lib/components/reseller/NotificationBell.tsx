@@ -3,14 +3,14 @@ import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../hooks/useAuth';
-import { useResellerNotifications } from '../../hooks/useResellerNotifications';
+import { useNotifications } from '../../hooks/useNotifications';
 
 /** The notification bell in a reseller's header: opens their notifications -
- * technicians accepting their jobs - and shows how many are new since they
- * last looked. The bell fills in and turns blue while there are some. */
+ * what technicians have done on their jobs - and shows how many are unread.
+ * The bell fills in and turns blue while there are some. */
 export function ResellerNotificationBell() {
   const userId = useAuthStore((state) => state.session?.user.id);
-  const { unread } = useResellerNotifications(userId);
+  const { unread } = useNotifications(userId);
 
   return (
     <Pressable

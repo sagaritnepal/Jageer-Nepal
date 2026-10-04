@@ -34,6 +34,7 @@ import { parseAmount } from '../../../lib/utils/number';
 import { assignTechnician, showJobSentAlert } from '../../../lib/utils/assignTechnician';
 import { reopenCompletedJob, withdrawJobOffer, claimServiceRequest } from '../../../lib/hooks/useJobOffers';
 import { respondToJobHold } from '../../../lib/hooks/useJobHold';
+import { canCancelWork, useCancelWork } from '../../../lib/hooks/useCancelWork';
 import { distanceKm } from '../../../lib/utils/distance';
 import { jobAmountDue } from '../../../lib/utils/jobAmount';
 import type { ServiceRequest } from '../../../types/database.types';
@@ -318,6 +319,24 @@ function MobileBar({ hint, children }: { hint: string; children: ReactNode }) {
 
 // ---------------------------------------------------------------- states
 
+/** "Cancel work" for the reseller's own job, at whatever stage it has reached
+ * (until it is finished). Asks "are you sure?" before doing anything. */
+function CancelWorkButton({ request }: { request: ServiceRequest }) {
+  const { confirmCancelWork, busyId } = useCancelWork();
+  if (!canCancelWork(request)) return null;
+  const busy = busyId === request.id;
+  return (
+    <DetailButton
+      label={busy ? 'Cancelling…' : 'Cancel work'}
+      icon="close-circle-outline"
+      kind="danger"
+      height={42}
+      disabled={busy}
+      onPress={() => confirmCancelWork(request)}
+    />
+  );
+}
+
 function JobTracking({ request }: { request: ServiceRequest }) {
   // A "reseller" origin request's client_id is just the reseller's own id
   // (there's no real customer profile behind it), so only look up a photo
@@ -492,6 +511,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
                 disabled={withdrawing}
                 onPress={confirmWithdraw}
               />
+              <CancelWorkButton request={request} />
             </NextStepCard>
           )}
           {!finished && !cancelled && !awaitingAnswer && (
@@ -499,7 +519,9 @@ function JobTracking({ request }: { request: ServiceRequest }) {
               wide={wide}
               title="Wait for the job to finish"
               hint="You can collect payment once the technician marks the job done."
-            />
+            >
+              <CancelWorkButton request={request} />
+            </NextStepCard>
           )}
           <ProgressCard request={request} />
         </>
@@ -610,7 +632,9 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
             wide={wide}
             title="Pick a technician"
             hint="Set your price first if you know it, then choose who does the job."
-          />
+          >
+            <CancelWorkButton request={request} />
+          </NextStepCard>
           <ProgressCard request={request} />
         </>
       }
@@ -783,6 +807,7 @@ function SendQuote({ request, userId }: { request: ServiceRequest; userId: strin
         <>
           <NextStepCard wide={wide} title="Send the quote" hint="Needs the problem written down and a price.">
             {sendButton}
+            <CancelWorkButton request={request} />
           </NextStepCard>
           <ProgressCard request={request} />
         </>
@@ -856,6 +881,7 @@ function WaitingForApproval({ request }: { request: ServiceRequest }) {
                 onPress={() => Linking.openURL(`tel:${customerPhone}`)}
               />
             )}
+            <CancelWorkButton request={request} />
           </NextStepCard>
           <ProgressCard request={request} />
         </>
@@ -908,7 +934,9 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
             wide={wide}
             title="Pick a technician"
             hint={`The customer approved ${money(request.quoted_price)} — choose who does the job.`}
-          />
+          >
+            <CancelWorkButton request={request} />
+          </NextStepCard>
           <ProgressCard request={request} />
         </>
       }

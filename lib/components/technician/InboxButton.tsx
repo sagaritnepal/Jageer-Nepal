@@ -5,11 +5,13 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useOpenTeamJobs } from '../../hooks/useJobOffers';
+import { useNotifications } from '../../hooks/useNotifications';
 
 /** The notification bell in a technician's header: opens the Inbox - job
  * offers to answer, open team work to take and the employment link, which
- * used to be the Home tab. Shows how many things are waiting there, and the
- * bell fills in and turns blue while something is. */
+ * used to be the Home tab - plus updates such as a reseller cancelling work.
+ * Shows how many things are waiting there, and the bell fills in and turns
+ * blue while something is. */
 export function InboxButton() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { data: offers } = useSupabaseQuery('service_requests', {
@@ -18,7 +20,8 @@ export function InboxButton() {
     queryOptions: { refetchInterval: 20_000 },
   });
   const open = useOpenTeamJobs(userId);
-  const waiting = (offers?.length ?? 0) + open.length;
+  const { unread } = useNotifications(userId);
+  const waiting = (offers?.length ?? 0) + open.length + unread;
 
   return (
     <Pressable

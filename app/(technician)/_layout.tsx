@@ -9,6 +9,7 @@ import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../l
 import { IncomingJobOffer } from '../../lib/components/IncomingJobOffer';
 import { TechnicianHoldNotice } from '../../lib/components/HoldNotice';
 import { TechnicianLeaveNotice } from '../../lib/components/LeaveRequestNotice';
+import { NotificationPopup } from '../../lib/components/NotificationPopup';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useMyStaffRole } from '../../lib/hooks/useTechnicianEmployment';
 import { useShareLiveLocation } from '../../lib/hooks/useShareLiveLocation';
@@ -122,6 +123,7 @@ export default function TechnicianLayout() {
         )}
         <TechnicianHoldNotice technicianId={userId} />
         <TechnicianLeaveNotice technicianId={userId} />
+        <NotificationPopup userId={userId} portal="technician" />
         <IncomingJobOffer technicianId={userId} />
       </View>
     </RoleGuard>

@@ -317,7 +317,7 @@ export function PersonRow({
   );
 }
 
-type ButtonKind = 'primary' | 'green' | 'ghost' | 'tint' | 'red';
+type ButtonKind = 'primary' | 'green' | 'ghost' | 'tint' | 'red' | 'danger';
 
 /** The one button style used across both detail pages. */
 export function DetailButton({
@@ -341,6 +341,8 @@ export function DetailButton({
     ghost: { bg: '#FFFFFF', fg: '#374151', border: '#D1D5DB' },
     tint: { bg: '#EFF6FF', fg: '#1D4ED8', border: '#BFDBFE' },
     red: { bg: '#DC2626', fg: '#FFFFFF' },
+    // A destructive action that is not the main one: outlined, red text.
+    danger: { bg: '#FFFFFF', fg: '#DC2626', border: '#FECACA' },
   };
   const style = styles[kind];
   return (

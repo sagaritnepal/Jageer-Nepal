@@ -9,6 +9,7 @@ import { useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useRankedTechnicians } from '../../lib/hooks/useTechnicianRanking';
 import { assignTechnician, showJobSentAlert } from '../../lib/utils/assignTechnician';
+import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
@@ -328,6 +329,7 @@ function JobSheet({
   technicianName,
   onAssign,
   onRequest,
+  onCancelWork,
   busyId,
   wide,
   expanded,
@@ -336,6 +338,8 @@ function JobSheet({
   technicianName: (id: string) => string;
   onAssign: (request: ServiceRequest) => void;
   onRequest: (request: ServiceRequest) => void;
+  /** Calls off a job that is not finished yet (asks "are you sure?" first). */
+  onCancelWork: (request: ServiceRequest) => void;
   busyId: string | null;
   wide: boolean;
   /** Full screen: nothing is cut short, however long the job's name is. */
@@ -413,6 +417,19 @@ function JobSheet({
                   </Text>
                 </Pressable>
               </View>
+              {canCancelWork(r) && (
+                <Pressable
+                  onPress={() => onCancelWork(r)}
+                  disabled={busyId === r.id}
+                  className="mt-2 h-9 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white disabled:opacity-50"
+                  style={{ borderColor: '#FECACA' }}
+                >
+                  <Ionicons name="close-circle-outline" size={15} color="#DC2626" />
+                  <Text className="text-[12.5px] font-semibold" style={{ color: '#DC2626' }}>
+                    {busyId === r.id ? 'Cancelling…' : 'Cancel work'}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           );
         })}
@@ -428,7 +445,7 @@ function JobSheet({
         {head('With', { width: 150 })}
         {head('Status', { width: 170 })}
         {head('Payment', { width: 100 })}
-        <Text className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-gray-400" style={{ width: 210 }}>
+        <Text className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-gray-400" style={{ width: 254 }}>
           Assign
         </Text>
       </View>
@@ -475,7 +492,7 @@ function JobSheet({
             <View className={cell} style={{ width: 100 }}>
               <Chip {...pay} />
             </View>
-            <View className="flex-row px-3 py-2" style={{ width: 210, gap: 8 }}>
+            <View className="flex-row px-3 py-2" style={{ width: 254, gap: 8 }}>
               {isOpenJob(r) ? (
                 <>
                   <Pressable
@@ -496,6 +513,17 @@ function JobSheet({
                       Request
                     </Text>
                   </Pressable>
+                  {canCancelWork(r) && (
+                    <Pressable
+                      onPress={() => onCancelWork(r)}
+                      disabled={busyId === r.id}
+                      accessibilityLabel="Cancel work"
+                      className="h-9 w-9 items-center justify-center rounded-lg border bg-white disabled:opacity-50"
+                      style={{ borderColor: '#FECACA' }}
+                    >
+                      <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
+                    </Pressable>
+                  )}
                 </>
               ) : (
                 <Pressable
@@ -526,6 +554,7 @@ export default function WorkHub() {
   const queryClient = useQueryClient();
   const updateRequest = useSupabaseUpdate('service_requests');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { confirmCancelWork, busyId: cancellingId } = useCancelWork();
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
   const [assigning, setAssigning] = useState<{ request: ServiceRequest; mode: 'staff' | 'freelance' } | null>(null);
   const [sending, setSending] = useState(false);
@@ -947,7 +976,8 @@ export default function WorkHub() {
         technicianName={technicianName}
         onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
         onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
-        busyId={busyId}
+        onCancelWork={confirmCancelWork}
+        busyId={cancellingId ?? busyId}
         wide={wide}
       />
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
@@ -981,7 +1011,8 @@ export default function WorkHub() {
               technicianName={technicianName}
               onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
               onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
-              busyId={busyId}
+              onCancelWork={confirmCancelWork}
+              busyId={cancellingId ?? busyId}
               wide={wide}
               expanded
             />

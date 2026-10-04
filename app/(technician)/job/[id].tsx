@@ -336,7 +336,9 @@ function JobCard({ id }: { id: string }) {
                 ? request.payment_status === 'paid'
                   ? 'Completed and paid'
                   : 'Completed - waiting for payment'
-                : request.status.replace('_', ' ')}
+                : request.status === 'cancelled'
+                  ? 'Cancelled by the reseller - no more work needed'
+                  : request.status.replace('_', ' ')}
         </Text>
         {request.status === 'in_progress' && (
           <Text className="mt-1 text-xs text-gray-500">

@@ -8,7 +8,7 @@ import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
 import { ResellerHoldNotice } from '../../lib/components/HoldNotice';
 import { ResellerLeaveRequestNotice } from '../../lib/components/LeaveRequestNotice';
-import { ResellerJobAcceptedNotice } from '../../lib/components/JobAcceptedNotice';
+import { NotificationPopup } from '../../lib/components/NotificationPopup';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/components/finance/FinanceDashboardScreen';
 
@@ -186,7 +186,7 @@ export default function ResellerLayout() {
           tabs
         )}
         <ResellerHoldNotice resellerId={userId} />
-        <ResellerJobAcceptedNotice resellerId={userId} />
+        <NotificationPopup userId={userId} portal="reseller" />
         <ResellerLeaveRequestNotice resellerId={userId} />
       </View>
     </RoleGuard>
