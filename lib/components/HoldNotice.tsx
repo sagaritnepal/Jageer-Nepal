@@ -8,16 +8,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSupabaseQuery, subscribeToTable } from '../hooks/useSupabase';
 import type { ServiceRequest } from '../../types/database.types';
 
-type Tone = 'amber' | 'gray';
+export type CapsuleTone = 'amber' | 'gray' | 'green';
+type Tone = CapsuleTone;
 
 const TONES: Record<Tone, { bg: string; fg: string }> = {
   amber: { bg: '#D97706', fg: '#FFFFFF' },
   gray: { bg: '#374151', fg: '#FFFFFF' },
+  green: { bg: '#16A34A', fg: '#FFFFFF' },
 };
 
 /** A small floating pill at the top of the screen that slides in over
- * whichever tab is open - tap to jump to the job, optional × to dismiss. */
-function HoldCapsule({
+ * whichever tab is open - tap to jump to the job, optional × to dismiss.
+ * Shared by the other pop-up notices (see JobAcceptedNotice). */
+export function HoldCapsule({
   tone,
   icon,
   label,

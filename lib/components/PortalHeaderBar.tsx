@@ -8,6 +8,7 @@ import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseUpdate } from '../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { InboxButton } from './technician/InboxButton';
+import { ResellerNotificationBell } from './reseller/NotificationBell';
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -75,6 +76,7 @@ export function PortalHeaderBar({
   title,
   showAvailabilityToggle,
   showInbox,
+  showNotifications,
   backTo,
   hideAccount,
   left,
@@ -84,6 +86,8 @@ export function PortalHeaderBar({
   showAvailabilityToggle?: boolean;
   /** Technician only: a button to the Inbox, with a count of what is waiting. */
   showInbox?: boolean;
+  /** Reseller only: the notification bell - technicians accepting their jobs, with a count of the new ones. */
+  showNotifications?: boolean;
   backTo?: string;
   /** Drops the account avatar from the right - where the layout already shows the account elsewhere (the web sidebar). */
   hideAccount?: boolean;
@@ -117,6 +121,7 @@ export function PortalHeaderBar({
       </Text>
       {showAvailabilityToggle && profile?.role === 'technician' && <AvailabilityToggle />}
       {showInbox && profile?.role === 'technician' && <InboxButton />}
+      {showNotifications && profile?.role === 'reseller' && <ResellerNotificationBell />}
       {!!right && (
         <View className="flex-row items-center" style={{ gap: 8 }}>
           {right}

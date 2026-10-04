@@ -8,6 +8,7 @@ import { ROLE_ACCENT } from '../../lib/constants/roleColors';
 import { WebSidebarShell, WEB_SIDEBAR_MIN_WIDTH, type WebNavItem } from '../../lib/components/web/WebSidebarShell';
 import { ResellerHoldNotice } from '../../lib/components/HoldNotice';
 import { ResellerLeaveRequestNotice } from '../../lib/components/LeaveRequestNotice';
+import { ResellerJobAcceptedNotice } from '../../lib/components/JobAcceptedNotice';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/components/finance/FinanceDashboardScreen';
 
@@ -54,6 +55,7 @@ const MAIN_WIDE_ROUTES = [
   '/catalog',
   '/technician',
   '/team-activity',
+  '/notifications',
 ];
 const WIDE_ROUTES = [...FINANCE_WIDE_ROUTES, ...MAIN_WIDE_ROUTES];
 
@@ -69,6 +71,7 @@ export default function ResellerLayout() {
           <PortalHeaderBar
             title={options.title}
             hideAccount={isWideWeb}
+            showNotifications
             left={options.headerLeft?.({ canGoBack: false })}
             right={options.headerRight?.({ canGoBack: false })}
           />
@@ -112,7 +115,7 @@ export default function ResellerLayout() {
           options={{
             href: null,
             title: 'Team',
-            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/profile" />,
+            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/profile" showNotifications />,
           }}
         />
         <Tabs.Screen
@@ -120,7 +123,7 @@ export default function ResellerLayout() {
           options={{
             href: null,
             title: 'Team Activity',
-            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/employees" />,
+            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/employees" showNotifications />,
           }}
         />
         <Tabs.Screen
@@ -128,10 +131,20 @@ export default function ResellerLayout() {
           options={{
             href: null,
             title: 'Employee',
-            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/employees" />,
+            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/employees" showNotifications />,
           }}
         />
         <Tabs.Screen name="rewards" options={{ href: null, title: 'Rewards' }} />
+        {/* Where the notification bell leads. It has its own header (with a
+            back arrow), so the bell is not repeated on it. */}
+        <Tabs.Screen
+          name="notifications"
+          options={{
+            href: null,
+            title: 'Notifications',
+            header: () => <PortalHeaderBar title="Notifications" backTo="/(reseller)/dashboard" />,
+          }}
+        />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Service Request' }} />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a technician' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service details' }} />
@@ -173,6 +186,7 @@ export default function ResellerLayout() {
           tabs
         )}
         <ResellerHoldNotice resellerId={userId} />
+        <ResellerJobAcceptedNotice resellerId={userId} />
         <ResellerLeaveRequestNotice resellerId={userId} />
       </View>
     </RoleGuard>
