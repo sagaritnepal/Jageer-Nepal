@@ -11,6 +11,8 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { useMyEmployment } from '../../lib/hooks/useTechnicianEmployment';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideCardGrid } from '../../lib/components/web/WideCardGrid';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
@@ -279,6 +281,7 @@ function EmploymentStatusCard({ userId }: { userId: string }) {
 }
 
 export default function TechnicianInbox() {
+  const wide = useIsWideWeb();
   const profile = useAuthStore((state) => state.profile);
   const userId = useAuthStore((state) => state.session?.user.id);
 
@@ -312,7 +315,10 @@ export default function TechnicianInbox() {
   const next = () => order++;
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
       <Rise index={next()}>
         <Text className="mb-1 text-2xl font-bold text-gray-900">
           Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
@@ -339,11 +345,13 @@ export default function TechnicianInbox() {
               </Text>
             </View>
           </Appear>
-          {openJobs.map((job) => (
-            <Rise key={job.id} index={next()}>
-              <OpenJobCard item={job} />
-            </Rise>
-          ))}
+          <WideCardGrid cardWidth={440}>
+            {openJobs.map((job) => (
+              <Rise key={job.id} index={next()}>
+                <OpenJobCard item={job} />
+              </Rise>
+            ))}
+          </WideCardGrid>
         </>
       )}
 
@@ -372,11 +380,13 @@ export default function TechnicianInbox() {
               <Text className="text-[15px] font-bold text-gray-900">New assignment{newJobs.length === 1 ? '' : 's'}</Text>
             </View>
           </Appear>
-          {newJobs.map((job) => (
-            <Rise key={job.id} index={next()}>
-              <NewJobCard item={job} />
-            </Rise>
-          ))}
+          <WideCardGrid cardWidth={440}>
+            {newJobs.map((job) => (
+              <Rise key={job.id} index={next()}>
+                <NewJobCard item={job} />
+              </Rise>
+            ))}
+          </WideCardGrid>
         </>
       )}
 
@@ -388,11 +398,13 @@ export default function TechnicianInbox() {
               <Text className="text-[15px] font-bold text-gray-900">In progress</Text>
             </View>
           </Appear>
-          {activeJobs.map((job) => (
-            <Rise key={job.id} index={next()}>
-              <ActiveJobCard item={job} />
-            </Rise>
-          ))}
+          <WideCardGrid cardWidth={440}>
+            {activeJobs.map((job) => (
+              <Rise key={job.id} index={next()}>
+                <ActiveJobCard item={job} />
+              </Rise>
+            ))}
+          </WideCardGrid>
         </>
       )}
     </ScrollView>

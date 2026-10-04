@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { CatalogStockingList } from '../../lib/components/CatalogStockingList';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { ReadableWidth } from '../../lib/components/web/ReadableWidth';
 import { pickAndUploadCatalogImage } from '../../lib/utils/catalogImage';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { parseAmount, decimalInput, digitsInput } from '../../lib/utils/number';
@@ -146,9 +148,13 @@ function CreateProductForm({ onDone }: { onDone: () => void }) {
 
 export default function WholesaleMarket() {
   const [showForm, setShowForm] = useState(false);
+  const wide = useIsWideWeb();
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
       <View className="mb-1 flex-row items-center justify-end">
         <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-orange-500 px-3 py-2">
           <Text className="text-xs font-semibold text-white">{showForm ? 'Cancel' : '+ Create Product'}</Text>
@@ -159,7 +165,11 @@ export default function WholesaleMarket() {
         something new? Submit it for admin review with Create Product.
       </Text>
 
-      {showForm && <CreateProductForm onDone={() => setShowForm(false)} />}
+      {showForm && (
+        <ReadableWidth>
+          <CreateProductForm onDone={() => setShowForm(false)} />
+        </ReadableWidth>
+      )}
 
       <CatalogStockingList priceLabel="Your price to resellers" basePath="/(wholesaler)" />
     </ScrollView>

@@ -12,7 +12,9 @@ import {
   useRespondToHire,
   useRequestToLeave,
 } from '../../lib/hooks/useTechnicianEmployment';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
 import { TimeField } from '../../lib/components/DateTimeFields';
+import { ReadableWidth } from '../../lib/components/web/ReadableWidth';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { isValidPhone10 } from '../../lib/utils/phone';
 import { workHoursIssue } from '../../lib/utils/workHours';
@@ -168,6 +170,7 @@ export default function EmploymentScreen() {
   const leave = useRequestToLeave();
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leaveReason, setLeaveReason] = useState('');
+  const wide = useIsWideWeb();
 
   // Only for cancelling a request that is still pending. Once accepted,
   // leaving needs the employer's approval (handleRequestLeave) - the
@@ -202,7 +205,11 @@ export default function EmploymentScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      <ReadableWidth>
       {userId && <InvitesList technicianId={userId} employed={current?.status === 'accepted'} />}
 
       {!current && userId && <ApplyForm technicianId={userId} />}
@@ -284,6 +291,7 @@ export default function EmploymentScreen() {
           )}
         </View>
       )}
+      </ReadableWidth>
 
       <Modal visible={leaveOpen} transparent animationType="fade" onRequestClose={() => setLeaveOpen(false)}>
         <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={() => setLeaveOpen(false)}>

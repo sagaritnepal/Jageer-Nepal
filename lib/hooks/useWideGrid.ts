@@ -5,6 +5,14 @@ import { WEB_SIDEBAR_MIN_WIDTH } from '../components/web/WebSidebarShell';
 
 const WIDE_GRID_GAP = 16;
 
+/** True on a wide web window (a laptop or desktop with the sidebar showing) -
+ * the one check every "lay this out wider" decision is based on. A phone
+ * browser is still Platform.OS === 'web', hence the width test. */
+export function useIsWideWeb(): boolean {
+  const { width } = useWindowDimensions();
+  return Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
+}
+
 /** Card grids and lists are one column (or two product cards) on a phone. On
  * wide web this gives as many columns as fit at `cardWidth`, measured from the
  * grid itself so it follows whatever width the page column ends up with.

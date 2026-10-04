@@ -1,7 +1,9 @@
 // app/(admin)/users.tsx
 import { useState } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideFlatList } from '../../lib/components/web/WideFlatList';
 import { showAlert } from '../../lib/utils/alert';
 import type { Profile, UserRole, VerificationStatus } from '../../types/database.types';
 
@@ -138,6 +140,7 @@ function UserRow({ user }: { user: Profile }) {
 
 export default function AdminUsers() {
   const [roleFilter, setRoleFilter] = useState<(typeof ROLE_FILTERS)[number]>('all');
+  const wide = useIsWideWeb();
 
   const { data: profiles, isLoading } = useSupabaseQuery('profiles', {
     orderBy: { column: 'created_at', ascending: false },
@@ -146,7 +149,7 @@ export default function AdminUsers() {
   const filtered = roleFilter === 'all' ? profiles : profiles?.filter((p) => p.role === roleFilter);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
+    <View className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
       <View className="mb-4 flex-row flex-wrap gap-2">
         {ROLE_FILTERS.map((role) => (
           <Pressable
@@ -165,7 +168,7 @@ export default function AdminUsers() {
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
 
-      <FlatList data={filtered} keyExtractor={(item) => item.id} renderItem={({ item }) => <UserRow user={item} />} />
+      <WideFlatList data={filtered} keyExtractor={(item) => item.id} renderItem={({ item }) => <UserRow user={item} />} />
     </View>
   );
 }

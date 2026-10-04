@@ -6,6 +6,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../supabase';
 import { useAuthStore } from '../hooks/useAuth';
 import { useCartStore } from '../hooks/useCart';
+import { useIsWideWeb } from '../hooks/useWideGrid';
+import { SplitColumns } from './web/SplitColumns';
 import { showAlert, getErrorMessage } from '../utils/alert';
 
 export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
@@ -18,6 +20,7 @@ export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const wide = useIsWideWeb();
 
   const queryClient = useQueryClient();
 
@@ -62,8 +65,10 @@ export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
     );
   }
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+  // On wide web the cart sits on the left and the shipping, total and Place
+  // order on the right; on a phone it is the same stack, in the same order.
+  const cartItems = (
+    <>
       {items.map((item) => (
         <View
           key={item.product.id}
@@ -93,7 +98,11 @@ export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
           </View>
         </View>
       ))}
+    </>
+  );
 
+  const orderSummary = (
+    <>
       <View className="mb-4 mt-2 rounded-xl bg-white p-5">
         <Text className="mb-1 text-sm font-semibold text-gray-900">Shipping address</Text>
         <TextInput
@@ -125,6 +134,15 @@ export function CheckoutScreen({ redirectTo }: { redirectTo: string }) {
       >
         <Text className="text-base font-semibold text-white">{submitting ? 'Placing order…' : 'Place order'}</Text>
       </Pressable>
+    </>
+  );
+
+  return (
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      <SplitColumns left={cartItems} right={orderSummary} leftFlex={3} rightFlex={2} />
     </ScrollView>
   );
 }

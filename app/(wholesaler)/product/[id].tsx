@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
+import { useIsWideWeb } from '../../../lib/hooks/useWideGrid';
+import { ReadableWidth } from '../../../lib/components/web/ReadableWidth';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useSupabaseRow } from '../../../lib/hooks/useSupabase';
@@ -13,6 +15,7 @@ const PLATFORM_FEE_RATE = 0.075;
 export default function WholesaleProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const wide = useIsWideWeb();
   const { data: product, isLoading } = useSupabaseRow('products', id);
 
   const queryClient = useQueryClient();
@@ -66,7 +69,11 @@ export default function WholesaleProductDetail() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      <ReadableWidth>
       <Text className="mb-1 text-2xl font-bold text-gray-900">{product.name}</Text>
       <Text className="mb-6 text-sm text-gray-500">Minimum order quantity: {product.min_order_qty} units</Text>
 
@@ -112,6 +119,7 @@ export default function WholesaleProductDetail() {
           {submitting ? 'Requesting…' : 'Request Bulk Order'}
         </Text>
       </Pressable>
+      </ReadableWidth>
     </ScrollView>
   );
 }

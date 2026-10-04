@@ -1,9 +1,12 @@
 // app/(admin)/categories.tsx
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
+import { View, Text, TextInput, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { ReadableWidth } from '../../lib/components/web/ReadableWidth';
+import { WideFlatList } from '../../lib/components/web/WideFlatList';
 import { resolveVisualKey } from '../../lib/constants/categoryIcons';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import type { ServiceCategory } from '../../types/database.types';
@@ -138,6 +141,7 @@ export default function AdminCategories() {
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('');
+  const wide = useIsWideWeb();
 
   async function handleAdd() {
     if (!label.trim()) {
@@ -162,7 +166,7 @@ export default function AdminCategories() {
   }
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
+    <View className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
       <View className="mb-4 flex-row items-center justify-end">
         <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-orange-500 px-4 py-2">
           <Text className="font-semibold text-white">{showForm ? 'Cancel' : '+ Add'}</Text>
@@ -170,6 +174,7 @@ export default function AdminCategories() {
       </View>
 
       {showForm && (
+        <ReadableWidth>
         <View className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
           <Text className="mb-1 text-sm font-medium text-gray-700">Name</Text>
           <TextInput
@@ -202,11 +207,12 @@ export default function AdminCategories() {
             </Text>
           </Pressable>
         </View>
+        </ReadableWidth>
       )}
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
 
-      <FlatList
+      <WideFlatList
         data={categories}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <CategoryRow category={item} />}

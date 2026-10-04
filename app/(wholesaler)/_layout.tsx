@@ -15,6 +15,21 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(wholesaler)/finance', label: 'Finance', icon: 'wallet' },
 ];
 
+// Every other wholesaler page uses the wider content column too (like
+// Finance's pages), so there is no empty strip beside them on a big screen -
+// see WebSidebarShell's `wideRoutes`.
+const WIDE_ROUTES = [
+  ...FINANCE_WIDE_ROUTES,
+  '/market',
+  '/marketplace',
+  '/orders',
+  '/profile',
+  '/rewards',
+  '/product',
+  '/catalog',
+  '/order',
+];
+
 export default function WholesalerLayout() {
   const { width } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
@@ -83,7 +98,7 @@ export default function WholesalerLayout() {
   return (
     <RoleGuard allow={['wholesaler']}>
       {isWideWeb ? (
-        <WebSidebarShell items={NAV_ITEMS} roleLabel="Wholesaler" profileHref="/(wholesaler)/profile" wideRoutes={FINANCE_WIDE_ROUTES}>
+        <WebSidebarShell items={NAV_ITEMS} roleLabel="Wholesaler" profileHref="/(wholesaler)/profile" wideRoutes={WIDE_ROUTES}>
           {tabs}
         </WebSidebarShell>
       ) : (

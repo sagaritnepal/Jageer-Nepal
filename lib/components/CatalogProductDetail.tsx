@@ -4,6 +4,7 @@ import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-nativ
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseRow, useSupabaseQuery, useSupabaseUpsert } from '../hooks/useSupabase';
+import { useIsWideWeb } from '../hooks/useWideGrid';
 import { decimalInput } from '../utils/number';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { toSafeImageUri } from '../utils/image';
@@ -29,6 +30,7 @@ export function CatalogProductDetail({
   const [qty, setQty] = useState(existing?.stock_level ?? 0);
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
   const [saving, setSaving] = useState(false);
+  const wide = useIsWideWeb();
 
   // `existing` comes from a second, separately-loading query - it's almost
   // never ready by the time these useState initializers run, so re-sync once
@@ -94,17 +96,20 @@ export function CatalogProductDetail({
     }
   }
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="px-6 pt-16">
-        <View className="mb-4 aspect-square items-center justify-center overflow-hidden rounded-2xl bg-gray-100">
-          {item.image_url ? (
-            <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
-          ) : (
-            <Text className="text-5xl">📦</Text>
-          )}
-        </View>
+  // Built once so the phone layout (image above the form) and the wide web
+  // layout (image beside it) show exactly the same things.
+  const imageBox = (
+    <View className="mb-4 aspect-square items-center justify-center overflow-hidden rounded-2xl bg-gray-100">
+      {item.image_url ? (
+        <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
+      ) : (
+        <Text className="text-5xl">📦</Text>
+      )}
+    </View>
+  );
 
+  const info = (
+    <>
         {item.category && (
           <Text className="text-xs font-bold uppercase tracking-wide text-orange-600">{item.category}</Text>
         )}
@@ -112,9 +117,11 @@ export function CatalogProductDetail({
         {isStocked && <Text className="mt-1 text-xs text-gray-400">Currently in your listings</Text>}
 
         {item.description && <Text className="mt-3.5 text-sm leading-6 text-gray-600">{item.description}</Text>}
-      </View>
+    </>
+  );
 
-      <View className="mt-6 border-t border-gray-200 bg-white px-6 pt-5">
+  const stockForm = (
+    <>
         <Text className="mb-3 text-sm font-semibold text-gray-900">
           {isStocked ? 'Update your listing' : 'Stock this item'}
         </Text>
@@ -191,7 +198,31 @@ export function CatalogProductDetail({
             {saving ? 'Saving…' : isStocked ? 'Update listing' : 'Add to my listings'}
           </Text>
         </Pressable>
+    </>
+  );
+
+  if (wide) {
+    return (
+      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 32, paddingTop: 24, paddingBottom: 40 }}>
+        <View className="flex-row items-start" style={{ gap: 32 }}>
+          <View style={{ width: 420, flexShrink: 0 }}>{imageBox}</View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {info}
+            <View className="mt-6 rounded-2xl border border-gray-200 bg-white p-5">{stockForm}</View>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
+      <View className="px-6 pt-16">
+        {imageBox}
+        {info}
       </View>
+
+      <View className="mt-6 border-t border-gray-200 bg-white px-6 pt-5">{stockForm}</View>
     </ScrollView>
   );
 }

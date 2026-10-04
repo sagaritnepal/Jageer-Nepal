@@ -1,7 +1,9 @@
 // app/(admin)/support.tsx
 import { useMemo } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideFlatList } from '../../lib/components/web/WideFlatList';
 
 export default function AdminSupport() {
   const { data: tickets, isLoading } = useSupabaseQuery('support_tickets', {
@@ -9,15 +11,16 @@ export default function AdminSupport() {
   });
   const { data: profiles } = useSupabaseQuery('profiles', {});
   const updateTicket = useSupabaseUpdate('support_tickets');
+  const wide = useIsWideWeb();
 
   const profileMap = useMemo(() => new Map((profiles ?? []).map((p) => [p.id, p])), [profiles]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
+    <View className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && tickets?.length === 0 && <Text className="text-gray-500">No tickets reported.</Text>}
 
-      <FlatList
+      <WideFlatList
         data={tickets}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {

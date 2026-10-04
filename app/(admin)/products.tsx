@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideCardGrid } from '../../lib/components/web/WideCardGrid';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { parseAmount } from '../../lib/utils/number';
 import type { Product } from '../../types/database.types';
@@ -152,9 +154,13 @@ export default function AdminProducts() {
   const { data: profiles } = useSupabaseQuery('profiles', {});
 
   const sellerMap = useMemo(() => new Map((profiles ?? []).map((p) => [p.id, p])), [profiles]);
+  const wide = useIsWideWeb();
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
       <Text className="mb-4 text-sm text-gray-500">
         Every product currently stocked by a wholesaler or reseller. New listings are self-service — manage what can
         be stocked from the Catalog tab.
@@ -163,9 +169,11 @@ export default function AdminProducts() {
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && (products?.length ?? 0) === 0 && <Text className="text-gray-500">No listings yet.</Text>}
 
-      {(products ?? []).map((item) => (
-        <ProductRow key={item.id} product={item} sellerName={sellerMap.get(item.seller_id)?.full_name ?? 'Unknown'} />
-      ))}
+      <WideCardGrid cardWidth={440}>
+        {(products ?? []).map((item) => (
+          <ProductRow key={item.id} product={item} sellerName={sellerMap.get(item.seller_id)?.full_name ?? 'Unknown'} />
+        ))}
+      </WideCardGrid>
     </ScrollView>
   );
 }

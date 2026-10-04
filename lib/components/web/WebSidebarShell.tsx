@@ -29,14 +29,14 @@ function initialsOf(name: string | null | undefined) {
 // space (unlike the app-wide 640px WebFrame cap that applies pre-login),
 // narrow enough that a plain mobile-first form/list still reads well
 // instead of stretching to the sidebar's full remaining width.
-const CONTENT_MAX_WIDTH = 1120;
+export const CONTENT_MAX_WIDTH = 1120;
 
 // Finance's book-style pages (tables, ledgers, the dashboard) fill the space
 // beside the sidebar, so the gap on their left and right is just the page's
 // own gutter on any laptop or desktop screen. The cap only matters on
 // ultra-wide monitors, where an unbounded table would stretch past readable
 // width. Only the routes a layout lists in `wideRoutes` get it.
-const WIDE_CONTENT_MAX_WIDTH = 1840;
+export const WIDE_CONTENT_MAX_WIDTH = 1840;
 
 // Below this viewport width, each _layout.tsx renders plain Tabs (bottom
 // bar and all) instead of this shell - a phone browser hitting the website

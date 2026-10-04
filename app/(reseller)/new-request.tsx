@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
-import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
+import { WEB_SIDEBAR_MIN_WIDTH, WIDE_CONTENT_MAX_WIDTH } from '../../lib/components/web/WebSidebarShell';
 
 const SERVICE_ACTIONS = [
   { key: 'Repair', icon: 'construct-outline' },
@@ -13,11 +13,12 @@ const SERVICE_ACTIONS = [
 ] as const;
 type ServiceAction = (typeof SERVICE_ACTIONS)[number]['key'];
 
-// Mirrors WebSidebarShell's layout (240px sidebar, 1120px content cap, 32px
-// side padding) so the tile count follows the real width of the grid.
+// Mirrors WebSidebarShell's layout (240px sidebar, the wide content cap this
+// page is listed for in the reseller layout, 32px side padding) so the tile
+// count follows the real width of the grid.
 function gridColumns(width: number, isWideWeb: boolean): number {
-  const gridWidth = isWideWeb ? Math.min(width - 240, 1120) - 64 - 40 : width - 32;
-  return Math.max(4, Math.min(8, Math.floor(gridWidth / 120)));
+  const gridWidth = isWideWeb ? Math.min(width - 240, WIDE_CONTENT_MAX_WIDTH) - 64 - 40 : width - 32;
+  return Math.max(4, Math.min(12, Math.floor(gridWidth / 120)));
 }
 
 export default function ResellerNewRequest() {

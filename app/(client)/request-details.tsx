@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseInsert } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
 import { supabase } from '../../lib/supabase';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
@@ -63,6 +64,7 @@ function RequestDetails() {
   const [photos, setPhotos] = useState<(string | null)[]>(Array(PHOTO_SLOTS).fill(null));
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const wide = useIsWideWeb();
 
   // The chat assistant's prefill - only fills fields, Submit is still a
   // separate manual tap. Depends on the param values (not just mount) since
@@ -151,8 +153,94 @@ function RequestDetails() {
     }
   }
 
+  // Built once so the phone layout (one card) and the wide web layout (two
+  // cards side by side) show exactly the same sections.
+  const scheduleSection = (
+    <FormSection icon="calendar-outline" title="Schedule" first>
+      <View className="flex-row gap-2.5">
+        <View className="flex-1">
+          <Text className="mb-1.5 text-sm font-medium text-gray-700">Date</Text>
+          <DateField value={date} onChange={setDate} />
+        </View>
+        <View className="flex-1">
+          <Text className="mb-1.5 text-sm font-medium text-gray-700">Time</Text>
+          <TimeField value={time} onChange={setTime} />
+        </View>
+      </View>
+    </FormSection>
+  );
+
+  const locationSection = (
+    <FormSection icon="location-outline" title="Location">
+      <Pressable
+        onPress={() => setShowLocationPicker(true)}
+        className="mb-2.5 flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
+      >
+        <Ionicons name="locate" size={16} color="#1D4ED8" />
+        <Text className="text-sm font-semibold text-blue-700">
+          {coords ? 'Location set — tap to change' : 'Select location'}
+        </Text>
+      </Pressable>
+      {coords && <View className="mb-2.5"><MapPreview coords={coords} /></View>}
+      <TextInput
+        value={address}
+        onChangeText={setAddress}
+        placeholder="House/street, city, area"
+        multiline
+        className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+        style={{ minHeight: 60, textAlignVertical: 'top' }}
+      />
+    </FormSection>
+  );
+
+  // `first` drops the top divider when Photos opens its own card.
+  const photosSection = (
+    <FormSection icon="camera-outline" title={`Photos (optional, up to ${PHOTO_SLOTS})`} first={wide}>
+      <View className="flex-row gap-2.5">
+        {photos.map((uri, index) => (
+          <Pressable
+            key={index}
+            onPress={() => (uri ? removePhoto(index) : handlePickPhoto(index))}
+            className="h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50"
+          >
+            {uri ? (
+              <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
+            ) : (
+              <Ionicons name="camera-outline" size={22} color="#9CA3AF" />
+            )}
+          </Pressable>
+        ))}
+      </View>
+      {photos.some(Boolean) && <Text className="mt-2 text-xs text-gray-400">Tap a photo to remove it.</Text>}
+    </FormSection>
+  );
+
+  const notesSection = (
+    <FormSection icon="document-text-outline" title="Extra information (optional)">
+      <TextInput
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="Anything else the technician should know?"
+        multiline
+        numberOfLines={4}
+        className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
+        style={{ minHeight: 100, textAlignVertical: 'top' }}
+      />
+    </FormSection>
+  );
+
+  const submitButton = (
+    <Pressable
+      onPress={handleSubmit}
+      disabled={submitting}
+      className="mt-5 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
+    >
+      <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
+    </Pressable>
+  );
+
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
+    <ScrollView className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'} contentContainerStyle={{ paddingBottom: 100 }}>
       <View className="mb-5 flex-row items-center gap-2.5 rounded-2xl border border-gray-200 bg-white px-3.5 py-3">
         <CategoryBadge category={category} size={34} />
         <Text className="flex-1 text-sm font-bold text-gray-900" numberOfLines={1}>
@@ -160,80 +248,32 @@ function RequestDetails() {
         </Text>
       </View>
 
-      <View className="rounded-2xl border border-gray-200 bg-white p-4">
-        <FormSection icon="calendar-outline" title="Schedule" first>
-          <View className="flex-row gap-2.5">
-            <View className="flex-1">
-              <Text className="mb-1.5 text-sm font-medium text-gray-700">Date</Text>
-              <DateField value={date} onChange={setDate} />
-            </View>
-            <View className="flex-1">
-              <Text className="mb-1.5 text-sm font-medium text-gray-700">Time</Text>
-              <TimeField value={time} onChange={setTime} />
-            </View>
+      {wide ? (
+        <View className="flex-row items-start" style={{ gap: 24 }}>
+          <View className="rounded-2xl border border-gray-200 bg-white p-4" style={{ flex: 1, minWidth: 0 }}>
+            {scheduleSection}
+            {locationSection}
           </View>
-        </FormSection>
-
-        <FormSection icon="location-outline" title="Location">
-          <Pressable
-            onPress={() => setShowLocationPicker(true)}
-            className="mb-2.5 flex-row items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-50 py-2.5"
-          >
-            <Ionicons name="locate" size={16} color="#1D4ED8" />
-            <Text className="text-sm font-semibold text-blue-700">
-              {coords ? 'Location set — tap to change' : 'Select location'}
-            </Text>
-          </Pressable>
-          {coords && <View className="mb-2.5"><MapPreview coords={coords} /></View>}
-          <TextInput
-            value={address}
-            onChangeText={setAddress}
-            placeholder="House/street, city, area"
-            multiline
-            className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-            style={{ minHeight: 60, textAlignVertical: 'top' }}
-          />
-        </FormSection>
-
-        <FormSection icon="camera-outline" title={`Photos (optional, up to ${PHOTO_SLOTS})`}>
-          <View className="flex-row gap-2.5">
-            {photos.map((uri, index) => (
-              <Pressable
-                key={index}
-                onPress={() => (uri ? removePhoto(index) : handlePickPhoto(index))}
-                className="h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-300 bg-gray-50"
-              >
-                {uri ? (
-                  <Image source={{ uri }} className="h-full w-full" resizeMode="cover" />
-                ) : (
-                  <Ionicons name="camera-outline" size={22} color="#9CA3AF" />
-                )}
-              </Pressable>
-            ))}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View className="rounded-2xl border border-gray-200 bg-white p-4">
+              {photosSection}
+              {notesSection}
+            </View>
+            {submitButton}
           </View>
-          {photos.some(Boolean) && <Text className="mt-2 text-xs text-gray-400">Tap a photo to remove it.</Text>}
-        </FormSection>
+        </View>
+      ) : (
+        <>
+          <View className="rounded-2xl border border-gray-200 bg-white p-4">
+            {scheduleSection}
+            {locationSection}
+            {photosSection}
+            {notesSection}
+          </View>
 
-        <FormSection icon="document-text-outline" title="Extra information (optional)">
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Anything else the technician should know?"
-            multiline
-            numberOfLines={4}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-base"
-            style={{ minHeight: 100, textAlignVertical: 'top' }}
-          />
-        </FormSection>
-      </View>
-
-      <Pressable
-        onPress={handleSubmit}
-        disabled={submitting}
-        className="mt-5 items-center rounded-lg bg-orange-500 py-3 disabled:opacity-50"
-      >
-        <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
-      </Pressable>
+          {submitButton}
+        </>
+      )}
 
       <LocationPickerModal
         visible={showLocationPicker}

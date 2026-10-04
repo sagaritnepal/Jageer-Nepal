@@ -1,11 +1,12 @@
 // app/(client)/requests.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
-import { useWideGrid } from '../../lib/hooks/useWideGrid';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideFlatList } from '../../lib/components/web/WideFlatList';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { OrderCard } from '../../lib/components/OrderCard';
@@ -129,8 +130,7 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
 export default function ClientRequests() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [viewMode, setViewMode] = useState<ViewMode>('active');
-  // Wide web lays the cards out in columns instead of one stretched row each.
-  const { wide, columns, containerProps, cellStyle } = useWideGrid({ cardWidth: 440, minColumns: 1, maxColumns: 3 });
+  const wide = useIsWideWeb();
 
   const { data: requests, isLoading: loadingRequests } = useSupabaseQuery('service_requests', {
     filters: userId ? { client_id: userId } : {},
@@ -241,23 +241,17 @@ export default function ClientRequests() {
         <Text className="text-gray-500">{viewMode === 'active' ? 'Nothing active right now.' : 'No history yet.'}</Text>
       )}
 
-      <FlatList
-        // A FlatList cannot change its column count on the fly, so a new
-        // count remounts it.
-        key={wide ? columns : 1}
-        numColumns={wide ? columns : 1}
-        {...containerProps}
+      <WideFlatList
+        cardWidth={440}
         data={combined}
         keyExtractor={(item) => item.key}
-        renderItem={({ item }) => {
-          const card =
-            item.kind === 'service' ? (
-              <ClientRequestCard item={item.data} />
-            ) : userId ? (
-              <OrderCard order={item.data} productMap={productMap} viewerId={userId} basePath="/(client)" />
-            ) : null;
-          return wide ? <View style={cellStyle}>{card}</View> : card;
-        }}
+        renderItem={({ item }) =>
+          item.kind === 'service' ? (
+            <ClientRequestCard item={item.data} />
+          ) : userId ? (
+            <OrderCard order={item.data} productMap={productMap} viewerId={userId} basePath="/(client)" />
+          ) : null
+        }
       />
     </View>
   );

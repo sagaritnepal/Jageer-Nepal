@@ -1,11 +1,11 @@
 // app/(client)/product/[id].tsx
 import { useLocalSearchParams, router } from 'expo-router';
-import { View, Text, Pressable, ScrollView, Image } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { useSupabaseRow } from '../../../lib/hooks/useSupabase';
 import { useCartStore } from '../../../lib/hooks/useCart';
 import { CartBar } from '../../../lib/components/CartBar';
+import { ProductDetailContent } from '../../../lib/components/ProductDetailContent';
 import { showAlert } from '../../../lib/utils/alert';
-import { toSafeImageUri } from '../../../lib/utils/image';
 
 export default function ClientProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,8 +33,6 @@ export default function ClientProductDetail() {
     );
   }
 
-  const outOfStock = product.stock_level <= 0;
-
   function handleAddToCart() {
     const added = addToCart(product!);
     if (!added) {
@@ -60,43 +58,7 @@ export default function ClientProductDetail() {
   return (
     <View className="flex-1">
     <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: cartCount > 0 ? 100 : 40 }}>
-      <View className="px-6 pt-4">
-        <View className="mb-4 aspect-square items-center justify-center overflow-hidden rounded-2xl bg-blue-50">
-          {product.image_url ? (
-            <Image source={{ uri: toSafeImageUri(product.image_url)! }} className="h-full w-full" resizeMode="cover" />
-          ) : (
-            <Text className="text-5xl">🖥️</Text>
-          )}
-        </View>
-
-        {product.category && (
-          <Text className="text-xs font-bold uppercase tracking-wide text-blue-600">{product.category}</Text>
-        )}
-        <Text className="mt-1 text-xl font-extrabold text-gray-900">{product.name}</Text>
-        <Text className="mt-2 text-2xl font-extrabold text-blue-700">
-          NPR {Number(product.price).toLocaleString()}
-        </Text>
-
-        {product.description && (
-          <Text className="mt-3.5 text-sm leading-6 text-gray-600">{product.description}</Text>
-        )}
-
-        <Text className="mt-4 text-xs text-gray-400">
-          {outOfStock ? 'Out of stock' : `${product.stock_level} in stock`}
-        </Text>
-      </View>
-
-      <View className="mt-6 px-6">
-        <Pressable
-          onPress={handleAddToCart}
-          disabled={outOfStock}
-          className="items-center rounded-xl bg-orange-500 py-3.5 disabled:opacity-40"
-        >
-          <Text className="text-base font-semibold text-white">
-            {outOfStock ? 'Out of stock' : 'Add to cart'}
-          </Text>
-        </Pressable>
-      </View>
+      <ProductDetailContent product={product} onAddToCart={handleAddToCart} />
       </ScrollView>
 
       <CartBar

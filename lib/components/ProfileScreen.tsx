@@ -25,6 +25,7 @@ import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../hooks/useAuth';
+import { useIsWideWeb } from '../hooks/useWideGrid';
 import { useBiometricLockStore, toggleBiometricLock } from '../hooks/useBiometricLock';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate } from '../hooks/useSupabase';
 import { supabase } from '../supabase';
@@ -144,7 +145,7 @@ function AvatarEditor({ profile }: { profile: Profile }) {
 /** The pinned identity band - fixed above the scrolling settings panel, so
  * the visitor is never scrolled away from confirmation of who they are.
  * Compact by design: an anchor, not the old full hero. */
-function IdentityBand({ profile }: { profile: Profile | null }) {
+function IdentityBand({ profile, card }: { profile: Profile | null; card?: boolean }) {
   const accent = (profile && ROLE_ACCENT[profile.role]) || ROLE_ACCENT.client;
   const { data: reviews } = useSupabaseQuery('reviews', {
     filters: profile?.role === 'technician' ? { technician_id: profile.id } : {},
@@ -156,7 +157,12 @@ function IdentityBand({ profile }: { profile: Profile | null }) {
   }, [reviews]);
 
   return (
-    <View style={{ backgroundColor: accent }} className="flex-row items-center gap-3.5 px-6 pb-5 pt-16">
+    // `card`: on wide web the band is a rounded card inside the page, not a
+    // full-bleed strip under the phone's status bar (hence no pt-16).
+    <View
+      style={{ backgroundColor: accent }}
+      className={card ? 'flex-row items-center gap-3.5 rounded-2xl px-6 py-5' : 'flex-row items-center gap-3.5 px-6 pb-5 pt-16'}
+    >
       {profile ? (
         <AvatarEditor profile={profile} />
       ) : (
@@ -714,6 +720,7 @@ function EmployeesRow({ profile }: { profile: Profile }) {
 export function ProfileScreen() {
   const profile = useAuthStore((state) => state.profile);
   const signOut = useAuthStore((state) => state.signOut);
+  const wide = useIsWideWeb();
 
   const accountRows: React.ReactNode[] = [];
   const workRows: React.ReactNode[] = [];
@@ -733,6 +740,50 @@ export function ProfileScreen() {
     }
   }
 
+  // Shared by the phone layout and the wide web layout below.
+  const workSection =
+    workRows.length > 0 ? (
+      <View>
+        <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Work</Text>
+        <GroupedList rows={workRows} />
+      </View>
+    ) : null;
+
+  const accountSection =
+    accountRows.length > 0 ? (
+      <View>
+        <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Account</Text>
+        <GroupedList rows={accountRows} />
+      </View>
+    ) : null;
+
+  const signOutButton = (
+    <Pressable onPress={signOut} className="items-center rounded-xl border border-red-200 bg-white py-3.5">
+      <Text className="font-semibold text-red-600">Sign Out from Jageer Nepal</Text>
+    </Pressable>
+  );
+
+  // Wide web: the identity band across the top, then two columns - your
+  // details and work on the left, account and sign out on the right - instead
+  // of one phone-width stack stretched across the page.
+  if (wide) {
+    return (
+      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 32, paddingTop: 24, gap: 20 }}>
+        <IdentityBand profile={profile} card />
+        <View className="flex-row items-start" style={{ gap: 24 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: 20 }}>
+            {profile && <ProfileDetails profile={profile} />}
+            {workSection}
+          </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 20 }}>
+            {accountSection}
+            {signOutButton}
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
     <View className="flex-1 bg-gray-50">
       <IdentityBand profile={profile} />
@@ -749,24 +800,9 @@ export function ProfileScreen() {
         }}
       >
         {profile && <ProfileDetails profile={profile} />}
-
-        {workRows.length > 0 && (
-          <View>
-            <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Work</Text>
-            <GroupedList rows={workRows} />
-          </View>
-        )}
-
-        {accountRows.length > 0 && (
-          <View>
-            <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Account</Text>
-            <GroupedList rows={accountRows} />
-          </View>
-        )}
-
-        <Pressable onPress={signOut} className="items-center rounded-xl border border-red-200 bg-white py-3.5">
-          <Text className="font-semibold text-red-600">Sign Out from Jageer Nepal</Text>
-        </Pressable>
+        {workSection}
+        {accountSection}
+        {signOutButton}
       </ScrollView>
     </View>
   );

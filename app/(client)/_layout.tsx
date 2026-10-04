@@ -14,9 +14,23 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(client)/contacts', label: 'Contacts', icon: 'people' },
 ];
 
-// The four main sections use the wider content column (see WebSidebarShell's
+// Every client page uses the wider content column (see WebSidebarShell's
 // `wideRoutes`), so there is no empty strip beside them on a big screen.
-const WIDE_ROUTES = ['/dashboard', '/requests', '/market', '/contacts'];
+const WIDE_ROUTES = [
+  '/dashboard',
+  '/requests',
+  '/market',
+  '/contacts',
+  '/profile',
+  '/rewards',
+  '/request',
+  '/new-request',
+  '/request-details',
+  '/checkout',
+  '/order',
+  '/product',
+  '/reseller',
+];
 
 export default function ClientLayout() {
   const { width } = useWindowDimensions();

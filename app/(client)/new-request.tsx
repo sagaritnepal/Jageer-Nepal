@@ -2,7 +2,9 @@
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { WideCardGrid } from '../../lib/components/web/WideCardGrid';
 
 const SERVICE_ACTIONS = ['Repair', 'Installation'] as const;
 
@@ -10,6 +12,7 @@ export default function NewRequest() {
   // `from` is the tab this form was opened from - carried through so
   // finishing the request lands back there (see returnPathOr).
   const { category: presetCategory, from } = useLocalSearchParams<{ category?: string; from?: string }>();
+  const wide = useIsWideWeb();
 
   const { data: categories, isLoading: loadingCategories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
@@ -24,16 +27,22 @@ export default function NewRequest() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 100 }}>
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 100 }}
+    >
       <Text className="mb-2 text-sm font-medium text-gray-700">What do you need help with?</Text>
       {loadingCategories && <Text className="mb-4 text-gray-500">Loading categories…</Text>}
-      <View className="mb-6 flex-row flex-wrap justify-between">
+      {/* On wide web the grid is its own row-wrapping box, so this wrapper only
+          lays the phone's two-per-row cards out. */}
+      <View className={wide ? 'mb-6' : 'mb-6 flex-row flex-wrap justify-between'}>
+        <WideCardGrid cardWidth={260} minColumns={2} maxColumns={5}>
         {(categories ?? []).map((c) => {
           const isPreset = presetCategory === c.label;
           return (
             <View
               key={c.id}
-              className={`mb-2.5 w-[48%] rounded-2xl border p-3.5 ${
+              className={`mb-2.5 ${wide ? 'w-full' : 'w-[48%]'} rounded-2xl border p-3.5 ${
                 isPreset ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white'
               }`}
             >
@@ -61,6 +70,7 @@ export default function NewRequest() {
             </View>
           );
         })}
+        </WideCardGrid>
       </View>
 
       <Text className="text-xs text-gray-400">

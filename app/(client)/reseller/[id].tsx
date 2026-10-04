@@ -3,8 +3,11 @@ import { View, Text, ScrollView, Pressable } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../../lib/hooks/useWideGrid';
 import { STATUS_STYLES } from '../../../lib/constants/requestStatus';
 import { CategoryBadge } from '../../../lib/components/CategoryBadge';
+import { SplitColumns } from '../../../lib/components/web/SplitColumns';
+import { WideCardGrid } from '../../../lib/components/web/WideCardGrid';
 import { SaveContactButtonLabeled } from '../../../lib/components/SaveContactButton';
 import type { RequestStatus } from '../../../types/database.types';
 
@@ -30,6 +33,7 @@ function StatusPill({ status }: { status: RequestStatus }) {
 export default function ResellerDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const wide = useIsWideWeb();
 
   const { data: reseller, isLoading: loadingReseller } = useSupabaseRow('profiles', id);
   const { data: history, isLoading: loadingHistory } = useSupabaseQuery('service_requests', {
@@ -46,20 +50,22 @@ export default function ResellerDetail() {
     );
   }
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
-        <View className="h-14 w-14 items-center justify-center rounded-full bg-teal-600">
-          <Text className="text-base font-bold text-white">{initialsOf(reseller.full_name)}</Text>
-        </View>
-        <View className="flex-1">
-          <Text className="text-lg font-bold text-gray-900">{reseller.full_name ?? 'Reseller'}</Text>
-          <Text className="mt-0.5 text-sm text-gray-500">{reseller.city ?? 'Nepal'}</Text>
-          {reseller.phone && <Text className="mt-0.5 text-sm text-gray-500">{reseller.phone}</Text>}
-        </View>
-        {userId && <SaveContactButtonLabeled clientId={userId} contactId={reseller.id} />}
+  const profileCard = (
+    <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <View className="h-14 w-14 items-center justify-center rounded-full bg-teal-600">
+        <Text className="text-base font-bold text-white">{initialsOf(reseller.full_name)}</Text>
       </View>
+      <View className="flex-1">
+        <Text className="text-lg font-bold text-gray-900">{reseller.full_name ?? 'Reseller'}</Text>
+        <Text className="mt-0.5 text-sm text-gray-500">{reseller.city ?? 'Nepal'}</Text>
+        {reseller.phone && <Text className="mt-0.5 text-sm text-gray-500">{reseller.phone}</Text>}
+      </View>
+      {userId && <SaveContactButtonLabeled clientId={userId} contactId={reseller.id} />}
+    </View>
+  );
 
+  const workHistory = (
+    <>
       <Text className="mb-3 text-[15px] font-bold text-gray-900">Work history</Text>
 
       {loadingHistory && <Text className="text-gray-500">Loading…</Text>}
@@ -67,26 +73,38 @@ export default function ResellerDetail() {
         <Text className="text-gray-500">No jobs with this reseller yet.</Text>
       )}
 
-      {(history ?? []).map((item) => {
-        return (
-          <Pressable
-            key={item.id}
-            onPress={() => router.push(`/(client)/request/${item.id}`)}
-            className="mb-3 flex-row items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4"
-          >
-            <CategoryBadge category={item.issue_type} />
-            <View className="flex-1">
-              <View className="flex-row items-start justify-between gap-2">
-                <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
-                <StatusPill status={item.status} />
+      <WideCardGrid cardWidth={380}>
+        {(history ?? []).map((item) => {
+          return (
+            <Pressable
+              key={item.id}
+              onPress={() => router.push(`/(client)/request/${item.id}`)}
+              className="mb-3 flex-row items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4"
+            >
+              <CategoryBadge category={item.issue_type} />
+              <View className="flex-1">
+                <View className="flex-row items-start justify-between gap-2">
+                  <Text className="flex-1 font-semibold text-gray-900">{item.issue_type}</Text>
+                  <StatusPill status={item.status} />
+                </View>
+                <Text className="mt-1 text-xs text-gray-400">
+                  {new Date(item.created_at).toLocaleDateString()}
+                </Text>
               </View>
-              <Text className="mt-1 text-xs text-gray-400">
-                {new Date(item.created_at).toLocaleDateString()}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
+            </Pressable>
+          );
+        })}
+      </WideCardGrid>
+    </>
+  );
+
+  return (
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      {/* On wide web the profile sits in a column beside the work history. */}
+      <SplitColumns left={profileCard} right={workHistory} leftFlex={1} rightFlex={2} />
     </ScrollView>
   );
 }

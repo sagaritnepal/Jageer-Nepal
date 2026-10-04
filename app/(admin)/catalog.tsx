@@ -3,6 +3,9 @@ import { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, useSupabaseDelete } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { ReadableWidth } from '../../lib/components/web/ReadableWidth';
+import { WideCardGrid } from '../../lib/components/web/WideCardGrid';
 import { SearchBar } from '../../lib/components/SearchBar';
 import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
@@ -115,6 +118,7 @@ export default function AdminCatalog() {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const wide = useIsWideWeb();
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -166,7 +170,10 @@ export default function AdminCatalog() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
       <View className="mb-4 flex-row items-center justify-end">
         <Pressable onPress={() => setShowForm((v) => !v)} className="rounded-lg bg-orange-500 px-4 py-2">
           <Text className="font-semibold text-white">{showForm ? 'Cancel' : '+ Add'}</Text>
@@ -178,6 +185,7 @@ export default function AdminCatalog() {
       </Text>
 
       {showForm && (
+        <ReadableWidth>
         <View className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
           <Text className="mb-1 text-sm font-medium text-gray-700">Product name</Text>
           <TextInput
@@ -223,19 +231,22 @@ export default function AdminCatalog() {
             </Text>
           </Pressable>
         </View>
+        </ReadableWidth>
       )}
 
       <View className="mb-4">
-        <SearchBar
-          value={search}
-          onChangeText={(text) => {
-            setSearch(text);
-            if (sheetOpen) setSheetOpen(false);
-          }}
-          onOpenFilters={() => setSheetOpen(true)}
-          filterActive={!!filterCategory}
-          placeholder="Search by name or model…"
-        />
+        <ReadableWidth maxWidth={560}>
+          <SearchBar
+            value={search}
+            onChangeText={(text) => {
+              setSearch(text);
+              if (sheetOpen) setSheetOpen(false);
+            }}
+            onOpenFilters={() => setSheetOpen(true)}
+            filterActive={!!filterCategory}
+            placeholder="Search by name or model…"
+          />
+        </ReadableWidth>
       </View>
 
       <SearchFilterSheet
@@ -251,9 +262,11 @@ export default function AdminCatalog() {
         <Text className="text-gray-500">No items match your search.</Text>
       )}
 
-      {filtered.map((item) => (
-        <CatalogRow key={item.id} item={item} />
-      ))}
+      <WideCardGrid cardWidth={440}>
+        {filtered.map((item) => (
+          <CatalogRow key={item.id} item={item} />
+        ))}
+      </WideCardGrid>
     </ScrollView>
   );
 }

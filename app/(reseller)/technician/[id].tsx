@@ -4,7 +4,9 @@ import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
 import { useSupabaseRow } from '../../../lib/hooks/useSupabase';
 import { useTeamJobs } from '../../../lib/hooks/useTeamActivity';
+import { useIsWideWeb } from '../../../lib/hooks/useWideGrid';
 import { TeamJobRow } from '../../../lib/components/TeamActivity';
+import { SplitColumns } from '../../../lib/components/web/SplitColumns';
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -19,6 +21,7 @@ function initialsOf(name: string | null | undefined) {
 export default function TechnicianWorkHistory() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const wide = useIsWideWeb();
 
   const { data: technician, isLoading: loadingTech } = useSupabaseRow('profiles', id);
   const { data: jobs, isLoading: loadingHistory } = useTeamJobs(userId, id ? [id] : []);
@@ -31,19 +34,21 @@ export default function TechnicianWorkHistory() {
     );
   }
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
-        <View className="h-14 w-14 items-center justify-center rounded-full bg-teal-600">
-          <Text className="text-base font-bold text-white">{initialsOf(technician.full_name)}</Text>
-        </View>
-        <View className="flex-1">
-          <Text className="text-lg font-bold text-gray-900">{technician.full_name ?? 'Technician'}</Text>
-          <Text className="mt-0.5 text-sm text-gray-500">{technician.city ?? 'Nepal'}</Text>
-          {technician.phone && <Text className="mt-0.5 text-sm text-gray-500">{technician.phone}</Text>}
-        </View>
+  const profileCard = (
+    <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <View className="h-14 w-14 items-center justify-center rounded-full bg-teal-600">
+        <Text className="text-base font-bold text-white">{initialsOf(technician.full_name)}</Text>
       </View>
+      <View className="flex-1">
+        <Text className="text-lg font-bold text-gray-900">{technician.full_name ?? 'Technician'}</Text>
+        <Text className="mt-0.5 text-sm text-gray-500">{technician.city ?? 'Nepal'}</Text>
+        {technician.phone && <Text className="mt-0.5 text-sm text-gray-500">{technician.phone}</Text>}
+      </View>
+    </View>
+  );
 
+  const workHistory = (
+    <>
       <Text className="mb-3 text-[15px] font-bold text-gray-900">Work history</Text>
 
       {loadingHistory && <Text className="text-gray-500">Loading…</Text>}
@@ -56,6 +61,16 @@ export default function TechnicianWorkHistory() {
           ))}
         </View>
       )}
+    </>
+  );
+
+  return (
+    <ScrollView
+      className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      {/* On wide web the profile sits in a column beside the work history. */}
+      <SplitColumns left={profileCard} right={workHistory} leftFlex={1} rightFlex={2} />
     </ScrollView>
   );
 }

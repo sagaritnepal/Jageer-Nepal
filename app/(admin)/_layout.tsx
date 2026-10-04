@@ -18,6 +18,20 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(admin)/support', label: 'Support', icon: 'headset' },
 ];
 
+// Every admin page uses the wider content column (see WebSidebarShell's
+// `wideRoutes`), so there is no empty strip beside them on a big screen.
+const WIDE_ROUTES = [
+  '/dashboard',
+  '/requests',
+  '/reports',
+  '/users',
+  '/categories',
+  '/catalog',
+  '/products',
+  '/support',
+  '/profile',
+];
+
 export default function AdminLayout() {
   const { width } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
@@ -97,7 +111,7 @@ export default function AdminLayout() {
   return (
     <RoleGuard allow={['admin']}>
       {isWideWeb ? (
-        <WebSidebarShell items={NAV_ITEMS} roleLabel="Admin">
+        <WebSidebarShell items={NAV_ITEMS} roleLabel="Admin" wideRoutes={WIDE_ROUTES}>
           {tabs}
         </WebSidebarShell>
       ) : (

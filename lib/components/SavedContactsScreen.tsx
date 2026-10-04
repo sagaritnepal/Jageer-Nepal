@@ -1,12 +1,13 @@
 // lib/components/SavedContactsScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, FlatList, Linking } from 'react-native';
+import { View, Text, Pressable, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseDelete } from '../hooks/useSupabase';
-import { useWideGrid } from '../hooks/useWideGrid';
+import { useIsWideWeb } from '../hooks/useWideGrid';
+import { WideFlatList } from './web/WideFlatList';
 import { supabase } from '../supabase';
 import { PersonAvatar } from './PersonAvatar';
 import { SearchBar } from './SearchBar';
@@ -144,8 +145,7 @@ export function SavedContactsScreen({ basePath }: { basePath: string }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<RoleFilter>('all');
   const { entries, isLoading } = useSavedContactProfiles(userId);
-  // Wide web lays the contacts out in columns instead of one stretched row each.
-  const { wide, columns, containerProps, cellStyle } = useWideGrid({ cardWidth: 360, minColumns: 1, maxColumns: 3 });
+  const wide = useIsWideWeb();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -172,18 +172,11 @@ export function SavedContactsScreen({ basePath }: { basePath: string }) {
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
 
-      <FlatList
-        // A FlatList cannot change its column count on the fly, so a new
-        // count remounts it.
-        key={wide ? columns : 1}
-        numColumns={wide ? columns : 1}
-        {...containerProps}
+      <WideFlatList
+        cardWidth={360}
         data={filtered}
         keyExtractor={(item) => item.saved.id}
-        renderItem={({ item }) => {
-          const row = <ContactRow entry={item} basePath={basePath} />;
-          return wide ? <View style={cellStyle}>{row}</View> : row;
-        }}
+        renderItem={({ item }) => <ContactRow entry={item} basePath={basePath} />}
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           !isLoading ? (

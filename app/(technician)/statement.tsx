@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform } from 'react-native';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideCardGrid } from '../../lib/components/web/WideCardGrid';
 import { jobCardAmount, type JobCardWithQuote } from './earnings';
 import { formatDuration, formatTimestamp } from '../../lib/utils/duration';
 import type { JobCard } from '../../types/database.types';
@@ -64,7 +66,9 @@ function money(amount: number) {
 // look, without needing web-only CSS gradients (works on native too).
 function ZigzagEdge({ flip }: { flip?: boolean }) {
   const TOOTH = 26;
-  const teeth = 20;
+  // Enough teeth to reach across a receipt card up to ~550px wide (the widest
+  // one on a wide web screen); the row is clipped to the card's own width.
+  const teeth = 26;
   return (
     <View style={{ flexDirection: 'row', height: TOOTH / 2, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
       {Array.from({ length: teeth }).map((_, i) => (
@@ -181,6 +185,7 @@ export default function TechnicianStatement() {
   const profile = useAuthStore((state) => state.profile);
   const userId = useAuthStore((state) => state.session?.user.id);
   const [range, setRange] = useState<RangeKey>('30d');
+  const wide = useIsWideWeb();
 
   const { data: jobCards, isLoading } = useSupabaseQuery('job_cards', {
     filters: userId ? { technician_id: userId } : {},
@@ -216,8 +221,11 @@ export default function TechnicianStatement() {
   const technicianName = profile?.full_name ?? 'Technician';
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: PAGE_BG }} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
-      <View className="mb-4 flex-row" style={{ gap: 8 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: PAGE_BG }}
+      contentContainerStyle={{ padding: wide ? 32 : 20, paddingTop: wide ? 24 : 20, paddingBottom: 48 }}
+    >
+      <View className="mb-4 flex-row" style={{ gap: 8, ...(wide ? { maxWidth: 520 } : null) }}>
         {RANGES.map((r) => {
           const active = range === r.key;
           return (
@@ -242,9 +250,12 @@ export default function TechnicianStatement() {
         <Text className="text-center text-gray-400">No completed jobs in this period.</Text>
       )}
 
-      {rows.map((row) => (
-        <JobReceiptCard key={row.id} row={row} technicianName={technicianName} />
-      ))}
+      {/* Each receipt is its own card, so on wide web they sit side by side. */}
+      <WideCardGrid cardWidth={400} maxColumns={4}>
+        {rows.map((row) => (
+          <JobReceiptCard key={row.id} row={row} technicianName={technicianName} />
+        ))}
+      </WideCardGrid>
     </ScrollView>
   );
 }

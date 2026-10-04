@@ -26,9 +26,20 @@ const SUPERVISOR_NAV: WebNavItem[] = [
   ...NAV_ITEMS.slice(2),
 ];
 
-// The main sections use the wider content column (see WebSidebarShell's
+// Every technician page uses the wider content column (see WebSidebarShell's
 // `wideRoutes`), so there is no empty strip beside them on a big screen.
-const WIDE_ROUTES = ['/dashboard', '/jobs', '/earnings', '/workhub'];
+const WIDE_ROUTES = [
+  '/dashboard',
+  '/jobs',
+  '/earnings',
+  '/workhub',
+  '/profile',
+  '/rewards',
+  '/statement',
+  '/job',
+  '/employment',
+  '/inbox',
+];
 
 export default function TechnicianLayout() {
   const { width } = useWindowDimensions();

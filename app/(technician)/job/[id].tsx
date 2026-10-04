@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { respondToJobOffer, reopenCompletedJob } from '../../../lib/hooks/useJobOffers';
 import { requestJobHold, resumeJobHold } from '../../../lib/hooks/useJobHold';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
+import { useIsWideWeb } from '../../../lib/hooks/useWideGrid';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
@@ -125,6 +126,7 @@ function JobCard({ id }: { id: string }) {
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [holdSubmitting, setHoldSubmitting] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const wide = useIsWideWeb();
   const queryClient = useQueryClient();
   const now = useNow(request?.status === 'in_progress' && !!jobCard?.started_at);
 
@@ -291,22 +293,38 @@ function JobCard({ id }: { id: string }) {
     jobCard ? Number(jobCard.labor_cost ?? 0) + Number(jobCard.parts_cost ?? 0) : null
   );
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+  // Each part of the page is built once, so the phone layout (one stack, in this
+  // order) and the wide web layout (the job details beside the actions and the
+  // money) show exactly the same things.
+  const heading = (
+    <>
       <Text className="mb-1 text-xs text-gray-400">Job #{request.id.slice(0, 8).toUpperCase()}</Text>
       <View className="mb-4 flex-row items-center gap-3">
         <CategoryBadge category={request.issue_type} />
         <Text className="flex-1 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       </View>
       <Text className="mb-6 text-gray-600">{request.description}</Text>
+    </>
+  );
 
+  const stageStrip = (
+    <>
       <StageStrip status={request.status} paid={request.payment_status === 'paid'} />
+    </>
+  );
+
+  const paymentChip = (
+    <>
       {request.status === 'resolved' && (
         <View className="mb-4 -mt-3 flex-row">
           <PaymentChip request={request} total={paymentTotal} />
         </View>
       )}
+    </>
+  );
 
+  const statusCard = (
+    <>
       <View className="mb-6 rounded-xl bg-white p-5">
         <Text className="text-sm uppercase tracking-wide text-gray-400">Current status</Text>
         <Text className="mt-1 text-lg font-semibold text-gray-900">
@@ -361,7 +379,11 @@ function JobCard({ id }: { id: string }) {
           </Text>
         )}
       </View>
+    </>
+  );
 
+  const holdRequested = (
+    <>
       {request.hold_status === 'requested' && (
         <View className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <View className="flex-row items-center gap-2">
@@ -371,7 +393,11 @@ function JobCard({ id }: { id: string }) {
           {!!request.hold_note && <Text className="mt-2 text-xs italic leading-[17px] text-amber-800">"{request.hold_note}"</Text>}
         </View>
       )}
+    </>
+  );
 
+  const onHold = (
+    <>
       {request.hold_status === 'on_hold' && (
         <View className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
           <View className="flex-row items-center gap-2">
@@ -389,7 +415,11 @@ function JobCard({ id }: { id: string }) {
           </Pressable>
         </View>
       )}
+    </>
+  );
 
+  const resellerContact = (
+    <>
       {hasResellerContact && (
         <View className="mb-6 rounded-xl bg-white p-5">
           <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Reseller</Text>
@@ -420,7 +450,11 @@ function JobCard({ id }: { id: string }) {
           )}
         </View>
       )}
+    </>
+  );
 
+  const lockedNote = (
+    <>
       {!hasAccepted && (
         <View className="mb-6 flex-row items-center gap-2 rounded-xl border border-dashed border-gray-200 bg-white p-4">
           <Ionicons name="lock-closed-outline" size={16} color="#9CA3AF" />
@@ -429,7 +463,11 @@ function JobCard({ id }: { id: string }) {
           </Text>
         </View>
       )}
+    </>
+  );
 
+  const extras = (
+    <>
       <RequestDetailsExtras
         scheduledDate={request.scheduled_date}
         scheduledTime={request.scheduled_time}
@@ -440,14 +478,22 @@ function JobCard({ id }: { id: string }) {
         contactPersonName={hasAccepted ? request.contact_person_name : undefined}
         contactPersonPhone={hasAccepted ? request.contact_person_phone : undefined}
       />
+    </>
+  );
 
+  const remark = (
+    <>
       {request.remark && (
         <View className="mb-6 mt-4 rounded-xl bg-white p-5">
           <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Remark</Text>
           <Text className="text-sm text-gray-700">{request.remark}</Text>
         </View>
       )}
+    </>
+  );
 
+  const chalan = (
+    <>
       {hasAccepted && (
         <View className="mb-6 rounded-xl bg-white p-5">
           <ChalanPhotos
@@ -459,7 +505,11 @@ function JobCard({ id }: { id: string }) {
           />
         </View>
       )}
+    </>
+  );
 
+  const partsAndLabor = (
+    <>
       {request.status === 'in_progress' && (
         <View className="mb-6 rounded-xl bg-white p-5">
           {request.quoted_price != null && Number(request.quoted_price) > 0 && (
@@ -510,7 +560,11 @@ function JobCard({ id }: { id: string }) {
           />
         </View>
       )}
+    </>
+  );
 
+  const acceptReject = (
+    <>
       {request.status === 'assigned' && (
         <View className="mb-4 flex-row" style={{ gap: 12 }}>
           <Pressable
@@ -533,7 +587,11 @@ function JobCard({ id }: { id: string }) {
           </Pressable>
         </View>
       )}
+    </>
+  );
 
+  const advance = (
+    <>
       {nextStatus && request.hold_status !== 'on_hold' && (
         <Pressable
           onPress={handleAdvance}
@@ -545,7 +603,11 @@ function JobCard({ id }: { id: string }) {
           </Text>
         </Pressable>
       )}
+    </>
+  );
 
+  const holdButton = (
+    <>
       {request.status === 'in_progress' && request.hold_status === 'none' && (
         <Pressable
           onPress={() => setShowHoldModal(true)}
@@ -555,14 +617,22 @@ function JobCard({ id }: { id: string }) {
           <Text className="text-base font-semibold text-amber-900">Hold</Text>
         </Pressable>
       )}
+    </>
+  );
 
+  const holdModal = (
+    <>
       <HoldRequestModal
         visible={showHoldModal}
         submitting={holdSubmitting}
         onSubmit={handleRequestHold}
         onClose={() => setShowHoldModal(false)}
       />
+    </>
+  );
 
+  const paymentBanner = (
+    <>
       {request.status === 'resolved' && request.payment_status !== 'paid' && (
         <View className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
           <View className="flex-row items-center gap-2.5">
@@ -584,28 +654,44 @@ function JobCard({ id }: { id: string }) {
           </Pressable>
         </View>
       )}
+    </>
+  );
 
+  const paidBanner = (
+    <>
       {request.status === 'resolved' && request.payment_status === 'paid' && (
         <View className="mb-4 flex-row items-center gap-2.5 rounded-xl border border-green-200 bg-green-50 p-4">
           <Ionicons name="checkmark-done-circle" size={18} color="#15803D" />
           <Text className="flex-1 text-xs leading-[17px] text-green-900">Paid in full - this job is closed.</Text>
         </View>
       )}
+    </>
+  );
 
+  const paymentSheet = (
+    <>
       <PaymentStatusSheet
         visible={showPayment}
         request={request}
         total={paymentTotal}
         onClose={() => setShowPayment(false)}
       />
+    </>
+  );
 
+  const paidBannerAgain = (
+    <>
       {request.status === 'resolved' && request.payment_status === 'paid' && (
         <View className="mb-4 flex-row items-center gap-2.5 rounded-xl border border-green-200 bg-green-50 p-4">
           <Ionicons name="checkmark-done-circle" size={18} color="#15803D" />
           <Text className="flex-1 text-xs leading-[17px] text-green-900">Paid - this job is closed.</Text>
         </View>
       )}
+    </>
+  );
 
+  const undo = (
+    <>
       {request.status === 'resolved' && request.payment_status !== 'paid' && (
         <View className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <Text className="text-sm font-semibold text-amber-900">Marked complete by mistake?</Text>
@@ -624,6 +710,66 @@ function JobCard({ id }: { id: string }) {
           </Pressable>
         </View>
       )}
+    </>
+  );
+
+  if (wide) {
+    return (
+      <ScrollView className="flex-1 bg-gray-50 px-8 pt-5" contentContainerStyle={{ paddingBottom: 40 }}>
+        <View className="flex-row items-start" style={{ gap: 24 }}>
+          <View style={{ flex: 3, minWidth: 0 }}>
+            {heading}
+            {stageStrip}
+            {paymentChip}
+            {statusCard}
+            {holdRequested}
+            {onHold}
+            {extras}
+            {remark}
+            {chalan}
+          </View>
+          <View style={{ flex: 2, minWidth: 0 }}>
+            {resellerContact}
+            {lockedNote}
+            {partsAndLabor}
+            {acceptReject}
+            {advance}
+            {holdButton}
+            {paymentBanner}
+            {paidBanner}
+            {paidBannerAgain}
+            {undo}
+          </View>
+        </View>
+        {holdModal}
+        {paymentSheet}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      {heading}
+      {stageStrip}
+      {paymentChip}
+      {statusCard}
+      {holdRequested}
+      {onHold}
+      {resellerContact}
+      {lockedNote}
+      {extras}
+      {remark}
+      {chalan}
+      {partsAndLabor}
+      {acceptReject}
+      {advance}
+      {holdButton}
+      {holdModal}
+      {paymentBanner}
+      {paidBanner}
+      {paymentSheet}
+      {paidBannerAgain}
+      {undo}
     </ScrollView>
   );
 }

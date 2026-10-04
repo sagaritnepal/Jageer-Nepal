@@ -5,6 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSupabaseRow, useSupabaseQuery, useSupabaseInsert, useSupabaseUpdate, subscribeToTable } from '../../../lib/hooks/useSupabase';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
+import { useIsWideWeb } from '../../../lib/hooks/useWideGrid';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
 import { PersonAvatar } from '../../../lib/components/PersonAvatar';
 import { PaymentQrModal } from '../../../lib/components/PaymentQrModal';
@@ -291,6 +292,7 @@ export default function RequestDetailScreen() {
 
 function RequestDetail({ id }: { id: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
+  const wide = useIsWideWeb();
   const { data: request, isLoading, refetch } = useSupabaseRow('service_requests', id);
   const { data: reseller } = useSupabaseRow('profiles', request?.reseller_id ?? undefined);
   const { data: technician } = useSupabaseRow('profiles', request?.technician_id ?? undefined);
@@ -330,91 +332,144 @@ function RequestDetail({ id }: { id: string }) {
     );
   }
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+  // Built once so the phone layout (one stack, in this order) and the wide web
+  // layout (the status and details beside the actions) show the same things.
+  const header = (
+    <>
       <Text className="mb-1 text-xs text-gray-400">Request #{request.id.slice(0, 8).toUpperCase()}</Text>
       <Text className="mb-2 text-2xl font-bold text-gray-900">{request.issue_type}</Text>
       <Text className="mb-6 text-gray-600">{request.description}</Text>
+    </>
+  );
 
-      {(reseller || technician) && (
-        <View className="mb-4 flex-row flex-wrap gap-4 rounded-xl bg-white p-5">
-          {reseller && (
-            <View className="flex-row items-center gap-3">
-              <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={40} bg="bg-orange-500" />
-              <View>
-                <Text className="text-[11px] uppercase tracking-wide text-gray-400">Reseller</Text>
-                <Text className="text-sm font-semibold text-gray-800">{reseller.full_name ?? 'Unnamed'}</Text>
-                {reseller.phone && <Text className="text-xs text-gray-500">{reseller.phone}</Text>}
-              </View>
-              {userId && <SaveContactButtonLabeled clientId={userId} contactId={reseller.id} />}
+  const people =
+    (reseller || technician) && (
+      <View className="mb-4 flex-row flex-wrap gap-4 rounded-xl bg-white p-5">
+        {reseller && (
+          <View className="flex-row items-center gap-3">
+            <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={40} bg="bg-orange-500" />
+            <View>
+              <Text className="text-[11px] uppercase tracking-wide text-gray-400">Reseller</Text>
+              <Text className="text-sm font-semibold text-gray-800">{reseller.full_name ?? 'Unnamed'}</Text>
+              {reseller.phone && <Text className="text-xs text-gray-500">{reseller.phone}</Text>}
             </View>
-          )}
-          {technician && (
-            <View className="flex-row items-center gap-3">
-              <PersonAvatar name={technician.full_name} photoUrl={technician.avatar_url} size={40} bg="bg-blue-600" />
-              <View>
-                <Text className="text-[11px] uppercase tracking-wide text-gray-400">Technician</Text>
-                <Text className="text-sm font-semibold text-gray-800">{technician.full_name ?? 'Unnamed'}</Text>
-                {technician.phone && <Text className="text-xs text-gray-500">{technician.phone}</Text>}
-              </View>
-              {userId && <SaveContactButtonLabeled clientId={userId} contactId={technician.id} />}
-            </View>
-          )}
-        </View>
-      )}
-
-      <View className="rounded-xl bg-white p-5">
-        <Text className="text-sm uppercase tracking-wide text-gray-400">Status</Text>
-        <Text className="mt-1 text-lg font-semibold text-blue-700">
-          {STATUS_LABELS[request.status] ?? request.status}
-        </Text>
-        {request.quoted_price != null && (
-          <Text className="mt-2 text-sm text-gray-500">
-            Quoted price: NPR {Number(request.quoted_price).toLocaleString()}
-          </Text>
+            {userId && <SaveContactButtonLabeled clientId={userId} contactId={reseller.id} />}
+          </View>
         )}
-        {request.status === 'resolved' && (
-          <View className={`mt-3 self-start rounded-full px-3 py-1 ${request.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
-            <Text className={`text-xs font-bold ${request.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'}`}>
-              {request.payment_status === 'paid' ? 'Payment received' : 'Payment due to reseller'}
-            </Text>
+        {technician && (
+          <View className="flex-row items-center gap-3">
+            <PersonAvatar name={technician.full_name} photoUrl={technician.avatar_url} size={40} bg="bg-blue-600" />
+            <View>
+              <Text className="text-[11px] uppercase tracking-wide text-gray-400">Technician</Text>
+              <Text className="text-sm font-semibold text-gray-800">{technician.full_name ?? 'Unnamed'}</Text>
+              {technician.phone && <Text className="text-xs text-gray-500">{technician.phone}</Text>}
+            </View>
+            {userId && <SaveContactButtonLabeled clientId={userId} contactId={technician.id} />}
           </View>
         )}
       </View>
+    );
 
-      {request.status === 'quoted' && <QuoteApproval request={request} />}
-
-      {(request.status === 'pending' || request.status === 'approved') && <CancelRequest request={request} />}
-
-      <RequestDetailsExtras
-        scheduledDate={request.scheduled_date}
-        scheduledTime={request.scheduled_time}
-        location={request.location_data}
-        photoUrls={request.photo_urls}
-      />
-
-      {request.remark && (
-        <View className="mt-4 rounded-xl bg-white p-5">
-          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Reseller's remark</Text>
-          <Text className="text-sm text-gray-700">{request.remark}</Text>
+  const statusCard = (
+    <View className="rounded-xl bg-white p-5">
+      <Text className="text-sm uppercase tracking-wide text-gray-400">Status</Text>
+      <Text className="mt-1 text-lg font-semibold text-blue-700">
+        {STATUS_LABELS[request.status] ?? request.status}
+      </Text>
+      {request.quoted_price != null && (
+        <Text className="mt-2 text-sm text-gray-500">
+          Quoted price: NPR {Number(request.quoted_price).toLocaleString()}
+        </Text>
+      )}
+      {request.status === 'resolved' && (
+        <View className={`mt-3 self-start rounded-full px-3 py-1 ${request.payment_status === 'paid' ? 'bg-green-100' : 'bg-red-50'}`}>
+          <Text className={`text-xs font-bold ${request.payment_status === 'paid' ? 'text-green-700' : 'text-red-600'}`}>
+            {request.payment_status === 'paid' ? 'Payment received' : 'Payment due to reseller'}
+          </Text>
         </View>
       )}
+    </View>
+  );
 
-      {request.status === 'resolved' && jobCards?.[0] && (
-        <JobCardBreakdown jobCard={jobCards[0]} quotedPrice={request.quoted_price} />
-      )}
+  const quoteApproval = request.status === 'quoted' && <QuoteApproval request={request} />;
 
-      {request.status === 'resolved' && request.payment_status !== 'paid' && (
-        <PayNow request={request} amountDue={jobAmountDue(request.quoted_price, jobCards?.[0])} onPaid={refetch} />
-      )}
+  const cancel = (request.status === 'pending' || request.status === 'approved') && (
+    <CancelRequest request={request} />
+  );
 
-      {request.status === 'resolved' &&
-        request.technician_id &&
-        userId &&
-        reviews &&
-        reviews.length === 0 && (
-          <RatingForm serviceRequestId={request.id} technicianId={request.technician_id} clientId={userId} />
-        )}
+  const extras = (
+    <RequestDetailsExtras
+      scheduledDate={request.scheduled_date}
+      scheduledTime={request.scheduled_time}
+      location={request.location_data}
+      photoUrls={request.photo_urls}
+    />
+  );
+
+  const remark =
+    request.remark && (
+      <View className="mt-4 rounded-xl bg-white p-5">
+        <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Reseller's remark</Text>
+        <Text className="text-sm text-gray-700">{request.remark}</Text>
+      </View>
+    );
+
+  const jobBreakdown =
+    request.status === 'resolved' && jobCards?.[0] && (
+      <JobCardBreakdown jobCard={jobCards[0]} quotedPrice={request.quoted_price} />
+    );
+
+  const payNow =
+    request.status === 'resolved' && request.payment_status !== 'paid' && (
+      <PayNow request={request} amountDue={jobAmountDue(request.quoted_price, jobCards?.[0])} onPaid={refetch} />
+    );
+
+  const rating =
+    request.status === 'resolved' &&
+      request.technician_id &&
+      userId &&
+      reviews &&
+      reviews.length === 0 && (
+        <RatingForm serviceRequestId={request.id} technicianId={request.technician_id} clientId={userId} />
+      );
+
+  if (wide) {
+    return (
+      <ScrollView className="flex-1 bg-gray-50 px-8 pt-5" contentContainerStyle={{ paddingBottom: 40 }}>
+        <View className="flex-row items-start" style={{ gap: 24 }}>
+          <View style={{ flex: 3, minWidth: 0 }}>
+            {header}
+            {people}
+            {statusCard}
+            {extras}
+            {remark}
+          </View>
+          {/* Each action card carries its own top margin (mt-4), so the
+              column is pulled up by the same amount to line up with the left. */}
+          <View style={{ flex: 2, minWidth: 0, marginTop: -16 }}>
+            {quoteApproval}
+            {cancel}
+            {jobBreakdown}
+            {payNow}
+            {rating}
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+      {header}
+      {people}
+      {statusCard}
+      {quoteApproval}
+      {cancel}
+      {extras}
+      {remark}
+      {jobBreakdown}
+      {payNow}
+      {rating}
     </ScrollView>
   );
 }

@@ -9,6 +9,8 @@ import { showAlert, getErrorMessage } from '../utils/alert';
 import { filterBySearch } from '../utils/search';
 import { toSafeImageUri } from '../utils/image';
 import { SearchSuggestions } from './SearchSuggestions';
+import { ReadableWidth } from './web/ReadableWidth';
+import { WideCardGrid } from './web/WideCardGrid';
 import { SearchBar } from './SearchBar';
 import { SearchFilterSheet } from './SearchFilterSheet';
 import type { CatalogProduct, Product } from '../../types/database.types';
@@ -259,26 +261,28 @@ export function CatalogStockingList({
 
   return (
     <View>
-      <View className="relative z-10 mb-3">
-        <SearchBar
-          value={search}
-          onChangeText={handleSearchChange}
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-          onOpenFilters={() => setSheetOpen(true)}
-          filterActive={!!category}
-          placeholder="Search by name or model…"
-        />
-        <SearchSuggestions
-          items={suggestions}
-          visible={searchFocused}
-          onSelect={(item) => {
-            setSearch('');
-            setSearchFocused(false);
-            router.push(`${basePath}/catalog/${item.id}`);
-          }}
-        />
-      </View>
+      <ReadableWidth maxWidth={560}>
+        <View className="relative z-10 mb-3">
+          <SearchBar
+            value={search}
+            onChangeText={handleSearchChange}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+            onOpenFilters={() => setSheetOpen(true)}
+            filterActive={!!category}
+            placeholder="Search by name or model…"
+          />
+          <SearchSuggestions
+            items={suggestions}
+            visible={searchFocused}
+            onSelect={(item) => {
+              setSearch('');
+              setSearchFocused(false);
+              router.push(`${basePath}/catalog/${item.id}`);
+            }}
+          />
+        </View>
+      </ReadableWidth>
 
       <SearchFilterSheet
         visible={sheetOpen}
@@ -300,17 +304,19 @@ export function CatalogStockingList({
       {!isLoading && scoped.length > 0 && filtered.length === 0 && (
         <Text className="text-gray-500">No items match your search.</Text>
       )}
-      {filtered.map((item) => (
-        <StockRow
-          key={item.id}
-          item={item}
-          existing={myProductByCatalogId.get(item.id)}
-          priceLabel={priceLabel}
-          userId={userId}
-          capToPurchasedStock={capToPurchasedStock}
-          basePath={basePath}
-        />
-      ))}
+      <WideCardGrid cardWidth={400}>
+        {filtered.map((item) => (
+          <StockRow
+            key={item.id}
+            item={item}
+            existing={myProductByCatalogId.get(item.id)}
+            priceLabel={priceLabel}
+            userId={userId}
+            capToPurchasedStock={capToPurchasedStock}
+            basePath={basePath}
+          />
+        ))}
+      </WideCardGrid>
     </View>
   );
 }

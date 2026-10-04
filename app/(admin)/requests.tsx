@@ -1,7 +1,9 @@
 // app/(admin)/requests.tsx
 import { useMemo } from 'react';
-import { View, Text, FlatList } from 'react-native';
+import { View, Text } from 'react-native';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideFlatList } from '../../lib/components/web/WideFlatList';
 import { distanceKm } from '../../lib/utils/distance';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
@@ -123,13 +125,14 @@ export default function AdminRequests() {
 
   const profileMap = useMemo(() => new Map((profiles ?? []).map((p) => [p.id, p])), [profiles]);
   const isLoading = loadingRequests || loadingProfiles;
+  const wide = useIsWideWeb();
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
+    <View className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && requests?.length === 0 && <Text className="text-gray-500">No requests yet.</Text>}
 
-      <FlatList
+      <WideFlatList
         data={requests}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <RequestCard item={item} profileMap={profileMap} />}

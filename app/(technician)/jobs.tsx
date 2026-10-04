@@ -1,11 +1,12 @@
 // app/(technician)/jobs.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
-import { useWideGrid } from '../../lib/hooks/useWideGrid';
+import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { WideFlatList } from '../../lib/components/web/WideFlatList';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
@@ -187,8 +188,7 @@ export default function TechnicianJobs() {
   // left on Completed and the person switched back to In progress by hand.
   const { tab: tabParam, t: tabStamp } = useLocalSearchParams<{ tab?: string; t?: string }>();
   const [tab, setTab] = useState<JobsTab>(tabParam === 'completed' ? 'resolved' : 'in_progress');
-  // Wide web lays the job cards out in columns instead of one stretched row each.
-  const { wide, columns, containerProps, cellStyle } = useWideGrid({ cardWidth: 440, minColumns: 1, maxColumns: 3 });
+  const wide = useIsWideWeb();
   useEffect(() => {
     if (tabParam === 'completed') setTab('resolved');
     else if (tabParam === 'in_progress') setTab('in_progress');
@@ -228,15 +228,11 @@ export default function TechnicianJobs() {
         <Text className="text-gray-500">{tab === 'in_progress' ? 'No jobs in progress.' : 'No completed jobs yet.'}</Text>
       )}
 
-      <FlatList
-        // A FlatList cannot change its column count on the fly, so a new
-        // count remounts it.
-        key={wide ? columns : 1}
-        numColumns={wide ? columns : 1}
-        {...containerProps}
+      <WideFlatList
+        cardWidth={440}
         data={activeJobs}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (wide ? <View style={cellStyle}><JobListCard item={item} /></View> : <JobListCard item={item} />)}
+        renderItem={({ item }) => <JobListCard item={item} />}
       />
     </View>
   );
