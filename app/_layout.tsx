@@ -13,6 +13,8 @@ import { BiometricLockScreen } from '../lib/components/BiometricLockScreen';
 import { FloatingAssistantChat } from '../lib/components/FloatingAssistantChat';
 import { ClientAssistantChat } from '../lib/components/ClientAssistantChat';
 import { AppAlertHost } from '../lib/components/AppAlertHost';
+import { PushTapHandler } from '../lib/components/PushTapHandler';
+import { installWebAppManifest } from '../lib/utils/webAppManifest';
 import '../global.css';
 
 // Pre-login screens (login/register) are still a bare mobile-first form
@@ -83,6 +85,23 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useAuthListener();
   const isLoading = useAuthStore((state) => state.isLoading);
   const userId = useAuthStore((state) => state.session?.user.id);
+  const hasProfile = useAuthStore((state) => !!state.profile);
+
+  // A cold start with a saved login restores the session first and the profile a
+  // moment later. Mounting the screens in that gap sends the person to the login
+  // screen and on to Home - so a refresh, a bookmark or a tapped notification
+  // lost the page it pointed at. Hold the screens until the profile is there (the
+  // address stays as it was), but only for this first start - later sign-ins work
+  // as before - and never for more than a few seconds if the profile cannot load.
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    if (!isLoading && (!userId || hasProfile)) setStarted(true);
+  }, [isLoading, userId, hasProfile]);
+  useEffect(() => {
+    const giveUp = setTimeout(() => setStarted(true), 8000);
+    return () => clearTimeout(giveUp);
+  }, []);
+  const waitingForProfile = !started && !!userId && !hasProfile;
 
   useBiometricLockBootstrap(userId);
   const role = useAuthStore((state) => state.profile?.role);
@@ -91,7 +110,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const biometricLocked = useBiometricLockStore((state) => state.locked);
   const biometricChecked = useBiometricLockStore((state) => state.checked);
 
-  if (isLoading || (userId && !biometricChecked)) {
+  if (isLoading || waitingForProfile || (userId && !biometricChecked)) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
         <ActivityIndicator size="large" color="#1d4ed8" />
@@ -122,6 +141,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <>
       {content}
+      <PushTapHandler />
       {showFinanceAssistant && <FloatingAssistantChat basePath={`/(${role})`} />}
       {showClientAssistant && <ClientAssistantChat basePath="/(client)" />}
     </>
@@ -130,6 +150,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   useLiveUpdates();
+  useEffect(() => installWebAppManifest(), []);
 
   return (
     <SafeAreaProvider>

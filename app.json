@@ -37,6 +37,13 @@
         }
       ],
       "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "color": "#2563EB",
+          "defaultChannel": "default"
+        }
+      ],
       "expo-font",
       "expo-asset"
     ],

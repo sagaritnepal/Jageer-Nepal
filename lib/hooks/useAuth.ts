@@ -7,6 +7,7 @@ import { SecureAuthStorage } from '../utils/secureAuthStorage';
 import { queryClient } from '../providers/QueryProvider';
 import type { Profile, UserRole } from '../../types/database.types';
 import { useCartStore } from './useCart';
+import { unregisterThisDevice } from './usePushNotifications';
 
 interface AuthState {
   session: Session | null;
@@ -43,6 +44,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   // and clearing the query cache stops a second account signing in on this
   // device from briefly seeing the previous user's cached data.
   signOut: async () => {
+    // While still signed in: stop pushing to this device for the person leaving,
+    // so the next person to use it is not sent their notifications.
+    await unregisterThisDevice();
     try {
       await supabase.auth.signOut({ scope: 'global' });
     } catch {

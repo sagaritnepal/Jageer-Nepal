@@ -13,6 +13,7 @@ import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { useMyEmployment } from '../../lib/hooks/useTechnicianEmployment';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 import { NotificationRow } from '../../lib/components/NotificationRow';
+import { PushSettingsCard } from '../../lib/components/PushSettingsCard';
 import { notificationHref } from '../../lib/constants/notificationKinds';
 import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
 import { WideCardGrid } from '../../lib/components/web/WideCardGrid';
@@ -350,6 +351,8 @@ export default function TechnicianInbox() {
           <EmploymentStatusCard userId={userId} />
         </Rise>
       )}
+
+      <PushSettingsCard hideWhenOn />
 
       {recentUpdates.length > 0 && (
         <>

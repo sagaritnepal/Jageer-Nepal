@@ -8,6 +8,7 @@ import { useNotifications } from '../hooks/useNotifications';
 import { notificationHref, type NotificationPortal } from '../constants/notificationKinds';
 import { showAlert } from '../utils/alert';
 import { NotificationRow } from './NotificationRow';
+import { PushSettingsCard } from './PushSettingsCard';
 import { ReadableWidth } from './web/ReadableWidth';
 
 /** Everyone's notification inbox, newest first: the same list for a customer,
@@ -48,6 +49,8 @@ export function NotificationsScreen({ portal, emptyHint }: { portal: Notificatio
       contentContainerStyle={{ paddingBottom: 40 }}
     >
       <ReadableWidth maxWidth={720}>
+        <PushSettingsCard />
+
         {items.length > 0 && (
           <View className="mb-3 flex-row flex-wrap items-center justify-between" style={{ gap: 8 }}>
             <Text className="text-[13px] font-semibold text-gray-600">
