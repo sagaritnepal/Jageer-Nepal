@@ -4,42 +4,44 @@ import { router, usePathname } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { subscribeToTable } from '../hooks/useSupabase';
 import { useNotifications } from '../hooks/useNotifications';
-import { NO_POPUP_KINDS, notificationStyle } from '../constants/notificationKinds';
+import {
+  NOTIFICATIONS_PAGE,
+  NO_POPUP_KINDS,
+  notificationHref,
+  notificationStyle,
+  type NotificationPortal,
+} from '../constants/notificationKinds';
 import { HoldCapsule } from './HoldNotice';
 import type { AppNotification } from '../../types/database.types';
 
 const SHOW_FOR_MS = 12_000;
 
-type Portal = 'reseller' | 'technician';
+// How a job's own page shows up in usePathname() (route groups are not part
+// of it), so a pill is not shown for the job the person is already looking at.
+const JOB_PATH = {
+  reseller: (id: string) => `/request/${id}`,
+  client: (id: string) => `/request/${id}`,
+  technician: (id: string) => `/job/${id}`,
+} as const;
 
-// Where a tap goes: the job's own page, or - when several arrive at once - the
-// page that lists them. `path` is how that job page shows up in usePathname()
-// (route groups are not part of it).
-const PORTAL = {
-  reseller: {
-    job: (id: string) => `/(reseller)/request/${id}`,
-    path: (id: string) => `/request/${id}`,
-    list: '/(reseller)/notifications',
-    many: (count: number) => `${count} new updates on your jobs`,
-  },
-  technician: {
-    job: (id: string) => `/(technician)/job/${id}`,
-    path: (id: string) => `/job/${id}`,
-    list: '/(technician)/inbox',
-    many: (count: number) => `${count} new updates`,
-  },
+const MANY_LABEL = {
+  reseller: (count: number) => `${count} new updates on your jobs`,
+  client: (count: number) => `${count} new updates on your requests`,
+  technician: (count: number) => `${count} new updates`,
 } as const;
 
 /** Pops up at the top of whichever screen is open the moment a notification
- * arrives - a technician accepting, declining or finishing a job or recording a
- * payment (reseller), a reseller cancelling work (technician) - with a tap to
- * open the job. Only one that arrives while the app is open pops up: the first
+ * arrives - for a customer a quote, an assigned technician or a finished job;
+ * for a reseller what a technician or customer did; for a technician cancelled
+ * work or a team invitation - with a tap to open it. Questions that already
+ * have their own pop-up (see NO_POPUP_KINDS) are left to it. Only one that
+ * arrives while the app is open pops up: the first
  * load just records what is already there, so old ones do not pop up again on
  * every launch (they wait, unread, in the bell instead).
  *
  * This is also the one place that listens for new rows live; the bell and the
  * list read the same query and update when this refetches it. */
-export function NotificationPopup({ userId, portal }: { userId: string | undefined; portal: Portal }) {
+export function NotificationPopup({ userId, portal }: { userId: string | undefined; portal: NotificationPortal }) {
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const pathRef = useRef(pathname);
@@ -47,7 +49,6 @@ export function NotificationPopup({ userId, portal }: { userId: string | undefin
   const { items, loaded, markRead } = useNotifications(userId);
   const known = useRef<Set<string> | null>(null);
   const [fresh, setFresh] = useState<AppNotification[]>([]);
-  const target = PORTAL[portal];
 
   useEffect(() => {
     if (!userId) return;
@@ -75,11 +76,11 @@ export function NotificationPopup({ userId, portal }: { userId: string | undefin
     if (arrived.length === 0) return;
 
     // Already looking at that job: no pill, and it counts as read.
-    const here = arrived.filter((item) => !!item.request_id && pathRef.current === target.path(item.request_id));
+    const here = arrived.filter((item) => !!item.request_id && pathRef.current === JOB_PATH[portal](item.request_id));
     if (here.length > 0) markRead(here.map((item) => item.id));
     const toShow = arrived.filter((item) => !here.includes(item));
     if (toShow.length > 0) setFresh(toShow);
-  }, [items, loaded, markRead, target]);
+  }, [items, loaded, markRead, portal]);
 
   useEffect(() => {
     if (fresh.length === 0) return;
@@ -98,11 +99,11 @@ export function NotificationPopup({ userId, portal }: { userId: string | undefin
       key={fresh.map((item) => item.id).join(',')}
       tone={tone}
       icon={icon}
-      label={several ? target.many(fresh.length) : first.title}
+      label={several ? MANY_LABEL[portal](fresh.length) : first.title}
       onPress={() => {
         setFresh([]);
         markRead(fresh.map((item) => item.id));
-        router.push((!several && first.request_id ? target.job(first.request_id) : target.list) as any);
+        router.push(((!several && notificationHref(first, portal)) || NOTIFICATIONS_PAGE[portal]) as any);
       }}
       onDismiss={() => setFresh([])}
     />

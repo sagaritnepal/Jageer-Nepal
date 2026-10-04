@@ -48,6 +48,12 @@ export function useNotifications(userId: string | undefined) {
     [userId, queryClient]
   );
 
+  const clearAll = useCallback(async () => {
+    if (!userId) return;
+    const { error } = await (supabase.from('notifications') as any).delete().eq('user_id', userId);
+    if (!error) queryClient.invalidateQueries({ queryKey: ['notifications'] });
+  }, [userId, queryClient]);
+
   return {
     items,
     unread,
@@ -56,5 +62,7 @@ export function useNotifications(userId: string | undefined) {
     failed: isError,
     /** Marks the given ones (or, with no argument, all of them) as read. */
     markRead,
+    /** Removes all of this person's notifications. */
+    clearAll,
   };
 }

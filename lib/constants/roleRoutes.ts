@@ -18,14 +18,19 @@ import type { UserRole } from '../../types/database.types';
  * Keep in step with the files under app/(role)/ - a missing entry only
  * costs a redirect to home, a wrong one lands on an unknown route. */
 export const ROLE_ROUTES: Record<UserRole, string[]> = {
-  client: ['checkout', 'contacts', 'dashboard', 'market', 'new-request', 'profile', 'request-details', 'requests', 'rewards'],
+  client: [
+    'checkout', 'contacts', 'dashboard', 'market', 'new-request', 'notifications', 'profile', 'request-details', 'requests',
+    'rewards',
+  ],
   reseller: [
     'bank-accounts', 'bank-balances', 'checkout', 'company', 'customers', 'dashboard', 'daybook', 'edit-request',
     'employees', 'finance', 'import-statement', 'inventory', 'new-request', 'notifications', 'paid', 'profile', 'quick-payment',
     'quotation/new', 'received', 'report', 'request-details', 'requests', 'rewards', 'shop', 'to-give', 'to-receive',
     'transactions', 'wholesale', 'workhub',
   ],
-  technician: ['dashboard', 'earnings', 'employment', 'inbox', 'jobs', 'profile', 'rewards', 'statement', 'workhub'],
+  technician: [
+    'dashboard', 'earnings', 'employment', 'inbox', 'jobs', 'notifications', 'profile', 'rewards', 'statement', 'workhub',
+  ],
   wholesaler: [
     'bank-accounts', 'bank-balances', 'customers', 'daybook', 'finance', 'import-statement', 'inventory', 'market',
     'marketplace', 'orders', 'paid', 'profile', 'quick-payment', 'received', 'report', 'to-give', 'to-receive',

@@ -1,6 +1,6 @@
 // lib/components/HoldNotice.tsx
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Animated, Easing, Platform } from 'react-native';
+import { View, Text, Pressable, Animated, Easing, Platform, useWindowDimensions } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSupabaseQuery, subscribeToTable } from '../hooks/useSupabase';
 import type { ServiceRequest } from '../../types/database.types';
 
-export type CapsuleTone = 'amber' | 'gray' | 'green' | 'red';
+export type CapsuleTone = 'amber' | 'gray' | 'green' | 'red' | 'blue';
 type Tone = CapsuleTone;
 
 const TONES: Record<Tone, { bg: string; fg: string }> = {
@@ -16,6 +16,7 @@ const TONES: Record<Tone, { bg: string; fg: string }> = {
   gray: { bg: '#374151', fg: '#FFFFFF' },
   green: { bg: '#16A34A', fg: '#FFFFFF' },
   red: { bg: '#DC2626', fg: '#FFFFFF' },
+  blue: { bg: '#2563EB', fg: '#FFFFFF' },
 };
 
 /** A small floating pill at the top of the screen that slides in over
@@ -35,6 +36,7 @@ export function HoldCapsule({
   onDismiss?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const slide = useRef(new Animated.Value(0)).current;
   const { bg, fg } = TONES[tone];
 
@@ -52,7 +54,9 @@ export function HoldCapsule({
         style={{
           opacity: slide,
           transform: [{ translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }],
-          maxWidth: 420,
+          // Never wider than the screen (minus the side padding), so a long
+          // title is cut with "…" instead of running off the edge.
+          maxWidth: Math.min(420, screenWidth - 32),
         }}
       >
         <Pressable

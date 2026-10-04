@@ -3,9 +3,9 @@
 // The technician's job inbox: updates (such as a reseller cancelling work), offers
 // to answer, open team work to take, jobs in progress and the employment link. This used to be the Home tab; Home is now the
 // dashboard (see dashboard.tsx) and this lives one tap away from its header.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -13,6 +13,7 @@ import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
 import { useMyEmployment } from '../../lib/hooks/useTechnicianEmployment';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 import { NotificationRow } from '../../lib/components/NotificationRow';
+import { notificationHref } from '../../lib/constants/notificationKinds';
 import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
 import { WideCardGrid } from '../../lib/components/web/WideCardGrid';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
@@ -305,17 +306,16 @@ export default function TechnicianInbox() {
     return reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
   }, [reviews]);
 
-  // Updates from resellers (the database writes them - see migration 0082): the
-  // last week's, opened by tapping through to the job. Opening the Inbox marks
-  // them read, but the ones that were new stay highlighted while it is open.
-  const { items: updates, unread, loaded: updatesLoaded, markRead } = useNotifications(userId);
-  const highlighted = useRef(new Set<string>());
-  for (const update of updates) if (!update.read_at) highlighted.current.add(update.id);
-  useEffect(() => {
-    if (updatesLoaded && unread > 0) markRead();
-  }, [updatesLoaded, unread, markRead]);
+  // Updates addressed to the technician (the database writes them - see
+  // migrations 0082 and 0083): this week's latest few. A job offer is left out
+  // because it is already shown as a card below. Tap one to open it, tick it to
+  // mark it read; the full list is one tap away.
+  const { items: updates, markRead } = useNotifications(userId);
   const recentUpdates = useMemo(
-    () => updates.filter((u) => Date.now() - new Date(u.created_at).getTime() <= 7 * 24 * 60 * 60 * 1000).slice(0, 5),
+    () =>
+      updates
+        .filter((u) => u.kind !== 'job_offered' && Date.now() - new Date(u.created_at).getTime() <= 7 * 24 * 60 * 60 * 1000)
+        .slice(0, 5),
     [updates]
   );
 
@@ -364,12 +364,23 @@ export default function TechnicianInbox() {
               <Rise key={update.id} index={next()}>
                 <NotificationRow
                   item={update}
-                  isNew={highlighted.current.has(update.id)}
-                  onPress={update.request_id ? () => router.push(`/(technician)/job/${update.request_id}` as any) : undefined}
+                  onMarkRead={() => markRead([update.id])}
+                  onPress={
+                    notificationHref(update, 'technician')
+                      ? () => {
+                          if (!update.read_at) markRead([update.id]);
+                          router.push(notificationHref(update, 'technician') as any);
+                        }
+                      : undefined
+                  }
                 />
               </Rise>
             ))}
           </WideCardGrid>
+          <Pressable onPress={() => router.push('/(technician)/notifications' as any)} className="mb-4 -mt-1 flex-row items-center gap-1 self-start py-1">
+            <Text className="text-[13px] font-semibold text-blue-700">See all notifications</Text>
+            <Ionicons name="chevron-forward" size={14} color="#1D4ED8" />
+          </Pressable>
         </>
       )}
 

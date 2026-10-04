@@ -20,7 +20,9 @@ export function InboxButton() {
     queryOptions: { refetchInterval: 20_000 },
   });
   const open = useOpenTeamJobs(userId);
-  const { unread } = useNotifications(userId);
+  const { items: notes } = useNotifications(userId);
+  // A job offer is already counted as an offer above, so its notification is not counted twice.
+  const unread = notes.filter((n) => !n.read_at && n.kind !== 'job_offered').length;
   const waiting = (offers?.length ?? 0) + open.length + unread;
 
   return (

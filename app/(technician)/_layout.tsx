@@ -40,6 +40,7 @@ const WIDE_ROUTES = [
   '/job',
   '/employment',
   '/inbox',
+  '/notifications',
 ];
 
 export default function TechnicianLayout() {
@@ -93,6 +94,16 @@ export default function TechnicianLayout() {
       <Tabs.Screen name="statement" options={{ href: null, title: 'Statement' }} />
       <Tabs.Screen name="job/[id]" options={{ href: null, title: 'Job Card' }} />
       <Tabs.Screen name="employment" options={{ href: null, title: 'Employment' }} />
+      {/* Everything addressed to the technician. Opened from "See all" in the
+          Inbox's Updates, so it goes back there. */}
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+          title: 'Notifications',
+          header: () => <PortalHeaderBar title="Notifications" backTo="/(technician)/inbox" />,
+        }}
+      />
       {/* The old Home tab: offers to answer, open team work, employment.
           Reached from the Inbox button in the dashboard's header. */}
       <Tabs.Screen

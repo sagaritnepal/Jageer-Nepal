@@ -17,16 +17,18 @@ export function timeAgo(iso: string): string {
 }
 
 /** One notification in a list: its icon, what happened, which job, and when.
- * `isNew` highlights it (unread, or unread when the page was opened). */
+ * An unread one is highlighted, with a tick to mark just that one as read;
+ * tapping the row opens what it is about (and marks it read). */
 export function NotificationRow({
   item,
-  isNew,
   onPress,
+  onMarkRead,
 }: {
   item: AppNotification;
-  isNew: boolean;
   onPress?: () => void;
+  onMarkRead?: () => void;
 }) {
+  const unread = !item.read_at;
   const { icon, tone } = notificationStyle(item.kind);
   const tint = NOTIFICATION_TINT[tone];
 
@@ -35,19 +37,16 @@ export function NotificationRow({
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={item.title}
+      accessibilityLabel={`${unread ? 'Unread. ' : ''}${item.title}`}
       className={`mb-3 flex-row items-start gap-3 rounded-2xl border p-4 ${
-        isNew ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-white'
+        unread ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-white'
       }`}
     >
       <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: tint.bg }}>
         <Ionicons name={icon} size={21} color={tint.fg} />
       </View>
       <View className="flex-1" style={{ gap: 2 }}>
-        <View className="flex-row items-center gap-1.5">
-          <Text className="flex-1 text-[14.5px] font-bold text-gray-900">{item.title}</Text>
-          {isNew && <View className="h-2 w-2 rounded-full bg-blue-600" />}
-        </View>
+        <Text className={`text-[14.5px] text-gray-900 ${unread ? 'font-bold' : 'font-semibold'}`}>{item.title}</Text>
         {!!item.body && (
           <Text className="text-[13px] text-gray-700" numberOfLines={2}>
             {item.body}
@@ -57,7 +56,19 @@ export function NotificationRow({
           {timeAgo(item.created_at)} · {formatTimestamp(item.created_at)}
         </Text>
       </View>
-      {!!onPress && <Ionicons name="chevron-forward" size={16} color="#9CA3AF" style={{ marginTop: 10 }} />}
+      {unread && onMarkRead ? (
+        <Pressable
+          onPress={onMarkRead}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Mark as read"
+          className="h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-white active:bg-blue-100"
+        >
+          <Ionicons name="checkmark" size={17} color="#2563EB" />
+        </Pressable>
+      ) : (
+        !!onPress && <Ionicons name="chevron-forward" size={16} color="#9CA3AF" style={{ marginTop: 10 }} />
+      )}
     </Pressable>
   );
 }

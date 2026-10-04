@@ -1,20 +1,22 @@
-// lib/components/reseller/NotificationBell.tsx
+// lib/components/NotificationBell.tsx
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useAuthStore } from '../../hooks/useAuth';
-import { useNotifications } from '../../hooks/useNotifications';
+import { useAuthStore } from '../hooks/useAuth';
+import { useNotifications } from '../hooks/useNotifications';
+import { NOTIFICATIONS_PAGE, type NotificationPortal } from '../constants/notificationKinds';
 
-/** The notification bell in a reseller's header: opens their notifications -
- * what technicians have done on their jobs - and shows how many are unread.
- * The bell fills in and turns blue while there are some. */
-export function ResellerNotificationBell() {
+/** The notification bell in a customer's or reseller's header: opens their
+ * notifications and shows how many are unread. The bell fills in and turns
+ * blue while there are some. (A technician's bell is the Inbox button, which
+ * counts these too.) */
+export function NotificationBell({ portal }: { portal: Exclude<NotificationPortal, 'technician'> }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { unread } = useNotifications(userId);
 
   return (
     <Pressable
-      onPress={() => router.push('/(reseller)/notifications')}
+      onPress={() => router.push(NOTIFICATIONS_PAGE[portal] as never)}
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={unread > 0 ? `Notifications, ${unread} new` : 'Notifications'}

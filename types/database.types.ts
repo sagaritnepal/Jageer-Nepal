@@ -469,11 +469,12 @@ export interface ServiceCategory {
   created_at: string;
 }
 
-// Written by the database (migration 0082), never by the app: one row per
-// thing someone should hear about - a technician accepting, declining or
-// finishing a job, a payment, a reseller cancelling work. The app only reads
-// them and marks its own as read.
+// Written by the database (migrations 0082 and 0083), never by the app: one row
+// per thing someone should hear about - what a technician, reseller or customer
+// did on a job, and what happened in a team. The app only reads them, marks its
+// own as read, and clears them.
 export type NotificationKind =
+  // a technician did something on a reseller's job
   | 'job_accepted'
   | 'job_declined'
   | 'hold_requested'
@@ -482,7 +483,27 @@ export type NotificationKind =
   | 'job_reopened'
   | 'payment_recorded'
   | 'chalan_added'
-  | 'work_cancelled';
+  | 'work_cancelled'
+  // the customer's own request moved on
+  | 'quote_received'
+  | 'technician_assigned'
+  | 'job_started'
+  // the customer answered the reseller
+  | 'quote_approved'
+  // the reseller's side moved, for the technician
+  | 'job_offered'
+  | 'offer_withdrawn'
+  | 'hold_approved'
+  | 'hold_declined'
+  // teams
+  | 'team_invite'
+  | 'team_application'
+  | 'team_accepted'
+  | 'team_declined'
+  | 'team_removed'
+  | 'leave_requested'
+  | 'leave_approved'
+  | 'leave_declined';
 
 export interface AppNotification {
   id: string;
