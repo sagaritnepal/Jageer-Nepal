@@ -3,26 +3,29 @@ import { useState } from 'react';
 import { Platform, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../components/web/WebSidebarShell';
 
-// A wide web grid wants cards about this wide, so a bigger screen shows more
-// of them per row instead of a few huge ones.
-const WIDE_CARD_WIDTH = 220;
 const WIDE_GRID_GAP = 16;
 
-/** Product-card grids are two to a row on a phone. On wide web this gives
- * as many columns as fit at WIDE_CARD_WIDTH, measured from the grid itself so
- * it follows whatever width the page column ends up with.
+/** Card grids and lists are one column (or two product cards) on a phone. On
+ * wide web this gives as many columns as fit at `cardWidth`, measured from the
+ * grid itself so it follows whatever width the page column ends up with.
  *
- * Spread `containerProps` on the wrapping row (it measures the grid and pulls
- * the outer edges back out), and wrap each card in a View with `cellStyle`.
- * When `wide` is false, render the plain phone grid instead. */
-export function useWideGrid() {
+ * Spread `containerProps` on the wrapping row (or the FlatList - it measures
+ * the grid and pulls the outer edges back out), and give each card's cell
+ * `cellStyle`. A FlatList also wants `numColumns={columns}` and
+ * `key={columns}`. When `wide` is false, render the plain phone layout. */
+export function useWideGrid({
+  cardWidth = 220,
+  minColumns = 2,
+  maxColumns = 8,
+}: { cardWidth?: number; minColumns?: number; maxColumns?: number } = {}) {
   const { width: windowWidth } = useWindowDimensions();
   const [gridWidth, setGridWidth] = useState(0);
   const wide = Platform.OS === 'web' && windowWidth >= WEB_SIDEBAR_MIN_WIDTH;
-  const columns = Math.min(8, Math.max(2, Math.floor(gridWidth / (WIDE_CARD_WIDTH + WIDE_GRID_GAP))));
+  const columns = Math.min(maxColumns, Math.max(minColumns, Math.floor(gridWidth / (cardWidth + WIDE_GRID_GAP))));
 
   return {
     wide,
+    columns,
     containerProps: {
       onLayout: (e: LayoutChangeEvent) => setGridWidth(e.nativeEvent.layout.width),
       // Each cell pads half the gap on both sides; this pulls the outer edges

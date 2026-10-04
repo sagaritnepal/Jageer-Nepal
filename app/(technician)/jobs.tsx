@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../lib/hooks/useSupabase';
+import { useWideGrid } from '../../lib/hooks/useWideGrid';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { RequestPhotoThumb } from '../../lib/components/RequestPhotoThumb';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
@@ -186,6 +187,8 @@ export default function TechnicianJobs() {
   // left on Completed and the person switched back to In progress by hand.
   const { tab: tabParam, t: tabStamp } = useLocalSearchParams<{ tab?: string; t?: string }>();
   const [tab, setTab] = useState<JobsTab>(tabParam === 'completed' ? 'resolved' : 'in_progress');
+  // Wide web lays the job cards out in columns instead of one stretched row each.
+  const { wide, columns, containerProps, cellStyle } = useWideGrid({ cardWidth: 440, minColumns: 1, maxColumns: 3 });
   useEffect(() => {
     if (tabParam === 'completed') setTab('resolved');
     else if (tabParam === 'in_progress') setTab('in_progress');
@@ -214,8 +217,8 @@ export default function TechnicianJobs() {
   // Supabase reuses the already-joined channel for the same table+filter.
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-4 flex-row" style={{ gap: 8 }}>
+    <View className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
+      <View className="mb-4 flex-row" style={{ gap: 8, ...(wide ? { maxWidth: 420 } : null) }}>
         <TabPill label="In progress" count={inProgressJobs.length} active={tab === 'in_progress'} onPress={() => setTab('in_progress')} />
         <TabPill label="Completed" count={completedJobs.length} active={tab === 'resolved'} onPress={() => setTab('resolved')} />
       </View>
@@ -225,7 +228,16 @@ export default function TechnicianJobs() {
         <Text className="text-gray-500">{tab === 'in_progress' ? 'No jobs in progress.' : 'No completed jobs yet.'}</Text>
       )}
 
-      <FlatList data={activeJobs} keyExtractor={(item) => item.id} renderItem={({ item }) => <JobListCard item={item} />} />
+      <FlatList
+        // A FlatList cannot change its column count on the fly, so a new
+        // count remounts it.
+        key={wide ? columns : 1}
+        numColumns={wide ? columns : 1}
+        {...containerProps}
+        data={activeJobs}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (wide ? <View style={cellStyle}><JobListCard item={item} /></View> : <JobListCard item={item} />)}
+      />
     </View>
   );
 }

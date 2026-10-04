@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseDelete } from '../hooks/useSupabase';
+import { useWideGrid } from '../hooks/useWideGrid';
 import { supabase } from '../supabase';
 import { PersonAvatar } from './PersonAvatar';
 import { SearchBar } from './SearchBar';
@@ -143,6 +144,8 @@ export function SavedContactsScreen({ basePath }: { basePath: string }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<RoleFilter>('all');
   const { entries, isLoading } = useSavedContactProfiles(userId);
+  // Wide web lays the contacts out in columns instead of one stretched row each.
+  const { wide, columns, containerProps, cellStyle } = useWideGrid({ cardWidth: 360, minColumns: 1, maxColumns: 3 });
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -154,8 +157,12 @@ export function SavedContactsScreen({ basePath }: { basePath: string }) {
   }, [entries, search, filter]);
 
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
+    <View className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
+      {/* On a wide page the search box keeps a normal width instead of
+          running the whole way across. */}
+      <View style={wide ? { maxWidth: 520 } : undefined}>
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
+      </View>
 
       <View className="my-3 flex-row gap-2">
         <FilterTab label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
@@ -166,9 +173,17 @@ export function SavedContactsScreen({ basePath }: { basePath: string }) {
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
 
       <FlatList
+        // A FlatList cannot change its column count on the fly, so a new
+        // count remounts it.
+        key={wide ? columns : 1}
+        numColumns={wide ? columns : 1}
+        {...containerProps}
         data={filtered}
         keyExtractor={(item) => item.saved.id}
-        renderItem={({ item }) => <ContactRow entry={item} basePath={basePath} />}
+        renderItem={({ item }) => {
+          const row = <ContactRow entry={item} basePath={basePath} />;
+          return wide ? <View style={cellStyle}>{row}</View> : row;
+        }}
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
           !isLoading ? (

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
+import { useWideGrid } from '../../lib/hooks/useWideGrid';
 import { BarChart } from '../../lib/components/BarChart';
 import { formatDuration, formatTimestamp } from '../../lib/utils/duration';
 import type { JobCard } from '../../types/database.types';
@@ -63,6 +64,8 @@ export function jobCardAmount(c: JobCardWithQuote) {
 
 export default function TechnicianEarnings() {
   const userId = useAuthStore((state) => state.session?.user.id);
+  // Only wants to know if this is a wide web screen, for the two-column layout.
+  const { wide } = useWideGrid();
 
   const { data: jobCards, isLoading } = useSupabaseQuery('job_cards', {
     filters: userId ? { technician_id: userId } : {},
@@ -148,8 +151,10 @@ export default function TechnicianEarnings() {
     };
   }, [jobCards]);
 
-  return (
-    <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
+  // Built once so the phone layout (one column) and the wide web layout (the
+  // summary and charts beside the payouts) show exactly the same things.
+  const summarySection = (
+    <>
       <View className="mb-5 rounded-2xl bg-[#0D9488] p-5">
         <Text className="text-[12.5px] font-semibold text-white/85">This week</Text>
         <Text className="mt-1 text-[28px] font-extrabold text-white">NPR {stats.weekTotal.toLocaleString()}</Text>
@@ -215,7 +220,11 @@ export default function TechnicianEarnings() {
           formatLabel={(label, i) => (i % 6 === 0 ? label : null)}
         />
       </View>
+    </>
+  );
 
+  const payoutsSection = (
+    <>
       <View className="mb-3 flex-row items-center justify-between">
         <Text className="text-[15px] font-bold text-gray-900">Recent payouts</Text>
         <Pressable
@@ -260,6 +269,22 @@ export default function TechnicianEarnings() {
           <Text className="text-[13.5px] font-extrabold text-[#0D9488]">NPR {item.amount.toLocaleString()}</Text>
         </View>
       ))}
+    </>
+  );
+
+  return (
+    <ScrollView className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'} contentContainerStyle={{ paddingBottom: 40 }}>
+      {wide ? (
+        <View className="flex-row items-start" style={{ gap: 24 }}>
+          <View style={{ flex: 3, minWidth: 0 }}>{summarySection}</View>
+          <View style={{ flex: 2, minWidth: 0 }}>{payoutsSection}</View>
+        </View>
+      ) : (
+        <>
+          {summarySection}
+          {payoutsSection}
+        </>
+      )}
     </ScrollView>
   );
 }

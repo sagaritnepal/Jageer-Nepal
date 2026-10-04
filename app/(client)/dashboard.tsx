@@ -1,6 +1,6 @@
 // app/(client)/dashboard.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
@@ -9,6 +9,7 @@ import { CategoryGrid } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { SaveContactButton } from '../../lib/components/SaveContactButton';
+import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import type { Profile, ServiceCategory, ServiceRequest, RequestStatus } from '../../types/database.types';
 
@@ -26,6 +27,15 @@ export default function ClientDashboard() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [search, setSearch] = useState('');
   const [pickerCategory, setPickerCategory] = useState<ServiceCategory | null>(null);
+
+  // A phone browser is still Platform.OS === 'web', so the desktop layout
+  // below also needs the width the sidebar shell itself switches on.
+  const { width: screenWidth } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
+  // Width of the wide layout's main column, so the category grid can add
+  // columns as the page gets wider (8 is what fits the narrowest wide page).
+  const [mainColumnWidth, setMainColumnWidth] = useState(0);
+  const categoryColumns = Math.min(12, Math.max(8, Math.floor(mainColumnWidth / 92)));
 
   const { data: resellers } = useSupabaseQuery('profiles', { filters: { role: 'reseller' } });
   const { data: myRequests } = useSupabaseQuery('service_requests', {
@@ -62,6 +72,102 @@ export default function ClientDashboard() {
       .sort((a, b) => new Date(b.lastRequest.created_at).getTime() - new Date(a.lastRequest.created_at).getTime())
       .slice(0, 3);
   }, [myRequests, resellers]);
+
+  // Shared by the phone layout and the wide web layout below.
+  const recentlyHiredSection =
+    recentlyHiredResellers.length > 0 ? (
+      <>
+        <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Recently Hired Reseller</Text>
+        {recentlyHiredResellers.map(({ reseller, lastRequest }) => (
+          <Pressable
+            key={reseller.id}
+            onPress={() => router.push(`/(client)/reseller/${reseller.id}`)}
+            className="mb-2.5 flex-row items-center gap-2.5 rounded-2xl border border-gray-200 bg-white p-3"
+          >
+            <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={36} />
+            <Text className="flex-1 text-[13px] text-gray-900" numberOfLines={1}>
+              <Text className="font-bold">{reseller.full_name ?? 'Reseller'}</Text>
+              <Text className="text-gray-400"> · {lastRequest.issue_type} · </Text>
+              <Text className="text-gray-400">{new Date(lastRequest.created_at).toLocaleDateString()}</Text>
+            </Text>
+            <StatusPill status={lastRequest.status} />
+            {userId && <SaveContactButton clientId={userId} contactId={reseller.id} />}
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+        ))}
+      </>
+    ) : null;
+
+  const actionSheet = (
+    <ServiceActionSheet
+      category={pickerCategory}
+      onClose={() => setPickerCategory(null)}
+      onSelect={(action) => {
+        if (!pickerCategory) return;
+        const category = pickerCategory.label;
+        setPickerCategory(null);
+        router.push(
+          `/(client)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}&n=${Date.now()}`
+        );
+      }}
+    />
+  );
+
+  // Wide web gets its own arrangement (a wider category grid, the request
+  // button in a right rail) instead of one long phone-width column. Kept as a
+  // separate branch so the phone layout below stays exactly as it was.
+  if (isWideWeb) {
+    return (
+      <>
+        <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: 40 }}>
+          <View className="px-8 pb-2 pt-6">
+            <View className="mb-5 flex-row items-center justify-between">
+              <Text className="text-2xl font-extrabold text-gray-900">
+                Welcome{profile?.full_name ? `, ${profile.full_name}` : ''}
+              </Text>
+              <View className="w-80 flex-row items-center rounded-xl border border-gray-200 bg-white px-4 py-2.5">
+                <Ionicons name="search" size={16} color="#9CA3AF" />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search for services..."
+                  placeholderTextColor="#9CA3AF"
+                  className="ml-2 flex-1 text-sm text-gray-900"
+                />
+              </View>
+            </View>
+
+            <View className="flex-row gap-6">
+              <View
+                className="flex-1"
+                style={{ minWidth: 0 }}
+                onLayout={(e) => setMainColumnWidth(e.nativeEvent.layout.width)}
+              >
+                <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
+                <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} columns={categoryColumns} />
+                {recentlyHiredSection}
+              </View>
+
+              <View className="w-72 gap-4">
+                <Pressable
+                  onPress={() => router.push('/(client)/new-request?from=dashboard')}
+                  className="rounded-2xl bg-orange-500 p-4"
+                >
+                  <Text className="text-[14.5px] font-bold text-white">Need IT help?</Text>
+                  <Text className="mb-2.5 mt-0.5 text-xs text-orange-100">Report an issue in seconds</Text>
+                  <View className="self-start rounded-full bg-white px-4 py-1.5">
+                    <Text className="text-xs font-bold text-orange-600">Request</Text>
+                  </View>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+
+        {actionSheet}
+      </>
+    );
+  }
 
   return (
     <>
@@ -100,43 +206,11 @@ export default function ClientDashboard() {
           <Text className="mb-3 text-[15px] font-bold text-gray-900">Browse by category</Text>
           <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} />
 
-          {recentlyHiredResellers.length > 0 && (
-            <>
-              <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Recently Hired Reseller</Text>
-              {recentlyHiredResellers.map(({ reseller, lastRequest }) => (
-                <Pressable
-                  key={reseller.id}
-                  onPress={() => router.push(`/(client)/reseller/${reseller.id}`)}
-                  className="mb-2.5 flex-row items-center gap-2.5 rounded-2xl border border-gray-200 bg-white p-3"
-                >
-                  <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={36} />
-                  <Text className="flex-1 text-[13px] text-gray-900" numberOfLines={1}>
-                    <Text className="font-bold">{reseller.full_name ?? 'Reseller'}</Text>
-                    <Text className="text-gray-400"> · {lastRequest.issue_type} · </Text>
-                    <Text className="text-gray-400">{new Date(lastRequest.created_at).toLocaleDateString()}</Text>
-                  </Text>
-                  <StatusPill status={lastRequest.status} />
-                  {userId && <SaveContactButton clientId={userId} contactId={reseller.id} />}
-                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-                </Pressable>
-              ))}
-            </>
-          )}
+          {recentlyHiredSection}
         </View>
       </ScrollView>
 
-      <ServiceActionSheet
-        category={pickerCategory}
-        onClose={() => setPickerCategory(null)}
-        onSelect={(action) => {
-          if (!pickerCategory) return;
-          const category = pickerCategory.label;
-          setPickerCategory(null);
-          router.push(
-            `/(client)/request-details?category=${encodeURIComponent(category)}&action=${encodeURIComponent(action)}&n=${Date.now()}`
-          );
-        }}
-      />
+      {actionSheet}
     </>
   );
 }

@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
+import { useWideGrid } from '../../lib/hooks/useWideGrid';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { OrderCard } from '../../lib/components/OrderCard';
@@ -128,6 +129,8 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
 export default function ClientRequests() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [viewMode, setViewMode] = useState<ViewMode>('active');
+  // Wide web lays the cards out in columns instead of one stretched row each.
+  const { wide, columns, containerProps, cellStyle } = useWideGrid({ cardWidth: 440, minColumns: 1, maxColumns: 3 });
 
   const { data: requests, isLoading: loadingRequests } = useSupabaseQuery('service_requests', {
     filters: userId ? { client_id: userId } : {},
@@ -190,32 +193,48 @@ export default function ClientRequests() {
 
   const isLoading = loadingRequests || loadingOrders;
 
-  return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-4 flex-row items-center justify-end">
-        <Pressable onPress={() => router.push('/(client)/new-request?from=requests')} className="rounded-lg bg-orange-500 px-4 py-2">
-          <Text className="font-semibold text-white">+ New</Text>
-        </Pressable>
-      </View>
+  const newButton = (
+    <Pressable onPress={() => router.push('/(client)/new-request?from=requests')} className="rounded-lg bg-orange-500 px-4 py-2">
+      <Text className="font-semibold text-white">+ New</Text>
+    </Pressable>
+  );
 
-      <View className="mb-4 flex-row rounded-lg border border-gray-300 bg-white p-1">
-        <Pressable
-          onPress={() => setViewMode('active')}
-          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'active' ? 'bg-orange-500' : ''}`}
-        >
-          <Text className={`text-sm font-semibold ${viewMode === 'active' ? 'text-white' : 'text-gray-600'}`}>
-            Active
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setViewMode('history')}
-          className={`flex-1 items-center rounded-md py-2 ${viewMode === 'history' ? 'bg-orange-500' : ''}`}
-        >
-          <Text className={`text-sm font-semibold ${viewMode === 'history' ? 'text-white' : 'text-gray-600'}`}>
-            History
-          </Text>
-        </Pressable>
-      </View>
+  const viewToggle = (
+    <View className="flex-row rounded-lg border border-gray-300 bg-white p-1">
+      <Pressable
+        onPress={() => setViewMode('active')}
+        className={`flex-1 items-center rounded-md py-2 ${viewMode === 'active' ? 'bg-orange-500' : ''}`}
+      >
+        <Text className={`text-sm font-semibold ${viewMode === 'active' ? 'text-white' : 'text-gray-600'}`}>
+          Active
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setViewMode('history')}
+        className={`flex-1 items-center rounded-md py-2 ${viewMode === 'history' ? 'bg-orange-500' : ''}`}
+      >
+        <Text className={`text-sm font-semibold ${viewMode === 'history' ? 'text-white' : 'text-gray-600'}`}>
+          History
+        </Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <View className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
+      {wide ? (
+        // Wide web: the toggle and the New button share one row, so the
+        // toggle is not stretched across the whole page.
+        <View className="mb-4 flex-row items-center justify-between">
+          <View style={{ width: 360 }}>{viewToggle}</View>
+          {newButton}
+        </View>
+      ) : (
+        <>
+          <View className="mb-4 flex-row items-center justify-end">{newButton}</View>
+          <View className="mb-4">{viewToggle}</View>
+        </>
+      )}
 
       {isLoading && <Text className="text-gray-500">Loading…</Text>}
       {!isLoading && combined.length === 0 && (
@@ -223,15 +242,22 @@ export default function ClientRequests() {
       )}
 
       <FlatList
+        // A FlatList cannot change its column count on the fly, so a new
+        // count remounts it.
+        key={wide ? columns : 1}
+        numColumns={wide ? columns : 1}
+        {...containerProps}
         data={combined}
         keyExtractor={(item) => item.key}
-        renderItem={({ item }) =>
-          item.kind === 'service' ? (
-            <ClientRequestCard item={item.data} />
-          ) : userId ? (
-            <OrderCard order={item.data} productMap={productMap} viewerId={userId} basePath="/(client)" />
-          ) : null
-        }
+        renderItem={({ item }) => {
+          const card =
+            item.kind === 'service' ? (
+              <ClientRequestCard item={item.data} />
+            ) : userId ? (
+              <OrderCard order={item.data} productMap={productMap} viewerId={userId} basePath="/(client)" />
+            ) : null;
+          return wide ? <View style={cellStyle}>{card}</View> : card;
+        }}
       />
     </View>
   );

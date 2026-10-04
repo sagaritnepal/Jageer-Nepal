@@ -14,6 +14,10 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(client)/contacts', label: 'Contacts', icon: 'people' },
 ];
 
+// The four main sections use the wider content column (see WebSidebarShell's
+// `wideRoutes`), so there is no empty strip beside them on a big screen.
+const WIDE_ROUTES = ['/dashboard', '/requests', '/market', '/contacts'];
+
 export default function ClientLayout() {
   const { width } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
@@ -68,7 +72,7 @@ export default function ClientLayout() {
   return (
     <RoleGuard allow={['client']}>
       {isWideWeb ? (
-        <WebSidebarShell items={NAV_ITEMS} roleLabel="Client">
+        <WebSidebarShell items={NAV_ITEMS} roleLabel="Client" wideRoutes={WIDE_ROUTES}>
           {tabs}
         </WebSidebarShell>
       ) : (

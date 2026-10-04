@@ -4,6 +4,7 @@ import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useCartStore } from '../../lib/hooks/useCart';
+import { useWideGrid } from '../../lib/hooks/useWideGrid';
 import { SearchBar } from '../../lib/components/SearchBar';
 import { SearchFilterSheet } from '../../lib/components/SearchFilterSheet';
 import { CartBar } from '../../lib/components/CartBar';
@@ -12,9 +13,11 @@ import { filterBySearch } from '../../lib/utils/search';
 import { toSafeImageUri } from '../../lib/utils/image';
 import type { Product } from '../../types/database.types';
 
-function ProductCard({ item, onAdd }: { item: Product; onAdd: (product: Product) => void }) {
+/** `fill` makes the card take its whole cell instead of the phone layout's
+ * fixed 48% (two to a row) - used by the wide web grid below. */
+function ProductCard({ item, onAdd, fill }: { item: Product; onAdd: (product: Product) => void; fill?: boolean }) {
   return (
-    <View className="mb-4 w-[48%] rounded-xl border border-gray-200 bg-white p-3">
+    <View className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border border-gray-200 bg-white p-3`}>
       <Pressable onPress={() => router.push(`/(client)/product/${item.id}`)}>
         <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
           {item.image_url ? (
@@ -45,6 +48,7 @@ export default function ClientMarket() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { wide, containerProps, cellStyle } = useWideGrid();
 
   const cartItems = useCartStore((state) => state.items);
   const cartSellerId = useCartStore((state) => state.sellerId);
@@ -147,10 +151,16 @@ export default function ClientMarket() {
           </Text>
         )}
 
-        <View className="flex-row flex-wrap justify-between">
-          {filtered.map((item) => (
-            <ProductCard key={item.id} item={item} onAdd={handleAdd} />
-          ))}
+        <View className={wide ? 'flex-row flex-wrap' : 'flex-row flex-wrap justify-between'} {...containerProps}>
+          {filtered.map((item) =>
+            wide ? (
+              <View key={item.id} style={cellStyle}>
+                <ProductCard item={item} onAdd={handleAdd} fill />
+              </View>
+            ) : (
+              <ProductCard key={item.id} item={item} onAdd={handleAdd} />
+            )
+          )}
         </View>
       </ScrollView>
 

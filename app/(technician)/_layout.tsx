@@ -26,6 +26,10 @@ const SUPERVISOR_NAV: WebNavItem[] = [
   ...NAV_ITEMS.slice(2),
 ];
 
+// The main sections use the wider content column (see WebSidebarShell's
+// `wideRoutes`), so there is no empty strip beside them on a big screen.
+const WIDE_ROUTES = ['/dashboard', '/jobs', '/earnings', '/workhub'];
+
 export default function TechnicianLayout() {
   const { width } = useWindowDimensions();
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -98,7 +102,7 @@ export default function TechnicianLayout() {
           whichever tab (or the sidebar) is open when an offer comes in. */}
       <View style={{ flex: 1 }}>
         {isWideWeb ? (
-          <WebSidebarShell items={isSupervisor ? SUPERVISOR_NAV : NAV_ITEMS} roleLabel="Technician">
+          <WebSidebarShell items={isSupervisor ? SUPERVISOR_NAV : NAV_ITEMS} roleLabel="Technician" wideRoutes={WIDE_ROUTES}>
             {tabs}
           </WebSidebarShell>
         ) : (
