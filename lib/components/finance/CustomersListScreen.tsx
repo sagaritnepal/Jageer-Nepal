@@ -7,9 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { supabase } from '../../supabase';
 import { SearchBar } from '../SearchBar';
 import { BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { PartyBalance, PartyTypePill } from './PartyBalance';
+import { PartyTypeField } from './PartyTypeField';
+import { partyPosition } from '../../utils/partyBalance';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { isValidPhone10 } from '../../utils/phone';
 import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
@@ -68,36 +72,6 @@ function useLedgerBalances(userId: string | undefined) {
   }, [customerEntries, vendorEntries]);
 }
 
-/** The one line that says where a party stands. Anything at zero (or in
- * credit both ways) reads as settled rather than as a confusing 0. */
-function BalanceLine({ balance }: { balance: Balance | undefined }) {
-  const receivable = balance && balance.receivable > 0 ? balance.receivable : 0;
-  const payable = balance && balance.payable > 0 ? balance.payable : 0;
-
-  if (!receivable && !payable) {
-    return <Text className="mt-1.5 text-[11.5px] font-medium text-gray-400">Settled</Text>;
-  }
-
-  return (
-    <View className="mt-1.5 flex-row flex-wrap items-center" style={{ gap: 8 }}>
-      {receivable > 0 && (
-        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#ECFDF5' }}>
-          <Text className="text-[11.5px] font-bold" style={{ color: '#047857' }}>
-            To receive NPR {money(receivable)}
-          </Text>
-        </View>
-      )}
-      {payable > 0 && (
-        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#FEF2F2' }}>
-          <Text className="text-[11.5px] font-bold" style={{ color: '#B91C1C' }}>
-            To pay NPR {money(payable)}
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
 /** Id of the existing customer already using `phone` for this owner, if any. */
 async function findExistingCustomerByPhone(ownerId: string, phone: string, excludeCustomerId?: string) {
   let query = supabase.from('customers').select('id').eq('owner_id', ownerId).eq('phone', phone);
@@ -112,6 +86,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -171,6 +146,8 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
         name: name.trim(),
         phone: trimmedPhone || null,
         address: address.trim() || null,
+        // Only sent when chosen, so a party saves exactly as before without one.
+        ...(partyTypeId ? { party_type_id: partyTypeId } : {}),
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
       });
@@ -198,6 +175,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
           </Pressable>
         )}
       </View>
+      <PartyTypeField ownerId={userId} value={partyTypeId} onChange={setPartyTypeId} />
       <TextInput
         value={phone}
         onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
@@ -237,34 +215,52 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
   );
 }
 
-function CustomerRow({ customer, basePath, isApp, balance }: { customer: Customer; basePath: string; isApp: boolean; balance: Balance | undefined }) {
+function CustomerRow({
+  customer,
+  basePath,
+  isApp,
+  balance,
+  typeName,
+}: {
+  customer: Customer;
+  basePath: string;
+  isApp: boolean;
+  balance: Balance | undefined;
+  typeName: string | undefined;
+}) {
   return (
     <Pressable
       onPress={() => router.push(`${basePath}/customer/${customer.id}` as any)}
-      className="mb-2.5 rounded-2xl border border-gray-200 bg-white p-4"
+      className="mb-2.5 flex-row items-start rounded-2xl border border-gray-200 bg-white p-4"
+      style={{ gap: 12 }}
     >
-      <View className="mb-0.5 flex-row items-center justify-between gap-2">
-        <Text className="flex-1 font-semibold text-gray-900" numberOfLines={1}>
+      <View className="flex-1" style={{ minWidth: 0 }}>
+        <Text className="font-semibold text-gray-900" numberOfLines={1}>
           {customer.name}
         </Text>
-        {isApp && (
-          <View className="flex-row items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5">
-            <Ionicons name="phone-portrait-outline" size={11} color="#2563eb" />
-            <Text className="text-[10px] font-bold text-blue-700">APP</Text>
+        {(isApp || !!typeName) && (
+          <View className="mt-1 flex-row flex-wrap items-center" style={{ gap: 6 }}>
+            {!!typeName && <PartyTypePill name={typeName} />}
+            {isApp && (
+              <View className="flex-row items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5">
+                <Ionicons name="phone-portrait-outline" size={11} color="#2563eb" />
+                <Text className="text-[10px] font-bold text-blue-700">APP</Text>
+              </View>
+            )}
           </View>
         )}
+        {!!customer.phone && (
+          <Text className="mt-1 text-xs text-gray-500">
+            <Ionicons name="call-outline" size={11} color="#9CA3AF" /> {customer.phone}
+          </Text>
+        )}
+        {!!customer.address && (
+          <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
+            <Ionicons name="location-outline" size={11} color="#9CA3AF" /> {customer.address}
+          </Text>
+        )}
       </View>
-      {!!customer.phone && (
-        <Text className="mt-0.5 text-xs text-gray-500">
-          <Ionicons name="call-outline" size={11} color="#9CA3AF" /> {customer.phone}
-        </Text>
-      )}
-      {!!customer.address && (
-        <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
-          <Ionicons name="location-outline" size={11} color="#9CA3AF" /> {customer.address}
-        </Text>
-      )}
-      <BalanceLine balance={balance} />
+      <PartyBalance position={partyPosition(balance)} />
     </Pressable>
   );
 }
@@ -435,6 +431,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   });
   const appCustomers = useAppCustomers(userId);
   const { byParty, totalReceivable, totalPayable } = useLedgerBalances(userId);
+  const { nameById: partyTypeName } = usePartyTypes(userId);
 
   // A saved customer whose phone matches a registered app user is marked
   // "APP" on their existing row instead of being listed twice; an app user
@@ -491,32 +488,16 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   // Web: the same cash-book look as the Day Book - header card, stat tiles,
   // one bordered table with totals. Phones keep the card list below.
   if (Platform.OS === 'web') {
-    const owed = (row: MergedRow) => (row.kind === 'customer' ? Math.max(0, byParty.get(row.id)?.receivable ?? 0) : 0);
-    const owing = (row: MergedRow) => (row.kind === 'customer' ? Math.max(0, byParty.get(row.id)?.payable ?? 0) : 0);
-    const amount = (value: number, color: string) =>
-      value > 0 ? (
-        <Text className="text-[12.5px] font-bold" style={{ color }}>
-          {bookMoney(value)}
-        </Text>
-      ) : (
-        <Text className="text-[12.5px] text-gray-400">—</Text>
-      );
-    const net = (row: MergedRow) => {
-      const diff = owed(row) - owing(row);
-      if (diff === 0) return <Text className="text-[12px] font-medium text-gray-400">Settled</Text>;
-      return (
-        <Text className="text-[13px] font-bold" style={{ color: diff > 0 ? '#047857' : '#B91C1C' }}>
-          {diff < 0 ? '−' : ''}
-          {bookMoney(Math.abs(diff))}
-        </Text>
-      );
-    };
+    // One balance per party: both ledgers netted (see partyPosition). An app-only
+    // row has no ledger to open, so it has no balance.
+    const positionOf = (row: MergedRow) => partyPosition(row.kind === 'customer' ? byParty.get(row.id) : undefined);
+    const typeOf = (row: MergedRow) => (row.kind === 'customer' && row.customer.party_type_id ? partyTypeName.get(row.customer.party_type_id) : undefined);
     const party = (row: MergedRow, withPhone: boolean) => (
       <View style={{ minWidth: 0 }}>
-        <View className="flex-row items-center" style={{ gap: 6 }}>
-          <Text className="flex-shrink text-[13px] font-semibold text-gray-900" numberOfLines={1}>
-            {row.name}
-          </Text>
+        {/* Wraps, so on a narrow screen the pills drop below the name instead of cutting it short. */}
+        <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
+          <Text className="text-[13px] font-semibold text-gray-900">{row.name}</Text>
+          {!!typeOf(row) && <PartyTypePill name={typeOf(row)!} />}
           {(row.kind === 'app' || (row.kind === 'customer' && row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
         </View>
         {(() => {
@@ -534,19 +515,16 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
       ? [
           { key: 'party', label: 'Party', render: (row) => party(row, false) },
           { key: 'phone', label: 'Phone', width: 130, render: (row) => <Text className="text-[12.5px] text-gray-600">{row.phone ?? '—'}</Text> },
-          { key: 'receive', label: 'To receive', width: 130, align: 'right', render: (row) => amount(owed(row), '#047857') },
-          { key: 'pay', label: 'To pay', width: 130, align: 'right', render: (row) => amount(owing(row), '#B91C1C') },
-          { key: 'net', label: 'Net balance', width: 140, align: 'right', render: (row) => net(row) },
+          { key: 'balance', label: 'Balance', width: 170, align: 'right', render: (row) => <PartyBalance position={positionOf(row)} /> },
         ]
       : [
           { key: 'party', label: 'Party', render: (row) => party(row, true) },
-          { key: 'receive', label: 'To receive', width: 96, align: 'right', render: (row) => amount(owed(row), '#047857') },
-          { key: 'pay', label: 'To pay', width: 92, align: 'right', render: (row) => amount(owing(row), '#B91C1C') },
+          { key: 'balance', label: 'Balance', width: 150, align: 'right', render: (row) => <PartyBalance position={positionOf(row)} /> },
         ];
 
-    const shownReceive = filteredMerged.reduce((s, row) => s + owed(row), 0);
-    const shownPay = filteredMerged.reduce((s, row) => s + owing(row), 0);
-    const shownNet = shownReceive - shownPay;
+    // The rows' own balances added up, so the footer always agrees with the
+    // list above it (the tiles keep their own receive / pay definitions).
+    const shownNet = partyPosition({ receivable: filteredMerged.reduce((s, row) => s + positionOf(row).net, 0), payable: 0 });
 
     return (
       <BookPage wide={layout.wide}>
@@ -578,28 +556,14 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
             rowKey={(row) => `${row.kind}-${row.id}`}
             onRowPress={(row) => row.kind === 'customer' && router.push(`${basePath}/customer/${row.id}` as any)}
             footer={{
-              label: `${filteredMerged.length} ${filteredMerged.length === 1 ? 'party' : 'parties'} · Totals`,
-              cells: layout.full
-                ? {
-                    receive: <Text className="text-[13px] font-extrabold" style={{ color: '#047857' }}>{bookMoney(shownReceive)}</Text>,
-                    pay: <Text className="text-[13px] font-extrabold" style={{ color: '#B91C1C' }}>{bookMoney(shownPay)}</Text>,
-                    net: (
-                      <Text className="text-[14px] font-extrabold" style={{ color: shownNet >= 0 ? '#047857' : '#B91C1C' }}>
-                        {shownNet < 0 ? '−' : ''}
-                        {bookMoney(Math.abs(shownNet))}
-                      </Text>
-                    ),
-                  }
-                : {
-                    receive: <Text className="text-[13px] font-extrabold" style={{ color: '#047857' }}>{bookMoney(shownReceive)}</Text>,
-                    pay: <Text className="text-[13px] font-extrabold" style={{ color: '#B91C1C' }}>{bookMoney(shownPay)}</Text>,
-                  },
+              label: `${filteredMerged.length} ${filteredMerged.length === 1 ? 'party' : 'parties'} · Net`,
+              cells: { balance: <PartyBalance position={shownNet} /> },
             }}
           />
         )}
 
         <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-          Tap a party to open their ledger. To receive is what they owe you; To pay is what you owe them - one person can be both, so the two are kept apart and Net balance shows where they stand overall.
+          Tap a party to open their ledger. Each balance is where that party stands overall: To receive is what they owe you, To pay is what you owe them. Someone who is both a customer and a vendor is netted into one figure.
         </Text>
       </BookPage>
     );
@@ -656,7 +620,13 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
         keyExtractor={(item) => `${item.kind}-${item.id}`}
         renderItem={({ item }) =>
           item.kind === 'customer' ? (
-            <CustomerRow customer={item.customer} basePath={basePath} isApp={item.isApp} balance={byParty.get(item.id)} />
+            <CustomerRow
+              customer={item.customer}
+              basePath={basePath}
+              isApp={item.isApp}
+              balance={byParty.get(item.id)}
+              typeName={item.customer.party_type_id ? partyTypeName.get(item.customer.party_type_id) : undefined}
+            />
           ) : (
             <AppCustomerRow entry={item.entry} />
           )

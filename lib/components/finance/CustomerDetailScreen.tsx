@@ -14,7 +14,10 @@ import {
   useSupabaseDelete,
 } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
+import { PartyTypePill } from './PartyBalance';
+import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { supabase } from '../../supabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -65,7 +68,9 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { nameById: partyTypeName } = usePartyTypes(customer?.owner_id);
 
   if (!customer) return null;
 
@@ -73,6 +78,7 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
     setName(customer!.name);
     setPhone(customer!.phone ?? '');
     setAddress(customer!.address ?? '');
+    setPartyTypeId(customer!.party_type_id ?? null);
     setEditing(true);
   }
 
@@ -94,7 +100,13 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
       }
       await updateCustomer.mutateAsync({
         id: customerId,
-        values: { name: name.trim(), phone: trimmedPhone || null, address: address.trim() || null },
+        values: {
+          name: name.trim(),
+          phone: trimmedPhone || null,
+          address: address.trim() || null,
+          // Only when changed, so saving a party never depends on the type column.
+          ...(partyTypeId !== (customer!.party_type_id ?? null) ? { party_type_id: partyTypeId } : {}),
+        },
       });
       setEditing(false);
     } catch (err) {
@@ -132,6 +144,7 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
           placeholder="Name"
           className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
         />
+        <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} />
         <TextInput
           value={phone}
           onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
@@ -165,7 +178,12 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
   return (
     <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
       <View className="mb-2 flex-row items-start justify-between">
-        <Text className="flex-1 text-lg font-bold text-gray-900">{customer.name}</Text>
+        <View className="flex-1 flex-row flex-wrap items-center" style={{ gap: 8 }}>
+          <Text className="text-lg font-bold text-gray-900">{customer.name}</Text>
+          {!!customer.party_type_id && !!partyTypeName.get(customer.party_type_id) && (
+            <PartyTypePill name={partyTypeName.get(customer.party_type_id)!} />
+          )}
+        </View>
         <View className="flex-row gap-3">
           <Pressable onPress={startEditing} hitSlop={8}>
             <Ionicons name="pencil" size={16} color="#2563eb" />

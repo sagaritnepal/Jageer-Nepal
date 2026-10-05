@@ -37,6 +37,8 @@ const LINKED_INVALIDATIONS: Partial<Record<TableName, TableName[]>> = {
   business_transactions: ['customer_ledger_entries', 'vendor_ledger_entries'],
   orders: ['products', 'business_transactions', 'customer_ledger_entries', 'vendor_ledger_entries'],
   catalog_products: ['products'],
+  // Deleting a party type un-types its parties (on delete set null, 0084).
+  party_types: ['customers'],
   service_requests: ['customer_ledger_entries', 'business_transactions', 'vendor_ledger_entries', 'reward_point_events', 'profiles'],
 };
 
