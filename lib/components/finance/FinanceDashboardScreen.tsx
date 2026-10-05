@@ -221,16 +221,20 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
+  // `all`: every tile below is a sum over these rows; a plain read stops at 1000.
   const { data: allEntries } = useSupabaseQuery('customer_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId,
   });
   const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId,
   });
   const { data: transactions } = useSupabaseQuery('business_transactions', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId,
   });
 

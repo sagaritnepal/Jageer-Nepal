@@ -29,12 +29,16 @@ function money(n: number): string {
 type Balance = { receivable: number; payable: number };
 
 function useLedgerBalances(userId: string | undefined) {
+  // `all`: balances are sums over every entry, and the API cuts a plain read
+  // off at 1000 rows - past that, each party's balance is silently wrong.
   const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId,
   });
   const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId,
   });
 

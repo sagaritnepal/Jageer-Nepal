@@ -467,9 +467,11 @@ export function CustomerDetailScreen({ basePath }: { basePath: string }) {
 
 function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
+  // `all` on both ledger reads: the balance is a sum over every entry.
   const { data: entries } = useSupabaseQuery('customer_ledger_entries', {
     filters: { customer_id: id },
     orderBy: { column: 'created_at', ascending: false },
+    all: true,
     enabled: !!id,
   });
   // Sales/purchases billed directly to this saved customer/vendor. Each one
@@ -490,6 +492,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: { vendor_id: id },
     orderBy: { column: 'created_at', ascending: false },
+    all: true,
     enabled: !!id,
   });
   const deleteEntry = useSupabaseDelete('customer_ledger_entries');
