@@ -177,12 +177,23 @@ export function useSupabaseUpsert<T extends TableName>(table: T, conflictColumns
  * To support true account deletion, add a Supabase Edge Function that runs
  * server-side with the service_role key and call it from here instead.
  */
-export function useSupabaseDelete<T extends TableName>(table: T) {
+/**
+ * `requireRow`: fail when the delete matched nothing. The API reports success
+ * for a delete that a permission rule filtered down to zero rows, so for
+ * something the user has to see really go (a person from the ledger) ask for
+ * the deleted row back and treat "none" as a failure instead of a silent no-op.
+ */
+export function useSupabaseDelete<T extends TableName>(table: T, options?: { requireRow?: boolean }) {
   const queryClient = useQueryClient();
+  const requireRow = options?.requireRow ?? false;
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase.from(table) as any).delete().eq('id', id);
+      const query = (supabase.from(table) as any).delete().eq('id', id);
+      const { data, error } = requireRow ? await query.select('id') : await query;
       if (error) throw error;
+      if (requireRow && (!data || data.length === 0)) {
+        throw new Error('Nothing was deleted - you may not have permission to remove this.');
+      }
       return id;
     },
     onSuccess: () => invalidateWithLinked(queryClient, table),

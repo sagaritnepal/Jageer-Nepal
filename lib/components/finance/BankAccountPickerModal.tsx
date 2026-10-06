@@ -77,7 +77,6 @@ export function BankAccountPickerModal({
               <Ionicons name="cash-outline" size={16} color="#6B7280" />
               {selectedId === null && <Ionicons name="checkmark-circle" size={16} color="#2563EB" />}
               <Text className="flex-1 text-sm font-medium text-gray-900">Cash</Text>
-              <Available amount={available?.cash} />
             </Pressable>
 
             {accounts.length === 0 ? (

@@ -671,7 +671,7 @@ function QuickPaymentForm() {
                     <KeyboardSelect
                       value={bankAccountId ?? '__cash__'}
                       options={[
-                        { value: '__cash__', label: optionLabel('Cash', available?.cash) },
+                        { value: '__cash__', label: 'Cash' },
                         ...bankAccounts.accounts.map((a) => ({ value: a.id, label: optionLabel(a.name, available?.byId[a.id]) })),
                       ]}
                       onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
