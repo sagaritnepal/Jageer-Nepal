@@ -23,6 +23,7 @@ type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 
  * (eSewa, Khalti, a bank...). */
 type AccountKey = string;
 const CASH: AccountKey = 'cash';
+type AccountOption = { key: AccountKey; name: string };
 
 /** One movement of money into or out of one account. A transfer has two (out
  * of one account, into the other); a sale or purchase bill has none. */
@@ -705,6 +706,85 @@ function NewEntryMenu({ basePath }: { basePath: string }) {
   );
 }
 
+/** A button floating over the bottom corner of the page that picks which account
+ * the Day Book shows: all of them together, Cash, or one bank / wallet. It names
+ * the account in use, and opens a small menu above itself; tapping anywhere else
+ * closes the menu. */
+function AccountPicker({ options, selected, onSelect }: {
+  options: AccountOption[];
+  /** null is every account together. */
+  selected: AccountKey | null;
+  onSelect: (key: AccountKey | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  type IconName = ComponentProps<typeof Ionicons>['name'];
+  const iconFor = (key: AccountKey | null): IconName => (key == null ? 'wallet-outline' : key === CASH ? 'cash-outline' : 'business-outline');
+  const current = options.find((o) => o.key === selected);
+  const choices: { key: AccountKey | null; name: string }[] = [{ key: null, name: 'All accounts' }, ...options];
+
+  return (
+    <>
+      {open && (
+        <Pressable
+          onPress={() => setOpen(false)}
+          accessibilityLabel="Close account menu"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
+        />
+      )}
+      <View style={{ position: 'absolute', right: 16, bottom: 16, alignItems: 'flex-end', gap: 8, zIndex: 11 }}>
+        {open && (
+          <View
+            className="overflow-hidden rounded-xl border border-gray-200 bg-white"
+            style={{ minWidth: 210, maxHeight: 340, boxShadow: '0 12px 32px rgba(16,24,40,0.22)' }}
+          >
+            <Text className="border-b border-gray-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+              Show money through
+            </Text>
+            <ScrollView>
+              {choices.map((c) => {
+                const on = c.key === (current?.key ?? null);
+                return (
+                  <Pressable
+                    key={c.key ?? 'all'}
+                    onPress={() => {
+                      onSelect(c.key);
+                      setOpen(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    className="flex-row items-center px-4 py-3"
+                    style={{ gap: 10, backgroundColor: on ? '#EFF6FF' : undefined }}
+                  >
+                    <Ionicons name={iconFor(c.key)} size={17} color={on ? '#1D4ED8' : '#6B7280'} />
+                    <Text className={`flex-1 text-[14px] ${on ? 'font-bold text-blue-700' : 'font-medium text-gray-900'}`} numberOfLines={1}>
+                      {c.name}
+                    </Text>
+                    {on && <Ionicons name="checkmark" size={17} color="#1D4ED8" />}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+        <Pressable
+          onPress={() => setOpen((o) => !o)}
+          accessibilityRole="button"
+          accessibilityLabel={`Showing ${current?.name ?? 'all accounts'}. Choose an account`}
+          accessibilityState={{ expanded: open }}
+          className="h-11 flex-row items-center rounded-full px-4"
+          style={{ gap: 8, backgroundColor: '#1D4ED8', boxShadow: '0 8px 20px rgba(29,78,216,0.35)' }}
+        >
+          <Ionicons name={iconFor(current?.key ?? null)} size={17} color="#FFFFFF" />
+          <Text className="max-w-[180px] text-[14px] font-semibold text-white" numberOfLines={1}>
+            {current?.name ?? 'All accounts'}
+          </Text>
+          <Ionicons name={open ? 'chevron-down' : 'chevron-up'} size={15} color="#FFFFFF" />
+        </Pressable>
+      </View>
+    </>
+  );
+}
+
 /** The day's money laid out like a paper cash book, as one table. Uses the
  * dashboard's definitions - a sale or purchase books a debt rather than
  * moving cash, the ledger rows it creates are skipped so nothing counts
@@ -726,6 +806,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const day = range.to || today;
   const singleDay = from === day;
   const [editing, setEditing] = useState<EditTarget | null>(null);
+  // null shows every account together; otherwise just what went through that one.
+  const [selectedAccount, setSelectedAccount] = useState<AccountKey | null>(null);
 
   const owner: Record<string, string> = userId ? { owner_id: userId } : {};
   const { data: transactions, isLoading } = useSupabaseQuery('business_transactions', { filters: owner, enabled: !!userId });
@@ -964,15 +1046,36 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     // add up to the opening balance.
     const listed = [{ key: CASH, name: 'Cash' }, ...(accounts ?? []).map((a) => ({ key: a.id, name: a.name }))];
     const listedKeys = new Set(listed.map((o) => o.key));
-    const stray = accounts ? Object.keys(openingBy).filter((k) => !listedKeys.has(k)) : [];
+    // Accounts seen either before the period (an opening balance) or in it (an entry).
+    const seen = new Set([...Object.keys(openingBy), ...rows.flatMap((r) => r.moves.map((m) => m.account))]);
+    const stray = accounts ? [...seen].filter((k) => !listedKeys.has(k)) : [];
     const openingByAccount = [...listed, ...stray.map((key) => ({ key, name: 'Other account' }))]
       .map((o) => ({ name: o.name, amount: openingBy[o.key] ?? 0 }))
       .filter((a) => Math.round(a.amount) !== 0);
 
-    let running = opening;
+    // One account on its own: its opening balance, and only the entries that
+    // touched it. A transfer is a real in or out there, unlike in the combined
+    // view where it nets to nothing.
+    const accountOptions: AccountOption[] = [...listed, ...stray.map((key) => ({ key, name: 'Other account' }))];
+    const selected = accountOptions.find((o) => o.key === selectedAccount) ?? null;
+    let viewRows = rows;
+    let viewOpening = opening;
+    if (selected) {
+      viewOpening = openingBy[selected.key] ?? 0;
+      viewRows = rows
+        .filter((r) => r.moves.some((m) => m.account === selected.key))
+        .map((r) => {
+          const mine = r.moves.filter((m) => m.account === selected.key);
+          const cashIn = mine.filter((m) => m.dir === 'in').reduce((sum, m) => sum + m.amount, 0);
+          const cashOut = mine.filter((m) => m.dir === 'out').reduce((sum, m) => sum + m.amount, 0);
+          return { ...r, cashIn: cashIn || null, cashOut: cashOut || null, amount: r.kind === 'transfer' ? null : r.amount };
+        });
+    }
+
+    let running = viewOpening;
     let totalIn = 0;
     let totalOut = 0;
-    for (const r of rows) {
+    for (const r of viewRows) {
       if (r.cashIn != null || r.cashOut != null) {
         totalIn += r.cashIn ?? 0;
         totalOut += r.cashOut ?? 0;
@@ -983,8 +1086,9 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
 
     // "Cash -13,259  +  Esewa -103,771  +  Jyoti Bikash Bank 416,777  =  299,747" - only
     // when more than one account holds money; with one (or none) there is nothing to add up.
-    const openingSub =
-      openingByAccount.length > 1
+    const openingSub = selected
+      ? `${selected.name} at the start of ${singleDay ? 'the day' : 'this period'}`
+      : openingByAccount.length > 1
         ? `${openingByAccount.map((a) => `${a.name} ${money(a.amount)}`).join('  +  ')}  =  ${money(opening)}`
         : null;
 
@@ -996,20 +1100,22 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       time: '',
       details: 'Opening balance',
       sub: openingSub,
-      balance: opening,
+      balance: viewOpening,
       sortKey: '',
     };
 
     return {
-      rows: [openingRow, ...rows],
-      entryCount: rows.length,
-      opening,
+      rows: [openingRow, ...viewRows],
+      entryCount: viewRows.length,
+      opening: viewOpening,
       totalIn,
       totalOut,
       closing: running,
       openingByAccount,
+      accountOptions,
+      selected,
     };
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, basePath]);
+  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, basePath, selectedAccount]);
 
   // The date band above each day of a longer view.
   const dayLabel = (date: string) => dateLabels(date, calendarMode).join('  ·  ');
@@ -1039,10 +1145,13 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     [range, isToday, today, basePath]
   );
 
+  const loaded = !(isLoading && !transactions);
+
   return (
+    <View className="flex-1 bg-gray-50">
     <ScrollView
-      className="flex-1 bg-gray-50"
-      contentContainerStyle={{ padding: wide ? 24 : 12, paddingTop: wide ? 24 : 12, paddingBottom: 48, gap: 14 }}
+      className="flex-1"
+      contentContainerStyle={{ padding: wide ? 24 : 12, paddingTop: wide ? 24 : 12, paddingBottom: 96, gap: 14 }}
     >
       {toolbar}
 
@@ -1065,17 +1174,20 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
 
           {book.entryCount === 0 && (
             <Text className="px-1 text-[13px] text-gray-500">
-              {singleDay ? 'No entries on this day.' : 'No entries in this period.'}
+              {`No ${book.selected ? `${book.selected.name} entries` : 'entries'} ${singleDay ? 'on this day.' : 'in this period.'}`}
             </Text>
           )}
 
           <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-            Tap any entry to edit, save or delete it. Sale and purchase bills show what was billed that day - they
+            Tap any entry to edit, save or delete it. The button at the bottom picks Cash, Esewa, a bank or all
+            accounts - a transfer shows under an account as money in or out. Sale and purchase bills show what was billed that day - they
             don't change the balance until the money is received or paid, which appears as its own Cash in or Paid
             out row.
           </Text>
         </>
       )}
     </ScrollView>
+    {loaded && <AccountPicker options={book.accountOptions} selected={book.selected?.key ?? null} onSelect={setSelectedAccount} />}
+    </View>
   );
 }
