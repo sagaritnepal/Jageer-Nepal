@@ -160,7 +160,6 @@ function TypePill({ kind }: { kind: Kind }) {
   );
 }
 
-<<<<<<< HEAD
 /** Which account an entry went through - Cash, eSewa, a bank... */
 function AccountPill({ row }: { row: BookRow }) {
   if (!row.account) return null;
@@ -175,19 +174,12 @@ function AccountPill({ row }: { row: BookRow }) {
   );
 }
 
-/** Every entry of the day in one cash-book table, in time order: opening
- * balance first, then cash in / paid out / expenses (which move the running
- * balance) mixed with the day's sales and purchase bills and transfers
- * (which don't), closing balance last. */
-function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenRow }: {
-=======
 /** Every entry of the day (or week / month) in one cash-book table, in date and
  * time order: opening balance first, then cash in / paid out / expenses (which
  * move the running balance) mixed with the sales and purchase bills and
  * transfers (which don't), closing balance last. `dayLabel` is given for a
  * view of more than one day, and puts a date band above each day's entries. */
 function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabel, onOpenRow }: {
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
   rows: BookRow[];
   opening: number;
   totalIn: number;
@@ -823,16 +815,11 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
 
     for (const t of transactions ?? []) {
       const date = t.bill_date ?? localDay(t.created_at);
-<<<<<<< HEAD
-      if (t.type === 'expense' && date < day) {
+      if (t.type === 'expense' && date < from) {
         opening -= t.amount;
         carry(keyOf(t.bank_account_id), -t.amount);
       }
-      if (date !== day) continue;
-=======
-      if (t.type === 'expense' && date < from) opening -= t.amount;
       if (date < from || date > day) continue;
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
       const discount = t.discount_amount ?? 0;
       const category = t.expense_category_id ? categoryName.get(t.expense_category_id) : null;
       const isExpense = t.type === 'expense';
@@ -890,16 +877,11 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       // Booking debits are the Sale itself, not cash.
       if (!isIn && e.source !== 'manual') continue;
       const date = e.entry_date ?? localDay(e.created_at);
-<<<<<<< HEAD
-      if (date < day) {
+      if (date < from) {
         opening += isIn ? e.amount : -e.amount;
         carry(keyOf(e.bank_account_id), isIn ? e.amount : -e.amount);
       }
-      if (date !== day) continue;
-=======
-      if (date < from) opening += isIn ? e.amount : -e.amount;
       if (date < from || date > day) continue;
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
       rows.push({
         ...blank,
         id: e.id,
@@ -943,16 +925,11 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       // Only payments to a vendor move money; debits are the Purchase.
       if (e.entry_type !== 'credit') continue;
       const date = e.entry_date ?? localDay(e.created_at);
-<<<<<<< HEAD
-      if (date < day) {
+      if (date < from) {
         opening -= e.amount;
         carry(keyOf(e.bank_account_id), -e.amount);
       }
-      if (date !== day) continue;
-=======
-      if (date < from) opening -= e.amount;
       if (date < from || date > day) continue;
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
       rows.push({
         ...blank,
         id: e.id,
@@ -994,17 +971,12 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     // A transfer only moves money between the owner's own accounts, so it
     // never changes the combined balance - listed for reference only.
     for (const tr of transfers ?? []) {
-<<<<<<< HEAD
-      const transferDate = tr.transfer_date ?? localDay(tr.created_at);
-      if (transferDate < day) {
+      const date = tr.transfer_date ?? localDay(tr.created_at);
+      if (date < from) {
         carry(keyOf(tr.from_account_id), -tr.amount);
         carry(keyOf(tr.to_account_id), tr.amount);
       }
-      if (transferDate !== day) continue;
-=======
-      const date = tr.transfer_date ?? localDay(tr.created_at);
       if (date < from || date > day) continue;
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
       rows.push({
         ...blank,
         id: tr.id,
@@ -1094,13 +1066,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       date: '',
       time: '',
       details: 'Opening balance',
-<<<<<<< HEAD
-      sub: selected ? `${selected.name} at the start of the day` : 'Cash + bank at the start of the day',
+      sub: `${selected ? selected.name : 'Cash + bank'} at the start of ${days === 1 ? 'the day' : `these ${days} days`}`,
       balance: viewOpening,
-=======
-      sub: days === 1 ? 'Cash + bank at the start of the day' : `Cash + bank at the start of these ${days} days`,
-      balance: opening,
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
       sortKey: '',
     };
 
@@ -1116,11 +1083,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       accountOptions,
       selected,
     };
-<<<<<<< HEAD
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, basePath, selectedAccount]);
-=======
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, days, basePath]);
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
+  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, days, basePath, selectedAccount]);
 
   const [mainDate, otherDate] = days === 1 ? dateLabels(day, calendarMode) : rangeLabels(from, day, calendarMode);
   // The date band above each day of a week or month.
@@ -1225,13 +1188,9 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           <EditEntryModal target={editing} onClose={() => setEditing(null)} />
 
           {book.entryCount === 0 && (
-<<<<<<< HEAD
             <Text className="px-1 text-[13px] text-gray-500">
-              {book.selected ? `No ${book.selected.name} entries on this day.` : 'No entries on this day.'}
+              {`No ${book.selected ? `${book.selected.name} entries` : 'entries'} ${days === 1 ? 'on this day.' : `in these ${days} days.`}`}
             </Text>
-=======
-            <Text className="px-1 text-[13px] text-gray-500">{days === 1 ? 'No entries on this day.' : `No entries in these ${days} days.`}</Text>
->>>>>>> 7d27bdf0fe2d2d3da5e32b380b73cf5992ebf7cb
           )}
 
           <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
