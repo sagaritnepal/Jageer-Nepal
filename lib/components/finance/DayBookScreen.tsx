@@ -12,11 +12,20 @@ import { FormSection } from './FormSection';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
-import { useBookToolbar } from './BookKit';
+import { FilterTabs, useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 
 type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer';
+
+/** Where money sits: 'cash' for cash in hand, otherwise a bank_accounts id
+ * (eSewa, Khalti, a bank...). */
+type AccountKey = string;
+const CASH: AccountKey = 'cash';
+
+/** One movement of money into or out of one account. A transfer has two (out
+ * of one account, into the other); a sale or purchase bill has none. */
+type Move = { account: AccountKey; amount: number; dir: 'in' | 'out' };
 
 type BookRow = {
   id: string;
@@ -32,6 +41,10 @@ type BookRow = {
   cashOut: number | null;
   /** Running cash + bank balance after this row; null for non-cash rows. */
   balance: number | null;
+  /** Name of the account the money went through, for the row's tag. */
+  account: string | null;
+  /** The same movement per account, so one account can be viewed on its own. */
+  moves: Move[];
   sortKey: string;
   href?: string;
   /** What this row actually is in the database, so it can be edited here. */
@@ -124,6 +137,20 @@ function TypePill({ kind }: { kind: Kind }) {
   );
 }
 
+/** Which account an entry went through - Cash, eSewa, a bank... */
+function AccountPill({ row }: { row: BookRow }) {
+  if (!row.account) return null;
+  const name = row.account;
+  return (
+    <View className="flex-row items-center self-start rounded-full border border-gray-300 bg-white px-2 py-0.5" style={{ gap: 3 }}>
+      <Ionicons name={row.moves[0]?.account === CASH ? 'cash-outline' : 'business-outline'} size={10} color="#4B5563" />
+      <Text className="text-[10.5px] font-semibold text-gray-600" numberOfLines={1}>
+        {name}
+      </Text>
+    </View>
+  );
+}
+
 /** Every entry of the day in one cash-book table, in time order: opening
  * balance first, then cash in / paid out / expenses (which move the running
  * balance) mixed with the day's sales and purchase bills and transfers
@@ -182,7 +209,10 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenR
                 <Text className={`text-[13px] text-gray-900 ${r.kind === 'opening' ? 'font-bold' : 'font-medium'}`} numberOfLines={2}>
                   {r.details}
                 </Text>
-                <TypePill kind={r.kind} />
+                <View className="flex-row flex-wrap" style={{ gap: 4 }}>
+                  <TypePill kind={r.kind} />
+                  <AccountPill row={r} />
+                </View>
                 {!!r.sub && (
                   <Text className="text-[11px] text-gray-400" numberOfLines={2}>
                     {r.sub}
@@ -261,8 +291,9 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenR
                   </Text>
                 )}
               </View>
-              <View className={cell} style={{ width: COL.type }}>
+              <View className={cell} style={{ width: COL.type, gap: 3 }}>
                 <TypePill kind={r.kind} />
+                <AccountPill row={r} />
               </View>
               {num(r.invoice, { width: COL.invoice }, '#4B5563')}
               {num(r.discount, { width: COL.discount }, '#4B5563')}
@@ -674,6 +705,29 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
   );
 }
 
+type AccountOption = { key: AccountKey; name: string };
+
+const ALL_ACCOUNTS = '__all__';
+
+/** One slim row - All accounts, Cash, and each bank / wallet - that narrows the
+ * day to what went through a single account. It scrolls sideways when the
+ * accounts don't all fit, so a phone keeps it to one line. */
+function AccountTabs({ options, selected, onSelect }: {
+  options: AccountOption[];
+  selected: AccountKey | null;
+  onSelect: (key: AccountKey | null) => void;
+}) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+      <FilterTabs
+        options={[{ key: ALL_ACCOUNTS, label: 'All accounts' }, ...options.map((o) => ({ key: o.key, label: o.name }))]}
+        value={selected ?? ALL_ACCOUNTS}
+        onChange={(key) => onSelect(key === ALL_ACCOUNTS ? null : key)}
+      />
+    </ScrollView>
+  );
+}
+
 /** The day's money laid out like a paper cash book, as one table. Uses the
  * dashboard's definitions - a sale or purchase books a debt rather than
  * moving cash, the ledger rows it creates are skipped so nothing counts
@@ -689,6 +743,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const today = localDay(new Date().toISOString());
   const [day, setDay] = useState(today);
   const [editing, setEditing] = useState<EditTarget | null>(null);
+  // null shows every account together; otherwise just that one's entries.
+  const [selectedAccount, setSelectedAccount] = useState<AccountKey | null>(null);
 
   const owner: Record<string, string> = userId ? { owner_id: userId } : {};
   const { data: transactions, isLoading } = useSupabaseQuery('business_transactions', { filters: owner, enabled: !!userId });
@@ -704,14 +760,25 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]));
     const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]));
     const via = (bankId: string | null) => (bankId ? (accountName.get(bankId) ?? 'Bank') : 'Cash');
-    const blank = { invoice: null, discount: null, amount: null, cashIn: null, cashOut: null, balance: null };
+    const keyOf = (bankId: string | null): AccountKey => bankId ?? CASH;
+    const blank = { invoice: null, discount: null, amount: null, cashIn: null, cashOut: null, balance: null, account: null, moves: [] as Move[] };
 
+    // Every account's balance at the start of the day. Transfers count here -
+    // they leave one account and enter another - though they net to nothing in
+    // the combined `opening`, so that total is unchanged by them.
+    const openingBy: Record<AccountKey, number> = {};
+    const carry = (account: AccountKey, delta: number) => {
+      openingBy[account] = (openingBy[account] ?? 0) + delta;
+    };
     let opening = 0;
     const rows: BookRow[] = [];
 
     for (const t of transactions ?? []) {
       const date = t.bill_date ?? localDay(t.created_at);
-      if (t.type === 'expense' && date < day) opening -= t.amount;
+      if (t.type === 'expense' && date < day) {
+        opening -= t.amount;
+        carry(keyOf(t.bank_account_id), -t.amount);
+      }
       if (date !== day) continue;
       const discount = t.discount_amount ?? 0;
       const category = t.expense_category_id ? categoryName.get(t.expense_category_id) : null;
@@ -729,7 +796,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             t.bill_no ? `Bill #${t.bill_no}` : null,
             isExpense && t.party_name ? category : null,
             t.note,
-            isExpense ? via(t.bank_account_id) : t.payment_mode === 'credit' ? 'On credit' : null,
+            !isExpense && t.payment_mode === 'credit' ? 'On credit' : null,
           ]
             .filter(Boolean)
             .join(' · ') || null,
@@ -740,6 +807,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         // purchase bill is a debt until its payment is recorded.
         amount: isExpense ? null : t.amount,
         cashOut: isExpense ? t.amount : null,
+        account: isExpense ? via(t.bank_account_id) : null,
+        moves: isExpense ? [{ account: keyOf(t.bank_account_id), amount: t.amount, dir: 'out' }] : [],
         sortKey: t.created_at,
         edit: {
           table: 'business_transactions',
@@ -767,7 +836,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       // Booking debits are the Sale itself, not cash.
       if (!isIn && e.source !== 'manual') continue;
       const date = e.entry_date ?? localDay(e.created_at);
-      if (date < day) opening += isIn ? e.amount : -e.amount;
+      if (date < day) {
+        opening += isIn ? e.amount : -e.amount;
+        carry(keyOf(e.bank_account_id), isIn ? e.amount : -e.amount);
+      }
       if (date !== day) continue;
       rows.push({
         ...blank,
@@ -775,9 +847,11 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         kind: isIn ? 'received' : 'paid',
         time: timeOf(e.created_at),
         details: `${isIn ? 'Received from' : 'Paid to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
-        sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, via(e.bank_account_id), e.note].filter(Boolean).join(' · ') || null,
+        sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, e.note].filter(Boolean).join(' · ') || null,
         cashIn: isIn ? e.amount : null,
         cashOut: isIn ? null : e.amount,
+        account: via(e.bank_account_id),
+        moves: [{ account: keyOf(e.bank_account_id), amount: e.amount, dir: isIn ? 'in' : 'out' }],
         sortKey: e.created_at,
         edit: {
           table: 'customer_ledger_entries',
@@ -809,7 +883,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       // Only payments to a vendor move money; debits are the Purchase.
       if (e.entry_type !== 'credit') continue;
       const date = e.entry_date ?? localDay(e.created_at);
-      if (date < day) opening -= e.amount;
+      if (date < day) {
+        opening -= e.amount;
+        carry(keyOf(e.bank_account_id), -e.amount);
+      }
       if (date !== day) continue;
       rows.push({
         ...blank,
@@ -817,8 +894,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         kind: 'paid',
         time: timeOf(e.created_at),
         details: `Paid to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
-        sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, via(e.bank_account_id), e.note].filter(Boolean).join(' · ') || null,
+        sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, e.note].filter(Boolean).join(' · ') || null,
         cashOut: e.amount,
+        account: via(e.bank_account_id),
+        moves: [{ account: keyOf(e.bank_account_id), amount: e.amount, dir: 'out' }],
         sortKey: e.created_at,
         edit: {
           table: 'vendor_ledger_entries',
@@ -849,7 +928,12 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     // A transfer only moves money between the owner's own accounts, so it
     // never changes the combined balance - listed for reference only.
     for (const tr of transfers ?? []) {
-      if ((tr.transfer_date ?? localDay(tr.created_at)) !== day) continue;
+      const transferDate = tr.transfer_date ?? localDay(tr.created_at);
+      if (transferDate < day) {
+        carry(keyOf(tr.from_account_id), -tr.amount);
+        carry(keyOf(tr.to_account_id), tr.amount);
+      }
+      if (transferDate !== day) continue;
       rows.push({
         ...blank,
         id: tr.id,
@@ -858,6 +942,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         details: `${via(tr.from_account_id)} → ${via(tr.to_account_id)}`,
         sub: tr.note,
         amount: tr.amount,
+        moves: [
+          { account: keyOf(tr.from_account_id), amount: tr.amount, dir: 'out' },
+          { account: keyOf(tr.to_account_id), amount: tr.amount, dir: 'in' },
+        ],
         sortKey: tr.created_at,
         edit: {
           table: 'account_transfers',
@@ -882,12 +970,39 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
 
     rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
-    let running = opening;
+    // One account on its own: its opening balance, and only the entries that
+    // touched it. A transfer is a real in or out there, unlike in the combined
+    // view where it nets to nothing.
+    const accountOptions: AccountOption[] = [
+      { key: CASH, name: 'Cash' },
+      ...(accounts ?? []).map((a) => ({ key: a.id, name: a.name })),
+    ];
+    const selected = accountOptions.find((o) => o.key === selectedAccount) ?? null;
+    let viewRows = rows;
+    let viewOpening = opening;
+    if (selected) {
+      viewOpening = openingBy[selected.key] ?? 0;
+      viewRows = rows
+        .filter((r) => r.moves.some((m) => m.account === selected.key))
+        .map((r) => {
+          const mine = r.moves.filter((m) => m.account === selected.key);
+          const cashIn = mine.filter((m) => m.dir === 'in').reduce((sum, m) => sum + m.amount, 0);
+          const cashOut = mine.filter((m) => m.dir === 'out').reduce((sum, m) => sum + m.amount, 0);
+          return {
+            ...r,
+            cashIn: cashIn || null,
+            cashOut: cashOut || null,
+            amount: r.kind === 'transfer' ? null : r.amount,
+          };
+        });
+    }
+
+    let running = viewOpening;
     let totalIn = 0;
     let totalOut = 0;
     let totalSales = 0;
     let totalPurchases = 0;
-    for (const r of rows) {
+    for (const r of viewRows) {
       if (r.cashIn != null || r.cashOut != null) {
         totalIn += r.cashIn ?? 0;
         totalOut += r.cashOut ?? 0;
@@ -904,22 +1019,24 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       kind: 'opening',
       time: '',
       details: 'Opening balance',
-      sub: 'Cash + bank at the start of the day',
-      balance: opening,
+      sub: selected ? `${selected.name} at the start of the day` : 'Cash + bank at the start of the day',
+      balance: viewOpening,
       sortKey: '',
     };
 
     return {
-      rows: [openingRow, ...rows],
-      entryCount: rows.length,
-      opening,
+      rows: [openingRow, ...viewRows],
+      entryCount: viewRows.length,
+      opening: viewOpening,
       totalIn,
       totalOut,
       totalSales,
       totalPurchases,
       closing: running,
+      accountOptions,
+      selected,
     };
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, basePath]);
+  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, basePath, selectedAccount]);
 
   const [mainDate, otherDate] = dateLabels(day, calendarMode);
 
@@ -993,6 +1110,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         <Text className="px-1 text-sm text-gray-500">Loading…</Text>
       ) : (
         <>
+          <AccountTabs options={book.accountOptions} selected={book.selected?.key ?? null} onSelect={setSelectedAccount} />
+
           <View className="flex-row flex-wrap" style={{ gap: 10 }}>
             <Stat label="Opening" value={book.opening} color="#374151" />
             <Stat label="Cash in" value={book.totalIn} color="#047857" />
@@ -1015,11 +1134,14 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           <EditEntryModal target={editing} onClose={() => setEditing(null)} />
 
           {book.entryCount === 0 && (
-            <Text className="px-1 text-[13px] text-gray-500">No entries on this day.</Text>
+            <Text className="px-1 text-[13px] text-gray-500">
+              {book.selected ? `No ${book.selected.name} entries on this day.` : 'No entries on this day.'}
+            </Text>
           )}
 
           <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-            Tap any entry to edit, save or delete it. Sale and purchase bills show what was billed that day - they
+            Tap any entry to edit, save or delete it. Pick an account above to see only what went through it - a
+            transfer shows there as money in or out. Sale and purchase bills show what was billed that day - they
             don't change the balance until the money is received or paid, which appears as its own Cash in or Paid
             out row.
           </Text>
