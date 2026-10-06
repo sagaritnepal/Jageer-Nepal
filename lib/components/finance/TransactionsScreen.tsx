@@ -20,6 +20,7 @@ import { FormSection } from './FormSection';
 import { BillItemsTable, type BillItemsTableHandle } from './BillItemsTable';
 import { KeyboardDateInput } from './KeyboardDateInput';
 import { KeyboardSelect } from './KeyboardSelect';
+import { useAvailableAmounts, optionLabel } from '../../hooks/useAvailableAmounts';
 import { ExpenseEntryTable, type ExpenseEntryRow as ExpenseRow, type ExpenseEntryTableHandle } from './ExpenseEntryTable';
 import { KeyInput } from './KeyInput';
 import { useConfirmSave } from './ConfirmSave';
@@ -612,6 +613,8 @@ function TransactionForm({
   // Expense: date + addable name + a managed category + amount + remark.
   const [amount, setAmount] = useState(initial && initial.type === 'expense' ? String(initial.amount) : '');
   const [expenseDate, setExpenseDate] = useState(initial?.bill_date ?? todayIso());
+  // Money in each place, shown in the Payment method dropdown of a new expense.
+  const available = useAvailableAmounts(type === 'expense' && !initial ? userId : undefined);
   const [categoryId, setCategoryId] = useState<string | null>(initial?.expense_category_id ?? null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
@@ -1272,8 +1275,8 @@ function TransactionForm({
                   <KeyboardSelect
                     value={bankAccountId ?? '__cash__'}
                     options={[
-                      { value: '__cash__', label: 'Cash' },
-                      ...bankAccounts.accounts.map((a) => ({ value: a.id, label: a.name })),
+                      { value: '__cash__', label: optionLabel('Cash', available?.cash) },
+                      ...bankAccounts.accounts.map((a) => ({ value: a.id, label: optionLabel(a.name, available?.byId[a.id]) })),
                     ]}
                     onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
                     selectRef={(el) => {
@@ -2023,6 +2026,7 @@ function TransactionForm({
         onClose={() => setShowAccountPicker(false)}
         onRename={bankAccounts.rename}
         onDelete={bankAccounts.remove}
+        available={available}
       />
       {confirmDialog}
       <ContactPickerModal

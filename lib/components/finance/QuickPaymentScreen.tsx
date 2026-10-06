@@ -19,6 +19,7 @@ import { PaymentEntryTable, type PaymentEntryTableHandle, type PaymentRow } from
 import { KeyboardDateInput } from './KeyboardDateInput';
 import { KeyboardSelect } from './KeyboardSelect';
 import { useConfirmSave } from './ConfirmSave';
+import { useAvailableAmounts, optionLabel } from '../../hooks/useAvailableAmounts';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { MONEY } from './moneyColors';
 import { readKey } from '../../utils/webKeys';
@@ -93,6 +94,8 @@ function QuickPaymentForm() {
   const createCustomer = useSupabaseInsert('customers');
   const updateCustomer = useSupabaseUpdate('customers');
   const bankAccounts = useBankAccounts(userId);
+  // Money in each place, shown in the Payment method dropdown - only when paying out.
+  const available = useAvailableAmounts(isOut ? userId : undefined);
   const phoneContacts = usePhoneContacts();
   const { scanning, pickAndScan } = useScanBill();
   const { confirm: confirmSave, dialog: confirmDialog } = useConfirmSave();
@@ -577,6 +580,7 @@ function QuickPaymentForm() {
         onClose={() => setShowAccountPicker(false)}
         onRename={bankAccounts.rename}
         onDelete={bankAccounts.remove}
+        available={available}
       />
     </>
   );
@@ -667,8 +671,8 @@ function QuickPaymentForm() {
                     <KeyboardSelect
                       value={bankAccountId ?? '__cash__'}
                       options={[
-                        { value: '__cash__', label: 'Cash' },
-                        ...bankAccounts.accounts.map((a) => ({ value: a.id, label: a.name })),
+                        { value: '__cash__', label: optionLabel('Cash', available?.cash) },
+                        ...bankAccounts.accounts.map((a) => ({ value: a.id, label: optionLabel(a.name, available?.byId[a.id]) })),
                       ]}
                       onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
                       selectRef={(el) => {

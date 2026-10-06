@@ -4,6 +4,13 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, Tex
 import { Ionicons } from '@expo/vector-icons';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import type { BankAccount } from '../../../types/database.types';
+import type { AvailableAmounts } from '../../hooks/useAvailableAmounts';
+
+/** The money available in an account, shown at the right of its row. */
+function Available({ amount }: { amount: number | undefined }) {
+  if (amount === undefined) return null;
+  return <Text className="text-xs font-bold text-gray-700">NPR {amount.toLocaleString()}</Text>;
+}
 
 // null selectedId/onSelect(null) means "Cash" - the one payment account that
 // always exists and isn't a row in bank_accounts (a business has exactly one).
@@ -18,6 +25,7 @@ export function BankAccountPickerModal({
   onClose,
   onRename,
   onDelete,
+  available,
 }: {
   visible: boolean;
   accounts: BankAccount[];
@@ -26,6 +34,8 @@ export function BankAccountPickerModal({
   onClose: () => void;
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  /** When given, each choice shows how much money is in it. */
+  available?: AvailableAmounts | null;
 }) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -67,6 +77,7 @@ export function BankAccountPickerModal({
               <Ionicons name="cash-outline" size={16} color="#6B7280" />
               {selectedId === null && <Ionicons name="checkmark-circle" size={16} color="#2563EB" />}
               <Text className="flex-1 text-sm font-medium text-gray-900">Cash</Text>
+              <Available amount={available?.cash} />
             </Pressable>
 
             {accounts.length === 0 ? (
@@ -102,7 +113,10 @@ export function BankAccountPickerModal({
                       >
                         <Ionicons name="business-outline" size={16} color="#6B7280" />
                         {selectedId === acc.id && <Ionicons name="checkmark-circle" size={16} color="#2563EB" />}
-                        <Text className="text-sm font-medium text-gray-900">{acc.name}</Text>
+                        <Text className="flex-1 text-sm font-medium text-gray-900" numberOfLines={1}>
+                          {acc.name}
+                        </Text>
+                        <Available amount={available?.byId[acc.id]} />
                       </Pressable>
                       <Pressable
                         onPress={() => {
