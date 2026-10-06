@@ -776,7 +776,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     const contactName = new Map((contacts ?? []).map((c) => [c.id, c.name]));
     const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]));
     const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]));
-    const via = (bankId: string | null) => (bankId ? (accountName.get(bankId) ?? 'Bank') : 'Cash');
+    const via = (bankId: string | null) => (bankId ? (accountName.get(bankId) ?? 'Other account') : 'Cash');
     const keyOf = (bankId: string | null): AccountKey => bankId ?? CASH;
     const blank = { invoice: null, discount: null, amount: null, cashIn: null, cashOut: null, balance: null, account: null, moves: [] as Move[] };
 
@@ -996,10 +996,24 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     // One account on its own: its opening balance, and only the entries that
     // touched it. A transfer is a real in or out there, unlike in the combined
     // view where it nets to nothing.
-    const accountOptions: AccountOption[] = [
+    const listed: AccountOption[] = [
       { key: CASH, name: 'Cash' },
       ...(accounts ?? []).map((a) => ({ key: a.id, name: a.name })),
     ];
+
+    // Where the closing balance sits, account by account: each one's balance at
+    // the start plus what moved through it in the period.
+    const movedBy: Record<AccountKey, number> = {};
+    for (const r of rows) {
+      for (const m of r.moves) movedBy[m.account] = (movedBy[m.account] ?? 0) + (m.dir === 'in' ? m.amount : -m.amount);
+    }
+    // An entry can point at an account that isn't in the list (one that was
+    // removed, say). Rather than leave that money out of every tab, it gets a tab
+    // of its own, so the tabs always add up to All accounts.
+    const listedKeys = new Set(listed.map((o) => o.key));
+    const stray = accounts ? [...new Set([...Object.keys(openingBy), ...Object.keys(movedBy)])].filter((k) => !listedKeys.has(k)) : [];
+    const accountOptions: AccountOption[] = [...listed, ...stray.map((key) => ({ key, name: 'Other account' }))];
+    const accountBalances = accountOptions.map((o) => ({ name: o.name, closing: (openingBy[o.key] ?? 0) + (movedBy[o.key] ?? 0) }));
     const selected = accountOptions.find((o) => o.key === selectedAccount) ?? null;
     let viewRows = rows;
     let viewOpening = opening;
@@ -1058,6 +1072,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       totalPurchases,
       closing: running,
       accountOptions,
+      accountBalances,
       selected,
     };
   }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, basePath, selectedAccount]);
@@ -1102,6 +1117,17 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       ) : (
         <>
           <AccountTabs options={book.accountOptions} selected={book.selected?.key ?? null} onSelect={setSelectedAccount} />
+
+          {/* Where the closing balance sits - the accounts that hold money, adding up to it. */}
+          {!book.selected && book.accountBalances.filter((a) => a.closing !== 0).length > 1 && (
+            <Text className="px-1 text-[12px] text-gray-500">
+              {book.accountBalances
+                .filter((a) => a.closing !== 0)
+                .map((a) => `${a.name} ${money(a.closing)}`)
+                .join('  +  ')}
+              {`  =  ${money(book.closing)}`}
+            </Text>
+          )}
 
           <View className="flex-row flex-wrap" style={{ gap: 10 }}>
             <Stat label="Opening" value={book.opening} color="#374151" />
