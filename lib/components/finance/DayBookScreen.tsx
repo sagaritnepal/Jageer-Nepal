@@ -1,5 +1,5 @@
 // lib/components/finance/DayBookScreen.tsx
-import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ import { FormSection } from './FormSection';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
-import { useBookToolbar } from './BookKit';
+import { FilterTabs, useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 
@@ -21,6 +21,8 @@ type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 
 type BookRow = {
   id: string;
   kind: Kind;
+  /** The day the entry sits on (YYYY-MM-DD); empty for the opening line. */
+  date: string;
   time: string;
   details: string;
   sub: string | null;
@@ -93,6 +95,27 @@ function shiftDay(day: string, delta: number): string {
   return localDay(new Date(y, m - 1, d + delta).toISOString());
 }
 
+/** How much of the book one view covers, ending on the picked date: a day, a
+ * week (7 days) or a month (30 days). A rolling window rather than a calendar
+ * week / month, so it reads the same in the AD and BS calendars. */
+type Period = 'day' | 'week' | 'month';
+const PERIOD_DAYS: Record<Period, number> = { day: 1, week: 7, month: 30 };
+const PERIOD_OPTIONS: { key: Period; label: string }[] = [
+  { key: 'day', label: '1 day' },
+  { key: 'week', label: '1 week' },
+  { key: 'month', label: '1 month' },
+];
+
+/** "Aswin 14 – Aswin 20, 2083 BS": the start drops its year when both ends
+ * share it. */
+function rangeLabels(from: string, to: string, mode: ReturnType<typeof useCalendarMode>[0]): [string, string] {
+  const [fromMain, fromOther] = dateLabels(from, mode);
+  const [toMain, toOther] = dateLabels(to, mode);
+  const year = (s: string) => s.match(/\d{4}/g)?.pop();
+  const short = (a: string, b: string) => (year(a) === year(b) ? a.replace(/,? ?\d{4}( BS)?$/, '') : a);
+  return [`${short(fromMain, toMain)} – ${toMain}`, `${short(fromOther, toOther)} – ${toOther}`];
+}
+
 function timeOf(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -124,11 +147,12 @@ function TypePill({ kind }: { kind: Kind }) {
   );
 }
 
-/** Every entry of the day in one cash-book table, in time order: opening
- * balance first, then cash in / paid out / expenses (which move the running
- * balance) mixed with the day's sales and purchase bills and transfers
- * (which don't), closing balance last. */
-function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenRow }: {
+/** Every entry of the day (or week / month) in one cash-book table, in date and
+ * time order: opening balance first, then cash in / paid out / expenses (which
+ * move the running balance) mixed with the sales and purchase bills and
+ * transfers (which don't), closing balance last. `dayLabel` is given for a
+ * view of more than one day, and puts a date band above each day's entries. */
+function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabel, onOpenRow }: {
   rows: BookRow[];
   opening: number;
   totalIn: number;
@@ -136,9 +160,16 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenR
   closing: number;
   /** Show every column; otherwise Time | Details | Amount | Balance. */
   full: boolean;
+  dayLabel?: (date: string) => string;
   onOpenRow: (row: BookRow) => void;
 }) {
   const cell = 'px-2.5 py-2 border-r border-gray-200';
+  const dayBand = (r: BookRow, index: number) =>
+    dayLabel && r.kind !== 'opening' && rows[index - 1]?.date !== r.date ? (
+      <View className="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5">
+        <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500">{dayLabel(r.date)}</Text>
+      </View>
+    ) : null;
   const headCell = (label: string, style: object, right = false) => (
     <Text className={`${cell} text-[11.5px] font-bold text-gray-600 ${right ? 'text-right' : ''}`} style={style}>
       {label}
@@ -169,12 +200,14 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenR
             Balance
           </Text>
         </View>
-        {rows.map((r) => {
+        {rows.map((r, index) => {
           const cash = r.cashIn ?? r.cashOut;
           const amountText = r.cashIn != null ? `+${money(r.cashIn)}` : r.cashOut != null ? `−${money(r.cashOut)}` : money(r.amount);
           const amountColor = r.cashIn != null ? '#047857' : r.cashOut != null ? '#B91C1C' : '#6B7280';
           return (
-            <Pressable key={r.id} onPress={open(r)} disabled={!r.edit && !r.href} className="flex-row border-b border-gray-200">
+            <Fragment key={r.id}>
+            {dayBand(r, index)}
+            <Pressable onPress={open(r)} disabled={!r.edit && !r.href} className="flex-row border-b border-gray-200">
               <Text className={`${cell} text-[11.5px] text-gray-500`} style={{ width: 50 }} numberOfLines={1}>
                 {r.time}
               </Text>
@@ -208,6 +241,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenR
                 {money(r.balance)}
               </Text>
             </Pressable>
+            </Fragment>
           );
         })}
         <View className="flex-row bg-gray-50">
@@ -240,9 +274,10 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenR
             </Text>
           </View>
 
-          {rows.map((r) => (
+          {rows.map((r, index) => (
+            <Fragment key={r.id}>
+            {dayBand(r, index)}
             <Pressable
-              key={r.id}
               onPress={open(r)}
               disabled={!r.edit && !r.href}
               className="flex-row border-b border-gray-200"
@@ -276,6 +311,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, onOpenR
                 {money(r.balance)}
               </Text>
             </Pressable>
+            </Fragment>
           ))}
 
           <View className="flex-row bg-gray-50">
@@ -687,7 +723,11 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const fullTable = wide && windowWidth >= FULL_TABLE_MIN_WINDOW;
   const [calendarMode] = useCalendarMode();
   const today = localDay(new Date().toISOString());
+  // `day` is the last day of what is shown; a week or month reaches back from it.
   const [day, setDay] = useState(today);
+  const [period, setPeriod] = useState<Period>('day');
+  const days = PERIOD_DAYS[period];
+  const from = shiftDay(day, -(days - 1));
   const [editing, setEditing] = useState<EditTarget | null>(null);
 
   const owner: Record<string, string> = userId ? { owner_id: userId } : {};
@@ -711,8 +751,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
 
     for (const t of transactions ?? []) {
       const date = t.bill_date ?? localDay(t.created_at);
-      if (t.type === 'expense' && date < day) opening -= t.amount;
-      if (date !== day) continue;
+      if (t.type === 'expense' && date < from) opening -= t.amount;
+      if (date < from || date > day) continue;
       const discount = t.discount_amount ?? 0;
       const category = t.expense_category_id ? categoryName.get(t.expense_category_id) : null;
       const isExpense = t.type === 'expense';
@@ -720,6 +760,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         ...blank,
         id: t.id,
         kind: isExpense ? 'expense' : t.type === 'sale' ? 'sale' : 'purchase',
+        date,
         time: timeOf(t.created_at),
         details: isExpense
           ? t.party_name || category || 'Expense'
@@ -767,12 +808,13 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       // Booking debits are the Sale itself, not cash.
       if (!isIn && e.source !== 'manual') continue;
       const date = e.entry_date ?? localDay(e.created_at);
-      if (date < day) opening += isIn ? e.amount : -e.amount;
-      if (date !== day) continue;
+      if (date < from) opening += isIn ? e.amount : -e.amount;
+      if (date < from || date > day) continue;
       rows.push({
         ...blank,
         id: e.id,
         kind: isIn ? 'received' : 'paid',
+        date,
         time: timeOf(e.created_at),
         details: `${isIn ? 'Received from' : 'Paid to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
         sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, via(e.bank_account_id), e.note].filter(Boolean).join(' · ') || null,
@@ -809,12 +851,13 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       // Only payments to a vendor move money; debits are the Purchase.
       if (e.entry_type !== 'credit') continue;
       const date = e.entry_date ?? localDay(e.created_at);
-      if (date < day) opening -= e.amount;
-      if (date !== day) continue;
+      if (date < from) opening -= e.amount;
+      if (date < from || date > day) continue;
       rows.push({
         ...blank,
         id: e.id,
         kind: 'paid',
+        date,
         time: timeOf(e.created_at),
         details: `Paid to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
         sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, via(e.bank_account_id), e.note].filter(Boolean).join(' · ') || null,
@@ -849,11 +892,13 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     // A transfer only moves money between the owner's own accounts, so it
     // never changes the combined balance - listed for reference only.
     for (const tr of transfers ?? []) {
-      if ((tr.transfer_date ?? localDay(tr.created_at)) !== day) continue;
+      const date = tr.transfer_date ?? localDay(tr.created_at);
+      if (date < from || date > day) continue;
       rows.push({
         ...blank,
         id: tr.id,
         kind: 'transfer',
+        date,
         time: timeOf(tr.created_at),
         details: `${via(tr.from_account_id)} → ${via(tr.to_account_id)}`,
         sub: tr.note,
@@ -880,7 +925,9 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       });
     }
 
-    rows.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    // By the day each entry sits on, then by when it was entered - so a longer
+    // view reads in date order and the running balance follows it.
+    rows.sort((a, b) => a.date.localeCompare(b.date) || a.sortKey.localeCompare(b.sortKey));
 
     let running = opening;
     let totalIn = 0;
@@ -902,9 +949,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       ...blank,
       id: 'opening',
       kind: 'opening',
+      date: '',
       time: '',
       details: 'Opening balance',
-      sub: 'Cash + bank at the start of the day',
+      sub: days === 1 ? 'Cash + bank at the start of the day' : `Cash + bank at the start of these ${days} days`,
       balance: opening,
       sortKey: '',
     };
@@ -919,26 +967,32 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       totalPurchases,
       closing: running,
     };
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, basePath]);
+  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, days, basePath]);
 
-  const [mainDate, otherDate] = dateLabels(day, calendarMode);
+  const [mainDate, otherDate] = days === 1 ? dateLabels(day, calendarMode) : rangeLabels(from, day, calendarMode);
+  // The date band above each day of a week or month.
+  const dayLabel = (date: string) => dateLabels(date, calendarMode).join('  ·  ');
 
-  // The day picker (previous / date / next / Today) and New entry live in the top
-  // bar on a wide screen - the date box already shows the day in both calendars -
-  // and as a plain row above the tiles on a narrow one.
+  // The period (1 day / 1 week / 1 month), the date picker (previous / date /
+  // next / Today) and New entry live in the top bar on a wide screen - the date
+  // box already shows the dates in both calendars - and as a plain row above the
+  // tiles on a narrow one. The arrows step a whole period, so views line up
+  // end to end. The extra control needs a wider window than the bar had before.
   const toolbar = useBookToolbar(
     {
       wide,
+      inBarMinWidth: 1280,
       right: (inBar) => (
         <>
+          <FilterTabs options={PERIOD_OPTIONS} value={period} onChange={setPeriod} />
           <Pressable
-            onPress={() => setDay((d) => shiftDay(d, -1))}
-            accessibilityLabel="Previous day"
+            onPress={() => setDay((d) => shiftDay(d, -days))}
+            accessibilityLabel={`Previous ${period}`}
             className="h-9 w-9 items-center justify-center rounded-lg border border-gray-200"
           >
             <Ionicons name="chevron-back" size={18} color="#374151" />
           </Pressable>
-          <View style={inBar ? { width: 200 } : { flexGrow: 1, minWidth: 160 }}>
+          <View style={inBar ? { width: days === 1 ? 200 : 250 } : { flexGrow: 1, minWidth: 160 }}>
             <DateField
               value={day}
               onChange={(v) => v && setDay(v)}
@@ -959,9 +1013,9 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             />
           </View>
           <Pressable
-            onPress={() => setDay((d) => shiftDay(d, 1))}
+            onPress={() => setDay((d) => (shiftDay(d, days) > today ? today : shiftDay(d, days)))}
             disabled={day >= today}
-            accessibilityLabel="Next day"
+            accessibilityLabel={`Next ${period}`}
             className="h-9 w-9 items-center justify-center rounded-lg border border-gray-200 disabled:opacity-30"
           >
             <Ionicons name="chevron-forward" size={18} color="#374151" />
@@ -979,7 +1033,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         </>
       ),
     },
-    [day, today, basePath, mainDate, otherDate]
+    [day, today, basePath, mainDate, otherDate, period, days]
   );
 
   return (
@@ -1009,13 +1063,14 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             totalOut={book.totalOut}
             closing={book.closing}
             full={fullTable}
+            dayLabel={days > 1 ? dayLabel : undefined}
             onOpenRow={(row) => row.edit && setEditing(row.edit)}
           />
 
           <EditEntryModal target={editing} onClose={() => setEditing(null)} />
 
           {book.entryCount === 0 && (
-            <Text className="px-1 text-[13px] text-gray-500">No entries on this day.</Text>
+            <Text className="px-1 text-[13px] text-gray-500">{days === 1 ? 'No entries on this day.' : `No entries in these ${days} days.`}</Text>
           )}
 
           <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
