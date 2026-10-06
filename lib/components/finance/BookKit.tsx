@@ -246,6 +246,7 @@ export function BookTable<T>({
   onRowPress,
   groupOf,
   highlight,
+  expanded,
   footer,
 }: {
   columns: BookColumn<T>[];
@@ -255,6 +256,8 @@ export function BookTable<T>({
   groupOf?: (row: T) => string;
   /** Rows to tint, e.g. the one currently open for editing. */
   highlight?: (row: T) => boolean;
+  /** Content shown directly under a row, e.g. its edit form; return null for a row with none. */
+  expanded?: (row: T) => ReactNode;
   footer?: { label: string; cells: Record<string, ReactNode> };
 }) {
   const cellStyle = (c: BookColumn<T>) => (c.width ? { width: c.width } : { flex: 1, minWidth: 0 });
@@ -301,6 +304,7 @@ export function BookTable<T>({
                 </View>
               ))}
             </Pressable>
+            {expanded?.(row)}
           </View>
         );
       })}

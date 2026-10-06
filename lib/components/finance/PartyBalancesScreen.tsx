@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useBarActions, useBookLayout } from './BookKit';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { nameCaps } from '../../utils/nameCaps';
 
 type Direction = 'receive' | 'give';
 
@@ -120,7 +121,7 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
             className="mb-2.5 flex-row items-center justify-between rounded-2xl border border-gray-200 bg-white p-4"
           >
             <Text className="flex-1 pr-2 text-sm font-semibold text-gray-900" numberOfLines={1}>
-              {item.name}
+              {nameCaps(item.name)}
             </Text>
             <Text className="text-sm font-extrabold" style={{ color: meta.color }}>
               NPR {item.balance.toLocaleString()}

@@ -3,16 +3,15 @@ import { useMemo } from 'react';
 import { useAccountBalances } from './useAccountBalances';
 
 export interface AvailableAmounts {
-  /** Money in hand available to spend - never below 0. */
-  cash: number;
-  /** Money available to spend in each bank / wallet, by bank account id - never below 0. */
+  /** Money available to spend in each bank / wallet, by bank account id - never below 0.
+   * Cash in hand isn't here: it has no amount shown, only the bank and wallet accounts do. */
   byId: Record<string, number>;
 }
 
-/** How much money is in Cash and in each bank account right now - the same
- * figures as the dashboard's Available Balance and the Bank Balances page - for
- * a payment form's "Payment method" dropdown to show beside each choice, so it
- * is clear where the money is before picking what to pay from.
+/** How much money is in each bank account / wallet right now - the same figures
+ * as the Bank Balances page - for a payment form's "Payment method" dropdown to
+ * show beside each choice, so it is clear where the money is before picking
+ * what to pay from.
  *
  * "Available" is money you can actually spend, so it is never negative: an
  * account whose books have gone below zero (more recorded going out than coming
@@ -27,7 +26,7 @@ export function useAvailableAmounts(userId: string | undefined): AvailableAmount
   return useMemo(
     () =>
       balances.ready
-        ? { cash: spendable(balances.cash), byId: Object.fromEntries(balances.perAccount.map((a) => [a.id, spendable(a.balance)])) }
+        ? { byId: Object.fromEntries(balances.perAccount.map((a) => [a.id, spendable(a.balance)])) }
         : null,
     [balances]
   );

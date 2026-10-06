@@ -15,6 +15,7 @@ import { PartyBalance, PartyTypePill } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { partyPosition } from '../../utils/partyBalance';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { nameCaps } from '../../utils/nameCaps';
 import { isValidPhone10 } from '../../utils/phone';
 import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
@@ -111,7 +112,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
   async function handlePickContact() {
     const picked = await pickPhoneContact();
     if (!picked) return;
-    if (picked.name) setName(picked.name);
+    if (picked.name) setName(nameCaps(picked.name));
     if (picked.phone) setPhone(picked.phone);
   }
 
@@ -143,7 +144,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
       }
       await createCustomer.mutateAsync({
         owner_id: userId,
-        name: name.trim(),
+        name: nameCaps(name.trim()),
         phone: trimmedPhone || null,
         address: address.trim() || null,
         // Only sent when chosen, so a party saves exactly as before without one.
@@ -165,7 +166,8 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
       <View className="mb-2.5 flex-row items-center rounded-lg border border-gray-300">
         <TextInput
           value={name}
-          onChangeText={setName}
+          onChangeText={(v) => setName(nameCaps(v))}
+          autoCapitalize="characters"
           placeholder="Name"
           className="flex-1 px-3 py-2.5 text-sm text-gray-900"
         />
@@ -236,7 +238,7 @@ function CustomerRow({
     >
       <View className="flex-1" style={{ minWidth: 0 }}>
         <Text className="font-semibold text-gray-900" numberOfLines={1}>
-          {customer.name}
+          {nameCaps(customer.name)}
         </Text>
         {(isApp || !!typeName) && (
           <View className="mt-1 flex-row flex-wrap items-center" style={{ gap: 6 }}>
@@ -496,7 +498,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
       <View style={{ minWidth: 0 }}>
         {/* Wraps, so on a narrow screen the pills drop below the name instead of cutting it short. */}
         <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
-          <Text className="text-[13px] font-semibold text-gray-900">{row.name}</Text>
+          <Text className="text-[13px] font-semibold text-gray-900">{nameCaps(row.name)}</Text>
           {!!typeOf(row) && <PartyTypePill name={typeOf(row)!} />}
           {(row.kind === 'app' || (row.kind === 'customer' && row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
         </View>
