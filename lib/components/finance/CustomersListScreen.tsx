@@ -13,6 +13,7 @@ import { SearchBar } from '../SearchBar';
 import { BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { PartyBalance, PartyTypePill } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
+import { Field, FieldRow, FormActions, INPUT, PopupCard } from './FormKit';
 import { partyPosition } from '../../utils/partyBalance';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { nameCaps } from '../../utils/nameCaps';
@@ -161,59 +162,62 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
   }
 
   return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="mb-3 text-sm font-semibold text-gray-900">Add a customer</Text>
-      <View className="mb-2.5 flex-row items-center rounded-lg border border-gray-300">
-        <TextInput
-          value={name}
-          onChangeText={(v) => setName(nameCaps(v))}
-          autoCapitalize="characters"
-          placeholder="Name"
-          className="flex-1 px-3 py-2.5 text-sm text-gray-900"
-        />
-        {Platform.OS !== 'web' && (
-          <Pressable onPress={handlePickContact} hitSlop={8} className="px-2.5">
-            <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
-          </Pressable>
-        )}
-      </View>
+    <PopupCard title="New party" onClose={onDone}>
+      <FieldRow>
+        <Field label="Name" basis={240}>
+          <View className="flex-row items-center rounded-lg border border-gray-300 bg-white">
+            <TextInput
+              value={name}
+              onChangeText={(v) => setName(nameCaps(v))}
+              autoCapitalize="characters"
+              autoFocus
+              placeholder="Name"
+              placeholderTextColor="#9CA3AF"
+              className="flex-1 px-3 py-2.5 text-sm text-gray-900"
+            />
+            {Platform.OS !== 'web' && (
+              <Pressable onPress={handlePickContact} hitSlop={8} className="px-2.5">
+                <Ionicons name="person-add-outline" size={18} color="#1d4ed8" />
+              </Pressable>
+            )}
+          </View>
+        </Field>
+        <Field label="Phone (10 digits)" basis={180}>
+          <TextInput
+            value={phone}
+            onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
+            placeholder="98XXXXXXXX"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="phone-pad"
+            maxLength={10}
+            className={INPUT}
+          />
+        </Field>
+        <Field label="Address" basis={320}>
+          <TextInput
+            value={address}
+            onChangeText={setAddress}
+            placeholder="Address"
+            placeholderTextColor="#9CA3AF"
+            className={INPUT}
+          />
+        </Field>
+      </FieldRow>
+
       <PartyTypeField ownerId={userId} value={partyTypeId} onChange={setPartyTypeId} />
-      <TextInput
-        value={phone}
-        onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
-        placeholder="Phone (10 digits)"
-        keyboardType="phone-pad"
-        maxLength={10}
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      <TextInput
-        value={address}
-        onChangeText={setAddress}
-        placeholder="Address"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
+
       <Pressable
         onPress={handleUseMyLocation}
         disabled={locating}
-        className="mb-3 items-center rounded-lg border border-blue-700 bg-blue-50 py-2 disabled:opacity-50"
+        className="items-center rounded-lg border border-blue-700 bg-blue-50 py-2 disabled:opacity-50"
       >
         <Text className="text-xs font-semibold text-blue-700">
           {locating ? 'Locating…' : coords ? '📍 Location captured' : '📍 Attach current location'}
         </Text>
       </Pressable>
-      <View className="flex-row gap-2">
-        <Pressable onPress={onDone} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
-          <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
-        >
-          <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save'}</Text>
-        </Pressable>
-      </View>
-    </View>
+
+      <FormActions onCancel={onDone} onSave={handleSave} saving={saving} />
+    </PopupCard>
   );
 }
 
@@ -480,11 +484,11 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
       right: (inBar) => (
         <>
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name or phone" wide={inBar} />
-          <ToolbarButton icon={showAddForm ? 'close' : 'add'} label={showAddForm ? 'Close' : 'New party'} onPress={() => setShowAddForm((v) => !v)} />
+          <ToolbarButton icon="add" label="New party" onPress={() => setShowAddForm(true)} />
         </>
       ),
     },
-    [search, showAddForm]
+    [search]
   );
 
   // Web: the same cash-book look as the Day Book - header card, stat tiles,
@@ -578,10 +582,10 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
           <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
         </View>
         <Pressable
-          onPress={() => setShowAddForm((v) => !v)}
+          onPress={() => setShowAddForm(true)}
           className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500"
         >
-          <Ionicons name={showAddForm ? 'close' : 'add'} size={22} color="white" />
+          <Ionicons name="add" size={22} color="white" />
         </Pressable>
       </View>
 

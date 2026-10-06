@@ -1,7 +1,6 @@
 // lib/components/finance/CustomerDetailScreen.tsx
-import { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, Linking } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useMemo, useState, type ReactNode } from 'react';
+import { View, Text, TextInput, Pressable, Linking, Platform } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +18,9 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { PartyTypePill } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
+import { BookTable, Pill, ToolbarButton, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { Field, FieldRow, FormActions, FormCard, INPUT, Segmented } from './FormKit';
+import { MONEY } from './moneyColors';
 import { supabase } from '../../supabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { nameCaps } from '../../utils/nameCaps';
@@ -35,20 +37,15 @@ import type {
 } from '../../../types/database.types';
 
 const TX_TYPE_LABEL: Record<BusinessTransactionType, string> = {
-  sale: 'Sale',
-  purchase: 'Purchase',
+  sale: 'Sale bill',
+  purchase: 'Purchase bill',
   expense: 'Expense',
 };
 
-// Rendering-only shadow used to replace thin gray borders on history rows -
-// no bearing on the data or logic those rows show.
-const ROW_SHADOW = {
-  shadowColor: '#101828',
-  shadowOpacity: 0.05,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 3 },
-  elevation: 1,
-} as const;
+// The two colours a choice or tag takes: green for money in, red for money out.
+const IN_TONE = { color: MONEY.in.text, bg: MONEY.in.bg, border: MONEY.in.base };
+const OUT_TONE = { color: MONEY.out.text, bg: MONEY.out.bg, border: MONEY.out.base };
+const NEUTRAL_TONE = { color: '#374151', bg: '#F3F4F6', border: '#9CA3AF' };
 
 /** Whether `phone` is already used by a different customer of this owner. */
 async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerId: string) {
@@ -63,7 +60,39 @@ async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerI
   return (data ?? []).length > 0;
 }
 
-function EditableDetails({ customerId, basePath }: { customerId: string; basePath: string }) {
+/** One balance in the name card: its label and the reason in plain words on one
+ * small line, the coloured amount under it. */
+function BalanceFigure({ label, value, color, caption }: { label: string; value: string; color: string; caption?: string }) {
+  return (
+    <View>
+      <Text className="text-[10.5px]" numberOfLines={1}>
+        <Text className="font-bold uppercase tracking-wide text-gray-400">{label}</Text>
+        {!!caption && <Text className="text-gray-400">{`  ·  ${caption}`}</Text>}
+      </Text>
+      <Text className="text-[17px] font-extrabold" style={{ color }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** A small outlined button for the header: an icon and a word. */
+function HeaderButton({ icon, label, danger, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; danger?: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="h-8 flex-row items-center rounded-lg border px-2.5"
+      style={{ gap: 5, borderColor: danger ? '#FECACA' : '#D1D5DB', backgroundColor: danger ? '#FEF2F2' : '#FFFFFF' }}
+    >
+      <Ionicons name={icon} size={13} color={danger ? '#DC2626' : '#2563EB'} />
+      <Text className="text-[12.5px] font-semibold" style={{ color: danger ? '#DC2626' : '#374151' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function EditableDetails({ customerId, basePath, summary }: { customerId: string; basePath: string; summary?: ReactNode }) {
   const { data: customer } = useSupabaseRow('customers', customerId);
   const updateCustomer = useSupabaseUpdate('customers');
   const deleteCustomer = useSupabaseDelete('customers', { requireRow: true });
@@ -139,84 +168,106 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
 
   if (editing) {
     return (
-      <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-        <Text className="mb-3 text-sm font-semibold text-gray-900">Edit customer</Text>
-        <TextInput
-          value={name}
-          onChangeText={(v) => setName(nameCaps(v))}
-          autoCapitalize="characters"
-          placeholder="Name"
-          className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-        />
+      <FormCard icon="person-outline" title="Edit customer">
+        <FieldRow>
+          <Field label="Name" basis={260}>
+            <TextInput
+              value={name}
+              onChangeText={(v) => setName(nameCaps(v))}
+              autoCapitalize="characters"
+              placeholder="Name"
+              placeholderTextColor="#9CA3AF"
+              className={INPUT}
+            />
+          </Field>
+          <Field label="Phone (10 digits)" basis={180}>
+            <TextInput
+              value={phone}
+              onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
+              placeholder="98XXXXXXXX"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="phone-pad"
+              maxLength={10}
+              className={INPUT}
+            />
+          </Field>
+          <Field label="Address" basis={300}>
+            <TextInput
+              value={address}
+              onChangeText={setAddress}
+              placeholder="Address"
+              placeholderTextColor="#9CA3AF"
+              className={INPUT}
+            />
+          </Field>
+        </FieldRow>
         <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} />
-        <TextInput
-          value={phone}
-          onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
-          placeholder="Phone (10 digits)"
-          keyboardType="phone-pad"
-          maxLength={10}
-          className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-        />
-        <TextInput
-          value={address}
-          onChangeText={setAddress}
-          placeholder="Address"
-          className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-        />
-        <View className="flex-row gap-2">
-          <Pressable onPress={() => setEditing(false)} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
-            <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
-          </Pressable>
-          <Pressable
-            onPress={handleSave}
-            disabled={saving}
-            className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
-          >
-            <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : 'Save'}</Text>
-          </Pressable>
-        </View>
-      </View>
+        <FormActions onCancel={() => setEditing(false)} onSave={handleSave} saving={saving} />
+      </FormCard>
     );
   }
 
+  const typeName = customer.party_type_id ? partyTypeName.get(customer.party_type_id) : undefined;
   return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <View className="mb-2 flex-row items-start justify-between">
-        <View className="flex-1 flex-row flex-wrap items-center" style={{ gap: 8 }}>
-          <Text className="text-lg font-bold text-gray-900">{nameCaps(customer.name)}</Text>
-          {!!customer.party_type_id && !!partyTypeName.get(customer.party_type_id) && (
-            <PartyTypePill name={partyTypeName.get(customer.party_type_id)!} />
-          )}
+    <View
+      className="flex-row flex-wrap items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
+      style={{ columnGap: 22, rowGap: 8 }}
+    >
+      <View style={{ flex: 1, minWidth: 200 }}>
+        <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
+          <Text className="text-[17px] font-extrabold text-gray-900">{nameCaps(customer.name)}</Text>
+          {!!typeName && <PartyTypePill name={typeName} />}
         </View>
-        <View className="flex-row gap-3">
-          <Pressable onPress={startEditing} hitSlop={8}>
-            <Ionicons name="pencil" size={16} color="#2563eb" />
-          </Pressable>
-          <Pressable onPress={handleDelete} hitSlop={8}>
-            <Ionicons name="trash-outline" size={16} color="#DC2626" />
-          </Pressable>
-        </View>
+        {(!!customer.phone || !!customer.address) && (
+          <View className="mt-0.5 flex-row flex-wrap" style={{ columnGap: 16, rowGap: 2 }}>
+            {!!customer.phone && (
+              <Pressable onPress={() => Linking.openURL(`tel:${customer.phone}`)} className="flex-row items-center gap-1">
+                <Ionicons name="call-outline" size={12} color="#6B7280" />
+                <Text className="text-[12.5px] text-blue-700">{customer.phone}</Text>
+              </Pressable>
+            )}
+            {!!customer.address && (
+              <Pressable
+                onPress={() =>
+                  customer.latitude != null && customer.longitude != null
+                    ? Linking.openURL(`https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`)
+                    : undefined
+                }
+                className="flex-row items-center gap-1"
+              >
+                <Ionicons name="location-outline" size={12} color="#6B7280" />
+                <Text className="text-[12.5px] text-gray-600">{customer.address}</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </View>
-      {customer.phone && (
-        <Pressable onPress={() => Linking.openURL(`tel:${customer.phone}`)} className="mb-1 flex-row items-center gap-1.5">
-          <Ionicons name="call-outline" size={13} color="#6B7280" />
-          <Text className="text-sm text-blue-700">{customer.phone}</Text>
-        </Pressable>
+      {!!summary && (
+        <View className="flex-row flex-wrap" style={{ columnGap: 22, rowGap: 6 }}>
+          {summary}
+        </View>
       )}
-      {customer.address && (
-        <Pressable
-          onPress={() =>
-            customer.latitude != null && customer.longitude != null
-              ? Linking.openURL(`https://www.google.com/maps?q=${customer.latitude},${customer.longitude}`)
-              : undefined
-          }
-          className="flex-row items-start gap-1.5"
-        >
-          <Ionicons name="location-outline" size={13} color="#6B7280" style={{ marginTop: 1.5 }} />
-          <Text className="flex-1 text-sm text-gray-600">{customer.address}</Text>
-        </Pressable>
-      )}
+      <View className="flex-row" style={{ gap: 6 }}>
+        <HeaderButton icon="pencil-outline" label="Edit" onPress={startEditing} />
+        <HeaderButton icon="trash-outline" label="Delete" danger onPress={handleDelete} />
+      </View>
     </View>
+  );
+}
+
+/** The payment-method button the entry forms share: Cash or a bank account. */
+function PaymentMethodButton({ name, isBank, onPress }: { name: string; isBank: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+    >
+      <View className="flex-row items-center gap-2">
+        <Ionicons name={isBank ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
+        <Text className="text-sm text-gray-900">{name}</Text>
+      </View>
+      <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+    </Pressable>
   );
 }
 
@@ -278,63 +329,42 @@ function AddEntryForm({
   }
 
   return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="mb-3 text-sm font-semibold text-gray-900">{initial ? 'Edit ledger entry' : 'Add ledger entry'}</Text>
-      <View className="mb-3 flex-row gap-2">
-        <Pressable
-          onPress={() => setEntryType('credit')}
-          className={`flex-1 items-center rounded-lg border py-2 ${entryType === 'credit' ? 'border-emerald-600 bg-emerald-50' : 'border-gray-300'}`}
-        >
-          <Text className={`text-xs font-bold ${entryType === 'credit' ? 'text-emerald-700' : 'text-gray-500'}`}>
-            Received
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setEntryType('debit')}
-          className={`flex-1 items-center rounded-lg border py-2 ${entryType === 'debit' ? 'border-red-600 bg-red-50' : 'border-gray-300'}`}
-        >
-          <Text className={`text-xs font-bold ${entryType === 'debit' ? 'text-red-700' : 'text-gray-500'}`}>
-            Customer owes
-          </Text>
-        </Pressable>
-      </View>
-      <TextInput
-        value={amount}
-        onChangeText={setAmount}
-        placeholder="Amount (NPR)"
-        keyboardType="numeric"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+    <FormCard icon="document-text-outline" title={initial ? 'Edit ledger entry' : 'Add ledger entry'}>
+      <Segmented
+        value={entryType}
+        onChange={setEntryType}
+        options={[
+          { key: 'credit', label: 'Received', ...IN_TONE },
+          { key: 'debit', label: 'Customer owes', ...OUT_TONE },
+        ]}
       />
-      <TextInput
-        value={note}
-        onChangeText={setNote}
-        placeholder="Remarks (optional)"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      {entryType === 'credit' && (
-        <Pressable
-          onPress={() => setShowAccountPicker(true)}
-          className="mb-3 flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
-        >
-          <View className="flex-row items-center gap-2">
-            <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
-            <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
-          </View>
-          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-        </Pressable>
-      )}
-      <View className="flex-row gap-2">
-        <Pressable onPress={onDone} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
-          <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
-        >
-          <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : initial ? 'Save' : 'Add entry'}</Text>
-        </Pressable>
-      </View>
+      <FieldRow>
+        <Field label="Amount (NPR)" basis={160}>
+          <TextInput
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="e.g. 1000"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            className={INPUT}
+          />
+        </Field>
+        {entryType === 'credit' && (
+          <Field label="Payment method" basis={200}>
+            <PaymentMethodButton name={selectedAccountName} isBank={!!bankAccountId} onPress={() => setShowAccountPicker(true)} />
+          </Field>
+        )}
+        <Field label="Remarks" basis={260}>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="Optional"
+            placeholderTextColor="#9CA3AF"
+            className={INPUT}
+          />
+        </Field>
+      </FieldRow>
+      <FormActions onCancel={onDone} onSave={handleSave} saving={saving} saveLabel={initial ? 'Save' : 'Add entry'} />
       <BankAccountPickerModal
         visible={showAccountPicker}
         accounts={bankAccounts.accounts}
@@ -344,7 +374,7 @@ function AddEntryForm({
         onRename={bankAccounts.rename}
         onDelete={bankAccounts.remove}
       />
-    </View>
+    </FormCard>
   );
 }
 
@@ -468,67 +498,43 @@ function AddVendorEntryForm({
   }
 
   return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="mb-3 text-sm font-semibold text-gray-900">{initial ? 'Edit vendor entry' : 'Add vendor entry'}</Text>
-      <View className="mb-3 flex-row gap-2">
-        <Pressable
-          onPress={() => setKind('paid')}
-          className={`flex-1 items-center rounded-lg border py-2 ${kind === 'paid' ? 'border-red-600 bg-red-50' : 'border-gray-300'}`}
-        >
-          <Text className={`text-xs font-bold ${kind === 'paid' ? 'text-red-700' : 'text-gray-500'}`}>Payment Out</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setKind('received')}
-          className={`flex-1 items-center rounded-lg border py-2 ${kind === 'received' ? 'border-emerald-600 bg-emerald-50' : 'border-gray-300'}`}
-        >
-          <Text className={`text-xs font-bold ${kind === 'received' ? 'text-emerald-700' : 'text-gray-500'}`}>Received</Text>
-        </Pressable>
-        {initial?.entry_type === 'debit' && (
-          <Pressable
-            onPress={() => setKind('onCredit')}
-            className={`flex-1 items-center rounded-lg border py-2 ${kind === 'onCredit' ? 'border-red-600 bg-red-50' : 'border-gray-300'}`}
-          >
-            <Text className={`text-xs font-bold ${kind === 'onCredit' ? 'text-red-700' : 'text-gray-500'}`}>Bought on credit</Text>
-          </Pressable>
+    <FormCard icon="cart-outline" title={initial ? 'Edit vendor entry' : 'Add vendor entry'}>
+      <Segmented
+        value={kind}
+        onChange={setKind}
+        options={[
+          { key: 'paid', label: 'Payment Out', ...OUT_TONE },
+          { key: 'received', label: 'Received', ...IN_TONE },
+          ...(initial?.entry_type === 'debit' ? [{ key: 'onCredit' as const, label: 'Bought on credit', ...OUT_TONE }] : []),
+        ]}
+      />
+      <FieldRow>
+        <Field label="Amount (NPR)" basis={160}>
+          <TextInput
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="e.g. 1000"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            className={INPUT}
+          />
+        </Field>
+        {kind !== 'onCredit' && (
+          <Field label="Payment method" basis={200}>
+            <PaymentMethodButton name={selectedAccountName} isBank={!!bankAccountId} onPress={() => setShowAccountPicker(true)} />
+          </Field>
         )}
-      </View>
-      <TextInput
-        value={amount}
-        onChangeText={setAmount}
-        placeholder="Amount (NPR)"
-        keyboardType="numeric"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      <TextInput
-        value={note}
-        onChangeText={setNote}
-        placeholder="Remarks (optional)"
-        className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-      />
-      {kind !== 'onCredit' && (
-        <Pressable
-          onPress={() => setShowAccountPicker(true)}
-          className="mb-3 flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
-        >
-          <View className="flex-row items-center gap-2">
-            <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
-            <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
-          </View>
-          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-        </Pressable>
-      )}
-      <View className="flex-row gap-2">
-        <Pressable onPress={onDone} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">
-          <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          className="flex-1 items-center rounded-lg bg-orange-500 py-2.5 disabled:opacity-50"
-        >
-          <Text className="text-sm font-semibold text-white">{saving ? 'Saving…' : initial ? 'Save' : 'Add entry'}</Text>
-        </Pressable>
-      </View>
+        <Field label="Remarks" basis={260}>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="Optional"
+            placeholderTextColor="#9CA3AF"
+            className={INPUT}
+          />
+        </Field>
+      </FieldRow>
+      <FormActions onCancel={onDone} onSave={handleSave} saving={saving} saveLabel={initial ? 'Save' : 'Add entry'} />
       <BankAccountPickerModal
         visible={showAccountPicker}
         accounts={bankAccounts.accounts}
@@ -538,9 +544,32 @@ function AddVendorEntryForm({
         onRename={bankAccounts.rename}
         onDelete={bankAccounts.remove}
       />
-    </View>
+    </FormCard>
   );
 }
+
+/** One line of the history, whichever list it came from - a customer ledger
+ * entry, a vendor ledger entry or a bill - so the table and the phone cards
+ * draw from the same thing. */
+type HistoryRow = {
+  key: string;
+  /** What the line is: Received, Payment Out, Sale bill ... */
+  label: string;
+  tone: { color: string; bg: string };
+  /** The note, with its receipt / bill number in front. */
+  detail: string;
+  dateLabel: string;
+  amount: number;
+  amountColor: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBg: string;
+  /** A manual entry can be edited and removed here; the rest are read-only. */
+  manual: boolean;
+  ledger?: CustomerLedgerEntry;
+  vendor?: VendorLedgerEntry;
+  tx?: BusinessTransaction;
+};
 
 export function CustomerDetailScreen({ basePath }: { basePath: string }) {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -594,17 +623,22 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // Transactions uses, instead of duplicating that layout here.
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
 
+  const layout = useBookLayout();
+  // On the web table an entry being edited opens right under its own row; on a
+  // phone (a card list) its form stays at the top of the page.
+  const inline = Platform.OS === 'web';
+
   const balance = useMemo(() => {
     return (entries ?? []).reduce((sum, e) => sum + (e.entry_type === 'debit' ? e.amount : -e.amount), 0);
   }, [entries]);
 
   // A party that already has vendor history but has never been used as a
   // customer is being treated purely as a vendor here (e.g. opened from the
-  // To Give tile) - the customer-side balance card and "Add ledger entry"
-  // are just noise on that page. A brand-new party with neither yet still
-  // sees both, so there's always a way to log its first entry. Same logic
-  // in reverse for a party that's only ever been a customer - the vendor
-  // card and "Log a vendor..." button are just as much noise there.
+  // To pay tile) - the customer-side balance and "Add entry" are just noise
+  // on that page. A brand-new party with neither yet still sees both, so
+  // there's always a way to log its first entry. Same logic in reverse for a
+  // party that's only ever been a customer - the vendor tile and "Payment
+  // Out" button are just as much noise there.
   const isPureVendor = (vendorEntries?.length ?? 0) > 0 && (entries?.length ?? 0) === 0;
   const isPureCustomer = (entries?.length ?? 0) > 0 && (vendorEntries?.length ?? 0) === 0;
 
@@ -628,249 +662,360 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     return [...ledgerItems, ...vendorItems, ...txItems].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [entries, vendorEntries, linkedTransactions]);
 
-  if (!id || !userId) return null;
+  const rows = useMemo<HistoryRow[]>(
+    () =>
+      history.map((item): HistoryRow => {
+        if (item.kind === 'tx') {
+          const t = item.tx;
+          const isSale = t.type === 'sale';
+          return {
+            key: `tx-${t.id}`,
+            label: TX_TYPE_LABEL[t.type],
+            tone: isSale ? IN_TONE : OUT_TONE,
+            detail: [t.bill_no ? `Bill No. ${t.bill_no}` : null, t.note].filter(Boolean).join(' · '),
+            dateLabel: toBsHistoryLabel(t.bill_date ?? t.created_at),
+            amount: t.amount,
+            amountColor: isSale ? '#059669' : '#DC2626',
+            icon: 'receipt-outline',
+            iconColor: isSale ? '#059669' : '#DC2626',
+            iconBg: isSale ? '#ECFDF5' : '#FEF2F2',
+            manual: false,
+            tx: t,
+          };
+        }
+        if (item.kind === 'vendor') {
+          const e = item.entry;
+          const onCredit = e.entry_type === 'debit';
+          return {
+            key: `vendor-${e.id}`,
+            label: onCredit ? 'Bought on credit' : 'Payment Out',
+            tone: OUT_TONE,
+            detail: [
+              e.receipt_no ? `Payment No. ${e.receipt_no}` : null,
+              e.note ?? (e.source === 'booking' ? 'From a credit purchase' : 'Manual entry'),
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            dateLabel: toBsHistoryLabel(e.entry_date ?? e.created_at),
+            amount: e.amount,
+            amountColor: '#DC2626',
+            icon: onCredit ? 'cart-outline' : 'arrow-up',
+            iconColor: '#DC2626',
+            iconBg: '#FEF2F2',
+            manual: e.source === 'manual',
+            vendor: e,
+          };
+        }
+        const e = item.entry;
+        const owes = e.entry_type === 'debit';
+        const outgoing = owes && e.source === 'manual';
+        return {
+          key: `ledger-${e.id}`,
+          label: owes ? 'Owes' : 'Received',
+          tone: owes ? NEUTRAL_TONE : IN_TONE,
+          detail: [
+            e.receipt_no ? `${owes ? 'Payment' : 'Receipt'} No. ${e.receipt_no}` : null,
+            e.note ?? (e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          dateLabel: toBsHistoryLabel(e.entry_date ?? e.created_at),
+          amount: e.amount,
+          amountColor: outgoing ? '#DC2626' : '#059669',
+          icon: owes ? 'arrow-up' : 'arrow-down',
+          iconColor: outgoing ? '#DC2626' : '#059669',
+          iconBg: outgoing ? '#FEF2F2' : '#ECFDF5',
+          manual: e.source === 'manual',
+          ledger: e,
+        };
+      }),
+    [history]
+  );
 
-  return (
-    <>
-    <KeyboardAwareScrollView
-      className="flex-1 bg-gray-50 px-6 pt-4"
-      contentContainerStyle={{ paddingBottom: 40 }}
-      enableOnAndroid
-      extraScrollHeight={20}
-      keyboardShouldPersistTaps="handled"
-    >
-      <EditableDetails customerId={id} basePath={basePath} />
+  function openRow(row: HistoryRow) {
+    if (row.tx) {
+      setViewingTx(row.tx);
+    } else if (row.vendor && row.manual) {
+      setEditingVendorEntry(row.vendor);
+      setShowAddVendorEntry(true);
+    } else if (row.ledger && row.manual) {
+      setEditingEntry(row.ledger);
+      setShowAddEntry(true);
+    }
+  }
 
-      {!isPureVendor && (
-        <LinearGradient
-          colors={balance > 0 ? (['#059669', '#047857'] as const) : balance < 0 ? (['#DC2626', '#B91C1C'] as const) : (['#2563EB', '#1D4ED8'] as const)}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: 24,
-            padding: 20,
-            gap: 14,
-            marginBottom: 16,
-            shadowColor: balance > 0 ? '#059669' : balance < 0 ? '#DC2626' : '#2563EB',
-            shadowOpacity: 0.35,
-            shadowRadius: 16,
-            shadowOffset: { width: 0, height: 8 },
-            elevation: 6,
-          }}
-        >
-          <View className="flex-row items-center justify-between">
-            <View>
-              <Text className="text-xs font-bold text-white/75" style={{ letterSpacing: 0.5 }}>
-                {(balance > 0 ? 'Customer owes you' : balance < 0 ? 'You owe customer' : 'Balance').toUpperCase()}
-              </Text>
-              <Text className="mt-1 text-2xl font-extrabold text-white">NPR {Math.abs(balance).toLocaleString()}</Text>
-            </View>
-            {balance !== 0 && (
-              <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>
-                <Text className="text-[11px] font-bold text-white">{balance > 0 ? 'Owes you' : 'You owe'}</Text>
-              </View>
-            )}
-          </View>
-          {!showAddEntry && (
-            <Pressable
+  function removeRow(row: HistoryRow) {
+    showAlert('Remove this entry?', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          if (row.vendor) deleteVendorEntry.mutate(row.vendor.id);
+          else if (row.ledger) deleteEntry.mutate(row.ledger.id);
+        },
+      },
+    ]);
+  }
+
+  // "Add entry" and "Payment Out" live in the top bar on a wide screen, and as a
+  // plain row at the top of the page on a narrow one.
+  const toolbar = useBookToolbar(
+    {
+      wide: layout.wide,
+      right: () => (
+        <>
+          {!isPureVendor && !showAddEntry && (
+            <ToolbarButton
+              icon="add"
+              label="Add entry"
               onPress={() => {
                 setEditingEntry(null);
                 setShowAddEntry(true);
               }}
-              className="flex-row items-center justify-center gap-1.5 rounded-full bg-white py-3"
-            >
-              <Ionicons name="add-circle-outline" size={16} color={balance > 0 ? '#047857' : balance < 0 ? '#B91C1C' : '#1D4ED8'} />
-              <Text className="text-sm font-semibold" style={{ color: balance > 0 ? '#047857' : balance < 0 ? '#B91C1C' : '#1D4ED8' }}>
-                Add Ledger Entry
-              </Text>
-            </Pressable>
+            />
           )}
-        </LinearGradient>
-      )}
-
-      {!isPureVendor && showAddEntry && (
-        <AddEntryForm
-          customerId={id}
-          ownerId={userId}
-          initial={editingEntry}
-          onDone={() => {
-            setShowAddEntry(false);
-            setEditingEntry(null);
-          }}
-        />
-      )}
-
-      {(vendorEntries?.length ?? 0) > 0 && (
-        <View className="mb-3 flex-row items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
-          <View className="h-9 w-9 items-center justify-center rounded-full bg-white">
-            <Ionicons name="cart-outline" size={18} color="#DC2626" />
-          </View>
-          <View className="flex-1">
-            <Text className="text-[11px] font-bold uppercase tracking-wide text-red-700">
-              {vendorBalance > 0 ? 'To Give' : vendorBalance < 0 ? 'They owe you (overpaid)' : 'Vendor balance'}
-            </Text>
-            <Text className="mt-0.5 text-lg font-extrabold text-red-600">NPR {Math.abs(vendorBalance).toLocaleString()}</Text>
-          </View>
-        </View>
-      )}
-      {!isPureCustomer && !showAddVendorEntry && (
-        <Pressable
-          onPress={() => {
-            setEditingVendorEntry(null);
-            setShowAddVendorEntry(true);
-          }}
-          className="mb-4 flex-row items-center justify-center gap-1.5 rounded-2xl border border-red-300 bg-white py-3"
-        >
-          <Ionicons name="cart-outline" size={16} color="#DC2626" />
-          <Text className="text-sm font-semibold text-red-600">Log a vendor payment</Text>
-        </Pressable>
-      )}
-      {!isPureCustomer && showAddVendorEntry && userId && (
-        <AddVendorEntryForm
-          vendorId={id}
-          ownerId={userId}
-          initial={editingVendorEntry}
-          onDone={() => {
-            setShowAddVendorEntry(false);
-            setEditingVendorEntry(null);
-          }}
-        />
-      )}
-
-      <Text className="mb-2 text-sm font-semibold text-gray-900">History</Text>
-      {history.length === 0 && <Text className="text-center text-sm text-gray-400">No history yet.</Text>}
-      {history.map((item) => {
-        if (item.kind === 'tx') {
-          const t = item.tx;
-          return (
-            <Pressable
-              key={`tx-${t.id}`}
-              onPress={() => setViewingTx(t)}
-              className="mb-2.5 flex-row items-center gap-3 rounded-2xl bg-white p-3.5"
-              style={ROW_SHADOW}
-            >
-              <View className={`h-8 w-8 items-center justify-center rounded-full ${t.type === 'sale' ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                <Ionicons name="receipt-outline" size={14} color={t.type === 'sale' ? '#059669' : '#DC2626'} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-900">{TX_TYPE_LABEL[t.type]}</Text>
-                <Text className="text-xs text-gray-400" numberOfLines={1}>
-                  {toBsHistoryLabel(t.bill_date ?? t.created_at)}
-                </Text>
-              </View>
-              <Text className="text-sm font-extrabold" style={{ color: t.type === 'sale' ? '#059669' : '#DC2626' }}>
-                NPR {t.amount.toLocaleString()}
-              </Text>
-              <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginLeft: 6 }} />
-            </Pressable>
-          );
-        }
-        if (item.kind === 'vendor') {
-          const entry = item.entry;
-          return (
-            <Pressable
-              key={`vendor-${entry.id}`}
-              disabled={entry.source !== 'manual'}
+          {!isPureCustomer && !showAddVendorEntry && (
+            <ToolbarButton
+              icon="arrow-up-circle-outline"
+              label="Payment Out"
               onPress={() => {
-                setEditingVendorEntry(entry);
+                setEditingVendorEntry(null);
                 setShowAddVendorEntry(true);
               }}
-              className="mb-2.5 flex-row items-center gap-3 rounded-2xl bg-white p-3.5"
-              style={ROW_SHADOW}
-            >
-              <View
-                className="h-8 w-8 items-center justify-center rounded-full bg-red-50"
-              >
-                <Ionicons name={entry.entry_type === 'debit' ? 'cart-outline' : 'arrow-up'} size={14} color="#DC2626" />
+            />
+          )}
+        </>
+      ),
+    },
+    [isPureVendor, isPureCustomer, showAddEntry, showAddVendorEntry]
+  );
+
+  if (!id || !userId) return null;
+
+  const editingHere = (row: HistoryRow) =>
+    (!!row.ledger && row.ledger.id === editingEntry?.id) || (!!row.vendor && row.vendor.id === editingVendorEntry?.id);
+
+  const removeButton = (row: HistoryRow) => (
+    <Pressable onPress={() => removeRow(row)} hitSlop={8} accessibilityLabel="Remove entry">
+      <Ionicons name="close" size={16} color="#9CA3AF" />
+    </Pressable>
+  );
+
+  // --- History: a bordered table on the web, flat cards on a phone ---
+  const detailsCell = (row: HistoryRow, withDate: boolean) => (
+    <View style={{ minWidth: 0 }}>
+      <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
+        {row.detail || row.label}
+      </Text>
+      {withDate && (
+        <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+          {row.dateLabel}
+        </Text>
+      )}
+    </View>
+  );
+  const typeColumn: BookColumn<HistoryRow> = {
+    key: 'type',
+    label: 'Type',
+    width: 130,
+    render: (row) => <Pill text={row.label} color={row.tone.color} bg={row.tone.bg} />,
+  };
+  const amountColumn: BookColumn<HistoryRow> = {
+    key: 'amount',
+    label: 'Amount (NPR)',
+    width: 140,
+    align: 'right',
+    render: (row) => (
+      <Text className="text-[13px] font-bold" style={{ color: row.amountColor }}>
+        {row.amount.toLocaleString()}
+      </Text>
+    ),
+  };
+  const actionColumn: BookColumn<HistoryRow> = {
+    key: 'action',
+    label: '',
+    width: 44,
+    align: 'right',
+    render: (row) => (row.tx ? <Ionicons name="chevron-forward" size={14} color="#D1D5DB" /> : row.manual ? removeButton(row) : null),
+  };
+  const columns: BookColumn<HistoryRow>[] = layout.full
+    ? [
+        { key: 'date', label: 'Date', width: 130, render: (row) => <Text className="text-[12.5px] text-gray-600">{row.dateLabel}</Text> },
+        { key: 'details', label: 'Details', render: (row) => detailsCell(row, false) },
+        typeColumn,
+        amountColumn,
+        actionColumn,
+      ]
+    : [{ key: 'details', label: 'Details', render: (row) => detailsCell(row, true) }, typeColumn, amountColumn, actionColumn];
+
+  const historyView =
+    rows.length === 0 ? (
+      <View className="items-center rounded-xl border border-gray-300 bg-white py-8">
+        <Ionicons name="document-text-outline" size={26} color="#D1D5DB" />
+        <Text className="mt-2 text-sm text-gray-500">No history yet.</Text>
+      </View>
+    ) : Platform.OS === 'web' ? (
+      <BookTable
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.key}
+        onRowPress={openRow}
+        highlight={editingHere}
+        expanded={(row) => {
+          if (row.ledger && row.ledger.id === editingEntry?.id && showAddEntry) {
+            return (
+              <View className="border-b border-gray-200 bg-gray-50 p-3">
+                <AddEntryForm
+                  key={row.ledger.id}
+                  customerId={id}
+                  ownerId={userId}
+                  initial={editingEntry}
+                  onDone={() => {
+                    setShowAddEntry(false);
+                    setEditingEntry(null);
+                  }}
+                />
               </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-gray-900">
-                  {entry.entry_type === 'debit' ? 'Bought on credit' : 'Payment Out'}
-                </Text>
-                <Text className="text-xs text-gray-400" numberOfLines={1}>
-                  {entry.note ?? (entry.source === 'booking' ? 'From a credit purchase' : 'Manual entry')} ·{' '}
-                  {toBsHistoryLabel(entry.entry_date ?? entry.created_at)}
-                </Text>
+            );
+          }
+          if (row.vendor && row.vendor.id === editingVendorEntry?.id && showAddVendorEntry) {
+            return (
+              <View className="border-b border-gray-200 bg-gray-50 p-3">
+                <AddVendorEntryForm
+                  key={row.vendor.id}
+                  vendorId={id}
+                  ownerId={userId}
+                  initial={editingVendorEntry}
+                  onDone={() => {
+                    setShowAddVendorEntry(false);
+                    setEditingVendorEntry(null);
+                  }}
+                />
               </View>
-              <Text className="text-sm font-extrabold" style={{ color: '#DC2626' }}>
-                NPR {entry.amount.toLocaleString()}
-              </Text>
-              {entry.source === 'manual' && (
-                <Pressable
-                  onPress={() =>
-                    showAlert('Remove this entry?', undefined, [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Remove', style: 'destructive', onPress: () => deleteVendorEntry.mutate(entry.id) },
-                    ])
-                  }
-                  hitSlop={8}
-                  className="ml-1"
-                >
-                  <Ionicons name="close" size={16} color="#9CA3AF" />
-                </Pressable>
-              )}
-            </Pressable>
-          );
-        }
-        const entry = item.entry;
-        return (
+            );
+          }
+          return null;
+        }}
+      />
+    ) : (
+      <View>
+        {rows.map((row) => (
           <Pressable
-            key={`ledger-${entry.id}`}
-            disabled={entry.source !== 'manual'}
-            onPress={() => {
-              setEditingEntry(entry);
-              setShowAddEntry(true);
-            }}
-            className="mb-2.5 flex-row items-center gap-3 rounded-2xl bg-white p-3.5"
-            style={ROW_SHADOW}
+            key={row.key}
+            disabled={!row.tx && !row.manual}
+            onPress={() => openRow(row)}
+            className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
           >
-            <View
-              className={`h-8 w-8 items-center justify-center rounded-full ${entry.entry_type === 'debit' && entry.source === 'manual' ? 'bg-red-50' : 'bg-emerald-50'}`}
-            >
-              <Ionicons
-                name={entry.entry_type === 'debit' ? 'arrow-up' : 'arrow-down'}
-                size={14}
-                color={entry.entry_type === 'debit' && entry.source === 'manual' ? '#DC2626' : '#059669'}
-              />
+            <View className="h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: row.iconBg }}>
+              <Ionicons name={row.icon} size={14} color={row.iconColor} />
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-900">{entry.entry_type === 'debit' ? 'Owes' : 'Received'}</Text>
+              <Text className="text-sm font-semibold text-gray-900">{row.label}</Text>
               <Text className="text-xs text-gray-400" numberOfLines={1}>
-                {entry.note ?? (entry.source === 'booking' ? 'From a booked job' : 'Manual entry')} ·{' '}
-                {toBsHistoryLabel(entry.entry_date ?? entry.created_at)}
+                {row.detail ? `${row.detail} · ` : ''}
+                {row.dateLabel}
               </Text>
             </View>
-            <Text className="text-sm font-extrabold" style={{ color: entry.entry_type === 'debit' && entry.source === 'manual' ? '#DC2626' : '#059669' }}>
-              NPR {entry.amount.toLocaleString()}
+            <Text className="text-sm font-extrabold" style={{ color: row.amountColor }}>
+              NPR {row.amount.toLocaleString()}
             </Text>
-            {entry.source === 'manual' && (
-              <Pressable
-                onPress={() =>
-                  showAlert('Remove this entry?', undefined, [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Remove', style: 'destructive', onPress: () => deleteEntry.mutate(entry.id) },
-                  ])
-                }
-                hitSlop={8}
-                className="ml-1"
-              >
-                <Ionicons name="close" size={16} color="#9CA3AF" />
-              </Pressable>
-            )}
+            {row.tx ? <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginLeft: 6 }} /> : row.manual ? removeButton(row) : null}
           </Pressable>
-        );
-      })}
-    </KeyboardAwareScrollView>
-    <TransactionDetailModal
-      tx={viewingTx}
-      categoryName={null}
-      bankAccountName={null}
-      onClose={() => setViewingTx(null)}
-      onEdit={() => {
-        if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}` as any);
-        setViewingTx(null);
-      }}
-    />
+        ))}
+      </View>
+    );
+
+  // The balances, shown in the name card itself rather than a row of their own.
+  // Worded the way the Ledger words them: "To receive" is money coming to you,
+  // "To pay" is money you owe - and the caption says which way round it is.
+  const customerWords =
+    balance > 0
+      ? { label: 'To receive', caption: 'Customer owes you', color: MONEY.in.text }
+      : balance < 0
+        ? { label: 'To pay', caption: 'You owe the customer', color: MONEY.out.text }
+        : { label: 'Balance', caption: undefined, color: '#374151' };
+  const vendorWords =
+    vendorBalance > 0
+      ? { label: 'To pay', caption: 'You owe the vendor', color: MONEY.out.text }
+      : vendorBalance < 0
+        ? { label: 'To receive', caption: 'You overpaid the vendor', color: MONEY.in.text }
+        : { label: 'Vendor balance', caption: undefined, color: '#374151' };
+  const summary = (
+    <>
+      {!isPureVendor && (
+        <BalanceFigure
+          label={customerWords.label}
+          caption={customerWords.caption}
+          value={`NPR ${Math.abs(balance).toLocaleString()}`}
+          color={customerWords.color}
+        />
+      )}
+      {(vendorEntries?.length ?? 0) > 0 && (
+        <BalanceFigure
+          label={vendorWords.label}
+          caption={vendorWords.caption}
+          value={`NPR ${Math.abs(vendorBalance).toLocaleString()}`}
+          color={vendorWords.color}
+        />
+      )}
+    </>
+  );
+
+  // A form for a brand-new entry opens at the top; one for an existing entry
+  // opens under its row on the web (see `expanded` above), at the top on a phone.
+  const addFormOpen = showAddEntry && !(inline && editingEntry);
+  const addVendorFormOpen = showAddVendorEntry && !(inline && editingVendorEntry);
+
+  return (
+    <>
+      <KeyboardAwareScrollView
+        className="flex-1 bg-gray-50"
+        contentContainerStyle={{ padding: layout.wide ? 24 : 12, paddingBottom: 48, gap: 14 }}
+        enableOnAndroid
+        extraScrollHeight={20}
+        keyboardShouldPersistTaps="handled"
+      >
+        {toolbar}
+
+        <EditableDetails customerId={id} basePath={basePath} summary={summary} />
+
+        {!isPureVendor && addFormOpen && (
+          <AddEntryForm
+            customerId={id}
+            ownerId={userId}
+            initial={editingEntry}
+            onDone={() => {
+              setShowAddEntry(false);
+              setEditingEntry(null);
+            }}
+          />
+        )}
+        {!isPureCustomer && addVendorFormOpen && (
+          <AddVendorEntryForm
+            vendorId={id}
+            ownerId={userId}
+            initial={editingVendorEntry}
+            onDone={() => {
+              setShowAddVendorEntry(false);
+              setEditingVendorEntry(null);
+            }}
+          />
+        )}
+
+        <Text className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">History</Text>
+        {historyView}
+      </KeyboardAwareScrollView>
+      <TransactionDetailModal
+        tx={viewingTx}
+        categoryName={null}
+        bankAccountName={null}
+        onClose={() => setViewingTx(null)}
+        onEdit={() => {
+          if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}` as any);
+          setViewingTx(null);
+        }}
+      />
     </>
   );
 }

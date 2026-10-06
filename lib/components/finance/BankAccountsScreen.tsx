@@ -1,12 +1,12 @@
 // lib/components/finance/BankAccountsScreen.tsx
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { View, Text, Pressable, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useBankAccounts, type BankAccountDetails } from '../../hooks/useBankAccounts';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { BookPage, BookTable, ToolbarButton, useBarActions, useBookLayout, type BookColumn } from './BookKit';
-import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
+import { Field, FieldRow, FormActions, FormCard, INPUT } from './FormKit';
 import type { BankAccount } from '../../../types/database.types';
 
 const EMPTY_DETAILS: BankAccountDetails = { name: '', bank_name: null, account_number: null, account_holder_name: null, address: null };
@@ -19,19 +19,6 @@ function toDetails(acc: BankAccount): BankAccountDetails {
     account_holder_name: acc.account_holder_name,
     address: acc.address,
   };
-}
-
-const INPUT = 'rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900';
-
-/** A label over its input. Fields sit side by side and wrap onto the next line
- * when the window is narrow, so the same form fits a desktop and a phone. */
-function Field({ label, basis = 220, children }: { label: string; basis?: number; children: ReactNode }) {
-  return (
-    <View style={{ flexGrow: 1, flexBasis: basis, minWidth: 0 }}>
-      <Text className="mb-1.5 text-xs font-semibold text-gray-600">{label}</Text>
-      {children}
-    </View>
-  );
 }
 
 /** Full add/edit form for one bank account - a label alone used to be all
@@ -78,18 +65,8 @@ function AccountForm({
   }
 
   return (
-    <View
-      className="rounded-2xl border border-gray-200 bg-white px-5 py-4"
-      style={{ boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 4px 12px rgba(16,24,40,0.03)' }}
-    >
-      <View className="mb-3 flex-row items-center gap-2">
-        <Ionicons name="business-outline" size={14} color="#6B7280" />
-        <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-          {initial ? 'Edit bank account' : 'New bank account'}
-        </Text>
-      </View>
-
-      <View className="flex-row flex-wrap" style={{ columnGap: 14, rowGap: 12 }}>
+    <FormCard icon="business-outline" title={initial ? 'Edit bank account' : 'New bank account'}>
+      <FieldRow>
         <Field label="Label">
           <TextInput
             value={details.name}
@@ -137,37 +114,23 @@ function AccountForm({
             className={INPUT}
           />
         </Field>
-      </View>
+      </FieldRow>
 
-      <View className="mt-4 flex-row flex-wrap items-center justify-end" style={{ gap: 10 }}>
-        {onDelete && (
-          <Pressable
-            onPress={() =>
-              showAlert('Remove this bank account?', undefined, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Remove', style: 'destructive', onPress: onDelete },
-              ])
-            }
-            className="mr-auto flex-row items-center rounded-xl border border-red-200 bg-red-50 px-4 py-2.5"
-            style={{ gap: 6 }}
-          >
-            <Ionicons name="trash-outline" size={15} color="#DC2626" />
-            <Text className="text-sm font-semibold text-red-600">Remove</Text>
-          </Pressable>
-        )}
-        <Pressable onPress={onCancel} className="items-center rounded-xl border border-gray-300 bg-white px-6 py-2.5">
-          <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          className="items-center rounded-xl px-8 py-2.5 disabled:opacity-50"
-          style={{ backgroundColor: FINANCE_ENTRY_ACCENT, boxShadow: `0 2px 6px ${FINANCE_ENTRY_SHADOW}` }}
-        >
-          <Text className="text-sm font-bold text-white">{saving ? 'Saving…' : 'Save'}</Text>
-        </Pressable>
-      </View>
-    </View>
+      <FormActions
+        onCancel={onCancel}
+        onSave={handleSave}
+        saving={saving}
+        onRemove={
+          onDelete
+            ? () =>
+                showAlert('Remove this bank account?', undefined, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Remove', style: 'destructive', onPress: onDelete },
+                ])
+            : undefined
+        }
+      />
+    </FormCard>
   );
 }
 
