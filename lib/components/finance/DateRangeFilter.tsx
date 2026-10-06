@@ -40,7 +40,13 @@ const PRESETS = [
  * a dialog with two ways in: one tap for "the last 7 / 14 / 30 days" (counting
  * today as the last day), which applies straight away, or From and To dates
  * chosen on the calendar, which apply when you press Apply. */
-export function DateFilterButton({ from, to, onApply }: { from: string; to: string; onApply: (from: string, to: string) => void }) {
+export function DateFilterButton({ from, to, onApply, idleLabel = 'Filter' }: {
+  from: string;
+  to: string;
+  onApply: (from: string, to: string) => void;
+  /** What the button says while no range is on - a page with a default range can name it ("Today"). */
+  idleLabel?: string;
+}) {
   const [mode] = useCalendarMode();
   const [open, setOpen] = useState(false);
   const [draftFrom, setDraftFrom] = useState(from);
@@ -74,7 +80,7 @@ export function DateFilterButton({ from, to, onApply }: { from: string; to: stri
         >
           <Ionicons name="funnel-outline" size={14} color={active ? '#1D4ED8' : '#4B5563'} />
           <Text className={`text-[13px] font-semibold ${active ? 'text-blue-700' : 'text-gray-700'}`} numberOfLines={1} style={{ maxWidth: 170 }}>
-            {active ? rangeLabel(from, to, mode) : 'Filter'}
+            {active ? rangeLabel(from, to, mode) : idleLabel}
           </Text>
         </Pressable>
         {active && (

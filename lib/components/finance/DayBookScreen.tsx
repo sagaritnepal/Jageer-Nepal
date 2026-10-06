@@ -12,6 +12,7 @@ import { FormSection } from './FormSection';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
+import { DateFilterButton } from './DateRangeFilter';
 import { FilterTabs, useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -101,32 +102,6 @@ const KIND: Record<Kind, { label: string; color: string; bg: string }> = {
 function localDay(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function shiftDay(day: string, delta: number): string {
-  const [y, m, d] = day.split('-').map(Number);
-  return localDay(new Date(y, m - 1, d + delta).toISOString());
-}
-
-/** How much of the book one view covers, ending on the picked date: a day, a
- * week (7 days) or a month (30 days). A rolling window rather than a calendar
- * week / month, so it reads the same in the AD and BS calendars. */
-type Period = 'day' | 'week' | 'month';
-const PERIOD_DAYS: Record<Period, number> = { day: 1, week: 7, month: 30 };
-const PERIOD_OPTIONS: { key: Period; label: string }[] = [
-  { key: 'day', label: '1 day' },
-  { key: 'week', label: '1 week' },
-  { key: 'month', label: '1 month' },
-];
-
-/** "Aswin 14 – Aswin 20, 2083 BS": the start drops its year when both ends
- * share it. */
-function rangeLabels(from: string, to: string, mode: ReturnType<typeof useCalendarMode>[0]): [string, string] {
-  const [fromMain, fromOther] = dateLabels(from, mode);
-  const [toMain, toOther] = dateLabels(to, mode);
-  const year = (s: string) => s.match(/\d{4}/g)?.pop();
-  const short = (a: string, b: string) => (year(a) === year(b) ? a.replace(/,? ?\d{4}( BS)?$/, '') : a);
-  return [`${short(fromMain, toMain)} – ${toMain}`, `${short(fromOther, toOther)} – ${toOther}`];
 }
 
 function timeOf(iso: string): string {
@@ -777,11 +752,13 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const fullTable = wide && windowWidth >= FULL_TABLE_MIN_WINDOW;
   const [calendarMode] = useCalendarMode();
   const today = localDay(new Date().toISOString());
-  // `day` is the last day of what is shown; a week or month reaches back from it.
-  const [day, setDay] = useState(today);
-  const [period, setPeriod] = useState<Period>('day');
-  const days = PERIOD_DAYS[period];
-  const from = shiftDay(day, -(days - 1));
+  // What the Filter button sets: today by default, otherwise a range. An empty
+  // From reaches back to the start of the books (so nothing is carried in as an
+  // opening balance); an empty To runs through today.
+  const [range, setRange] = useState({ from: today, to: today });
+  const from = range.from;
+  const day = range.to || today;
+  const singleDay = from === day;
   const [editing, setEditing] = useState<EditTarget | null>(null);
   // null shows every account together; otherwise just that one's entries.
   const [selectedAccount, setSelectedAccount] = useState<AccountKey | null>(null);
@@ -1066,7 +1043,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       date: '',
       time: '',
       details: 'Opening balance',
-      sub: `${selected ? selected.name : 'Cash + bank'} at the start of ${days === 1 ? 'the day' : `these ${days} days`}`,
+      sub: `${selected ? selected.name : 'Cash + bank'} at the start of ${singleDay ? 'the day' : 'this period'}`,
       balance: viewOpening,
       sortKey: '',
     };
@@ -1083,73 +1060,34 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       accountOptions,
       selected,
     };
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, days, basePath, selectedAccount]);
+  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, basePath, selectedAccount]);
 
-  const [mainDate, otherDate] = days === 1 ? dateLabels(day, calendarMode) : rangeLabels(from, day, calendarMode);
-  // The date band above each day of a week or month.
+  // The date band above each day of a longer view.
   const dayLabel = (date: string) => dateLabels(date, calendarMode).join('  ·  ');
 
-  // The period (1 day / 1 week / 1 month), the date picker (previous / date /
-  // next / Today) and New entry live in the top bar on a wide screen - the date
-  // box already shows the dates in both calendars - and as a plain row above the
-  // tiles on a narrow one. The arrows step a whole period, so views line up
-  // end to end. The extra control needs a wider window than the bar had before.
+  // Today is the resting state, so the button reads "Today" and carries no
+  // range; anything else shows as the range, and clearing it comes back to today.
+  const isToday = from === today && day === today;
+  const applyRange = (f: string, t: string) => setRange(f || t ? { from: f, to: t } : { from: today, to: today });
+
+  // The Filter button and New entry live in the top bar on a wide screen, and as
+  // a plain row above the tiles on a narrow one.
   const toolbar = useBookToolbar(
     {
       wide,
-      inBarMinWidth: 1280,
-      right: (inBar) => (
+      right: () => (
         <>
-          <FilterTabs options={PERIOD_OPTIONS} value={period} onChange={setPeriod} />
-          <Pressable
-            onPress={() => setDay((d) => shiftDay(d, -days))}
-            accessibilityLabel={`Previous ${period}`}
-            className="h-9 w-9 items-center justify-center rounded-lg border border-gray-200"
-          >
-            <Ionicons name="chevron-back" size={18} color="#374151" />
-          </Pressable>
-          <View style={inBar ? { width: days === 1 ? 200 : 250 } : { flexGrow: 1, minWidth: 160 }}>
-            <DateField
-              value={day}
-              onChange={(v) => v && setDay(v)}
-              renderTrigger={(open) => (
-                <Pressable
-                  onPress={open}
-                  accessibilityLabel="Pick a date"
-                  className="h-9 justify-center rounded-lg border border-gray-300 bg-white px-3"
-                >
-                  <Text className="text-[12px] font-bold leading-[14px] text-gray-900" numberOfLines={1}>
-                    {mainDate}
-                  </Text>
-                  <Text className="text-[10px] leading-[12px] text-gray-500" numberOfLines={1}>
-                    {otherDate}
-                  </Text>
-                </Pressable>
-              )}
-            />
-          </View>
-          <Pressable
-            onPress={() => setDay((d) => (shiftDay(d, days) > today ? today : shiftDay(d, days)))}
-            disabled={day >= today}
-            accessibilityLabel={`Next ${period}`}
-            className="h-9 w-9 items-center justify-center rounded-lg border border-gray-200 disabled:opacity-30"
-          >
-            <Ionicons name="chevron-forward" size={18} color="#374151" />
-          </Pressable>
-          {day !== today && (
-            <Pressable
-              onPress={() => setDay(today)}
-              className="h-9 items-center justify-center rounded-lg px-3.5"
-              style={{ backgroundColor: '#EFF6FF' }}
-            >
-              <Text className="text-[13px] font-semibold text-blue-700">Today</Text>
-            </Pressable>
-          )}
+          <DateFilterButton
+            from={isToday ? '' : range.from}
+            to={isToday ? '' : range.to}
+            idleLabel="Today"
+            onApply={applyRange}
+          />
           <NewEntryMenu basePath={basePath} />
         </>
       ),
     },
-    [day, today, basePath, mainDate, otherDate, period, days]
+    [range, isToday, today, basePath]
   );
 
   return (
@@ -1181,7 +1119,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             totalOut={book.totalOut}
             closing={book.closing}
             full={fullTable}
-            dayLabel={days > 1 ? dayLabel : undefined}
+            dayLabel={singleDay ? undefined : dayLabel}
             onOpenRow={(row) => row.edit && setEditing(row.edit)}
           />
 
@@ -1189,7 +1127,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
 
           {book.entryCount === 0 && (
             <Text className="px-1 text-[13px] text-gray-500">
-              {`No ${book.selected ? `${book.selected.name} entries` : 'entries'} ${days === 1 ? 'on this day.' : `in these ${days} days.`}`}
+              {`No ${book.selected ? `${book.selected.name} entries` : 'entries'} ${singleDay ? 'on this day.' : 'in this period.'}`}
             </Text>
           )}
 
