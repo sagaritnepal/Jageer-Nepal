@@ -18,7 +18,7 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { PartyTypePill } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
-import { BookTable, Pill, ToolbarButton, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { BackButton, BookTable, Pill, ToolbarButton, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { Field, FieldRow, FormActions, FormCard, INPUT, PopupCard, Segmented } from './FormKit';
 import { MONEY } from './moneyColors';
 import { supabase } from '../../supabase';
@@ -761,11 +761,20 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     ]);
   }
 
-  // "Add entry" and "Payment Out" live in the top bar on a wide screen, and as a
-  // plain row at the top of the page on a narrow one.
+  // Back to wherever this person was opened from - the Ledger, a To receive list,
+  // the Day Book... - and to the Ledger when there is nothing to go back to (the
+  // page was opened directly). The sidebar is no longer the only way out.
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace(`${basePath}/customers` as any);
+  };
+
+  // The Back button, "Add entry" and "Payment Out" live in the top bar on a wide
+  // screen; the two actions drop to a plain row at the top of the page on a narrow one.
   const toolbar = useBookToolbar(
     {
       wide: layout.wide,
+      left: () => <BackButton onPress={goBack} />,
       right: () => (
         <>
           {!isPureVendor && !showAddEntry && (
@@ -791,7 +800,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         </>
       ),
     },
-    [isPureVendor, isPureCustomer, showAddEntry, showAddVendorEntry]
+    [isPureVendor, isPureCustomer, showAddEntry, showAddVendorEntry, basePath]
   );
 
   if (!id || !userId) return null;
