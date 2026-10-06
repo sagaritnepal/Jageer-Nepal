@@ -340,8 +340,24 @@ const FILTERS: { key: 'all' | BusinessTransactionType; label: string }[] = [
  * the live summary card, so a reseller can glance at their last few
  * Sale/Purchase/Expense entries without leaving the form. Sale/Purchase/
  * Expense all read business_transactions directly (Payment In/Out's own
- * version of this lives in QuickPaymentScreen, over the ledger tables). */
-function RecentEntriesCard({ userId, type, color }: { userId: string; type: BusinessTransactionType; color: string }) {
+ * version of this lives in QuickPaymentScreen, over the ledger tables).
+ *
+ * Each entry opens the same read-only receipt the list uses (`onOpen`), which
+ * has the Edit button - so a mistake can be fixed from here without leaving
+ * the entry screen. `activeId` marks the entry currently loaded in the form. */
+function RecentEntriesCard({
+  userId,
+  type,
+  color,
+  activeId,
+  onOpen,
+}: {
+  userId: string;
+  type: BusinessTransactionType;
+  color: string;
+  activeId?: string;
+  onOpen?: (tx: BusinessTransaction) => void;
+}) {
   const { data } = useSupabaseQuery('business_transactions', {
     filters: { owner_id: userId, type },
     orderBy: { column: 'created_at', ascending: false },
@@ -351,27 +367,39 @@ function RecentEntriesCard({ userId, type, color }: { userId: string; type: Busi
 
   return (
     <View className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
         Recent {TYPE_META[type].label}s
       </Text>
+      {!!onOpen && recent.length > 0 && <Text className="mb-1.5 mt-0.5 text-[10.5px] text-gray-400">Tap an entry to view or edit it</Text>}
       {recent.length === 0 ? (
-        <Text className="text-xs text-gray-400">No entries yet.</Text>
+        <Text className="mt-2 text-xs text-gray-400">No entries yet.</Text>
       ) : (
         recent.map((tx, i) => (
-          <View
+          <Pressable
             key={tx.id}
-            className={`flex-row items-center justify-between py-2 ${i < recent.length - 1 ? 'border-b border-gray-50' : ''}`}
+            onPress={onOpen ? () => onOpen(tx) : undefined}
+            disabled={!onOpen}
+            accessibilityRole={onOpen ? 'button' : undefined}
+            accessibilityLabel={`${tx.party_name || 'Unnamed'}, NPR ${tx.amount.toLocaleString()}`}
+            className={`-mx-2 flex-row items-center justify-between rounded-lg px-2 py-2 ${i < recent.length - 1 ? 'border-b border-gray-50' : ''}`}
+            style={(state: any) => ({
+              backgroundColor: activeId === tx.id ? '#EFF6FF' : state.hovered || state.pressed ? '#F9FAFB' : 'transparent',
+            })}
           >
             <View className="flex-1 pr-2">
               <Text numberOfLines={1} className="text-xs font-semibold text-gray-800">
                 {tx.party_name || 'Unnamed'}
               </Text>
-              <Text className="text-[10px] text-gray-400">{toBsHistoryLabel(tx.bill_date ?? tx.created_at)}</Text>
+              <Text className="text-[10px] text-gray-400">
+                {toBsHistoryLabel(tx.bill_date ?? tx.created_at)}
+                {activeId === tx.id ? ' · editing' : ''}
+              </Text>
             </View>
             <Text className="text-xs font-bold" style={{ color }}>
               NPR {tx.amount.toLocaleString()}
             </Text>
-          </View>
+            {!!onOpen && <Ionicons name="chevron-forward" size={12} color="#D1D5DB" style={{ marginLeft: 6 }} />}
+          </Pressable>
         ))
       )}
     </View>
@@ -529,6 +557,7 @@ function TransactionForm({
   customers,
   products,
   voicePrefill,
+  onOpenRecent,
   onDone,
   onCancel,
 }: {
@@ -539,6 +568,8 @@ function TransactionForm({
   customers: Customer[];
   products: Product[];
   voicePrefill?: { amount?: string; party?: string; date?: string; note?: string } | null;
+  /** Opens an entry from the Recent list (web) - see RecentEntriesCard. */
+  onOpenRecent?: (tx: BusinessTransaction) => void;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -1301,7 +1332,7 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 320 }}>
-            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} />
+            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} onOpen={onOpenRecent} />
           </View>
         </View>
 
@@ -1649,7 +1680,7 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 300 }}>
-            <RecentEntriesCard userId={userId} type={type} color={TYPE_META[type].color} />
+            <RecentEntriesCard userId={userId} type={type} color={TYPE_META[type].color} activeId={initial?.id} onOpen={onOpenRecent} />
           </View>
         </View>
 
@@ -2498,7 +2529,8 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   // stranding the reseller on a dead end they'd have to back out of anyway.
   // Editing an existing row (tapped from the list) is a different flow and
   // should just close back to that list.
-  const isQuickAddFlow = isLockedToType && isAddFlow && !editingTx;
+  const inAddFlow = isLockedToType && isAddFlow;
+  const isQuickAddFlow = inAddFlow && !editingTx;
 
   // Pressing the Android hardware back button while editing an existing
   // entry should close the form and stay on the list; during the locked
@@ -2702,7 +2734,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             </View>
             )}
 
-            {!(showForm && isQuickAddFlow) && (
+            {!(showForm && inAddFlow) && (
               <TrendChartCard key={filter} transactions={transactions ?? []} metrics={[filter]} />
             )}
 
@@ -2716,12 +2748,16 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 customers={customers ?? []}
                 products={products ?? []}
                 voicePrefill={editingTx || formKey > 0 ? null : voicePrefill}
+                onOpenRecent={desktopWeb ? setViewingTx : undefined}
                 onDone={() => {
                   // Entering several bills in a row is the whole point of
                   // the web entry screen: stay on it with a blank form and a
                   // quick confirmation, rather than dropping back to history.
-                  if (desktopWeb && isQuickAddFlow) {
-                    showAlert(`${TYPE_META[initialFilter].label} saved`, 'The form is ready for the next entry.');
+                  // An entry fixed from the Recent list (editingTx) is the
+                  // same: back to the blank form, not out to the history.
+                  if (desktopWeb && inAddFlow) {
+                    showAlert(`${TYPE_META[initialFilter].label} ${editingTx ? 'updated' : 'saved'}`, 'The form is ready for the next entry.');
+                    setEditingTx(null);
                     setFormKey((k) => k + 1);
                     setTimeout(() => listRef.current?.scrollToPosition(0, 0, true), 0);
                     return;
@@ -2731,6 +2767,13 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                   if (isQuickAddFlow) router.back();
                 }}
                 onCancel={() => {
+                  // Backing out of an edit started from the Recent list returns
+                  // to the blank entry form; only a blank form leaves the screen.
+                  if (desktopWeb && inAddFlow && editingTx) {
+                    setEditingTx(null);
+                    setFormKey((k) => k + 1);
+                    return;
+                  }
                   setShowForm(false);
                   setEditingTx(null);
                   if (isQuickAddFlow) router.back();
