@@ -14,10 +14,14 @@ import {
   useSupabaseDelete,
 } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
+import { PartyTypePill } from './PartyBalance';
+import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { supabase } from '../../supabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { fetchAllRows } from '../../utils/fetchAllRows';
 import { isValidPhone10 } from '../../utils/phone';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import type {
@@ -65,7 +69,9 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { nameById: partyTypeName } = usePartyTypes(customer?.owner_id);
 
   if (!customer) return null;
 
@@ -73,6 +79,7 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
     setName(customer!.name);
     setPhone(customer!.phone ?? '');
     setAddress(customer!.address ?? '');
+    setPartyTypeId(customer!.party_type_id ?? null);
     setEditing(true);
   }
 
@@ -94,7 +101,13 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
       }
       await updateCustomer.mutateAsync({
         id: customerId,
-        values: { name: name.trim(), phone: trimmedPhone || null, address: address.trim() || null },
+        values: {
+          name: name.trim(),
+          phone: trimmedPhone || null,
+          address: address.trim() || null,
+          // Only when changed, so saving a party never depends on the type column.
+          ...(partyTypeId !== (customer!.party_type_id ?? null) ? { party_type_id: partyTypeId } : {}),
+        },
       });
       setEditing(false);
     } catch (err) {
@@ -132,6 +145,7 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
           placeholder="Name"
           className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
         />
+        <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} />
         <TextInput
           value={phone}
           onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
@@ -165,7 +179,12 @@ function EditableDetails({ customerId, basePath }: { customerId: string; basePat
   return (
     <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
       <View className="mb-2 flex-row items-start justify-between">
-        <Text className="flex-1 text-lg font-bold text-gray-900">{customer.name}</Text>
+        <View className="flex-1 flex-row flex-wrap items-center" style={{ gap: 8 }}>
+          <Text className="text-lg font-bold text-gray-900">{customer.name}</Text>
+          {!!customer.party_type_id && !!partyTypeName.get(customer.party_type_id) && (
+            <PartyTypePill name={partyTypeName.get(customer.party_type_id)!} />
+          )}
+        </View>
         <View className="flex-row gap-3">
           <Pressable onPress={startEditing} hitSlop={8}>
             <Ionicons name="pencil" size={16} color="#2563eb" />
@@ -326,12 +345,33 @@ function AddEntryForm({
   );
 }
 
-/** Same shape as AddEntryForm, but for the vendor-payable side: "Bought on
- * credit" (debit - you owe this vendor more) and "You paid" (credit -
- * settles part of what you owe). Most credit purchases already get logged
- * automatically from the Purchase form's "Pay later" toggle - this is
- * mainly for recording an actual payment made to bring that debt down, or
- * a one-off debt that isn't tied to a specific bill. */
+/** The next Payment In receipt number (001, 002, ...), worked out the way the
+ * Payment In screen does it: one past the highest number already used by a
+ * manual payment received, falling back to how many there are when none of
+ * them carry a number. */
+async function nextReceivedReceiptNo(ownerId: string): Promise<string> {
+  const rows = await fetchAllRows<{ receipt_no: string | null }>(
+    (from, to) =>
+      (supabase.from('customer_ledger_entries') as any)
+        .select('receipt_no', { count: 'exact' })
+        .eq('owner_id', ownerId)
+        .eq('entry_type', 'credit')
+        .eq('source', 'manual')
+        .order('id')
+        .range(from, to)
+  );
+  const numbers = rows.map((r) => Number((r.receipt_no ?? '').replace(/\D/g, ''))).filter((n) => Number.isFinite(n) && n > 0);
+  return String((numbers.length ? Math.max(...numbers) : rows.length) + 1).padStart(3, '0');
+}
+
+/** The vendor-payable side: "You paid" (credit - settles part of what you owe
+ * this vendor). Credit purchases are logged automatically from the Purchase
+ * form, so there is no "Bought on credit" choice here any more - it only
+ * shows for an existing entry that already is one, so that stays editable.
+ *
+ * "Received" fixes an entry logged on the wrong ledger (e.g. a customer's
+ * payment recorded as Payment Out): the two ledgers are separate tables, so
+ * saving it as Received moves the entry onto the customer ledger. */
 function AddVendorEntryForm({
   vendorId,
   ownerId,
@@ -345,8 +385,13 @@ function AddVendorEntryForm({
 }) {
   const insertEntry = useSupabaseInsert('vendor_ledger_entries');
   const updateEntry = useSupabaseUpdate('vendor_ledger_entries');
+  const deleteVendorEntry = useSupabaseDelete('vendor_ledger_entries');
+  const insertCustomerEntry = useSupabaseInsert('customer_ledger_entries');
+  const deleteCustomerEntry = useSupabaseDelete('customer_ledger_entries');
   const bankAccounts = useBankAccounts(ownerId);
-  const [entryType, setEntryType] = useState<LedgerEntryType>(initial?.entry_type ?? 'credit');
+  // paid = vendor-ledger credit, received = customer-ledger credit, onCredit =
+  // vendor-ledger debit (only ever an existing entry being edited).
+  const [kind, setKind] = useState<'paid' | 'received' | 'onCredit'>(initial?.entry_type === 'debit' ? 'onCredit' : 'paid');
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
@@ -357,6 +402,31 @@ function AddVendorEntryForm({
     ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
     : 'Cash';
 
+  /** Records a payment received from this party on the customer ledger. When
+   * it came from an existing vendor entry, that entry is removed afterwards; if
+   * the removal fails the new one is taken back out, so the money is never
+   * counted on both ledgers at once. */
+  async function recordReceived(entry: VendorLedgerEntry | null, value: number) {
+    const created = await insertCustomerEntry.mutateAsync({
+      customer_id: vendorId,
+      owner_id: ownerId,
+      entry_type: 'credit',
+      amount: value,
+      note: note.trim() || null,
+      source: 'manual',
+      bank_account_id: bankAccountId,
+      ...(entry ? { entry_date: entry.entry_date ?? entry.created_at.slice(0, 10) } : {}),
+      receipt_no: await nextReceivedReceiptNo(ownerId),
+    });
+    if (!entry) return;
+    try {
+      await deleteVendorEntry.mutateAsync(entry.id);
+    } catch (err) {
+      await deleteCustomerEntry.mutateAsync(created.id).catch(() => {});
+      throw err;
+    }
+  }
+
   async function handleSave() {
     const value = Number(amount);
     if (!amount.trim() || Number.isNaN(value) || value <= 0) {
@@ -365,16 +435,21 @@ function AddVendorEntryForm({
     }
     setSaving(true);
     try {
-      if (initial) {
+      if (kind === 'received') {
+        await recordReceived(initial ?? null, value);
+        if (initial) {
+          showAlert('Moved to payment received', `NPR ${value.toLocaleString()} is now a payment received on the customer ledger.`);
+        }
+      } else if (initial) {
         await updateEntry.mutateAsync({
           id: initial.id,
-          values: { entry_type: entryType, amount: value, note: note.trim() || null, bank_account_id: bankAccountId },
+          values: { entry_type: kind === 'paid' ? 'credit' : 'debit', amount: value, note: note.trim() || null, bank_account_id: bankAccountId },
         });
       } else {
         await insertEntry.mutateAsync({
           vendor_id: vendorId,
           owner_id: ownerId,
-          entry_type: entryType,
+          entry_type: 'credit',
           amount: value,
           note: note.trim() || null,
           source: 'manual',
@@ -394,17 +469,25 @@ function AddVendorEntryForm({
       <Text className="mb-3 text-sm font-semibold text-gray-900">{initial ? 'Edit vendor entry' : 'Add vendor entry'}</Text>
       <View className="mb-3 flex-row gap-2">
         <Pressable
-          onPress={() => setEntryType('credit')}
-          className={`flex-1 items-center rounded-lg border py-2 ${entryType === 'credit' ? 'border-emerald-600 bg-emerald-50' : 'border-gray-300'}`}
+          onPress={() => setKind('paid')}
+          className={`flex-1 items-center rounded-lg border py-2 ${kind === 'paid' ? 'border-red-600 bg-red-50' : 'border-gray-300'}`}
         >
-          <Text className={`text-xs font-bold ${entryType === 'credit' ? 'text-emerald-700' : 'text-gray-500'}`}>You paid</Text>
+          <Text className={`text-xs font-bold ${kind === 'paid' ? 'text-red-700' : 'text-gray-500'}`}>You paid</Text>
         </Pressable>
         <Pressable
-          onPress={() => setEntryType('debit')}
-          className={`flex-1 items-center rounded-lg border py-2 ${entryType === 'debit' ? 'border-red-600 bg-red-50' : 'border-gray-300'}`}
+          onPress={() => setKind('received')}
+          className={`flex-1 items-center rounded-lg border py-2 ${kind === 'received' ? 'border-emerald-600 bg-emerald-50' : 'border-gray-300'}`}
         >
-          <Text className={`text-xs font-bold ${entryType === 'debit' ? 'text-red-700' : 'text-gray-500'}`}>Bought on credit</Text>
+          <Text className={`text-xs font-bold ${kind === 'received' ? 'text-emerald-700' : 'text-gray-500'}`}>Received</Text>
         </Pressable>
+        {initial?.entry_type === 'debit' && (
+          <Pressable
+            onPress={() => setKind('onCredit')}
+            className={`flex-1 items-center rounded-lg border py-2 ${kind === 'onCredit' ? 'border-red-600 bg-red-50' : 'border-gray-300'}`}
+          >
+            <Text className={`text-xs font-bold ${kind === 'onCredit' ? 'text-red-700' : 'text-gray-500'}`}>Bought on credit</Text>
+          </Pressable>
+        )}
       </View>
       <TextInput
         value={amount}
@@ -419,7 +502,7 @@ function AddVendorEntryForm({
         placeholder="Note (optional)"
         className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
       />
-      {entryType === 'credit' && (
+      {kind !== 'onCredit' && (
         <Pressable
           onPress={() => setShowAccountPicker(true)}
           className="mb-3 flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
@@ -467,9 +550,11 @@ export function CustomerDetailScreen({ basePath }: { basePath: string }) {
 
 function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
+  // `all` on both ledger reads: the balance is a sum over every entry.
   const { data: entries } = useSupabaseQuery('customer_ledger_entries', {
     filters: { customer_id: id },
     orderBy: { column: 'created_at', ascending: false },
+    all: true,
     enabled: !!id,
   });
   // Sales/purchases billed directly to this saved customer/vendor. Each one
@@ -490,6 +575,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: { vendor_id: id },
     orderBy: { column: 'created_at', ascending: false },
+    all: true,
     enabled: !!id,
   });
   const deleteEntry = useSupabaseDelete('customer_ledger_entries');
@@ -633,7 +719,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
           className="mb-4 flex-row items-center justify-center gap-1.5 rounded-2xl border border-red-300 bg-white py-3"
         >
           <Ionicons name="cart-outline" size={16} color="#DC2626" />
-          <Text className="text-sm font-semibold text-red-600">Log a vendor purchase or payment</Text>
+          <Text className="text-sm font-semibold text-red-600">Log a vendor payment</Text>
         </Pressable>
       )}
       {!isPureCustomer && showAddVendorEntry && userId && (

@@ -261,8 +261,19 @@ export interface Customer {
   latitude: number | null;
   longitude: number | null;
   phone_contact_id: string | null;
+  /** What kind of party this is (see party_types); null = not set. */
+  party_type_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A label a reseller sorts their parties by - Customer, Vendor, Employee or
+ * any they add themselves (0084_party_types.sql). */
+export interface PartyType {
+  id: string;
+  owner_id: string;
+  name: string;
+  created_at: string;
 }
 
 /** Someone on a reseller's team who has no Jageer account - a record they
@@ -561,6 +572,7 @@ export interface Database {
         Relationships: [];
       };
       customers: { Row: Customer; Insert: Partial<Customer>; Update: Partial<Customer>; Relationships: [] };
+      party_types: { Row: PartyType; Insert: Partial<PartyType>; Update: Partial<PartyType>; Relationships: [] };
       manual_employees: {
         Row: ManualEmployee;
         Insert: Partial<ManualEmployee>;

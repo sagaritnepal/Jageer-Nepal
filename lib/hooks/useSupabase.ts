@@ -1,6 +1,7 @@
 // lib/hooks/useSupabase.ts
 import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import { supabase } from '../supabase';
+import { fetchAllRows } from '../utils/fetchAllRows';
 import type { Database } from '../../types/database.types';
 
 type TableName = keyof Database['public']['Tables'];
@@ -36,6 +37,8 @@ const LINKED_INVALIDATIONS: Partial<Record<TableName, TableName[]>> = {
   business_transactions: ['customer_ledger_entries', 'vendor_ledger_entries'],
   orders: ['products', 'business_transactions', 'customer_ledger_entries', 'vendor_ledger_entries'],
   catalog_products: ['products'],
+  // Deleting a party type un-types its parties (on delete set null, 0084).
+  party_types: ['customers'],
   service_requests: ['customer_ledger_entries', 'business_transactions', 'vendor_ledger_entries', 'reward_point_events', 'profiles'],
 };
 
@@ -60,30 +63,46 @@ export function useSupabaseQuery<T extends TableName>(
     filters?: QueryFilters;
     columns?: string;
     orderBy?: { column: string; ascending?: boolean };
+    /** Read every matching row, not just the first 1000 the API returns per
+     * request. For anything that sums rows (ledger balances); the table needs
+     * an `id` column. */
+    all?: boolean;
     enabled?: boolean;
     queryOptions?: Omit<UseQueryOptions<Row<T>[]>, 'queryKey' | 'queryFn'>;
   }
 ) {
-  const { filters = {}, columns = '*', orderBy, enabled = true, queryOptions } = options ?? {};
+  const { filters = {}, columns = '*', orderBy, all = false, enabled = true, queryOptions } = options ?? {};
 
   return useQuery<Row<T>[]>({
-    queryKey: [table, filters, orderBy],
+    // `all` is part of the key: a full read and a capped read of the same
+    // table + filter are different data and must never share a cache entry.
+    // (Invalidations match on the leading [table], so they still reach both.)
+    queryKey: all ? [table, filters, orderBy, 'all'] : [table, filters, orderBy],
     enabled,
     queryFn: async () => {
       // Cast to `any` here: postgrest-js's `.select()`/`.eq()` overloads resolve
       // their column/query types from a literal table name, which breaks down
       // when `table` is itself a generic parameter. The hand-written `Row<T>`
       // cast below is what actually keeps this hook's return type safe.
-      let query = (supabase.from(table) as any).select(columns);
+      const buildQuery = (selectOptions?: { count: 'exact' }) => {
+        let query = (supabase.from(table) as any).select(columns, selectOptions);
 
-      for (const [column, value] of Object.entries(filters)) {
-        query = query.eq(column, value);
-      }
-      if (orderBy) {
-        query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
+        for (const [column, value] of Object.entries(filters)) {
+          query = query.eq(column, value);
+        }
+        if (orderBy) {
+          query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
+        }
+        return query;
+      };
+
+      if (all) {
+        // `id` as the last sort key keeps page boundaries stable, so no row is
+        // skipped or read twice between pages.
+        return fetchAllRows<Row<T>>((from, to) => buildQuery({ count: 'exact' }).order('id').range(from, to));
       }
 
-      const { data, error } = await query;
+      const { data, error } = await buildQuery();
       if (error) throw error;
       return (data ?? []) as Row<T>[];
     },

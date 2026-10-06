@@ -53,12 +53,15 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
+  // `all`: balances are sums over every entry; a plain read stops at 1000 rows.
   const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId && direction === 'receive',
   });
   const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId && direction === 'give',
   });
 
