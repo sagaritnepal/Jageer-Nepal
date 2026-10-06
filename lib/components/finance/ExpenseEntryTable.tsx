@@ -44,6 +44,8 @@ interface Props {
   categories: ExpenseCategory[];
   accent: string;
   totalColor?: string;
+  /** Editing one expense: just its row - no adding or removing rows. */
+  single?: boolean;
   onUpdateRow: (key: string, patch: Partial<ExpenseEntryRow>) => void;
   /** Appends an empty row and returns its key. */
   onAddRow: () => string;
@@ -70,6 +72,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
     categories,
     accent,
     totalColor,
+    single,
     onUpdateRow,
     onAddRow,
     onRemoveRow,
@@ -145,7 +148,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
   function advance(rowIndex: number, col: ExpenseCol) {
     if (col < LAST_COL) focusCell(rowIndex, (col + 1) as ExpenseCol);
     else if (rowIndex < rows.length - 1) focusCell(rowIndex + 1, 0);
-    else if (rowHasContent(rows[rowIndex])) addRowAndFocus(0);
+    else if (!single && rowHasContent(rows[rowIndex])) addRowAndFocus(0);
     else onExit();
   }
 
@@ -160,7 +163,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
     } else if (k.key === 'ArrowDown') {
       k.prevent();
       if (rowIndex < rows.length - 1) focusCell(rowIndex + 1, col);
-      else if (rowHasContent(row)) addRowAndFocus(col);
+      else if (!single && rowHasContent(row)) addRowAndFocus(col);
     } else if (k.key === 'ArrowUp' && rowIndex > 0) {
       k.prevent();
       focusCell(rowIndex - 1, col);
@@ -326,16 +329,18 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
             </View>
 
             <View style={{ width: 36, alignItems: 'center' }}>
-              <Pressable
-                onPress={() => onRemoveRow(row.key)}
-                disabled={rows.length === 1}
-                tabIndex={-1}
-                hitSlop={6}
-                accessibilityLabel={`Remove row ${rowIndex + 1}`}
-                style={{ opacity: rows.length === 1 ? 0 : 0.6 }}
-              >
-                <Ionicons name="close-circle" size={18} color="#DC2626" />
-              </Pressable>
+              {!single && (
+                <Pressable
+                  onPress={() => onRemoveRow(row.key)}
+                  disabled={rows.length === 1}
+                  tabIndex={-1}
+                  hitSlop={6}
+                  accessibilityLabel={`Remove row ${rowIndex + 1}`}
+                  style={{ opacity: rows.length === 1 ? 0 : 0.6 }}
+                >
+                  <Ionicons name="close-circle" size={18} color="#DC2626" />
+                </Pressable>
+              )}
             </View>
           </View>
         );
@@ -345,17 +350,21 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
         className="flex-row flex-wrap items-center justify-between border-t border-gray-200 bg-gray-50 px-3 py-2.5"
         style={{ borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}
       >
-        <Pressable
-          onPress={() => addRowAndFocus(0)}
-          tabIndex={-1}
-          className="flex-row items-center gap-1.5 rounded-lg px-2 py-2"
-          accessibilityLabel="Add expense"
-        >
-          <Ionicons name="add-circle-outline" size={17} color={accent} />
-          <Text className="text-sm font-bold" style={{ color: accent }}>
-            Add expense
-          </Text>
-        </Pressable>
+        {single ? (
+          <View />
+        ) : (
+          <Pressable
+            onPress={() => addRowAndFocus(0)}
+            tabIndex={-1}
+            className="flex-row items-center gap-1.5 rounded-lg px-2 py-2"
+            accessibilityLabel="Add expense"
+          >
+            <Ionicons name="add-circle-outline" size={17} color={accent} />
+            <Text className="text-sm font-bold" style={{ color: accent }}>
+              Add expense
+            </Text>
+          </Pressable>
+        )}
         <View className="flex-row items-baseline gap-3 pr-2">
           <Text className="text-[13px] font-semibold text-gray-500">Total Expenses</Text>
           <Text className="text-xl font-extrabold" style={{ color: totalColor ?? accent }}>

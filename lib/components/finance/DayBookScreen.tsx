@@ -55,7 +55,7 @@ type BookRow = {
   edit?: EditTarget;
 };
 
-type EditTable = 'business_transactions' | 'customer_ledger_entries' | 'vendor_ledger_entries' | 'account_transfers';
+type EditTable = 'customer_ledger_entries' | 'vendor_ledger_entries' | 'account_transfers';
 
 type EditValues = {
   date: string;
@@ -371,13 +371,11 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
   const bankAccounts = useBankAccounts(userId);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const updates = {
-    business_transactions: useSupabaseUpdate('business_transactions'),
     customer_ledger_entries: useSupabaseUpdate('customer_ledger_entries'),
     vendor_ledger_entries: useSupabaseUpdate('vendor_ledger_entries'),
     account_transfers: useSupabaseUpdate('account_transfers'),
   };
   const removals = {
-    business_transactions: useSupabaseDelete('business_transactions'),
     customer_ledger_entries: useSupabaseDelete('customer_ledger_entries'),
     vendor_ledger_entries: useSupabaseDelete('vendor_ledger_entries'),
     account_transfers: useSupabaseDelete('account_transfers'),
@@ -413,16 +411,6 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
     const amount = Number(values.amount);
     const note = values.note.trim() || null;
     switch (target!.table) {
-      case 'business_transactions':
-        return {
-          bill_date: values.date,
-          amount,
-          discount_amount: values.discount.trim() ? Number(values.discount) : 0,
-          party_name: values.party.trim() || null,
-          bill_no: values.billNo.trim() || null,
-          bank_account_id: values.bankAccountId,
-          note,
-        };
       case 'customer_ledger_entries':
       case 'vendor_ledger_entries':
         return {
@@ -874,24 +862,9 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         account: isExpense ? via(t.bank_account_id) : null,
         moves: isExpense ? [{ account: keyOf(t.bank_account_id), amount: t.amount, dir: 'out' }] : [],
         sortKey: t.created_at,
-        edit: {
-          table: 'business_transactions',
-          id: t.id,
-          title: `${isExpense ? 'Expense' : t.type === 'sale' ? 'Sale bill' : 'Purchase bill'} · ${t.party_name ?? 'no name'}`,
-          fields: { party: true, billNo: true, discount: true, method: true },
-          partyLabel: isExpense ? 'Paid to' : t.type === 'sale' ? 'Customer' : 'Vendor',
-          numberLabel: 'Bill No.',
-          values: {
-            date,
-            amount: amountText(t.amount),
-            party: t.party_name ?? '',
-            billNo: t.bill_no ?? '',
-            discount: amountText(t.discount_amount ?? 0),
-            receiptNo: '',
-            note: t.note ?? '',
-            bankAccountId: t.bank_account_id ?? null,
-          },
-        },
+        // A bill opens on its own page - the very page that recorded it, with the
+        // bill loaded - rather than in a cut-down popup.
+        href: `${basePath}/transactions?type=${t.type}&add=1&edit=${t.id}`,
       });
     }
 

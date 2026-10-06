@@ -5,7 +5,7 @@ import { KeyboardAwareSectionList } from 'react-native-keyboard-aware-scroll-vie
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
-import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
+import { useSupabaseInsert, useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { useScreenHeader } from '../../hooks/useScreenHeader';
 import { useIsWideWeb } from '../../hooks/useWideGrid';
@@ -637,8 +637,10 @@ function TransactionForm({
   // Web: the discount can be typed as a percent of the subtotal or as an NPR
   // amount - whichever was typed last drives the other, so a percent keeps
   // following the subtotal as items change. Native only ever uses the amount.
+  // An existing discount shows in rupees, exactly as saved; otherwise the same
+  // default as a new bill.
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>(
-    desktopWeb && !initial ? 'percent' : 'amount'
+    desktopWeb && !(initial && initial.discount_amount > 0) ? 'percent' : 'amount'
   );
   const [discountPercentInput, setDiscountPercentInput] = useState('');
   // Defaults to 0 (not 13) for a brand-new bill - the VAT row itself starts
@@ -1039,7 +1041,22 @@ function TransactionForm({
   // platform). Purely additive: the single-entry amount/partyName/categoryId
   // state and handleSave above are untouched and still drive every other
   // path (native, sale/purchase, and editing).
-  const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([emptyExpenseRow()]);
+  // Editing an expense is the same table page as adding one, with just its one row.
+  const editingExpense = !!initial && initial.type === 'expense';
+  const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>(() =>
+    initial && initial.type === 'expense'
+      ? [
+          {
+            key: makeExpenseRowKey(),
+            partyName: initial.party_name ?? '',
+            customerId: initial.customer_id,
+            categoryId: initial.expense_category_id,
+            amount: String(initial.amount),
+            note: initial.note ?? '',
+          },
+        ]
+      : [emptyExpenseRow()]
+  );
   const [activePartyRowKey, setActivePartyRowKey] = useState<string | null>(null);
   const [activeCategoryRowKey, setActiveCategoryRowKey] = useState<string | null>(null);
   const [expenseRowPickerQuery, setExpenseRowPickerQuery] = useState('');
@@ -1105,18 +1122,16 @@ function TransactionForm({
     phoneContacts.request();
     const scanned = await pickAndScan();
     if (!scanned) return;
-    const key = makeExpenseRowKey();
-    setExpenseRows((prev) => [
-      ...prev,
-      {
-        key,
-        partyName: scanned.vendor_name ?? '',
-        customerId: null,
-        categoryId: null,
-        amount: scanned.amount ? String(scanned.amount) : '',
-        note: scanned.note ?? '',
-      },
-    ]);
+    // Editing: the scan fills the one row. Adding: it becomes a fresh row.
+    const key = editingExpense ? expenseRows[0].key : makeExpenseRowKey();
+    const fromScan = {
+      partyName: scanned.vendor_name ?? '',
+      customerId: null,
+      categoryId: null,
+      amount: scanned.amount ? String(scanned.amount) : '',
+      note: scanned.note ?? '',
+    };
+    setExpenseRows((prev) => (editingExpense ? [{ ...prev[0], ...fromScan, categoryId: prev[0].categoryId }] : [...prev, { key, ...fromScan }]));
     if (scanned.date) setExpenseDate(scanned.date);
     if (scanned.vendor_name) {
       setExpenseRowPickerQuery(scanned.vendor_name);
@@ -1125,6 +1140,48 @@ function TransactionForm({
   }
 
   async function handleSaveAllExpenses() {
+    if (editingExpense && initial) {
+      const row = expenseRows[0];
+      const value = Number(row.amount);
+      if (!row.amount.trim() || !Number.isFinite(value) || value <= 0) {
+        showAlert('Enter an amount', 'Add a valid amount in NPR.');
+        return;
+      }
+      const categoryName = (categories ?? []).find((c) => c.id === row.categoryId)?.name;
+      const ok = await confirmSave({
+        title: 'Save changes to this expense?',
+        rows: [
+          ...(row.partyName.trim() ? [{ label: 'Paid to', value: row.partyName.trim() }] : []),
+          ...(categoryName ? [{ label: 'Category', value: categoryName }] : []),
+          { label: 'Paid via', value: selectedAccountName },
+        ],
+        total: { label: 'Amount', value: `NPR ${value.toLocaleString()}`, color: TYPE_META.expense.color },
+      });
+      if (!ok) return;
+      setSaving(true);
+      try {
+        await updateTx.mutateAsync({
+          id: initial.id,
+          values: {
+            type,
+            amount: value,
+            party_name: row.partyName.trim() || null,
+            customer_id: row.customerId,
+            note: row.note.trim() || null,
+            bill_date: expenseDate || null,
+            expense_category_id: row.categoryId,
+            payment_mode: bankAccountId ? ('bank' as const) : ('cash' as const),
+            bank_account_id: bankAccountId,
+          },
+        });
+        onDone();
+      } catch (err) {
+        showAlert('Could not save', getErrorMessage(err));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const validRows = expenseRows.filter((r) => Number(r.amount) > 0);
     if (validRows.length === 0) {
       showAlert('Add an expense', 'Add at least one expense with a valid amount.');
@@ -1218,8 +1275,10 @@ function TransactionForm({
   // On web the form's name and its Scan Bill button live in the top bar; the
   // heading row that used to repeat the name under it is gone.
   const newExpenses = type === 'expense' && !initial;
+  // The expense table page - the same one for adding and for editing.
+  const expenseTable = desktopWeb && type === 'expense';
   const scanRef = useRef<() => void>(() => {});
-  scanRef.current = newExpenses ? handleScanForExpenseRow : handleScan;
+  scanRef.current = expenseTable ? handleScanForExpenseRow : handleScan;
   useScreenHeader(
     desktopWeb
       ? {
@@ -1241,7 +1300,7 @@ function TransactionForm({
     [type, initial?.id, scanning]
   );
 
-  if (desktopWeb && type === 'expense' && !initial) {
+  if (expenseTable) {
     const accent = FINANCE_ENTRY_ACCENT;
     return (
       <View className="mb-4">
@@ -1299,6 +1358,7 @@ function TransactionForm({
               categories={categories ?? []}
               accent={accent}
               totalColor={TYPE_META.expense.color}
+              single={editingExpense}
               onUpdateRow={updateExpenseRow}
               onAddRow={() => {
                 const row = emptyExpenseRow();
@@ -1332,7 +1392,7 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 320 }}>
-            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} onOpen={onOpenRecent} />
+            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} activeId={initial?.id} onOpen={onOpenRecent} />
           </View>
         </View>
 
@@ -2397,6 +2457,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const {
     type: typeParam,
     add: addParam,
+    edit: editParam,
     voiceAmount,
     voiceParty,
     voiceDate,
@@ -2404,6 +2465,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   } = useLocalSearchParams<{
     type?: string;
     add?: string;
+    edit?: string;
     voiceAmount?: string;
     voiceParty?: string;
     voiceDate?: string;
@@ -2497,11 +2559,19 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   // are only ever added from Shortcuts.
   const isAddFlow = addParam === '1';
   const [filter, setFilter] = useState<'all' | BusinessTransactionType>(initialFilter);
-  const [showForm, setShowForm] = useState(isAddFlow);
+  const [showFormState, setShowForm] = useState(isAddFlow);
   // Bumped after each save in the web quick-add flow so the form remounts
   // empty (see onDone below) instead of closing to the history list.
   const [formKey, setFormKey] = useState(0);
-  const [editingTx, setEditingTx] = useState<BusinessTransaction | null>(null);
+  const [editingTxState, setEditingTx] = useState<BusinessTransaction | null>(null);
+  // An edit link (?edit=<id>) - from the Statement, the Day Book or a customer's
+  // page - lands on this same page as "New", with that bill loaded into the form.
+  // It is read straight from the link, so it needs no effect to open: the form
+  // shows as soon as the bill has loaded, and is gone when the link is.
+  const { data: editRow } = useSupabaseRow('business_transactions', editParam);
+  const editLinkTx = editParam && editRow && editRow.id === editParam ? editRow : null;
+  const editingTx = editLinkTx ?? editingTxState;
+  const showForm = showFormState || !!editLinkTx;
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
   // The form renders inside the list's own header, so opening it while
   // scrolled down through history (which is exactly when someone taps Edit
@@ -2544,6 +2614,24 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const inAddFlow = isLockedToType && isAddFlow;
   const isQuickAddFlow = inAddFlow && !editingTx;
 
+  // Edit a bill: from the entry page itself (its Recent list) load it right here;
+  // from anywhere else go to that same entry page with the bill loaded - so Edit
+  // is the very page "New" is, never a different layout.
+  function editBill(tx: BusinessTransaction | null) {
+    if (!tx) return;
+    if (inAddFlow) openForm(tx);
+    else router.push(`${basePath}/transactions?type=${tx.type}&add=1&edit=${tx.id}` as any);
+  }
+
+  // Done with, or backed out of, an edit that was opened by a link: back to
+  // wherever it was opened from (or the list, if the page was opened directly).
+  function leaveEdit() {
+    const type = editingTx?.type;
+    setEditingTx(null);
+    if (router.canGoBack()) router.back();
+    else router.replace(`${basePath}/transactions${type ? `?type=${type}` : ''}` as any);
+  }
+
   // Pressing the Android hardware back button while editing an existing
   // entry should close the form and stay on the list; during the locked
   // view's auto-opened quick-add form, let the default back navigation
@@ -2554,7 +2642,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         setViewingTx(null);
         return true;
       }
-      if (showForm && !isQuickAddFlow) {
+      if (showForm && !isQuickAddFlow && !editLinkTx) {
         setShowForm(false);
         setEditingTx(null);
         return true;
@@ -2562,7 +2650,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
       return false;
     });
     return () => sub.remove();
-  }, [showForm, isQuickAddFlow, viewingTx]);
+  }, [showForm, isQuickAddFlow, viewingTx, editLinkTx]);
 
   // "All" is a full daily feed across every money-moving table (general
   // sales/purchase/expense entries plus per-customer debit/credit entries),
@@ -2707,7 +2795,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           onClose={() => setViewingTx(null)}
           onEdit={() => {
             setViewingTx(null);
-            openForm(viewingTx);
+            editBill(viewingTx);
           }}
           onDelete={viewingTx ? () => handleDeleteFromReceipt(viewingTx) : undefined}
         />
@@ -2732,7 +2820,9 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 <View className="flex-row items-center gap-2">
                   <Pressable
                     onPress={() => {
-                      if (showForm && !isQuickAddFlow) {
+                      if (editLinkTx) {
+                        leaveEdit();
+                      } else if (showForm && !isQuickAddFlow) {
                         setShowForm(false);
                         setEditingTx(null);
                       } else {
@@ -2778,7 +2868,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             </View>
             )}
 
-            {!(showForm && inAddFlow) && (
+            {!(showForm && (inAddFlow || desktopWeb)) && (
               <TrendChartCard key={filter} transactions={transactions ?? []} metrics={[filter]} />
             )}
 
@@ -2794,6 +2884,10 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 voicePrefill={editingTx || formKey > 0 ? null : voicePrefill}
                 onOpenRecent={desktopWeb ? setViewingTx : undefined}
                 onDone={() => {
+                  if (editLinkTx) {
+                    leaveEdit();
+                    return;
+                  }
                   // Entering several bills in a row is the whole point of
                   // the web entry screen: stay on it with a blank form and a
                   // quick confirmation, rather than dropping back to history.
@@ -2811,6 +2905,10 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                   if (isQuickAddFlow) router.back();
                 }}
                 onCancel={() => {
+                  if (editLinkTx) {
+                    leaveEdit();
+                    return;
+                  }
                   // Backing out of an edit started from the Recent list returns
                   // to the blank entry form; only a blank form leaves the screen.
                   if (desktopWeb && inAddFlow && editingTx) {
@@ -2873,7 +2971,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
         onClose={() => setViewingTx(null)}
         onEdit={() => {
           setViewingTx(null);
-          openForm(viewingTx);
+          editBill(viewingTx);
         }}
         onDelete={viewingTx ? () => handleDeleteFromReceipt(viewingTx) : undefined}
       />

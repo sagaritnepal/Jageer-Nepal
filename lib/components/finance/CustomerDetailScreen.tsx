@@ -1024,7 +1024,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         bankAccountName={null}
         onClose={() => setViewingTx(null)}
         onEdit={() => {
-          if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}` as any);
+          if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}&add=1&edit=${viewingTx.id}` as any);
           setViewingTx(null);
         }}
       />
