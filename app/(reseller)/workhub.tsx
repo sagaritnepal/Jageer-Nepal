@@ -1,9 +1,12 @@
 // app/(reseller)/workhub.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../../lib/supabase';
+import { JobTimeline } from '../../lib/components/JobTimeline';
+import type { JobTimes } from '../../lib/utils/jobTimeline';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
@@ -87,6 +90,43 @@ function isOverdue(request: ServiceRequest): boolean {
 
 function money(n: number | null | undefined): string {
   return n == null ? '—' : `NPR ${Math.round(Number(n)).toLocaleString()}`;
+}
+
+/** When each job's technician started and finished it, by job - the two
+ * moments the timeline needs that the request itself does not carry. Asked for
+ * in chunks so a reseller with hundreds of jobs does not build a huge address. */
+function useJobTimes(requestIds: string[]) {
+  const { data } = useQuery({
+    queryKey: ['job-card-times', requestIds],
+    queryFn: async () => {
+      const byRequest = new Map<string, JobTimes & { created_at: string }>();
+      for (let i = 0; i < requestIds.length; i += 100) {
+        const { data: rows, error } = await (supabase.from('job_cards') as any)
+          .select('service_request_id, started_at, completed_at, created_at')
+          .in('service_request_id', requestIds.slice(i, i + 100));
+        if (error) throw error;
+        for (const row of (rows ?? []) as (JobTimes & { service_request_id: string; created_at: string })[]) {
+          // A job handed on can have a card per technician - the latest is the live one.
+          const seen = byRequest.get(row.service_request_id);
+          if (!seen || row.created_at > seen.created_at) byRequest.set(row.service_request_id, row);
+        }
+      }
+      return byRequest as Map<string, JobTimes>;
+    },
+    enabled: requestIds.length > 0,
+    refetchInterval: 30_000,
+  });
+  return data;
+}
+
+/** The current time, ticking each minute, so "3h 20m so far" keeps counting. */
+function useNow(everyMs = 60_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(t);
+  }, [everyMs]);
+  return now;
 }
 
 function when(request: ServiceRequest): string {
@@ -326,6 +366,8 @@ function AssignSheet({
  * rather than the first thing in the way. */
 function JobSheet({
   jobs,
+  times,
+  now,
   technicianName,
   onAssign,
   onRequest,
@@ -335,6 +377,9 @@ function JobSheet({
   expanded,
 }: {
   jobs: ServiceRequest[];
+  /** Each job's start / finish moments, for its timeline. */
+  times: Map<string, JobTimes> | undefined;
+  now: number;
   technicianName: (id: string) => string;
   onAssign: (request: ServiceRequest) => void;
   onRequest: (request: ServiceRequest) => void;
@@ -386,6 +431,7 @@ function JobSheet({
                   </Text>
                 </View>
               </Pressable>
+              <JobTimeline request={r} times={times?.get(r.id)} now={now} layout="list" />
               <View className="mt-2.5 flex-row" style={{ gap: 8 }}>
                 {!!r.customer_phone && (
                   <Pressable
@@ -452,7 +498,8 @@ function JobSheet({
       {jobs.map((r) => {
         const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
         return (
-          <View key={r.id} className="flex-row items-center border-b border-gray-100">
+          <View key={r.id} className="border-b border-gray-100">
+          <View className="flex-row items-center">
             <Pressable
               onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}
               className={cell}
@@ -536,6 +583,8 @@ function JobSheet({
               )}
             </View>
           </View>
+          <JobTimeline request={r} times={times?.get(r.id)} now={now} layout="strip" />
+          </View>
         );
       })}
     </View>
@@ -579,6 +628,9 @@ export default function WorkHub() {
     const unclaimed = (incomingRaw ?? []).filter((r) => !r.reseller_id);
     return [...(mine ?? []), ...unclaimed];
   }, [mine, incomingRaw]);
+  // Each job's timeline needs when its technician started and finished it.
+  const jobTimes = useJobTimes(useMemo(() => requests.map((r) => r.id).sort(), [requests]));
+  const now = useNow();
   const { data: employees } = useMyEmployees(userId);
   // Freelancers are ranked by the same rules the job page uses - nearest
   // and free first, and never someone else's employee while on duty.
@@ -973,6 +1025,8 @@ export default function WorkHub() {
       {filterChips}
       <JobSheet
         jobs={shown}
+        times={jobTimes}
+        now={now}
         technicianName={technicianName}
         onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
         onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
@@ -1008,6 +1062,8 @@ export default function WorkHub() {
             {filterChips}
             <JobSheet
               jobs={shown}
+              times={jobTimes}
+              now={now}
               technicianName={technicianName}
               onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
               onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
