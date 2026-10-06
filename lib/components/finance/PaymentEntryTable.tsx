@@ -202,7 +202,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
           Amount (NPR)
         </Text>
         <Text className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ flex: 1.1 }}>
-          Note
+          Remarks
         </Text>
         <View style={{ width: 36 }} />
       </View>
@@ -301,7 +301,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                 onKeyPress={(e) => handleKeyPress(e, row, rowIndex, 2)}
                 placeholder="Optional"
                 placeholderTextColor="#B2B8C1"
-                accessibilityLabel={`Note, row ${rowIndex + 1}`}
+                accessibilityLabel={`Remarks, row ${rowIndex + 1}`}
                 selectTextOnFocus
                 className={cellClass}
                 style={cellStyle(row.key, 2)}

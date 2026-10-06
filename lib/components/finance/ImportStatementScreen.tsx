@@ -70,7 +70,7 @@ export function ImportStatementScreen() {
       (r) => r.selected && (r.type === 'payment_in' || r.type === 'payment_out') && !r.party.trim()
     );
     if (missingParty) {
-      showAlert('Add a name', 'Every checked Payment In/Out row needs a customer or vendor name before it can be imported.');
+      showAlert('Add a name', 'Every checked Received / Payment Out row needs a customer or vendor name before it can be imported.');
       return;
     }
     const { imported, failed } = await importSelected(rows, customers ?? []);
@@ -204,7 +204,7 @@ export function ImportStatementScreen() {
                       <TextInput
                         value={item.description}
                         onChangeText={(v) => updateRow(index, { description: v })}
-                        placeholder="Remark"
+                        placeholder="Remarks"
                         placeholderTextColor="#9CA3AF"
                         multiline
                         className="mt-1 text-xs text-gray-500"

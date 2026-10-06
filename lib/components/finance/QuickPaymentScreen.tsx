@@ -228,7 +228,7 @@ function QuickPaymentForm() {
         receipt_no: receiptNo.trim() || null,
       } as any);
       showAlert(
-        isOut ? 'Payment out recorded' : 'Payment in recorded',
+        isOut ? 'Payment Out saved' : 'Received saved',
         `NPR ${value.toLocaleString()} for ${customer.name}.`
       );
       setAmount('');
@@ -691,7 +691,7 @@ function QuickPaymentForm() {
                 accent={accent}
                 partyLabel={payTarget === 'vendor' ? 'Vendor' : 'Customer'}
                 addLabel={`Add ${payTarget === 'vendor' ? 'vendor' : 'person'}`}
-                totalLabel={isOut ? 'Total paid out' : 'Total received'}
+                totalLabel={isOut ? 'Total Payment Out' : 'Total Received'}
                 totalColor={meta.color}
                 onUpdateRow={updateRow}
                 onAddRow={addRow}
@@ -821,7 +821,7 @@ function QuickPaymentForm() {
           </View>
 
           <Text className="mb-1 text-xs font-medium text-gray-500">
-            {isOut ? 'Amount paid out (NPR)' : 'Amount received (NPR)'}
+            Amount (NPR)
           </Text>
           <TextInput
             value={amount}
@@ -832,7 +832,7 @@ function QuickPaymentForm() {
             className="mb-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
           />
 
-          <Text className="mb-1 text-xs font-medium text-gray-500">Note (optional)</Text>
+          <Text className="mb-1 text-xs font-medium text-gray-500">Remarks (optional)</Text>
           <TextInput
             value={note}
             onChangeText={setNote}

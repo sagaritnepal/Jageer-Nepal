@@ -10,7 +10,7 @@ export const FINANCE_ACTION_META: Record<VoiceAction, { label: string; route: (b
   add_sale: { label: 'Sale', route: (basePath) => `${basePath}/transactions?type=sale&add=1` },
   add_purchase: { label: 'Purchase', route: (basePath) => `${basePath}/transactions?type=purchase&add=1` },
   add_expense: { label: 'Expense', route: (basePath) => `${basePath}/transactions?type=expense&add=1` },
-  payment_in: { label: 'Payment In', route: (basePath) => `${basePath}/quick-payment?type=in` },
+  payment_in: { label: 'Received', route: (basePath) => `${basePath}/quick-payment?type=in` },
   payment_out: { label: 'Payment Out', route: (basePath) => `${basePath}/quick-payment?type=out` },
 };
 

@@ -1270,7 +1270,7 @@ function TransactionForm({
                 <Text className="flex-1 text-[11px] font-semibold text-gray-500">Paid to</Text>
                 <Text className="flex-1 text-[11px] font-semibold text-gray-500">Category</Text>
                 <Text className="w-24 text-[11px] font-semibold text-gray-500">Amount</Text>
-                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Note</Text>
+                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Remarks</Text>
                 <View style={{ width: 28 }} />
               </View>
 
@@ -1552,7 +1552,7 @@ function TransactionForm({
                   style={{ columnGap: 28, rowGap: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}
                 >
                   <View style={{ flex: 1, minWidth: 240 }}>
-                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Remark</Text>
+                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Remarks</Text>
                     <KeyInput
                       value={note}
                       onChangeText={setNote}
@@ -1561,7 +1561,7 @@ function TransactionForm({
                       onRequestSave={handleSave}
                       accent={accent}
                       placeholder="Optional"
-                      accessibilityLabel="Remark"
+                      accessibilityLabel="Remarks"
                       className="rounded-lg px-3 py-2.5 text-sm text-gray-900"
                     />
                   </View>
@@ -1905,7 +1905,7 @@ function TransactionForm({
             <TextInput
               value={note}
               onChangeText={setNote}
-              placeholder="Remark"
+              placeholder="Remarks"
               placeholderTextColor="#9CA3AF"
               className="mt-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
             />
@@ -2004,7 +2004,7 @@ function TransactionForm({
               keyboardType="numeric"
               className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
             />
-            <Text className="mb-1 text-xs font-medium text-gray-500">Remark (optional)</Text>
+            <Text className="mb-1 text-xs font-medium text-gray-500">Remarks (optional)</Text>
             <TextInput
               value={note}
               onChangeText={setNote}
@@ -2261,7 +2261,7 @@ export function TransactionDetailModal({
 
             {!!tx.note && (
               <View className="mb-3">
-                <Text className="mb-0.5 text-xs text-gray-400">Note</Text>
+                <Text className="mb-0.5 text-xs text-gray-400">Remarks</Text>
                 <Text className="text-xs text-gray-700">{tx.note}</Text>
               </View>
             )}
@@ -2331,7 +2331,7 @@ function LedgerRow({ item, customerName, basePath }: { item: CustomerLedgerEntry
       </View>
       <View className="flex-1">
         <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-          {isDebit ? 'Owes' : 'Paid'} · {customerName ?? 'Unknown customer'}
+          {isDebit ? 'Owes' : 'Received'} · {customerName ?? 'Unknown customer'}
         </Text>
         <Text className="text-xs text-gray-400" numberOfLines={1}>
           {item.note ?? (item.source === 'booking' ? 'From a booked job' : 'Manual entry')} ·{' '}
@@ -2357,7 +2357,7 @@ function VendorFeedRow({ item, vendorName, basePath }: { item: VendorLedgerEntry
       </View>
       <View className="flex-1">
         <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-          {isDebit ? 'Bought on credit' : 'You paid'} · {vendorName ?? 'Unknown vendor'}
+          {isDebit ? 'Bought on credit' : 'Payment Out'} · {vendorName ?? 'Unknown vendor'}
         </Text>
         <Text className="text-xs text-gray-400" numberOfLines={1}>
           {item.note ?? (item.source === 'booking' ? 'From a credit purchase' : 'Manual entry')} ·{' '}

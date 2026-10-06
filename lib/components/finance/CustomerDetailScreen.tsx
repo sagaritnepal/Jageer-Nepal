@@ -283,7 +283,7 @@ function AddEntryForm({
           className={`flex-1 items-center rounded-lg border py-2 ${entryType === 'credit' ? 'border-emerald-600 bg-emerald-50' : 'border-gray-300'}`}
         >
           <Text className={`text-xs font-bold ${entryType === 'credit' ? 'text-emerald-700' : 'text-gray-500'}`}>
-            Payment received
+            Received
           </Text>
         </Pressable>
         <Pressable
@@ -305,7 +305,7 @@ function AddEntryForm({
       <TextInput
         value={note}
         onChangeText={setNote}
-        placeholder="Note (optional)"
+        placeholder="Remarks (optional)"
         className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
       />
       {entryType === 'credit' && (
@@ -472,7 +472,7 @@ function AddVendorEntryForm({
           onPress={() => setKind('paid')}
           className={`flex-1 items-center rounded-lg border py-2 ${kind === 'paid' ? 'border-red-600 bg-red-50' : 'border-gray-300'}`}
         >
-          <Text className={`text-xs font-bold ${kind === 'paid' ? 'text-red-700' : 'text-gray-500'}`}>You paid</Text>
+          <Text className={`text-xs font-bold ${kind === 'paid' ? 'text-red-700' : 'text-gray-500'}`}>Payment Out</Text>
         </Pressable>
         <Pressable
           onPress={() => setKind('received')}
@@ -499,7 +499,7 @@ function AddVendorEntryForm({
       <TextInput
         value={note}
         onChangeText={setNote}
-        placeholder="Note (optional)"
+        placeholder="Remarks (optional)"
         className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
       />
       {kind !== 'onCredit' && (
@@ -782,7 +782,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
               </View>
               <View className="flex-1">
                 <Text className="text-sm font-semibold text-gray-900">
-                  {entry.entry_type === 'debit' ? 'Bought on credit' : 'You paid'}
+                  {entry.entry_type === 'debit' ? 'Bought on credit' : 'Payment Out'}
                 </Text>
                 <Text className="text-xs text-gray-400" numberOfLines={1}>
                   {entry.note ?? (entry.source === 'booking' ? 'From a credit purchase' : 'Manual entry')} ·{' '}
@@ -831,7 +831,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
               />
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-900">{entry.entry_type === 'debit' ? 'Owes' : 'Paid'}</Text>
+              <Text className="text-sm font-semibold text-gray-900">{entry.entry_type === 'debit' ? 'Owes' : 'Received'}</Text>
               <Text className="text-xs text-gray-400" numberOfLines={1}>
                 {entry.note ?? (entry.source === 'booking' ? 'From a booked job' : 'Manual entry')} ·{' '}
                 {toBsHistoryLabel(entry.entry_date ?? entry.created_at)}

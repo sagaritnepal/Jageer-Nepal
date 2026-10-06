@@ -111,7 +111,7 @@ export function useAccountBalances(userId: string | undefined) {
         add(e.bank_account_id, e.amount, {
           id: e.id,
           date: e.entry_date ?? e.created_at,
-          label: `Payment in · ${name}`,
+          label: `Received · ${name}`,
           sub: e.note ?? '',
           isInflow: true,
           nav: { kind: 'party', partyId: e.customer_id },
@@ -120,7 +120,7 @@ export function useAccountBalances(userId: string | undefined) {
         add(e.bank_account_id, -e.amount, {
           id: e.id,
           date: e.entry_date ?? e.created_at,
-          label: `Payment out · ${name}`,
+          label: `Payment Out · ${name}`,
           sub: e.note ?? '',
           isInflow: false,
           nav: { kind: 'party', partyId: e.customer_id },
@@ -133,7 +133,7 @@ export function useAccountBalances(userId: string | undefined) {
         add(e.bank_account_id, -e.amount, {
           id: e.id,
           date: e.entry_date ?? e.created_at,
-          label: `Paid vendor · ${name}`,
+          label: `Payment Out · ${name}`,
           sub: e.note ?? '',
           isInflow: false,
           nav: { kind: 'party', partyId: e.vendor_id },

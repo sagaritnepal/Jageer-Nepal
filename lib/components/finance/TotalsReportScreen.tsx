@@ -28,10 +28,10 @@ const PILL = {
   sale: { label: 'Sale', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase', color: MONEY.out.text, bg: MONEY.out.bg },
   expense: { label: 'Expense', color: MONEY.out.text, bg: MONEY.out.bg },
-  paymentReceived: { label: 'Payment received', color: MONEY.in.text, bg: MONEY.in.bg },
+  paymentReceived: { label: 'Received', color: MONEY.in.text, bg: MONEY.in.bg },
   jobPayment: { label: 'Job payment', color: MONEY.in.text, bg: MONEY.in.bg },
-  paymentOut: { label: 'Payment out', color: MONEY.out.text, bg: MONEY.out.bg },
-  paidVendor: { label: 'Paid vendor', color: MONEY.out.text, bg: MONEY.out.bg },
+  paymentOut: { label: 'Payment Out', color: MONEY.out.text, bg: MONEY.out.bg },
+  paidVendor: { label: 'Payment Out', color: MONEY.out.text, bg: MONEY.out.bg },
 } satisfies Record<string, PillStyle>;
 
 interface Entry {

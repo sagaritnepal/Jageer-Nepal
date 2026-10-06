@@ -90,8 +90,8 @@ type EditTarget = {
 
 const KIND: Record<Kind, { label: string; color: string; bg: string }> = {
   opening: { label: 'Opening', color: '#374151', bg: '#F3F4F6' },
-  received: { label: 'Cash in', color: '#047857', bg: '#ECFDF5' },
-  paid: { label: 'Paid out', color: '#B91C1C', bg: '#FEF2F2' },
+  received: { label: 'Received', color: '#047857', bg: '#ECFDF5' },
+  paid: { label: 'Payment Out', color: '#B91C1C', bg: '#FEF2F2' },
   expense: { label: 'Expense', color: '#B91C1C', bg: '#FEF2F2' },
   sale: { label: 'Sale bill', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase bill', color: MONEY.out.text, bg: MONEY.out.bg },
@@ -588,7 +588,7 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
                   )}
                 </View>
                 <View className="mt-3">
-                  <Text className="mb-1 text-xs font-medium text-gray-500">Note</Text>
+                  <Text className="mb-1 text-xs font-medium text-gray-500">Remarks</Text>
                   <EditInput
                     value={form.note}
                     onChangeText={set('note')}
@@ -911,7 +911,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         kind: isIn ? 'received' : 'paid',
         date,
         time: timeOf(e.created_at),
-        details: `${isIn ? 'Received from' : 'Paid to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
+        details: `${isIn ? 'Received from' : 'Payment Out to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
         sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, e.note].filter(Boolean).join(' · ') || null,
         cashIn: isIn ? e.amount : null,
         cashOut: isIn ? null : e.amount,
@@ -921,7 +921,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         edit: {
           table: 'customer_ledger_entries',
           id: e.id,
-          title: `${isIn ? 'Received from' : 'Paid to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
+          title: `${isIn ? 'Received from' : 'Payment Out to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
           lockedReason:
             e.source === 'manual'
               ? undefined
@@ -959,7 +959,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         kind: 'paid',
         date,
         time: timeOf(e.created_at),
-        details: `Paid to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
+        details: `Payment Out to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
         sub: [e.receipt_no ? `Receipt #${e.receipt_no}` : null, e.note].filter(Boolean).join(' · ') || null,
         cashOut: e.amount,
         account: via(e.bank_account_id),
@@ -968,7 +968,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         edit: {
           table: 'vendor_ledger_entries',
           id: e.id,
-          title: `Paid to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
+          title: `Payment Out to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
           lockedReason:
             e.source === 'manual'
               ? undefined
@@ -1181,8 +1181,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
             Tap any entry to edit, save or delete it. The button at the bottom picks Cash, Esewa, a bank or all
             accounts - a transfer shows under an account as money in or out. Sale and purchase bills show what was billed that day - they
-            don't change the balance until the money is received or paid, which appears as its own Cash in or Paid
-            out row.
+            don't change the balance until the money is received or paid, which appears as its own Received or Payment
+            Out row.
           </Text>
         </>
       )}

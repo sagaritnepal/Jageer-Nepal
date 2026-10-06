@@ -151,7 +151,7 @@ function TransferForm({ userId, onDone }: { userId: string; onDone: () => void }
         <DateField value={date} onChange={setDate} />
       </View>
 
-      <Text className="mb-1 text-xs font-medium text-gray-500">Note (optional)</Text>
+      <Text className="mb-1 text-xs font-medium text-gray-500">Remarks (optional)</Text>
       <TextInput
         value={note}
         onChangeText={setNote}
