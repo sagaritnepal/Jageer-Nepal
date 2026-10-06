@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
+import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
 import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
 import { distanceKm } from '../../lib/utils/distance';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
@@ -449,6 +450,25 @@ export default function ResellerRequestQueue() {
   const { width: screenWidth } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
 
+  // "My Work Hub" at the top right of this tab, in the bar beside the bell: a
+  // full button on a wide screen, just the icon on a phone where the bar has
+  // less room (the Work tab is also in the bottom bar there).
+  useScreenHeader(
+    {
+      headerRight: () => (
+        <Pressable
+          onPress={() => router.push('/(reseller)/workhub' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="My Work Hub"
+          className={`h-9 flex-row items-center justify-center rounded-lg border border-gray-300 bg-white ${isWideWeb ? 'gap-1.5 px-3' : 'w-9'}`}
+        >
+          <Ionicons name="grid-outline" size={15} color="#2563EB" />
+          {isWideWeb && <Text className="text-[12.5px] font-semibold text-gray-700">My Work Hub</Text>}
+        </Pressable>
+      ),
+    },
+    [isWideWeb]
+  );
 
   const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
     filters: { status: 'pending', origin: 'app' },
