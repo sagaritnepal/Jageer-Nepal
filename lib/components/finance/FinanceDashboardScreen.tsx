@@ -346,32 +346,37 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         <View style={{ width: zoneLeft }}>
           {/* Grows to take whatever height the row gives it, so it never ends in a blank strip. */}
           <Pressable onPress={go('/bank-balances')} style={{ flexGrow: 1 }}>
-            <LinearGradient
-              colors={['#2563EB', '#1D4ED8']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+            {/* A quiet neutral tile like the ones beside it - the amount in dark ink,
+                red only when the balance is below zero - so it doesn't pull the eye
+                away from everything else on the page. */}
+            <View
               style={{
                 flexGrow: 1,
                 justifyContent: 'center',
                 borderRadius: 16,
                 padding: 18,
-                shadowColor: '#2563EB',
-                shadowOpacity: 0.3,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 6 },
-                elevation: 4,
+                backgroundColor: '#F9FAFB',
+                borderWidth: 1,
+                borderColor: '#E5E7EB',
               }}
             >
-              <Text className="text-xs font-semibold text-white/80">Available balance</Text>
+              <View className="flex-row items-center" style={{ gap: 6 }}>
+                <Ionicons name="wallet-outline" size={14} color="#6B7280" />
+                <Text className="text-xs font-semibold text-gray-600">Available balance</Text>
+              </View>
               <Text
-                className="mt-1 font-extrabold text-white"
-                style={{ fontSize: fitFont(balanceText, zoneLeft - 2 * 18, 28, 18), lineHeight: 34 }}
+                className="mt-1 font-extrabold"
+                style={{
+                  color: availableBalance < 0 ? '#DC2626' : '#111827',
+                  fontSize: fitFont(balanceText, zoneLeft - 2 * 18, 26, 18),
+                  lineHeight: 32,
+                }}
                 numberOfLines={1}
               >
                 {balanceText}
               </Text>
-              <Text className="mt-1 text-[11px] text-white/70">Cash in hand + all bank accounts</Text>
-            </LinearGradient>
+              <Text className="mt-1 text-[11px] text-gray-400">Cash in hand + all bank accounts</Text>
+            </View>
           </Pressable>
 
           <View className="mt-3 flex-row" style={{ gap: 12 }}>

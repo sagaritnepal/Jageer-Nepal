@@ -19,7 +19,7 @@ import { PartyTypePill } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { BookTable, Pill, ToolbarButton, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
-import { Field, FieldRow, FormActions, FormCard, INPUT, Segmented } from './FormKit';
+import { Field, FieldRow, FormActions, FormCard, INPUT, PopupCard, Segmented } from './FormKit';
 import { MONEY } from './moneyColors';
 import { supabase } from '../../supabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -166,49 +166,50 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
     ]);
   }
 
-  if (editing) {
-    return (
-      <FormCard icon="person-outline" title="Edit customer">
-        <FieldRow>
-          <Field label="Name" basis={260}>
-            <TextInput
-              value={name}
-              onChangeText={(v) => setName(nameCaps(v))}
-              autoCapitalize="characters"
-              placeholder="Name"
-              placeholderTextColor="#9CA3AF"
-              className={INPUT}
-            />
-          </Field>
-          <Field label="Phone (10 digits)" basis={180}>
-            <TextInput
-              value={phone}
-              onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
-              placeholder="98XXXXXXXX"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="phone-pad"
-              maxLength={10}
-              className={INPUT}
-            />
-          </Field>
-          <Field label="Address" basis={300}>
-            <TextInput
-              value={address}
-              onChangeText={setAddress}
-              placeholder="Address"
-              placeholderTextColor="#9CA3AF"
-              className={INPUT}
-            />
-          </Field>
-        </FieldRow>
-        <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} />
-        <FormActions onCancel={() => setEditing(false)} onSave={handleSave} saving={saving} />
-      </FormCard>
-    );
-  }
+  // Editing opens in a popup over the page; the name card stays as it is behind it.
+  const editPopup = editing ? (
+    <PopupCard title="Edit customer" onClose={() => setEditing(false)}>
+      <FieldRow>
+        <Field label="Name" basis={240}>
+          <TextInput
+            value={name}
+            onChangeText={(v) => setName(nameCaps(v))}
+            autoCapitalize="characters"
+            autoFocus
+            placeholder="Name"
+            placeholderTextColor="#9CA3AF"
+            className={INPUT}
+          />
+        </Field>
+        <Field label="Phone (10 digits)" basis={180}>
+          <TextInput
+            value={phone}
+            onChangeText={(v) => setPhone(v.replace(/[^0-9]/g, ''))}
+            placeholder="98XXXXXXXX"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="phone-pad"
+            maxLength={10}
+            className={INPUT}
+          />
+        </Field>
+        <Field label="Address" basis={320}>
+          <TextInput
+            value={address}
+            onChangeText={setAddress}
+            placeholder="Address"
+            placeholderTextColor="#9CA3AF"
+            className={INPUT}
+          />
+        </Field>
+      </FieldRow>
+      <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} />
+      <FormActions onCancel={() => setEditing(false)} onSave={handleSave} saving={saving} />
+    </PopupCard>
+  ) : null;
 
   const typeName = customer.party_type_id ? partyTypeName.get(customer.party_type_id) : undefined;
   return (
+    <>
     <View
       className="flex-row flex-wrap items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
       style={{ columnGap: 22, rowGap: 8 }}
@@ -252,6 +253,8 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
         <HeaderButton icon="trash-outline" label="Delete" danger onPress={handleDelete} />
       </View>
     </View>
+    {editPopup}
+    </>
   );
 }
 
