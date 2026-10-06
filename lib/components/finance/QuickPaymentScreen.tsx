@@ -201,7 +201,7 @@ function QuickPaymentForm() {
       return;
     }
     const ok = await confirmSave({
-      title: isOut ? 'Save this payment out?' : 'Save this payment?',
+      title: `Save this ${isOut ? 'Payment Out' : 'Received'} entry?`,
       rows: [
         { label: payTarget === 'vendor' ? 'Vendor' : 'Customer', value: trimmedName },
         ...(receiptNo.trim() ? [{ label: isOut ? 'Payment no.' : 'Receipt no.', value: receiptNo.trim() }] : []),
@@ -394,7 +394,7 @@ function QuickPaymentForm() {
     }
     const sum = validRows.reduce((s, r) => s + Number(r.amount), 0);
     const ok = await confirmSave({
-      title: `Save ${validRows.length === 1 ? 'this' : `these ${validRows.length}`} ${isOut ? 'payment out' : 'receipt'}${validRows.length === 1 ? '' : 's'}?`,
+      title: `Save ${validRows.length === 1 ? 'this' : `these ${validRows.length}`} ${isOut ? 'Payment Out' : 'Received'} ${validRows.length === 1 ? 'entry' : 'entries'}?`,
       rows: [
         ...validRows.slice(0, 5).map((r) => ({ label: r.customerName.trim(), value: `NPR ${Number(r.amount).toLocaleString()}` })),
         ...(validRows.length > 5 ? [{ label: `+ ${validRows.length - 5} more` }] : []),
@@ -441,7 +441,7 @@ function QuickPaymentForm() {
         });
       }
       showAlert(
-        isOut ? 'Payments out recorded' : 'Payments in recorded',
+        isOut ? 'Payment Out saved' : 'Received saved',
         `${validRows.length} ${validRows.length === 1 ? 'entry' : 'entries'} saved, NPR ${validRows
           .reduce((sum, r) => sum + Number(r.amount), 0)
           .toLocaleString()} total.`
@@ -725,7 +725,7 @@ function QuickPaymentForm() {
             <View style={{ width: 320 }}>
               <View className="rounded-2xl border border-gray-200 bg-white p-4">
                 <Text className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
-                  Recent {isOut ? 'payments out' : 'received'}
+                  Recent {isOut ? 'Payment Out' : 'Received'}
                 </Text>
                 {recentEntries.length === 0 ? (
                   <Text className="text-xs text-gray-400">No entries yet.</Text>
@@ -851,7 +851,7 @@ function QuickPaymentForm() {
           style={{ backgroundColor: meta.color }}
         >
           <Text className="text-base font-semibold text-white">
-            {saving ? 'Saving…' : isOut ? 'Record payment out' : 'Record payment in'}
+            {saving ? 'Saving…' : isOut ? 'Save Payment Out' : 'Save Received'}
           </Text>
         </Pressable>
       </View>

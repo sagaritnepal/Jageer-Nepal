@@ -438,7 +438,7 @@ function AddVendorEntryForm({
       if (kind === 'received') {
         await recordReceived(initial ?? null, value);
         if (initial) {
-          showAlert('Moved to payment received', `NPR ${value.toLocaleString()} is now a payment received on the customer ledger.`);
+          showAlert('Moved to Received', `NPR ${value.toLocaleString()} is now a Received entry on the customer ledger.`);
         }
       } else if (initial) {
         await updateEntry.mutateAsync({

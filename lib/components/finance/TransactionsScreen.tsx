@@ -19,6 +19,8 @@ import { ToggleSwitch } from '../ToggleSwitch';
 import { FormSection } from './FormSection';
 import { BillItemsTable, type BillItemsTableHandle } from './BillItemsTable';
 import { KeyboardDateInput } from './KeyboardDateInput';
+import { KeyboardSelect } from './KeyboardSelect';
+import { ExpenseEntryTable, type ExpenseEntryRow as ExpenseRow, type ExpenseEntryTableHandle } from './ExpenseEntryTable';
 import { KeyInput } from './KeyInput';
 import { useConfirmSave } from './ConfirmSave';
 import { TransactionsBook } from './TransactionsBook';
@@ -58,17 +60,8 @@ function makeExpenseRowKey() {
 }
 
 // Web only: recording several expenses under one Date/Payment method in a
-// single save, same "shared voucher, per-row table" shape as Quick Payment's
-// multi-entry table - see the web branch of TransactionForm below.
-interface ExpenseRow {
-  key: string;
-  partyName: string;
-  customerId: string | null;
-  categoryId: string | null;
-  amount: string;
-  note: string;
-}
-
+// single save, same "shared voucher, per-row table" shape as Received / Payment
+// Out - see ExpenseEntryTable and the web branch of TransactionForm below.
 function emptyExpenseRow(): ExpenseRow {
   return { key: makeExpenseRowKey(), partyName: '', customerId: null, categoryId: null, amount: '', note: '' };
 }
@@ -1072,7 +1065,10 @@ function TransactionForm({
   async function handleSelectNewPartyForExpenseRow(name: string, phone: string | null) {
     const key = activePartyRowKey;
     setActivePartyRowKey(null);
-    if (!key) return;
+    if (key) await attachContactToExpenseRow(key, name, phone);
+  }
+
+  async function attachContactToExpenseRow(key: string, name: string, phone: string | null) {
     if (!phone) {
       updateExpenseRow(key, { partyName: name, customerId: null });
       return;
@@ -1091,7 +1087,12 @@ function TransactionForm({
   }
 
   function selectCategoryForRow(id: string) {
-    if (activeCategoryRowKey) updateExpenseRow(activeCategoryRowKey, { categoryId: id });
+    const key = activeCategoryRowKey;
+    if (key) {
+      updateExpenseRow(key, { categoryId: id });
+      // Once the list has closed - keep typing from the Amount cell.
+      setTimeout(() => expenseTableRef.current?.focusRow(key, 2), 80);
+    }
     setActiveCategoryRowKey(null);
   }
 
@@ -1180,6 +1181,8 @@ function TransactionForm({
   const vatRef = useRef<TextInput>(null);
   const remarkRef = useRef<TextInput>(null);
   const saveButtonRef = useRef<View>(null);
+  const expenseTableRef = useRef<ExpenseEntryTableHandle>(null);
+  const methodRef = useRef<HTMLSelectElement | null>(null);
   const itemsTableRef = useRef<BillItemsTableHandle>(null);
   const [vendorFocused, setVendorFocused] = useState(false);
 
@@ -1217,7 +1220,7 @@ function TransactionForm({
   useScreenHeader(
     desktopWeb
       ? {
-          title: newExpenses ? 'New Expenses' : `${initial ? 'Edit' : 'New'} ${TYPE_META[type].label}`,
+          title: newExpenses ? 'Expenses' : `${initial ? 'Edit' : 'New'} ${TYPE_META[type].label}`,
           resetTitle: 'Statement',
           headerRight: () => (
             <Pressable
@@ -1236,108 +1239,88 @@ function TransactionForm({
   );
 
   if (desktopWeb && type === 'expense' && !initial) {
+    const accent = FINANCE_ENTRY_ACCENT;
     return (
       <View className="mb-4">
         <View className="mb-4 flex-row" style={{ gap: 24 }}>
           <View className="flex-1" style={{ minWidth: 0, maxWidth: 1500 }}>
-            <View className="mb-5 rounded-2xl border border-gray-200 bg-white p-5">
-              <FormSection icon="calendar-outline" title="Details" first>
-                <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
-                <DateField value={expenseDate} onChange={setExpenseDate} />
-              </FormSection>
-
-              <FormSection icon="wallet-outline" title="Payment method">
-                <Pressable
-                  onPress={() => setShowAccountPicker(true)}
-                  className="flex-row items-center justify-between rounded-lg border border-gray-300 px-3 py-2.5"
-                >
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name={bankAccountId ? 'business-outline' : 'cash-outline'} size={16} color="#6B7280" />
-                    <Text className="text-sm text-gray-900">{selectedAccountName}</Text>
-                  </View>
-                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-                </Pressable>
-              </FormSection>
+            {/* Date and Payment method apply to every row in the table below -
+                one voucher covering several expenses, the same shape as
+                Received. Tab/Enter walk Date -> Payment method -> the table,
+                and Ctrl+Enter saves from anywhere. */}
+            <View
+              className="mb-4 rounded-2xl border border-gray-200 bg-white px-5 py-4"
+              style={{ boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 4px 12px rgba(16,24,40,0.03)' }}
+            >
+              <View className="mb-3 flex-row items-center gap-2">
+                <Ionicons name="document-text-outline" size={14} color="#6B7280" />
+                <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Details</Text>
+              </View>
+              <View className="flex-row" style={{ gap: 14 }}>
+                <View style={{ flex: 1.3, minWidth: 0 }}>
+                  <Text className="mb-1.5 text-xs font-semibold text-gray-600">Date</Text>
+                  <KeyboardDateInput
+                    value={expenseDate}
+                    onChange={setExpenseDate}
+                    accent={accent}
+                    onEnter={() => methodRef.current?.focus()}
+                    onRequestSave={handleSaveAllExpenses}
+                  />
+                </View>
+                <View style={{ flex: 1.1, minWidth: 0 }}>
+                  <Text className="mb-1.5 text-xs font-semibold text-gray-600">Payment method</Text>
+                  <KeyboardSelect
+                    value={bankAccountId ?? '__cash__'}
+                    options={[
+                      { value: '__cash__', label: 'Cash' },
+                      ...bankAccounts.accounts.map((a) => ({ value: a.id, label: a.name })),
+                    ]}
+                    onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
+                    selectRef={(el) => {
+                      methodRef.current = el;
+                    }}
+                    onEnter={() => expenseTableRef.current?.focusRow(expenseRows[0].key, 0)}
+                    onRequestSave={handleSaveAllExpenses}
+                    accent={accent}
+                    label="Payment method"
+                  />
+                </View>
+              </View>
             </View>
 
-            <View className="rounded-2xl border border-gray-200 bg-white p-5">
-              <View className="mb-3 flex-row items-center gap-1.5">
-                <Ionicons name="receipt-outline" size={13} color="#9CA3AF" />
-                <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Expenses</Text>
-              </View>
+            <ExpenseEntryTable
+              ref={expenseTableRef}
+              rows={expenseRows}
+              customers={customers}
+              phoneContacts={phoneContacts.contacts}
+              categories={categories ?? []}
+              accent={accent}
+              totalColor={TYPE_META.expense.color}
+              onUpdateRow={updateExpenseRow}
+              onAddRow={() => {
+                const row = emptyExpenseRow();
+                setExpenseRows((prev) => [...prev, row]);
+                return row.key;
+              }}
+              onRemoveRow={removeExpenseRow}
+              onPickCategory={setActiveCategoryRowKey}
+              onSelectContact={attachContactToExpenseRow}
+              onRequestSave={handleSaveAllExpenses}
+              onExit={() => (saveButtonRef.current as unknown as { focus?: () => void } | null)?.focus?.()}
+              autoFocusFirst
+            />
 
-              <View className="mb-1.5 flex-row gap-2 px-1">
-                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Paid to</Text>
-                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Category</Text>
-                <Text className="w-24 text-[11px] font-semibold text-gray-500">Amount</Text>
-                <Text className="flex-1 text-[11px] font-semibold text-gray-500">Remarks</Text>
-                <View style={{ width: 28 }} />
-              </View>
-
-              {expenseRows.map((row) => {
-                const rowCategory = (categories ?? []).find((c) => c.id === row.categoryId) ?? null;
-                return (
-                  <View key={row.key} className="mb-2 flex-row items-center gap-2">
-                    <Pressable
-                      onPress={() => {
-                        phoneContacts.request();
-                        setExpenseRowPickerQuery('');
-                        setActivePartyRowKey(row.key);
-                      }}
-                      className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
-                    >
-                      <Text className={`flex-1 text-sm ${row.partyName ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-                        {row.partyName || 'Paid to?'}
-                      </Text>
-                      <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
-                    </Pressable>
-                    <Pressable
-                      onPress={() => setActiveCategoryRowKey(row.key)}
-                      className="flex-1 flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
-                    >
-                      <Text className={`flex-1 text-sm ${rowCategory ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
-                        {rowCategory?.name ?? 'Category'}
-                      </Text>
-                      <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
-                    </Pressable>
-                    <TextInput
-                      value={row.amount}
-                      onChangeText={(v) => updateExpenseRow(row.key, { amount: v })}
-                      placeholder="0"
-                      placeholderTextColor="#D1D5DB"
-                      keyboardType="numeric"
-                      className="w-24 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-900"
-                    />
-                    <TextInput
-                      value={row.note}
-                      onChangeText={(v) => updateExpenseRow(row.key, { note: v })}
-                      placeholder="Optional"
-                      placeholderTextColor="#9CA3AF"
-                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-                    />
-                    <Pressable onPress={() => removeExpenseRow(row.key)} hitSlop={8} style={{ width: 28, alignItems: 'center' }}>
-                      <Ionicons name="close-circle" size={18} color={expenseRows.length > 1 ? '#DC2626' : '#E5E7EB'} />
-                    </Pressable>
-                  </View>
-                );
-              })}
-
-              <Pressable onPress={addExpenseRow} className="mt-2 flex-row items-center gap-1.5 self-start">
-                <Ionicons name="add-circle-outline" size={16} color={FINANCE_ENTRY_ACCENT} />
-                <Text className="text-sm font-semibold" style={{ color: FINANCE_ENTRY_ACCENT }}>
-                  Add expense
-                </Text>
-              </Pressable>
-
-              <View className="mt-5 flex-row gap-3 border-t border-gray-100 pt-4">
-                <Pressable onPress={onCancel} className="flex-1 items-center rounded-xl border border-gray-300 py-3">
+            <View className="mt-4 flex-row items-center justify-end" style={{ gap: 16 }}>
+              <View className="flex-row" style={{ gap: 10 }}>
+                <Pressable onPress={onCancel} className="items-center rounded-xl border border-gray-300 bg-white px-6 py-2.5">
                   <Text className="text-sm font-semibold text-gray-600">Cancel</Text>
                 </Pressable>
                 <Pressable
+                  ref={saveButtonRef}
                   onPress={handleSaveAllExpenses}
                   disabled={saving}
-                  className="flex-1 items-center rounded-xl py-3 disabled:opacity-50"
-                  style={{ backgroundColor: FINANCE_ENTRY_ACCENT }}
+                  className="items-center rounded-xl px-8 py-2.5 disabled:opacity-50"
+                  style={{ backgroundColor: accent, boxShadow: `0 2px 6px ${FINANCE_ENTRY_SHADOW}` }}
                 >
                   <Text className="text-sm font-bold text-white">{saving ? 'Saving…' : 'Save'}</Text>
                 </Pressable>
@@ -1370,15 +1353,6 @@ function TransactionForm({
           onCreate={handleCreateCategory}
           onRename={handleRenameCategory}
           onDelete={handleDeleteCategory}
-        />
-        <BankAccountPickerModal
-          visible={showAccountPicker}
-          accounts={bankAccounts.accounts}
-          selectedId={bankAccountId}
-          onSelect={setBankAccountId}
-          onClose={() => setShowAccountPicker(false)}
-          onRename={bankAccounts.rename}
-          onDelete={bankAccounts.remove}
         />
       </View>
     );
