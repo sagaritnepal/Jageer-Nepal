@@ -22,6 +22,7 @@ import { KeyboardDateInput } from './KeyboardDateInput';
 import { KeyInput } from './KeyInput';
 import { useConfirmSave } from './ConfirmSave';
 import { TransactionsBook } from './TransactionsBook';
+import { BookTable, type BookColumn } from './BookKit';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
 import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/customerSuggestions';
@@ -342,21 +343,25 @@ const FILTERS: { key: 'all' | BusinessTransactionType; label: string }[] = [
  * Expense all read business_transactions directly (Payment In/Out's own
  * version of this lives in QuickPaymentScreen, over the ledger tables).
  *
- * Each entry opens the same read-only receipt the list uses (`onOpen`), which
- * has the Edit button - so a mistake can be fixed from here without leaving
- * the entry screen. `activeId` marks the entry currently loaded in the form. */
+ * Laid out as a small table (party and date, amount, bin). Each entry opens
+ * the same read-only receipt the list uses (`onOpen`), which has the Edit
+ * button - so a mistake can be fixed from here without leaving the entry
+ * screen - and the bin (`onDelete`) removes one that should not exist.
+ * `activeId` marks the entry currently loaded in the form. */
 function RecentEntriesCard({
   userId,
   type,
   color,
   activeId,
   onOpen,
+  onDelete,
 }: {
   userId: string;
   type: BusinessTransactionType;
   color: string;
   activeId?: string;
   onOpen?: (tx: BusinessTransaction) => void;
+  onDelete?: (tx: BusinessTransaction) => void;
 }) {
   const { data } = useSupabaseQuery('business_transactions', {
     filters: { owner_id: userId, type },
@@ -365,42 +370,73 @@ function RecentEntriesCard({
   });
   const recent = (data ?? []).slice(0, 5);
 
+  const columns: BookColumn<BusinessTransaction>[] = [
+    {
+      key: 'party',
+      label: 'Party',
+      render: (tx) => (
+        <View style={{ minWidth: 0 }}>
+          <Text numberOfLines={1} className="text-xs font-semibold text-gray-800">
+            {tx.party_name || 'Unnamed'}
+          </Text>
+          <Text className="text-[10px] text-gray-400">
+            {toBsHistoryLabel(tx.bill_date ?? tx.created_at)}
+            {activeId === tx.id ? ' · editing' : ''}
+          </Text>
+        </View>
+      ),
+    },
+    {
+      key: 'amount',
+      label: 'Amount',
+      width: 84,
+      align: 'right',
+      render: (tx) => (
+        <Text className="text-xs font-bold" style={{ color, fontVariant: ['tabular-nums'] }}>
+          {tx.amount.toLocaleString()}
+        </Text>
+      ),
+    },
+    ...(onDelete
+      ? [
+          {
+            key: 'delete',
+            label: '',
+            width: 38,
+            align: 'right' as const,
+            render: (tx: BusinessTransaction) => (
+              <Pressable
+                onPress={() => onDelete(tx)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${tx.party_name || 'entry'}`}
+              >
+                <Ionicons name="trash-outline" size={15} color="#9CA3AF" />
+              </Pressable>
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <View className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">
-        Recent {TYPE_META[type].label}s
-      </Text>
-      {!!onOpen && recent.length > 0 && <Text className="mb-1.5 mt-0.5 text-[10.5px] text-gray-400">Tap an entry to view or edit it</Text>}
+    <View className="mt-4">
+      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Recent {TYPE_META[type].label}s</Text>
+      {!!onOpen && recent.length > 0 && (
+        <Text className="mb-2 mt-0.5 text-[10.5px] text-gray-400">Tap an entry to view or edit it{onDelete ? '; the bin deletes it' : ''}</Text>
+      )}
       {recent.length === 0 ? (
-        <Text className="mt-2 text-xs text-gray-400">No entries yet.</Text>
+        <View className="mt-2 rounded-xl border border-gray-300 bg-white p-4">
+          <Text className="text-xs text-gray-400">No entries yet.</Text>
+        </View>
       ) : (
-        recent.map((tx, i) => (
-          <Pressable
-            key={tx.id}
-            onPress={onOpen ? () => onOpen(tx) : undefined}
-            disabled={!onOpen}
-            accessibilityRole={onOpen ? 'button' : undefined}
-            accessibilityLabel={`${tx.party_name || 'Unnamed'}, NPR ${tx.amount.toLocaleString()}`}
-            className={`-mx-2 flex-row items-center justify-between rounded-lg px-2 py-2 ${i < recent.length - 1 ? 'border-b border-gray-50' : ''}`}
-            style={(state: any) => ({
-              backgroundColor: activeId === tx.id ? '#EFF6FF' : state.hovered || state.pressed ? '#F9FAFB' : 'transparent',
-            })}
-          >
-            <View className="flex-1 pr-2">
-              <Text numberOfLines={1} className="text-xs font-semibold text-gray-800">
-                {tx.party_name || 'Unnamed'}
-              </Text>
-              <Text className="text-[10px] text-gray-400">
-                {toBsHistoryLabel(tx.bill_date ?? tx.created_at)}
-                {activeId === tx.id ? ' · editing' : ''}
-              </Text>
-            </View>
-            <Text className="text-xs font-bold" style={{ color }}>
-              NPR {tx.amount.toLocaleString()}
-            </Text>
-            {!!onOpen && <Ionicons name="chevron-forward" size={12} color="#D1D5DB" style={{ marginLeft: 6 }} />}
-          </Pressable>
-        ))
+        <BookTable
+          columns={columns}
+          rows={recent}
+          rowKey={(tx) => tx.id}
+          onRowPress={onOpen}
+          highlight={(tx) => tx.id === activeId}
+        />
       )}
     </View>
   );
@@ -558,6 +594,7 @@ function TransactionForm({
   products,
   voicePrefill,
   onOpenRecent,
+  onDeleteRecent,
   onDone,
   onCancel,
 }: {
@@ -568,8 +605,9 @@ function TransactionForm({
   customers: Customer[];
   products: Product[];
   voicePrefill?: { amount?: string; party?: string; date?: string; note?: string } | null;
-  /** Opens an entry from the Recent list (web) - see RecentEntriesCard. */
+  /** Opens / deletes an entry from the Recent list (web) - see RecentEntriesCard. */
   onOpenRecent?: (tx: BusinessTransaction) => void;
+  onDeleteRecent?: (tx: BusinessTransaction) => void;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -1332,7 +1370,7 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 320 }}>
-            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} onOpen={onOpenRecent} />
+            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} onOpen={onOpenRecent} onDelete={onDeleteRecent} />
           </View>
         </View>
 
@@ -1680,7 +1718,14 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 300 }}>
-            <RecentEntriesCard userId={userId} type={type} color={TYPE_META[type].color} activeId={initial?.id} onOpen={onOpenRecent} />
+            <RecentEntriesCard
+              userId={userId}
+              type={type}
+              color={TYPE_META[type].color}
+              activeId={initial?.id}
+              onOpen={onOpenRecent}
+              onDelete={onDeleteRecent}
+            />
           </View>
         </View>
 
@@ -2631,6 +2676,35 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     ]);
   }
 
+  // Delete from the Recent list beside the entry form: names the entry so the
+  // right one is being removed, and if it is the one loaded in the form, the
+  // form goes back to blank instead of keeping a bill that no longer exists.
+  function handleDeleteRecent(tx: BusinessTransaction) {
+    const label = TYPE_META[tx.type].label.toLowerCase();
+    showAlert(
+      `Delete this ${label}?`,
+      `${tx.party_name || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}${tx.customer_id ? '. It is also taken off their ledger.' : ''}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTx.mutateAsync(tx.id);
+              if (editingTx?.id === tx.id) {
+                setEditingTx(null);
+                setFormKey((k) => k + 1);
+              }
+            } catch (err) {
+              showAlert('Could not delete', getErrorMessage(err));
+            }
+          },
+        },
+      ]
+    );
+  }
+
   // Web: the list view is a Day Book style cash-book table (the entry form
   // keeps its own layout below). Phones keep the card list.
   if (Platform.OS === 'web' && !showForm) {
@@ -2749,6 +2823,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 products={products ?? []}
                 voicePrefill={editingTx || formKey > 0 ? null : voicePrefill}
                 onOpenRecent={desktopWeb ? setViewingTx : undefined}
+                onDeleteRecent={desktopWeb ? handleDeleteRecent : undefined}
                 onDone={() => {
                   // Entering several bills in a row is the whole point of
                   // the web entry screen: stay on it with a blank form and a
