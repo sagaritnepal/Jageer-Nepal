@@ -343,25 +343,23 @@ const FILTERS: { key: 'all' | BusinessTransactionType; label: string }[] = [
  * Expense all read business_transactions directly (Payment In/Out's own
  * version of this lives in QuickPaymentScreen, over the ledger tables).
  *
- * Laid out as a small table (party and date, amount, bin). Each entry opens
- * the same read-only receipt the list uses (`onOpen`), which has the Edit
- * button - so a mistake can be fixed from here without leaving the entry
- * screen - and the bin (`onDelete`) removes one that should not exist.
- * `activeId` marks the entry currently loaded in the form. */
+ * Laid out as a small table (party and date, amount). Each entry opens the
+ * same read-only receipt the list uses (`onOpen`), which carries the Edit and
+ * Delete buttons - so a mistake can be fixed or removed from here without
+ * leaving the entry screen. `activeId` marks the entry currently loaded in the
+ * form. */
 function RecentEntriesCard({
   userId,
   type,
   color,
   activeId,
   onOpen,
-  onDelete,
 }: {
   userId: string;
   type: BusinessTransactionType;
   color: string;
   activeId?: string;
   onOpen?: (tx: BusinessTransaction) => void;
-  onDelete?: (tx: BusinessTransaction) => void;
 }) {
   const { data } = useSupabaseQuery('business_transactions', {
     filters: { owner_id: userId, type },
@@ -397,33 +395,13 @@ function RecentEntriesCard({
         </Text>
       ),
     },
-    ...(onDelete
-      ? [
-          {
-            key: 'delete',
-            label: '',
-            width: 38,
-            align: 'right' as const,
-            render: (tx: BusinessTransaction) => (
-              <Pressable
-                onPress={() => onDelete(tx)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete ${tx.party_name || 'entry'}`}
-              >
-                <Ionicons name="trash-outline" size={15} color="#9CA3AF" />
-              </Pressable>
-            ),
-          },
-        ]
-      : []),
   ];
 
   return (
     <View className="mt-4">
       <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Recent {TYPE_META[type].label}s</Text>
       {!!onOpen && recent.length > 0 && (
-        <Text className="mb-2 mt-0.5 text-[10.5px] text-gray-400">Tap an entry to view or edit it{onDelete ? '; the bin deletes it' : ''}</Text>
+        <Text className="mb-2 mt-0.5 text-[10.5px] text-gray-400">Tap an entry to view, edit or delete it</Text>
       )}
       {recent.length === 0 ? (
         <View className="mt-2 rounded-xl border border-gray-300 bg-white p-4">
@@ -594,7 +572,6 @@ function TransactionForm({
   products,
   voicePrefill,
   onOpenRecent,
-  onDeleteRecent,
   onDone,
   onCancel,
 }: {
@@ -605,9 +582,8 @@ function TransactionForm({
   customers: Customer[];
   products: Product[];
   voicePrefill?: { amount?: string; party?: string; date?: string; note?: string } | null;
-  /** Opens / deletes an entry from the Recent list (web) - see RecentEntriesCard. */
+  /** Opens an entry from the Recent list (web) - see RecentEntriesCard. */
   onOpenRecent?: (tx: BusinessTransaction) => void;
-  onDeleteRecent?: (tx: BusinessTransaction) => void;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -1370,7 +1346,7 @@ function TransactionForm({
           </View>
 
           <View style={{ width: 320 }}>
-            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} onOpen={onOpenRecent} onDelete={onDeleteRecent} />
+            <RecentEntriesCard userId={userId} type="expense" color={FINANCE_ENTRY_ACCENT} onOpen={onOpenRecent} />
           </View>
         </View>
 
@@ -1724,7 +1700,6 @@ function TransactionForm({
               color={TYPE_META[type].color}
               activeId={initial?.id}
               onOpen={onOpenRecent}
-              onDelete={onDeleteRecent}
             />
           </View>
         </View>
@@ -2159,21 +2134,24 @@ function TransactionRow({
 
 // A read-only receipt view - tapping a past transaction should let you see
 // what's in it without immediately dropping into an editable form. Edit is
-// an explicit action from here, not the default. Exported so a customer/
-// vendor's own page (CustomerDetailScreen) can reuse the same organized
-// detail view for a linked bill instead of building a second one.
+// an explicit action from here, not the default, and so is Delete (beside it,
+// only where the caller passes `onDelete`). Exported so a customer/vendor's
+// own page (CustomerDetailScreen) can reuse the same organized detail view
+// for a linked bill instead of building a second one.
 export function TransactionDetailModal({
   tx,
   categoryName,
   bankAccountName,
   onClose,
   onEdit,
+  onDelete,
 }: {
   tx: BusinessTransaction | null;
   categoryName: string | null;
   bankAccountName: string | null;
   onClose: () => void;
   onEdit: () => void;
+  onDelete?: () => void;
 }) {
   if (!tx) return null;
   const meta = TYPE_META[tx.type];
@@ -2288,13 +2266,24 @@ export function TransactionDetailModal({
               </View>
             )}
 
-            <Pressable
-              onPress={onEdit}
-              className="mt-2 flex-row items-center justify-center gap-1.5 rounded-lg bg-orange-500 py-3"
-            >
-              <Ionicons name="pencil" size={14} color="white" />
-              <Text className="text-sm font-semibold text-white">Edit</Text>
-            </Pressable>
+            <View className="mt-2 flex-row" style={{ gap: 8 }}>
+              <Pressable onPress={onEdit} className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg bg-orange-500 py-3">
+                <Ionicons name="pencil" size={14} color="white" />
+                <Text className="text-sm font-semibold text-white">Edit</Text>
+              </Pressable>
+              {!!onDelete && (
+                <Pressable
+                  onPress={onDelete}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white py-3"
+                  style={{ borderColor: '#FECACA' }}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#DC2626" />
+                  <Text className="text-sm font-semibold" style={{ color: '#DC2626' }}>
+                    Delete
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </ScrollView>
         </Pressable>
       </Pressable>
@@ -2676,10 +2665,12 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     ]);
   }
 
-  // Delete from the Recent list beside the entry form: names the entry so the
-  // right one is being removed, and if it is the one loaded in the form, the
-  // form goes back to blank instead of keeping a bill that no longer exists.
-  function handleDeleteRecent(tx: BusinessTransaction) {
+  // Delete from the receipt (opened from the list or the Recent entries beside
+  // the form): names the entry so the right one is being removed, and if it is
+  // the one loaded in the form, the form goes back to blank instead of keeping
+  // a bill that no longer exists.
+  function handleDeleteFromReceipt(tx: BusinessTransaction) {
+    setViewingTx(null);
     const label = TYPE_META[tx.type].label.toLowerCase();
     showAlert(
       `Delete this ${label}?`,
@@ -2740,6 +2731,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             setViewingTx(null);
             openForm(viewingTx);
           }}
+          onDelete={viewingTx ? () => handleDeleteFromReceipt(viewingTx) : undefined}
         />
       </>
     );
@@ -2823,7 +2815,6 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 products={products ?? []}
                 voicePrefill={editingTx || formKey > 0 ? null : voicePrefill}
                 onOpenRecent={desktopWeb ? setViewingTx : undefined}
-                onDeleteRecent={desktopWeb ? handleDeleteRecent : undefined}
                 onDone={() => {
                   // Entering several bills in a row is the whole point of
                   // the web entry screen: stay on it with a blank form and a
@@ -2906,6 +2897,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           setViewingTx(null);
           openForm(viewingTx);
         }}
+        onDelete={viewingTx ? () => handleDeleteFromReceipt(viewingTx) : undefined}
       />
     </View>
   );
