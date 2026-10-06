@@ -390,7 +390,7 @@ function JobSheet({
   /** Full screen: nothing is cut short, however long the job's name is. */
   expanded?: boolean;
 }) {
-  const cell = 'px-3 py-2.5 border-r border-gray-100';
+  const cell = 'px-3 py-2.5 border-r border-gray-300';
   const head = (label: string, style: object) => (
     <Text className={`${cell} text-[11px] font-bold uppercase tracking-wide text-gray-400`} style={style}>
       {label}
@@ -484,8 +484,8 @@ function JobSheet({
   }
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-      <View className="flex-row border-b border-gray-200 bg-gray-50">
+    <View className="overflow-hidden rounded-2xl border border-gray-300 bg-white">
+      <View className="flex-row border-b border-gray-300 bg-gray-50">
         {head('Job', { flex: 1 })}
         {head('Customer', { width: 220 })}
         {head('With', { width: 150 })}
@@ -498,7 +498,7 @@ function JobSheet({
       {jobs.map((r) => {
         const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
         return (
-          <View key={r.id} className="border-b border-gray-100">
+          <View key={r.id} className="border-b border-gray-300">
           <View className="flex-row items-center">
             <Pressable
               onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}
