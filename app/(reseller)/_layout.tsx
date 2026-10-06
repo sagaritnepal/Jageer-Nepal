@@ -12,8 +12,9 @@ import { NotificationPopup } from '../../lib/components/NotificationPopup';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/components/finance/FinanceDashboardScreen';
 
-// Same 4 sections as the mobile bottom tabs below, just as a persistent
-// left rail on web instead - see WebSidebarShell. Finance's own shortcuts
+// The mobile bottom tabs below, as a persistent left rail on web instead - see
+// WebSidebarShell. The Work Hub is not in it: on web it is the "My Work Hub"
+// button at the top right of Requests (the phone keeps its Work tab). Finance's own shortcuts
 // (Payment In, Purchase, Report, ...) are nested under it too, reusing the
 // exact same list the Finance dashboard's tiles use, so switching between
 // them never means going back to that dashboard to pick another tile.
@@ -21,7 +22,6 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/dashboard', label: 'Home', icon: 'home' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
-  { href: '/(reseller)/workhub', label: 'Work Hub', icon: 'grid' },
   {
     href: '/(reseller)/finance',
     label: 'Finance',

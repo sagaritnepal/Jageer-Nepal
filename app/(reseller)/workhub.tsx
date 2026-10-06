@@ -9,6 +9,7 @@ import { JobTimeline } from '../../lib/components/JobTimeline';
 import type { JobTimes } from '../../lib/utils/jobTimeline';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
+import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useRankedTechnicians } from '../../lib/hooks/useTechnicianRanking';
 import { assignTechnician, showJobSentAlert } from '../../lib/utils/assignTechnician';
@@ -390,7 +391,7 @@ function JobSheet({
   /** Full screen: nothing is cut short, however long the job's name is. */
   expanded?: boolean;
 }) {
-  const cell = 'px-3 py-2.5 border-r border-gray-100';
+  const cell = 'px-3 py-2.5 border-r border-gray-300';
   const head = (label: string, style: object) => (
     <Text className={`${cell} text-[11px] font-bold uppercase tracking-wide text-gray-400`} style={style}>
       {label}
@@ -484,8 +485,8 @@ function JobSheet({
   }
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-      <View className="flex-row border-b border-gray-200 bg-gray-50">
+    <View className="overflow-hidden rounded-2xl border border-gray-300 bg-white">
+      <View className="flex-row border-b border-gray-300 bg-gray-50">
         {head('Job', { flex: 1 })}
         {head('Customer', { width: 220 })}
         {head('With', { width: 150 })}
@@ -498,7 +499,7 @@ function JobSheet({
       {jobs.map((r) => {
         const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
         return (
-          <View key={r.id} className="border-b border-gray-100">
+          <View key={r.id} className="border-b border-gray-300">
           <View className="flex-row items-center">
             <Pressable
               onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}
@@ -612,6 +613,26 @@ export default function WorkHub() {
   // The sheet answers "what is on today"; the board answers "who is
   // carrying it". Opening on the lighter of the two.
   const [view, setView] = useState<'sheet' | 'board'>('sheet');
+
+  // The way out, at the top right of the bar like "My Work Hub" on Requests: the
+  // Work Hub is no longer in the sidebar, so this takes you straight back to the
+  // Requests tab (whichever way you got here). The label shortens on a phone.
+  useScreenHeader(
+    {
+      headerRight: () => (
+        <Pressable
+          onPress={() => router.push('/(reseller)/requests' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Requests"
+          className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
+        >
+          <Ionicons name="arrow-back" size={15} color={BLUE} />
+          <Text className="text-[12.5px] font-semibold text-gray-700">{wide ? 'Back to Requests' : 'Requests'}</Text>
+        </Pressable>
+      ),
+    },
+    [wide]
+  );
 
   const { data: mine, isLoading } = useSupabaseQuery('service_requests', {
     filters: userId ? { reseller_id: userId } : {},
