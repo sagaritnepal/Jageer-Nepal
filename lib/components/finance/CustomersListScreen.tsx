@@ -9,8 +9,8 @@ import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { supabase } from '../../supabase';
-import { SearchBar } from '../SearchBar';
-import { BookPage, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { ContactPickerModal } from '../ContactPickerModal';
+import { BookPage, BookStats, BookTable, Pill, ToolbarButton, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { PartyBalance } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { Field, FieldRow, FormActions, INPUT, PopupCard } from './FormKit';
@@ -96,12 +96,12 @@ async function findExistingCustomerByPhone(ownerId: string, phone: string, exclu
   return ((data ?? []) as { id: string }[])[0]?.id ?? null;
 }
 
-function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePath: string; onDone: () => void }) {
+function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: string; basePath: string; initialName?: string; onDone: () => void }) {
   const createCustomer = useSupabaseInsert('customers');
   // A ledger type is required - unless there are none to choose from (the types table
   // is not set up yet), where the field is not shown at all.
   const { available: typesAvailable } = usePartyTypes(userId);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName ? nameCaps(initialName) : '');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
@@ -155,9 +155,9 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
         // user got to it manually - a flat "already exists" refusal with no
         // way forward reads as the app just blocking them, so take them
         // straight to the record that's already there instead.
-        showAlert('Already saved', 'A customer with this phone number is already in your list.', [
+        showAlert('Already saved', 'Someone with this phone number is already in your list.', [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'View customer', onPress: () => router.push(`${basePath}/customer/${existingId}` as any) },
+          { text: 'View them', onPress: () => router.push(`${basePath}/customer/${existingId}` as any) },
         ]);
         onDone();
         return;
@@ -573,7 +573,10 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
+  // The search is a popup (see ContactPickerModal): tap the search box, pick a party, and their ledger opens.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // A name typed in that popup that is not saved yet starts the New party form with it filled in.
+  const [newPartyName, setNewPartyName] = useState('');
   const [showAddForm, setShowAddForm] = useState(add === '1');
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -673,13 +676,8 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     return { receivable, payable, net: receivable - payable };
   }, [itemsByParty]);
 
-  const searched = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return analysed;
-    return analysed.filter((d) => d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q));
-  }, [analysed, search]);
   // In name order (A-Z): `merged` is already sorted that way and filtering keeps the order.
-  const filtered = useMemo(() => (filter === 'all' ? searched : searched.filter((d) => d.status === filter)), [searched, filter]);
+  const filtered = useMemo(() => (filter === 'all' ? analysed : analysed.filter((d) => d.status === filter)), [analysed, filter]);
 
   // --- selection (phone: the Select button): only saved parties - an app-only row has no ledger to act on ---
   const toggle = (id: string) =>
@@ -753,18 +751,31 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   // list as it is now through a ref.
   const exportNow = useRef(exportRows);
   exportNow.current = exportRows;
+  const openNewParty = () => {
+    setNewPartyName('');
+    setShowAddForm(true);
+  };
   const toolbar = useBookToolbar(
     {
       wide: layout.wide,
       right: (inBar) => (
         <>
-          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name or phone" wide={inBar} />
+          <Pressable
+            onPress={() => setPickerOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Search the ledger"
+            className="h-9 flex-row items-center rounded-lg border border-gray-200 bg-white px-3"
+            style={inBar ? { width: 250 } : { flexGrow: 1, minWidth: 180 }}
+          >
+            <Ionicons name="search" size={15} color="#9CA3AF" />
+            <Text className="ml-2 text-sm text-gray-400">Search by name or phone</Text>
+          </Pressable>
           <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
-          <ToolbarButton icon="add" label="New party" onPress={() => setShowAddForm(true)} />
+          <ToolbarButton icon="add" label="New party" onPress={openNewParty} />
         </>
       ),
     },
-    [search, exporting]
+    [exporting]
   );
 
   // --- pieces both layouts share ---
@@ -796,7 +807,32 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     </BookStats>
   );
 
-  const addForm = showAddForm && userId ? <AddCustomerForm userId={userId} basePath={basePath} onDone={() => setShowAddForm(false)} /> : null;
+  const addForm = (
+    <>
+      {showAddForm && userId ? (
+        <AddCustomerForm userId={userId} basePath={basePath} initialName={newPartyName} onDone={() => setShowAddForm(false)} />
+      ) : null}
+      <ContactPickerModal
+        visible={pickerOpen}
+        initialQuery=""
+        customers={customers ?? []}
+        phoneContacts={[]}
+        placeholder="Search by name or phone"
+        matchPhone
+        onSelectCustomer={(c) => {
+          setPickerOpen(false);
+          router.push(`${basePath}/customer/${c.id}` as any);
+        }}
+        onAddNewTyped={(name) => {
+          setPickerOpen(false);
+          setNewPartyName(name);
+          setShowAddForm(true);
+        }}
+        onSelectNew={() => {}}
+        onClose={() => setPickerOpen(false)}
+      />
+    </>
+  );
 
   const bulkBar =
     selectedCount > 0 ? (
@@ -825,7 +861,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
       <Ionicons name="people-outline" size={28} color="#D1D5DB" />
       <Text className="mt-2 text-gray-500">{merged.length > 0 ? 'No matches.' : 'No customers yet.'}</Text>
       <Text className="text-xs text-gray-400">
-        {merged.length > 0 ? 'Try another search or filter.' : "Add one with New party, or they'll be saved when you record a bill for them."}
+        {merged.length > 0 ? 'Try another filter.' : "Add one with New party, or they'll be saved when you record a bill for them."}
       </Text>
     </View>
   );
@@ -925,10 +961,16 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     <View className="flex-1 bg-gray-50">
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }} keyboardShouldPersistTaps="handled">
         <View className="flex-row items-center gap-2">
-          <View className="flex-1">
-            <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
-          </View>
-          <Pressable onPress={() => setShowAddForm(true)} className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500">
+          <Pressable
+            onPress={() => setPickerOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Search the ledger"
+            className="flex-1 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
+          >
+            <Ionicons name="search" size={18} color="#9CA3AF" />
+            <Text className="ml-2 text-sm text-gray-400">Search by name or phone</Text>
+          </Pressable>
+          <Pressable onPress={openNewParty} className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500">
             <Ionicons name="add" size={22} color="white" />
           </Pressable>
         </View>

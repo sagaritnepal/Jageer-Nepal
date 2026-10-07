@@ -19,6 +19,10 @@ export function ContactPickerModal({
   onSelectCustomer,
   onSelectNew,
   onClose,
+  title = 'Pick a customer',
+  placeholder = 'Search saved customers or phone contacts',
+  matchPhone,
+  onAddNewTyped,
 }: {
   visible: boolean;
   initialQuery: string;
@@ -27,6 +31,13 @@ export function ContactPickerModal({
   onSelectCustomer: (customer: Customer) => void;
   onSelectNew: (name: string, phone: string | null) => void;
   onClose: () => void;
+  title?: string;
+  placeholder?: string;
+  /** Also search the saved customers' phone numbers, not only their names. */
+  matchPhone?: boolean;
+  /** When given, "Add "x" as a new customer" hands the typed name to this straight away,
+   * instead of opening this popup's own name / phone step. */
+  onAddNewTyped?: (name: string) => void;
 }) {
   const [search, setSearch] = useState(initialQuery);
   // "Add as a new customer" no longer saves the instant it's tapped - it
@@ -44,7 +55,7 @@ export function ContactPickerModal({
     }
   }, [visible, initialQuery]);
 
-  const suggestions = buildCustomerSuggestions(customers, phoneContacts, search);
+  const suggestions = buildCustomerSuggestions(customers, phoneContacts, search, undefined, matchPhone);
 
   function handleSelect(s: CustomerSuggestion) {
     if (s.customer) {
@@ -107,7 +118,7 @@ export function ContactPickerModal({
           ) : (
             <>
               <View className="mb-2 flex-row items-center justify-between">
-                <Text className="text-base font-semibold text-gray-900">Pick a customer</Text>
+                <Text className="text-base font-semibold text-gray-900">{title}</Text>
                 <Pressable onPress={onClose} className="px-2 py-1">
                   <Text className="text-sm font-semibold text-blue-700">Close</Text>
                 </Pressable>
@@ -115,7 +126,7 @@ export function ContactPickerModal({
               <TextInput
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search saved customers or phone contacts"
+                placeholder={placeholder}
                 autoFocus
                 className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
               />
@@ -137,6 +148,10 @@ export function ContactPickerModal({
                   search.trim() ? (
                     <Pressable
                       onPress={() => {
+                        if (onAddNewTyped) {
+                          onAddNewTyped(search.trim());
+                          return;
+                        }
                         setNewName(search.trim());
                         setNewPhone('');
                         setAddingNew(true);
