@@ -1,6 +1,6 @@
 // lib/components/finance/CustomerDetailScreen.tsx
 import { useMemo, useState, type ReactNode } from 'react';
-import { View, Text, TextInput, Pressable, Linking, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, Linking, useWindowDimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,10 +15,10 @@ import {
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
-import { PartyTypePill } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { BackButton, BookTable, Pill, ToolbarButton, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { OptionMenuModal } from './ledger/LedgerUi';
 import { Field, FieldRow, FormActions, FormCard, INPUT, PopupCard, Segmented } from './FormKit';
 import { MONEY } from './moneyColors';
 import { supabase } from '../../supabase';
@@ -28,6 +28,17 @@ import { deleteErrorMessage } from '../../utils/dbErrors';
 import { fetchAllRows } from '../../utils/fetchAllRows';
 import { isValidPhone10 } from '../../utils/phone';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { localTodayIso } from '../../utils/localDate';
+import {
+  compareItems,
+  drCr,
+  entryDay,
+  sideTotals,
+  summarize,
+  withRunningBalance,
+  type LedgerItem,
+} from '../../utils/ledgerStatement';
+import { drCrText, exportStatementXlsx, printStatement, type StatementData } from '../../utils/exportLedger';
 import type {
   BusinessTransaction,
   BusinessTransactionType,
@@ -60,14 +71,12 @@ async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerI
   return (data ?? []).length > 0;
 }
 
-/** One balance in the name card: its label and the reason in plain words on one
- * small line, the coloured amount under it. */
-function BalanceFigure({ label, value, color, caption }: { label: string; value: string; color: string; caption?: string }) {
+/** The balance in the name card: "To receive" or "To pay" over the coloured amount. */
+function BalanceFigure({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <View>
-      <Text className="text-[10.5px]" numberOfLines={1}>
-        <Text className="font-bold uppercase tracking-wide text-gray-400">{label}</Text>
-        {!!caption && <Text className="text-gray-400">{`  ·  ${caption}`}</Text>}
+      <Text className="text-[10.5px] font-bold uppercase tracking-wide text-gray-400" numberOfLines={1}>
+        {label}
       </Text>
       <Text className="text-[17px] font-extrabold" style={{ color }}>
         {value}
@@ -102,7 +111,9 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
   const [address, setAddress] = useState('');
   const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const { nameById: partyTypeName } = usePartyTypes(customer?.owner_id);
+  // A ledger type is required - unless there are none to choose from (the types table
+  // is not set up yet), where the field is not shown at all.
+  const { available: typesAvailable } = usePartyTypes(customer?.owner_id);
 
   if (!customer) return null;
 
@@ -115,8 +126,10 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
   }
 
   async function handleSave() {
-    if (!name.trim()) {
-      showAlert('Add a name', "Enter the customer's name.");
+    // The name and the ledger type are required; the phone number and address are not.
+    const missing = [!name.trim() && 'Name', typesAvailable && !partyTypeId && 'Ledger type'].filter(Boolean);
+    if (missing.length > 0) {
+      showAlert('Fill in the required details', `Still needed: ${missing.join(', ')}.`);
       return;
     }
     const trimmedPhone = phone.trim();
@@ -170,7 +183,7 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
   const editPopup = editing ? (
     <PopupCard title="Edit customer" onClose={() => setEditing(false)}>
       <FieldRow>
-        <Field label="Name" basis={240}>
+        <Field label="Name *" basis={240}>
           <TextInput
             value={name}
             onChangeText={(v) => setName(nameCaps(v))}
@@ -202,12 +215,12 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
           />
         </Field>
       </FieldRow>
-      <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} />
+      <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} required />
+      <Text className="text-[11px] text-gray-400">* Required</Text>
       <FormActions onCancel={() => setEditing(false)} onSave={handleSave} saving={saving} />
     </PopupCard>
   ) : null;
 
-  const typeName = customer.party_type_id ? partyTypeName.get(customer.party_type_id) : undefined;
   return (
     <>
     <View
@@ -217,7 +230,6 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
       <View style={{ flex: 1, minWidth: 200 }}>
         <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
           <Text className="text-[17px] font-extrabold text-gray-900">{nameCaps(customer.name)}</Text>
-          {!!typeName && <PartyTypePill name={typeName} />}
         </View>
         {(!!customer.phone || !!customer.address) && (
           <View className="mt-0.5 flex-row flex-wrap" style={{ columnGap: 16, rowGap: 2 }}>
@@ -278,17 +290,20 @@ function AddEntryForm({
   customerId,
   ownerId,
   initial,
+  defaultType,
   onDone,
 }: {
   customerId: string;
   ownerId: string;
   initial?: CustomerLedgerEntry | null;
+  /** Which way a new entry starts: Received or Customer owes. */
+  defaultType?: LedgerEntryType;
   onDone: () => void;
 }) {
   const insertEntry = useSupabaseInsert('customer_ledger_entries');
   const updateEntry = useSupabaseUpdate('customer_ledger_entries');
   const bankAccounts = useBankAccounts(ownerId);
-  const [entryType, setEntryType] = useState<LedgerEntryType>(initial?.entry_type ?? 'credit');
+  const [entryType, setEntryType] = useState<LedgerEntryType>(initial?.entry_type ?? defaultType ?? 'credit');
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
@@ -331,16 +346,25 @@ function AddEntryForm({
     }
   }
 
+  const accountPicker = (
+    <BankAccountPickerModal
+      visible={showAccountPicker}
+      accounts={bankAccounts.accounts}
+      selectedId={bankAccountId}
+      onSelect={setBankAccountId}
+      onClose={() => setShowAccountPicker(false)}
+      onRename={bankAccounts.rename}
+      onDelete={bankAccounts.remove}
+    />
+  );
+  const typeOptions = [
+    { key: 'credit' as const, label: 'Received', ...IN_TONE },
+    { key: 'debit' as const, label: 'Customer owes', ...OUT_TONE },
+  ];
+
   return (
     <FormCard icon="document-text-outline" title={initial ? 'Edit ledger entry' : 'Add ledger entry'}>
-      <Segmented
-        value={entryType}
-        onChange={setEntryType}
-        options={[
-          { key: 'credit', label: 'Received', ...IN_TONE },
-          { key: 'debit', label: 'Customer owes', ...OUT_TONE },
-        ]}
-      />
+      <Segmented value={entryType} onChange={setEntryType} options={typeOptions} />
       <FieldRow>
         <Field label="Amount (NPR)" basis={160}>
           <TextInput
@@ -368,15 +392,7 @@ function AddEntryForm({
         </Field>
       </FieldRow>
       <FormActions onCancel={onDone} onSave={handleSave} saving={saving} saveLabel={initial ? 'Save' : 'Add entry'} />
-      <BankAccountPickerModal
-        visible={showAccountPicker}
-        accounts={bankAccounts.accounts}
-        selectedId={bankAccountId}
-        onSelect={setBankAccountId}
-        onClose={() => setShowAccountPicker(false)}
-        onRename={bankAccounts.rename}
-        onDelete={bankAccounts.remove}
-      />
+      {accountPicker}
     </FormCard>
   );
 }
@@ -500,17 +516,26 @@ function AddVendorEntryForm({
     }
   }
 
+  const accountPicker = (
+    <BankAccountPickerModal
+      visible={showAccountPicker}
+      accounts={bankAccounts.accounts}
+      selectedId={bankAccountId}
+      onSelect={setBankAccountId}
+      onClose={() => setShowAccountPicker(false)}
+      onRename={bankAccounts.rename}
+      onDelete={bankAccounts.remove}
+    />
+  );
+  const kindOptions = [
+    { key: 'paid' as const, label: 'Payment Out', ...OUT_TONE },
+    { key: 'received' as const, label: 'Received', ...IN_TONE },
+    ...(initial?.entry_type === 'debit' ? [{ key: 'onCredit' as const, label: 'Bought on credit', ...OUT_TONE }] : []),
+  ];
+
   return (
     <FormCard icon="cart-outline" title={initial ? 'Edit vendor entry' : 'Add vendor entry'}>
-      <Segmented
-        value={kind}
-        onChange={setKind}
-        options={[
-          { key: 'paid', label: 'Payment Out', ...OUT_TONE },
-          { key: 'received', label: 'Received', ...IN_TONE },
-          ...(initial?.entry_type === 'debit' ? [{ key: 'onCredit' as const, label: 'Bought on credit', ...OUT_TONE }] : []),
-        ]}
-      />
+      <Segmented value={kind} onChange={setKind} options={kindOptions} />
       <FieldRow>
         <Field label="Amount (NPR)" basis={160}>
           <TextInput
@@ -538,15 +563,7 @@ function AddVendorEntryForm({
         </Field>
       </FieldRow>
       <FormActions onCancel={onDone} onSave={handleSave} saving={saving} saveLabel={initial ? 'Save' : 'Add entry'} />
-      <BankAccountPickerModal
-        visible={showAccountPicker}
-        accounts={bankAccounts.accounts}
-        selectedId={bankAccountId}
-        onSelect={setBankAccountId}
-        onClose={() => setShowAccountPicker(false)}
-        onRename={bankAccounts.rename}
-        onDelete={bankAccounts.remove}
-      />
+      {accountPicker}
     </FormCard>
   );
 }
@@ -559,9 +576,20 @@ type HistoryRow = {
   /** What the line is: Received, Payment Out, Sale bill ... */
   label: string;
   tone: { color: string; bg: string };
-  /** The note, with its receipt / bill number in front. */
+  /** The note. */
   detail: string;
+  /** Its receipt / bill number. */
+  reference: string;
   dateLabel: string;
+  /** 'YYYY-MM-DD', and when it was entered - what the statement is ordered by. */
+  day: string;
+  createdAt: string;
+  /** The party's Debit / Credit for this line, and the balance after it. */
+  debit: number;
+  credit: number;
+  balance: number;
+  /** Listed for the record but not part of the balance (an Expense). */
+  info?: boolean;
   amount: number;
   amountColor: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -627,9 +655,13 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
 
   const layout = useBookLayout();
+  // The statement table needs the room (the sidebar takes 240px of it): below
+  // 1000px it is a card list, like on a phone.
+  const { width: windowWidth } = useWindowDimensions();
+  const tableMode = layout.wide && windowWidth >= 1000;
   // On the web table an entry being edited opens right under its own row; on a
   // phone (a card list) its form stays at the top of the page.
-  const inline = Platform.OS === 'web';
+  const inline = tableMode;
 
   const balance = useMemo(() => {
     return (entries ?? []).reduce((sum, e) => sum + (e.entry_type === 'debit' ? e.amount : -e.amount), 0);
@@ -649,99 +681,179 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     return (vendorEntries ?? []).reduce((sum, e) => sum + (e.entry_type === 'debit' ? e.amount : -e.amount), 0);
   }, [vendorEntries]);
 
-  const history = useMemo(() => {
-    // Entries auto-synced from a Sale/Purchase's own ledger debt (see
-    // 0061_sale_purchase_always_ledger.sql) are skipped here - the linked
-    // bill below already represents them, so this only counts toward
-    // balance/vendorBalance above, not shown a second time.
-    const isAutoSyncedFromBill = (source: string, sourceType: string | null) => source === 'booking' && sourceType === 'business_transaction';
-    const ledgerItems = (entries ?? [])
-      .filter((e) => !isAutoSyncedFromBill(e.source, e.source_type))
-      .map((e) => ({ kind: 'ledger' as const, id: e.id, date: e.created_at, entry: e }));
-    const vendorItems = (vendorEntries ?? [])
-      .filter((e) => !isAutoSyncedFromBill(e.source, e.source_type))
-      .map((e) => ({ kind: 'vendor' as const, id: e.id, date: e.created_at, entry: e }));
-    const txItems = (linkedTransactions ?? []).map((t) => ({ kind: 'tx' as const, id: t.id, date: t.created_at, tx: t }));
-    return [...ledgerItems, ...vendorItems, ...txItems].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const { data: partyRow } = useSupabaseRow('customers', id);
+  const profile = useAuthStore((state) => state.profile);
+  const { nameById: partyTypeName } = usePartyTypes(partyRow?.owner_id);
+  // Which way "Add entry" opens its form: Received (credit) or Customer owes (debit).
+  const [entryPreset, setEntryPreset] = useState<LedgerEntryType>('credit');
+
+  // ---- The statement: both ledgers as one account (see ledgerStatement.ts) ----
+  const [exportMenu, setExportMenu] = useState(false);
+  const today = localTodayIso();
+
+  const items = useMemo<LedgerItem[]>(
+    () => [
+      ...(entries ?? []).map(
+        (e): LedgerItem => ({
+          id: e.id,
+          side: 'customer',
+          entryType: e.entry_type,
+          amount: Number(e.amount),
+          day: entryDay(e.entry_date, e.created_at),
+          createdAt: e.created_at,
+        })
+      ),
+      ...(vendorEntries ?? []).map(
+        (e): LedgerItem => ({
+          id: e.id,
+          side: 'vendor',
+          entryType: e.entry_type,
+          amount: Number(e.amount),
+          day: entryDay(e.entry_date, e.created_at),
+          createdAt: e.created_at,
+        })
+      ),
+    ],
+    [entries, vendorEntries]
+  );
+  const totals = useMemo(() => summarize(items), [items]);
+  const sides = useMemo(() => sideTotals(items), [items]);
+
+  // Every line of the account, oldest first. A bill's own ledger entry (the one
+  // a Sale / Purchase logs automatically - see 0061_sale_purchase_always_ledger.sql)
+  // is shown as the bill, since the bill carries the real detail (bill no., items)
+  // the entry doesn't; the amounts still come from the entry, so the running
+  // balance always adds up to the same figure as the name card. A bill with no
+  // entry behind it (an Expense) is listed too, but is not part of the balance.
+  const allLines = useMemo<HistoryRow[]>(() => {
+    const txById = new Map((linkedTransactions ?? []).map((t) => [t.id, t]));
+    const billedTx = new Set<string>();
+    const lines: HistoryRow[] = [];
+
+    const billLine = (t: BusinessTransaction, amount: number, debit: number, credit: number, day: string, createdAt: string, info: boolean): HistoryRow => {
+      const isSale = t.type === 'sale';
+      return {
+        key: `tx-${t.id}`,
+        label: TX_TYPE_LABEL[t.type],
+        tone: isSale ? IN_TONE : OUT_TONE,
+        detail: t.note ?? '',
+        reference: t.bill_no ?? '',
+        dateLabel: toBsHistoryLabel(day),
+        day,
+        createdAt,
+        debit,
+        credit,
+        balance: 0,
+        info,
+        amount,
+        amountColor: isSale ? '#059669' : '#DC2626',
+        icon: 'receipt-outline',
+        iconColor: isSale ? '#059669' : '#DC2626',
+        iconBg: isSale ? '#ECFDF5' : '#FEF2F2',
+        manual: false,
+        tx: t,
+      };
+    };
+
+    for (const e of entries ?? []) {
+      const { debit, credit } = drCr('customer', e.entry_type, e.amount);
+      const day = entryDay(e.entry_date, e.created_at);
+      const syncedFromBill = e.source === 'booking' && e.source_type === 'business_transaction';
+      const tx = syncedFromBill && e.source_id ? txById.get(e.source_id) : undefined;
+      if (tx) {
+        billedTx.add(tx.id);
+        lines.push(billLine(tx, e.amount, debit, credit, day, e.created_at, false));
+        continue;
+      }
+      const owes = e.entry_type === 'debit';
+      const outgoing = owes && e.source === 'manual';
+      lines.push({
+        key: `ledger-${e.id}`,
+        label: syncedFromBill ? TX_TYPE_LABEL.sale : owes ? 'Owes' : 'Received',
+        tone: owes ? (syncedFromBill ? IN_TONE : NEUTRAL_TONE) : IN_TONE,
+        detail: e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
+        reference: e.receipt_no ?? '',
+        dateLabel: toBsHistoryLabel(day),
+        day,
+        createdAt: e.created_at,
+        debit,
+        credit,
+        balance: 0,
+        amount: e.amount,
+        amountColor: outgoing ? '#DC2626' : '#059669',
+        icon: owes ? 'arrow-up' : 'arrow-down',
+        iconColor: outgoing ? '#DC2626' : '#059669',
+        iconBg: outgoing ? '#FEF2F2' : '#ECFDF5',
+        manual: e.source === 'manual',
+        ledger: e,
+      });
+    }
+
+    for (const e of vendorEntries ?? []) {
+      const { debit, credit } = drCr('vendor', e.entry_type, e.amount);
+      const day = entryDay(e.entry_date, e.created_at);
+      const syncedFromBill = e.source === 'booking' && e.source_type === 'business_transaction';
+      const tx = syncedFromBill && e.source_id ? txById.get(e.source_id) : undefined;
+      if (tx) {
+        billedTx.add(tx.id);
+        lines.push(billLine(tx, e.amount, debit, credit, day, e.created_at, false));
+        continue;
+      }
+      const onCredit = e.entry_type === 'debit';
+      lines.push({
+        key: `vendor-${e.id}`,
+        label: onCredit ? (syncedFromBill ? TX_TYPE_LABEL.purchase : 'Bought on credit') : 'Payment Out',
+        tone: OUT_TONE,
+        detail: e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a credit purchase' : 'Manual entry'),
+        reference: e.receipt_no ?? '',
+        dateLabel: toBsHistoryLabel(day),
+        day,
+        createdAt: e.created_at,
+        debit,
+        credit,
+        balance: 0,
+        amount: e.amount,
+        amountColor: '#DC2626',
+        icon: onCredit ? 'cart-outline' : 'arrow-up',
+        iconColor: '#DC2626',
+        iconBg: '#FEF2F2',
+        manual: e.source === 'manual',
+        vendor: e,
+      });
+    }
+
+    for (const t of linkedTransactions ?? []) {
+      if (billedTx.has(t.id)) continue;
+      lines.push(billLine(t, t.amount, 0, 0, entryDay(t.bill_date, t.created_at), t.created_at, true));
+    }
+    return lines.sort(compareItems);
   }, [entries, vendorEntries, linkedTransactions]);
 
-  const rows = useMemo<HistoryRow[]>(
-    () =>
-      history.map((item): HistoryRow => {
-        if (item.kind === 'tx') {
-          const t = item.tx;
-          const isSale = t.type === 'sale';
-          return {
-            key: `tx-${t.id}`,
-            label: TX_TYPE_LABEL[t.type],
-            tone: isSale ? IN_TONE : OUT_TONE,
-            detail: [t.bill_no ? `Bill No. ${t.bill_no}` : null, t.note].filter(Boolean).join(' · '),
-            dateLabel: toBsHistoryLabel(t.bill_date ?? t.created_at),
-            amount: t.amount,
-            amountColor: isSale ? '#059669' : '#DC2626',
-            icon: 'receipt-outline',
-            iconColor: isSale ? '#059669' : '#DC2626',
-            iconBg: isSale ? '#ECFDF5' : '#FEF2F2',
-            manual: false,
-            tx: t,
-          };
-        }
-        if (item.kind === 'vendor') {
-          const e = item.entry;
-          const onCredit = e.entry_type === 'debit';
-          return {
-            key: `vendor-${e.id}`,
-            label: onCredit ? 'Bought on credit' : 'Payment Out',
-            tone: OUT_TONE,
-            detail: [
-              e.receipt_no ? `Payment No. ${e.receipt_no}` : null,
-              e.note ?? (e.source === 'booking' ? 'From a credit purchase' : 'Manual entry'),
-            ]
-              .filter(Boolean)
-              .join(' · '),
-            dateLabel: toBsHistoryLabel(e.entry_date ?? e.created_at),
-            amount: e.amount,
-            amountColor: '#DC2626',
-            icon: onCredit ? 'cart-outline' : 'arrow-up',
-            iconColor: '#DC2626',
-            iconBg: '#FEF2F2',
-            manual: e.source === 'manual',
-            vendor: e,
-          };
-        }
-        const e = item.entry;
-        const owes = e.entry_type === 'debit';
-        const outgoing = owes && e.source === 'manual';
-        return {
-          key: `ledger-${e.id}`,
-          label: owes ? 'Owes' : 'Received',
-          tone: owes ? NEUTRAL_TONE : IN_TONE,
-          detail: [
-            e.receipt_no ? `${owes ? 'Payment' : 'Receipt'} No. ${e.receipt_no}` : null,
-            e.note ?? (e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
-          ]
-            .filter(Boolean)
-            .join(' · '),
-          dateLabel: toBsHistoryLabel(e.entry_date ?? e.created_at),
-          amount: e.amount,
-          amountColor: outgoing ? '#DC2626' : '#059669',
-          icon: owes ? 'arrow-up' : 'arrow-down',
-          iconColor: outgoing ? '#DC2626' : '#059669',
-          iconBg: outgoing ? '#FEF2F2' : '#ECFDF5',
-          manual: e.source === 'manual',
-          ledger: e,
-        };
-      }),
-    [history]
-  );
+  // Every line with the running balance after it, oldest first - and shown newest first.
+  const statementAsc = useMemo<HistoryRow[]>(() => withRunningBalance(allLines, 0), [allLines]);
+  const rows = useMemo(() => [...statementAsc].reverse(), [statementAsc]);
+
+  // Only one entry form is open at a time: a person with no entries yet is offered both
+  // (Add Entry for the customer side, Payment Out for the vendor side), and opening one
+  // closes the other rather than stacking two forms.
+  function closeCustomerForm() {
+    setShowAddEntry(false);
+    setEditingEntry(null);
+  }
+  function closeVendorForm() {
+    setShowAddVendorEntry(false);
+    setEditingVendorEntry(null);
+  }
 
   function openRow(row: HistoryRow) {
     if (row.tx) {
       setViewingTx(row.tx);
     } else if (row.vendor && row.manual) {
+      closeCustomerForm();
       setEditingVendorEntry(row.vendor);
       setShowAddVendorEntry(true);
     } else if (row.ledger && row.manual) {
+      closeVendorForm();
       setEditingEntry(row.ledger);
       setShowAddEntry(true);
     }
@@ -769,39 +881,92 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     else router.replace(`${basePath}/customers` as any);
   };
 
-  // The Back button, "Add entry" and "Payment Out" live in the top bar on a wide
-  // screen; the two actions drop to a plain row at the top of the page on a narrow one.
+  // What this party can have: a vendor-only party has no customer side and the
+  // other way round (see isPureVendor above); a new one has both until its first entry.
+  const showCustomer = !isPureVendor;
+  const showVendor = !isPureCustomer;
+
+  function openCustomerForm(type: LedgerEntryType) {
+    closeVendorForm();
+    setEditingEntry(null);
+    setEntryPreset(type);
+    setShowAddEntry(true);
+  }
+  function openVendorForm() {
+    closeCustomerForm();
+    setEditingVendorEntry(null);
+    setShowAddVendorEntry(true);
+  }
+
+  // Payment Out, New Sale, Add Entry, Print / Download - a row of their own under
+  // the name card (there are too many for the top bar on most screens). Payment Out
+  // is what the rest of the app calls paying someone; a payment received from a
+  // customer is an Add Entry, which opens on Received.
   const toolbar = useBookToolbar(
     {
       wide: layout.wide,
+      inBarMinWidth: 1500,
       left: () => <BackButton onPress={goBack} />,
       right: () => (
         <>
-          {!isPureVendor && !showAddEntry && (
-            <ToolbarButton
-              icon="add"
-              label="Add entry"
-              onPress={() => {
-                setEditingEntry(null);
-                setShowAddEntry(true);
-              }}
+          {showVendor && <ToolbarButton icon="arrow-up-circle-outline" label="Payment Out" onPress={openVendorForm} />}
+          {showCustomer && (
+            <HeaderButton
+              icon="receipt-outline"
+              label="New Sale"
+              onPress={() => router.push(`${basePath}/transactions?type=sale&add=1&partyId=${id}` as any)}
             />
           )}
-          {!isPureCustomer && !showAddVendorEntry && (
-            <ToolbarButton
-              icon="arrow-up-circle-outline"
-              label="Payment Out"
-              onPress={() => {
-                setEditingVendorEntry(null);
-                setShowAddVendorEntry(true);
-              }}
-            />
-          )}
+          {showCustomer && <HeaderButton icon="add" label="Add Entry" onPress={() => openCustomerForm('credit')} />}
+          <HeaderButton icon="print-outline" label="Print / Download" onPress={() => setExportMenu(true)} />
         </>
       ),
     },
-    [isPureVendor, isPureCustomer, showAddEntry, showAddVendorEntry, basePath]
+    [isPureVendor, isPureCustomer, basePath, id]
   );
+
+  // The statement as the print / Excel export draws it: oldest first, without the
+  // lines that are not in the balance.
+  async function runExport(kind: 'print' | 'excel') {
+    setExportMenu(false);
+    if (!partyRow) return;
+    const closingWords = totals.closing > 0.5 ? 'To receive' : totals.closing < -0.5 ? 'To pay' : 'Settled';
+    const data: StatementData = {
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      partyName: nameCaps(partyRow.name),
+      phone: partyRow.phone ?? '',
+      address: partyRow.address ?? '',
+      ledgerType: partyRow.party_type_id ? partyTypeName.get(partyRow.party_type_id) ?? '' : '',
+      periodLabel: 'All dates',
+      printedOn: toBsHistoryLabel(today),
+      opening: totals.opening,
+      totalDebit: totals.debit,
+      totalCredit: totals.credit,
+      closing: totals.closing,
+      summary: [
+        ...(totals.hasCustomer ? [{ label: 'Total sales', value: `NPR ${Math.round(sides.billed).toLocaleString()}` }, { label: 'Total payments', value: `NPR ${Math.round(sides.received).toLocaleString()}` }] : []),
+        ...(totals.hasVendor ? [{ label: 'Total purchases', value: `NPR ${Math.round(sides.purchased).toLocaleString()}` }, { label: 'Paid out', value: `NPR ${Math.round(sides.paid).toLocaleString()}` }] : []),
+        { label: 'Outstanding balance', value: `${drCrText(totals.closing)} · ${closingWords}` },
+      ],
+      lines: statementAsc
+        .filter((l) => !l.info)
+        .map((l) => ({
+          dateLabel: l.dateLabel,
+          adDate: l.day,
+          description: [l.label, l.detail].filter(Boolean).join(' - '),
+          reference: l.reference,
+          debit: l.debit,
+          credit: l.credit,
+          balance: l.balance,
+        })),
+    };
+    try {
+      if (kind === 'print') await printStatement(data);
+      else await exportStatementXlsx(data);
+    } catch (err) {
+      showAlert('Could not export the statement', getErrorMessage(err));
+    }
+  }
 
   if (!id || !userId) return null;
 
@@ -815,10 +980,15 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   );
 
   // --- History: a bordered table on the web, flat cards on a phone ---
+  // What a line says under "Details": its receipt / bill number, then the note.
+  const detailText = (row: HistoryRow) => {
+    const kind = row.tx ? 'Bill' : row.vendor || row.ledger?.entry_type === 'debit' ? 'Payment' : 'Receipt';
+    return [row.reference ? `${kind} No. ${row.reference}` : null, row.detail].filter(Boolean).join(' · ');
+  };
   const detailsCell = (row: HistoryRow, withDate: boolean) => (
     <View style={{ minWidth: 0 }}>
       <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
-        {row.detail || row.label}
+        {detailText(row) || row.label}
       </Text>
       {withDate && (
         <Text className="text-[11px] text-gray-400" numberOfLines={1}>
@@ -851,15 +1021,16 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     align: 'right',
     render: (row) => (row.tx ? <Ionicons name="chevron-forward" size={14} color="#D1D5DB" /> : row.manual ? removeButton(row) : null),
   };
-  const columns: BookColumn<HistoryRow>[] = layout.full
-    ? [
-        { key: 'date', label: 'Date', width: 130, render: (row) => <Text className="text-[12.5px] text-gray-600">{row.dateLabel}</Text> },
-        { key: 'details', label: 'Details', render: (row) => detailsCell(row, false) },
-        typeColumn,
-        amountColumn,
-        actionColumn,
-      ]
-    : [{ key: 'details', label: 'Details', render: (row) => detailsCell(row, true) }, typeColumn, amountColumn, actionColumn];
+  const columns: BookColumn<HistoryRow>[] =
+    windowWidth >= 1280
+      ? [
+          { key: 'date', label: 'Date', width: 130, render: (row) => <Text className="text-[12.5px] text-gray-600">{row.dateLabel}</Text> },
+          { key: 'details', label: 'Details', render: (row) => detailsCell(row, false) },
+          typeColumn,
+          amountColumn,
+          actionColumn,
+        ]
+      : [{ key: 'details', label: 'Details', render: (row) => detailsCell(row, true) }, typeColumn, amountColumn, actionColumn];
 
   const historyView =
     rows.length === 0 ? (
@@ -867,7 +1038,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         <Ionicons name="document-text-outline" size={26} color="#D1D5DB" />
         <Text className="mt-2 text-sm text-gray-500">No history yet.</Text>
       </View>
-    ) : Platform.OS === 'web' ? (
+    ) : tableMode ? (
       <BookTable
         columns={columns}
         rows={rows}
@@ -925,7 +1096,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
             <View className="flex-1">
               <Text className="text-sm font-semibold text-gray-900">{row.label}</Text>
               <Text className="text-xs text-gray-400" numberOfLines={1}>
-                {row.detail ? `${row.detail} · ` : ''}
+                {detailText(row) ? `${detailText(row)} · ` : ''}
                 {row.dateLabel}
               </Text>
             </View>
@@ -938,41 +1109,17 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       </View>
     );
 
-  // The balances, shown in the name card itself rather than a row of their own.
-  // Worded the way the Ledger words them: "To receive" is money coming to you,
-  // "To pay" is money you owe - and the caption says which way round it is.
-  const customerWords =
-    balance > 0
-      ? { label: 'To receive', caption: 'Customer owes you', color: MONEY.in.text }
-      : balance < 0
-        ? { label: 'To pay', caption: 'You owe the customer', color: MONEY.out.text }
-        : { label: 'Balance', caption: undefined, color: '#374151' };
-  const vendorWords =
-    vendorBalance > 0
-      ? { label: 'To pay', caption: 'You owe the vendor', color: MONEY.out.text }
-      : vendorBalance < 0
-        ? { label: 'To receive', caption: 'You overpaid the vendor', color: MONEY.in.text }
-        : { label: 'Vendor balance', caption: undefined, color: '#374151' };
-  const summary = (
-    <>
-      {!isPureVendor && (
-        <BalanceFigure
-          label={customerWords.label}
-          caption={customerWords.caption}
-          value={`NPR ${Math.abs(balance).toLocaleString()}`}
-          color={customerWords.color}
-        />
-      )}
-      {(vendorEntries?.length ?? 0) > 0 && (
-        <BalanceFigure
-          label={vendorWords.label}
-          caption={vendorWords.caption}
-          value={`NPR ${Math.abs(vendorBalance).toLocaleString()}`}
-          color={vendorWords.color}
-        />
-      )}
-    </>
-  );
+  // The balance, shown in the name card itself rather than a row of their own: one figure,
+  // both of their ledgers netted (as the Ledger list does), worded the way the Ledger
+  // words it - "To receive" is money coming to you, "To pay" is money you owe.
+  const netBalance = Math.round(balance - vendorBalance);
+  const words =
+    netBalance > 0
+      ? { label: 'To receive', color: MONEY.in.text }
+      : netBalance < 0
+        ? { label: 'To pay', color: MONEY.out.text }
+        : { label: 'Balance', color: '#374151' };
+  const summary = <BalanceFigure label={words.label} value={`NPR ${Math.abs(netBalance).toLocaleString()}`} color={words.color} />;
 
   // A form for a brand-new entry opens at the top; one for an existing entry
   // opens under its row on the web (see `expanded` above), at the top on a phone.
@@ -994,6 +1141,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
 
         {!isPureVendor && addFormOpen && (
           <AddEntryForm
+            key={editingEntry?.id ?? `new-${entryPreset}`}
+            defaultType={entryPreset}
             customerId={id}
             ownerId={userId}
             initial={editingEntry}
@@ -1015,8 +1164,17 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
           />
         )}
 
-        <Text className="px-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">History</Text>
         {historyView}
+        <OptionMenuModal
+          visible={exportMenu}
+          title="Print / Download statement"
+          options={[
+            { key: 'print', label: 'Print (or save as PDF)' },
+            { key: 'excel', label: 'Download Excel (.xlsx)' },
+          ]}
+          onPick={(kind) => runExport(kind)}
+          onClose={() => setExportMenu(false)}
+        />
       </KeyboardAwareScrollView>
       <TransactionDetailModal
         tx={viewingTx}

@@ -1,6 +1,6 @@
 // lib/components/finance/CustomersListScreen.tsx
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Platform } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,31 +10,39 @@ import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { supabase } from '../../supabase';
 import { SearchBar } from '../SearchBar';
-import { BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
-import { PartyBalance, PartyTypePill } from './PartyBalance';
+import { BookPage, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { PartyBalance } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { Field, FieldRow, FormActions, INPUT, PopupCard } from './FormKit';
-import { partyPosition } from '../../utils/partyBalance';
+import { Checkbox, LEDGER_TONE, OptionMenuModal, StatusBadges, SummaryCard, type MenuOption } from './ledger/LedgerUi';
+import { partyPosition, type PartyPosition } from '../../utils/partyBalance';
+import {
+  entryDay,
+  overdueAmount,
+  receivableAging,
+  relativeDay,
+  sideTotals,
+  statusOf,
+  summarize,
+  type LedgerItem,
+  type PartyStatus,
+  type PartyTotals,
+} from '../../utils/ledgerStatement';
+import { exportPartiesXlsx, type PartyListRow } from '../../utils/exportLedger';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { nameCaps } from '../../utils/nameCaps';
 import { isValidPhone10 } from '../../utils/phone';
+import { localTodayIso } from '../../utils/localDate';
+import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { Customer, Profile } from '../../../types/database.types';
 
-function money(n: number): string {
-  return Math.round(n).toLocaleString();
-}
-
-/** What a party owes this business (receivable) and what the business owes
- * them (payable). The two live in opposite tables with opposite polarity -
- * customer_ledger_entries for money coming in, vendor_ledger_entries for
- * money going out (see 0059_vendor_ledger.sql) - and one person can be both
- * a customer and a supplier, so they are kept apart rather than netted into
- * a single number that would hide half the story. */
-type Balance = { receivable: number; payable: number };
-
-function useLedgerBalances(userId: string | undefined) {
+/** Every ledger entry of every party, grouped by party. A party's two ledgers
+ * (customer_ledger_entries, vendor_ledger_entries - opposite polarity, see
+ * 0059_vendor_ledger.sql) are shown as the one account they add up to; the
+ * arithmetic is in ledgerStatement.ts. */
+function useLedgerItems(userId: string | undefined): Map<string, LedgerItem[]> {
   // `all`: balances are sums over every entry, and the API cuts a plain read
   // off at 1000 rows - past that, each party's balance is silently wrong.
   const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', {
@@ -49,28 +57,33 @@ function useLedgerBalances(userId: string | undefined) {
   });
 
   return useMemo(() => {
-    const byParty = new Map<string, Balance>();
-    const at = (id: string) => {
-      const found = byParty.get(id) ?? { receivable: 0, payable: 0 };
-      byParty.set(id, found);
-      return found;
+    const byParty = new Map<string, LedgerItem[]>();
+    const add = (partyId: string, item: LedgerItem) => {
+      const list = byParty.get(partyId);
+      if (list) list.push(item);
+      else byParty.set(partyId, [item]);
     };
     for (const e of customerEntries ?? []) {
-      const row = at(e.customer_id);
-      row.receivable += e.entry_type === 'debit' ? e.amount : -e.amount;
+      add(e.customer_id, {
+        id: e.id,
+        side: 'customer',
+        entryType: e.entry_type,
+        amount: Number(e.amount),
+        day: entryDay(e.entry_date, e.created_at),
+        createdAt: e.created_at,
+      });
     }
     for (const e of vendorEntries ?? []) {
-      const row = at(e.vendor_id);
-      row.payable += e.entry_type === 'debit' ? e.amount : -e.amount;
+      add(e.vendor_id, {
+        id: e.id,
+        side: 'vendor',
+        entryType: e.entry_type,
+        amount: Number(e.amount),
+        day: entryDay(e.entry_date, e.created_at),
+        createdAt: e.created_at,
+      });
     }
-
-    let totalReceivable = 0;
-    let totalPayable = 0;
-    for (const row of byParty.values()) {
-      if (row.receivable > 0) totalReceivable += row.receivable;
-      if (row.payable > 0) totalPayable += row.payable;
-    }
-    return { byParty, totalReceivable, totalPayable };
+    return byParty;
   }, [customerEntries, vendorEntries]);
 }
 
@@ -85,6 +98,9 @@ async function findExistingCustomerByPhone(ownerId: string, phone: string, exclu
 
 function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePath: string; onDone: () => void }) {
   const createCustomer = useSupabaseInsert('customers');
+  // A ledger type is required - unless there are none to choose from (the types table
+  // is not set up yet), where the field is not shown at all.
+  const { available: typesAvailable } = usePartyTypes(userId);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -118,11 +134,14 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
   }
 
   async function handleSave() {
-    if (!name.trim()) {
-      showAlert('Add a name', "Enter the customer's name.");
+    // The name and the ledger type are required; the phone number and address are not
+    // (a phone number, when given, has to be a real one).
+    const trimmedPhone = phone.trim();
+    const missing = [!name.trim() && 'Name', typesAvailable && !partyTypeId && 'Ledger type'].filter(Boolean);
+    if (missing.length > 0) {
+      showAlert('Fill in the required details', `Still needed: ${missing.join(', ')}.`);
       return;
     }
-    const trimmedPhone = phone.trim();
     if (trimmedPhone && !isValidPhone10(trimmedPhone)) {
       showAlert('Check the phone number', 'Enter a valid 10-digit phone number.');
       return;
@@ -148,7 +167,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
         name: nameCaps(name.trim()),
         phone: trimmedPhone || null,
         address: address.trim() || null,
-        // Only sent when chosen, so a party saves exactly as before without one.
+        // Only sent when chosen: without the types table there is nothing to send.
         ...(partyTypeId ? { party_type_id: partyTypeId } : {}),
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
@@ -164,7 +183,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
   return (
     <PopupCard title="New party" onClose={onDone}>
       <FieldRow>
-        <Field label="Name" basis={240}>
+        <Field label="Name *" basis={240}>
           <View className="flex-row items-center rounded-lg border border-gray-300 bg-white">
             <TextInput
               value={name}
@@ -204,7 +223,7 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
         </Field>
       </FieldRow>
 
-      <PartyTypeField ownerId={userId} value={partyTypeId} onChange={setPartyTypeId} />
+      <PartyTypeField ownerId={userId} value={partyTypeId} onChange={setPartyTypeId} required />
 
       <Pressable
         onPress={handleUseMyLocation}
@@ -212,41 +231,82 @@ function AddCustomerForm({ userId, basePath, onDone }: { userId: string; basePat
         className="items-center rounded-lg border border-blue-700 bg-blue-50 py-2 disabled:opacity-50"
       >
         <Text className="text-xs font-semibold text-blue-700">
-          {locating ? 'Locating…' : coords ? '📍 Location captured' : '📍 Attach current location'}
+          {locating ? 'Locating…' : coords ? '📍 Location captured' : '📍 Attach current location (optional)'}
         </Text>
       </Pressable>
+
+      <Text className="text-[11px] text-gray-400">* Required</Text>
 
       <FormActions onCancel={onDone} onSave={handleSave} saving={saving} />
     </PopupCard>
   );
 }
 
-function CustomerRow({
-  customer,
-  basePath,
-  isApp,
-  balance,
-  typeName,
-}: {
-  customer: Customer;
-  basePath: string;
-  isApp: boolean;
-  balance: Balance | undefined;
+/** One party as the Ledger list works with it: the row itself plus its figures
+ * for the period on screen. */
+interface PartyRowData {
+  row: MergedRow;
+  totals: PartyTotals;
+  /** What was billed to them (the customer ledger's sales and "customer owes" entries). */
+  sales: number;
+  /** What was bought from them on credit (the vendor ledger). */
+  purchases: number;
+  /** Money that actually moved: received from them plus paid out to them. */
+  payments: number;
+  /** Where the account stands at the end of the period; positive = they owe you. */
+  balance: number;
+  status: PartyStatus;
+  /** The part of it that is overdue - 0 unless they owe you. */
+  overdue: number;
+  /** Their ledger type, when one is set. */
   typeName: string | undefined;
+}
+
+/** The balance as the shared balance cell draws it. */
+function positionOf(data: PartyRowData): PartyPosition {
+  const base = partyPosition({ receivable: data.balance, payable: 0 });
+  // Both of their ledgers are in this one figure - say so, as the list always has.
+  return { ...base, bothLedgers: data.totals.hasCustomer && data.totals.hasVendor };
+}
+
+const dash = (n: number) => (Math.round(n) === 0 ? '—' : bookMoney(n));
+
+/** A party on a phone: who, how to reach them, when they last traded, Sales /
+ * Purchases / Payments / Balance, and where they stand. */
+function PartyCard({
+  data,
+  basePath,
+  today,
+  selecting,
+  selected,
+  onToggle,
+}: {
+  data: PartyRowData;
+  basePath: string;
+  today: string;
+  selecting: boolean;
+  selected: boolean;
+  onToggle: () => void;
 }) {
+  if (data.row.kind !== 'customer') return <AppCustomerRow entry={data.row.entry} />;
+  const { customer, isApp } = data.row;
+  const { totals } = data;
+  // The ledger type and how to reach them, side by side on one line.
+  const typeAndContact = [data.typeName, customer.phone, customer.address].filter(Boolean).join(' · ');
   return (
     <Pressable
-      onPress={() => router.push(`${basePath}/customer/${customer.id}` as any)}
-      className="mb-2.5 flex-row items-start rounded-2xl border border-gray-200 bg-white p-4"
-      style={{ gap: 12 }}
+      onPress={() => (selecting ? onToggle() : router.push(`${basePath}/customer/${customer.id}` as any))}
+      className="mb-2.5 rounded-2xl border bg-white p-3.5"
+      style={{ borderColor: selected ? '#2563EB' : '#E5E7EB' }}
     >
-      <View className="flex-1" style={{ minWidth: 0 }}>
-        <Text className="font-semibold text-gray-900" numberOfLines={1}>
-          {nameCaps(customer.name)}
-        </Text>
-        {(isApp || !!typeName) && (
-          <View className="mt-1 flex-row flex-wrap items-center" style={{ gap: 6 }}>
-            {!!typeName && <PartyTypePill name={typeName} />}
+      <View className="flex-row items-start" style={{ gap: 10 }}>
+        {selecting && <Checkbox checked={selected} onPress={onToggle} label={`Select ${customer.name}`} />}
+        <View className="flex-1" style={{ minWidth: 0 }}>
+          {/* Wraps, so on a narrow phone the APP badge drops below the name instead of cutting it short. */}
+          <View className="flex-row flex-wrap items-center" style={{ columnGap: 8, rowGap: 4 }}>
+            <Text className="font-semibold text-gray-900" style={{ flexShrink: 1 }} numberOfLines={1}>
+              {nameCaps(customer.name)}
+            </Text>
             {isApp && (
               <View className="flex-row items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5">
                 <Ionicons name="phone-portrait-outline" size={11} color="#2563eb" />
@@ -254,19 +314,38 @@ function CustomerRow({
               </View>
             )}
           </View>
-        )}
-        {!!customer.phone && (
-          <Text className="mt-1 text-xs text-gray-500">
-            <Ionicons name="call-outline" size={11} color="#9CA3AF" /> {customer.phone}
-          </Text>
-        )}
-        {!!customer.address && (
-          <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
-            <Ionicons name="location-outline" size={11} color="#9CA3AF" /> {customer.address}
+          {!!typeAndContact && (
+            <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
+              {typeAndContact}
+            </Text>
+          )}
+          {totals.lastDay && (
+            <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
+              Last transaction {toBsHistoryLabel(totals.lastDay)} · {relativeDay(totals.lastDay, today)}
+            </Text>
+          )}
+        </View>
+        <View className="items-end" style={{ gap: 4 }}>
+          <PartyBalance position={positionOf(data)} compact />
+          <StatusBadges status={data.status} overdue={data.overdue > 0} />
+        </View>
+      </View>
+      <View className="mt-2.5 flex-row border-t border-gray-100 pt-2" style={{ gap: 16 }}>
+        <Text className="text-[12px] text-gray-500">
+          Sales <Text className="font-semibold text-gray-800">{dash(data.sales)}</Text>
+        </Text>
+        <Text className="text-[12px] text-gray-500">
+          Purchases <Text className="font-semibold text-gray-800">{dash(data.purchases)}</Text>
+        </Text>
+        <Text className="text-[12px] text-gray-500">
+          Payments <Text className="font-semibold text-gray-800">{dash(data.payments)}</Text>
+        </Text>
+        {data.overdue > 0 && (
+          <Text className="text-[12px] text-gray-500">
+            Overdue <Text className="font-semibold" style={{ color: LEDGER_TONE.overdue.text }}>{bookMoney(data.overdue)}</Text>
           </Text>
         )}
       </View>
-      <PartyBalance position={partyPosition(balance)} />
     </Pressable>
   );
 }
@@ -424,11 +503,84 @@ type MergedRow =
   | { kind: 'customer'; id: string; name: string; phone: string | null; customer: Customer; isApp: boolean }
   | { kind: 'app'; id: string; name: string; phone: string | null; entry: AppCustomer };
 
+type StatusFilter = 'all' | 'receivable' | 'payable';
+
+/** "No ledger type" in the bulk menu - the key can't clash with a real type's id. */
+const NO_TYPE = '__none__';
+
+/** Exports the list on screen to Excel. */
+function ExportButton({ onPress, busy }: { onPress: () => void; busy: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      accessibilityLabel="Export the list to Excel"
+      className="h-9 flex-row items-center rounded-lg border border-gray-300 bg-white px-3"
+      style={{ gap: 6, opacity: busy ? 0.5 : 1 }}
+    >
+      <Ionicons name="download-outline" size={14} color="#4B5563" />
+      <Text className="text-[13px] font-semibold text-gray-700">{busy ? 'Exporting…' : 'Export'}</Text>
+    </Pressable>
+  );
+}
+
+/** The strip that appears once something is ticked: what to do with those parties. */
+function BulkBar({
+  count,
+  total,
+  onSelectAll,
+  onClear,
+  onSetType,
+  onExport,
+}: {
+  count: number;
+  /** How many parties the current filters match - "select all N". */
+  total: number;
+  onSelectAll: () => void;
+  onClear: () => void;
+  onSetType: () => void;
+  onExport: () => void;
+}) {
+  const action = (icon: keyof typeof Ionicons.glyphMap, label: string, onPress: () => void) => (
+    <Pressable
+      onPress={onPress}
+      className="h-8 flex-row items-center rounded-lg border border-blue-200 bg-white px-2.5"
+      style={{ gap: 5 }}
+    >
+      <Ionicons name={icon} size={14} color="#1D4ED8" />
+      <Text className="text-[12.5px] font-semibold text-blue-800">{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View className="flex-row flex-wrap items-center rounded-xl border border-blue-200 bg-blue-50 px-3 py-2" style={{ gap: 8 }}>
+      <Text className="text-[13px] font-bold text-blue-900">{count} selected</Text>
+      {count < total && (
+        <Pressable onPress={onSelectAll} hitSlop={6}>
+          <Text className="text-[12.5px] font-semibold text-blue-700">Select all {total}</Text>
+        </Pressable>
+      )}
+      <View className="flex-1" />
+      {action('pricetag-outline', 'Set ledger type', onSetType)}
+      {action('download-outline', 'Export selected', onExport)}
+      <Pressable onPress={onClear} hitSlop={6}>
+        <Text className="text-[12.5px] font-semibold text-gray-500">Clear</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export function CustomersListScreen({ basePath }: { basePath: string }) {
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(add === '1');
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // A phone shows tick boxes only while selecting; the wide table always has them.
+  const [selecting, setSelecting] = useState(false);
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
@@ -436,8 +588,15 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     enabled: !!userId,
   });
   const appCustomers = useAppCustomers(userId);
-  const { byParty, totalReceivable, totalPayable } = useLedgerBalances(userId);
-  const { nameById: partyTypeName } = usePartyTypes(userId);
+  const itemsByParty = useLedgerItems(userId);
+  const { types: partyTypes, nameById: partyTypeName } = usePartyTypes(userId);
+
+  const layout = useBookLayout();
+  // The table has seven columns and needs the room (the sidebar takes 240px): below
+  // 1200px a phone-style card list reads better.
+  const { width: windowWidth } = useWindowDimensions();
+  const tableMode = layout.wide && windowWidth >= 1200;
+  const today = localTodayIso();
 
   // A saved customer whose phone matches a registered app user is marked
   // "APP" on their existing row instead of being listed twice; an app user
@@ -468,186 +627,351 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     return [...customerRows, ...appOnlyRows].sort((a, b) => a.name.localeCompare(b.name));
   }, [customers, appCustomers]);
 
-  const filteredMerged = useMemo(() => {
+  // Every party's figures: all they have ever traded, as of today.
+  const analysed = useMemo(
+    (): PartyRowData[] =>
+      merged.map((row) => {
+        const all = row.kind === 'customer' ? itemsByParty.get(row.id) ?? [] : [];
+        const totals = summarize(all);
+        const sides = sideTotals(all);
+        const balance = totals.closing;
+        return {
+          row,
+          totals,
+          sales: sides.billed,
+          purchases: sides.purchased,
+          payments: sides.received + sides.paid,
+          balance,
+          status: statusOf(balance),
+          overdue: overdueAmount(balance, receivableAging(all, today)),
+          typeName: row.kind === 'customer' && row.customer.party_type_id ? partyTypeName.get(row.customer.party_type_id) : undefined,
+        };
+      }),
+    [merged, itemsByParty, today, partyTypeName]
+  );
+
+  // The headline cards count the way the Finance dashboard does, so the two always
+  // agree: each ledger on its own - a customer who owes you counts as receivable, a
+  // vendor you owe counts as payable - and one running the other way (a customer who
+  // paid ahead, a vendor you overpaid) is left out rather than netted against the
+  // other ledger. The rows below net a person's two ledgers into one figure, so their
+  // total can differ. All parties, whatever the search and status filter say.
+  const cards = useMemo(() => {
+    let receivable = 0;
+    let payable = 0;
+    for (const items of itemsByParty.values()) {
+      let customerBalance = 0;
+      let vendorBalance = 0;
+      for (const item of items) {
+        const signed = item.entryType === 'debit' ? item.amount : -item.amount;
+        if (item.side === 'customer') customerBalance += signed;
+        else vendorBalance += signed;
+      }
+      if (customerBalance > 0) receivable += customerBalance;
+      if (vendorBalance > 0) payable += vendorBalance;
+    }
+    return { receivable, payable, net: receivable - payable };
+  }, [itemsByParty]);
+
+  const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return merged;
-    return merged.filter((r) => r.name.toLowerCase().includes(q) || (r.phone ?? '').includes(q));
-  }, [merged, search]);
+    if (!q) return analysed;
+    return analysed.filter((d) => d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q));
+  }, [analysed, search]);
+  // In name order (A-Z): `merged` is already sorted that way and filtering keeps the order.
+  const filtered = useMemo(() => (filter === 'all' ? searched : searched.filter((d) => d.status === filter)), [searched, filter]);
 
-  const layout = useBookLayout();
+  // --- selection (phone: the Select button): only saved parties - an app-only row has no ledger to act on ---
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const selectAllFiltered = () => setSelected(new Set(filtered.filter((d) => d.row.kind === 'customer').map((d) => d.row.id)));
+  const clearSelection = () => {
+    setSelected(new Set());
+    setSelecting(false);
+  };
+  const selectedCount = selected.size;
 
-  // Search and New party live in the top bar on a wide screen (a plain row above
-  // the tiles on a narrow one) - web only; the phone app keeps its own list below.
+  // --- bulk actions ---
+  async function exportRows(onlySelected: boolean) {
+    const source = onlySelected ? filtered.filter((d) => selected.has(d.row.id)) : filtered;
+    if (source.length === 0) {
+      showAlert('Nothing to export', 'No parties match what is on screen.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const rows: PartyListRow[] = source.map((d) => ({
+        Party: nameCaps(d.row.name),
+        'Ledger type': d.typeName ?? '',
+        Phone: d.row.phone ?? '',
+        Address: d.row.kind === 'customer' ? d.row.customer.address ?? '' : '',
+        'Last transaction': d.totals.lastDay ? toBsHistoryLabel(d.totals.lastDay) : '',
+        Sales: Math.round(d.sales),
+        Purchases: Math.round(d.purchases),
+        Payments: Math.round(d.payments),
+        Balance: Math.abs(Math.round(d.balance)),
+        'Dr / Cr': d.status === 'receivable' ? 'Dr' : d.status === 'payable' ? 'Cr' : '',
+        Status: d.status === 'receivable' ? 'Receivable' : d.status === 'payable' ? 'Payable' : 'Settled',
+        Overdue: Math.round(d.overdue),
+      }));
+      await exportPartiesXlsx(rows);
+    } catch (err) {
+      showAlert('Could not export', getErrorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function applyLedgerType(key: string) {
+    setTypeMenuOpen(false);
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const { error } = await (supabase.from('customers') as any)
+      .update({ party_type_id: key === NO_TYPE ? null : key })
+      .in('id', ids);
+    if (error) {
+      showAlert('Could not set the ledger type', getErrorMessage(error));
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['customers'] });
+    showAlert('Ledger type updated', `${ids.length} ${ids.length === 1 ? 'party' : 'parties'} updated.`);
+    clearSelection();
+  }
+  const typeMenuOptions: MenuOption<string>[] = [
+    ...partyTypes.map((t) => ({ key: t.id, label: t.name })),
+    { key: NO_TYPE, label: 'No ledger type' },
+  ];
+
+  // Search, Export and New party live in the top bar on a wide screen (a plain row
+  // above the tiles on a narrow one) - web only; the phone app keeps its own list
+  // below. The bar keeps the callbacks it was last given, so Export reaches the
+  // list as it is now through a ref.
+  const exportNow = useRef(exportRows);
+  exportNow.current = exportRows;
   const toolbar = useBookToolbar(
     {
       wide: layout.wide,
       right: (inBar) => (
         <>
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name or phone" wide={inBar} />
+          <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
           <ToolbarButton icon="add" label="New party" onPress={() => setShowAddForm(true)} />
         </>
       ),
     },
-    [search]
+    [search, exporting]
   );
 
-  // Web: the same cash-book look as the Day Book - header card, stat tiles,
-  // one bordered table with totals. Phones keep the card list below.
-  if (Platform.OS === 'web') {
-    // One balance per party: both ledgers netted (see partyPosition). An app-only
-    // row has no ledger to open, so it has no balance.
-    const positionOf = (row: MergedRow) => partyPosition(row.kind === 'customer' ? byParty.get(row.id) : undefined);
-    const typeOf = (row: MergedRow) => (row.kind === 'customer' && row.customer.party_type_id ? partyTypeName.get(row.customer.party_type_id) : undefined);
-    const party = (row: MergedRow, withPhone: boolean) => (
-      <View style={{ minWidth: 0 }}>
-        {/* Wraps, so on a narrow screen the pills drop below the name instead of cutting it short. */}
-        <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
-          <Text className="text-[13px] font-semibold text-gray-900">{nameCaps(row.name)}</Text>
-          {!!typeOf(row) && <PartyTypePill name={typeOf(row)!} />}
-          {(row.kind === 'app' || (row.kind === 'customer' && row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
-        </View>
-        {(() => {
-          const sub = [withPhone ? row.phone : null, row.kind === 'customer' ? row.customer.address : null].filter(Boolean).join(' · ');
-          return sub ? (
+  // --- pieces both layouts share ---
+  const summaryCards = (
+    <BookStats>
+      <SummaryCard
+        label="Total receivable"
+        value={`NPR ${bookMoney(cards.receivable)}`}
+        color={LEDGER_TONE.receivable.text}
+        accent={LEDGER_TONE.receivable.base}
+        active={filter === 'receivable'}
+        onPress={() => setFilter(filter === 'receivable' ? 'all' : 'receivable')}
+      />
+      <SummaryCard
+        label="Total payable"
+        value={`NPR ${bookMoney(cards.payable)}`}
+        color={LEDGER_TONE.payable.text}
+        accent={LEDGER_TONE.payable.base}
+        active={filter === 'payable'}
+        onPress={() => setFilter(filter === 'payable' ? 'all' : 'payable')}
+      />
+      <SummaryCard
+        label="Net balance"
+        value={`${cards.net < 0 ? '−' : ''}NPR ${bookMoney(Math.abs(cards.net))}`}
+        color={cards.net > 0 ? LEDGER_TONE.receivable.text : cards.net < 0 ? LEDGER_TONE.payable.text : LEDGER_TONE.settled.text}
+        accent={cards.net > 0 ? LEDGER_TONE.receivable.base : cards.net < 0 ? LEDGER_TONE.payable.base : LEDGER_TONE.settled.base}
+      />
+      <SummaryCard label="Parties" value={String(merged.length)} color={LEDGER_TONE.settled.text} accent={LEDGER_TONE.settled.base} />
+    </BookStats>
+  );
+
+  const addForm = showAddForm && userId ? <AddCustomerForm userId={userId} basePath={basePath} onDone={() => setShowAddForm(false)} /> : null;
+
+  const bulkBar =
+    selectedCount > 0 ? (
+      <BulkBar
+        count={selectedCount}
+        total={filtered.filter((d) => d.row.kind === 'customer').length}
+        onSelectAll={selectAllFiltered}
+        onClear={clearSelection}
+        onSetType={() => setTypeMenuOpen(true)}
+        onExport={() => exportRows(true)}
+      />
+    ) : null;
+
+  const typeMenu = (
+    <OptionMenuModal
+      visible={typeMenuOpen}
+      title={`Set ledger type · ${selectedCount} selected`}
+      options={typeMenuOptions}
+      onPick={applyLedgerType}
+      onClose={() => setTypeMenuOpen(false)}
+    />
+  );
+
+  const emptyState = (
+    <View className="items-center rounded-xl border border-dashed border-gray-300 bg-white py-10">
+      <Ionicons name="people-outline" size={28} color="#D1D5DB" />
+      <Text className="mt-2 text-gray-500">{merged.length > 0 ? 'No matches.' : 'No customers yet.'}</Text>
+      <Text className="text-xs text-gray-400">
+        {merged.length > 0 ? 'Try another search or filter.' : "Add one with New party, or they'll be saved when you record a bill for them."}
+      </Text>
+    </View>
+  );
+
+  // ---------------- wide screen: the ledger table ----------------
+  if (tableMode) {
+    // Under the name: the ledger type, the phone number and the address, on one line.
+    const partyCell = (d: PartyRowData) => {
+      const typeAndContact = [d.typeName, d.row.phone, d.row.kind === 'customer' ? d.row.customer.address : null].filter(Boolean).join(' · ');
+      return (
+        <View style={{ minWidth: 0 }}>
+          {/* Wraps, so on a narrow screen the APP badge drops below the name instead of cutting it short. */}
+          <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
+            <Text className="text-[13px] font-semibold text-gray-900">{nameCaps(d.row.name)}</Text>
+            {(d.row.kind === 'app' || (d.row.kind === 'customer' && d.row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
+          </View>
+          {!!typeAndContact && (
             <Text className="text-[11px] text-gray-400" numberOfLines={1}>
-              {sub}
+              {typeAndContact}
             </Text>
-          ) : null;
-        })()}
-      </View>
-    );
+          )}
+        </View>
+      );
+    };
 
-    const columns: BookColumn<MergedRow>[] = layout.full
-      ? [
-          { key: 'party', label: 'Party', render: (row) => party(row, false) },
-          { key: 'phone', label: 'Phone', width: 130, render: (row) => <Text className="text-[12.5px] text-gray-600">{row.phone ?? '—'}</Text> },
-          { key: 'balance', label: 'Balance', width: 170, align: 'right', render: (row) => <PartyBalance position={positionOf(row)} /> },
-        ]
-      : [
-          { key: 'party', label: 'Party', render: (row) => party(row, true) },
-          { key: 'balance', label: 'Balance', width: 150, align: 'right', render: (row) => <PartyBalance position={positionOf(row)} /> },
-        ];
+    const lastCell = (d: PartyRowData) =>
+      d.totals.lastDay ? (
+        <View>
+          <Text className="text-[12.5px] text-gray-700">{toBsHistoryLabel(d.totals.lastDay)}</Text>
+          <Text className="text-[11px] text-gray-400">{relativeDay(d.totals.lastDay, today)}</Text>
+        </View>
+      ) : (
+        <Text className="text-[12.5px] text-gray-300">—</Text>
+      );
 
-    // The rows' own balances added up, so the footer always agrees with the
-    // list above it (the tiles keep their own receive / pay definitions).
-    const shownNet = partyPosition({ receivable: filteredMerged.reduce((s, row) => s + positionOf(row).net, 0), payable: 0 });
+    const figure = (n: number) => <Text className="text-[12.5px] text-gray-700">{dash(n)}</Text>;
+    const open = (d: PartyRowData) => {
+      if (d.row.kind === 'customer') router.push(`${basePath}/customer/${d.row.id}` as any);
+    };
+
+    const moneyColumn = (key: 'sales' | 'purchases' | 'payments', label: string): BookColumn<PartyRowData> => ({
+      key,
+      label,
+      width: 95,
+      align: 'right',
+      render: (d) => figure(d[key]),
+    });
+    const columns: BookColumn<PartyRowData>[] = [
+      { key: 'party', label: 'Party', render: partyCell },
+      { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
+      moneyColumn('sales', 'Sales'),
+      moneyColumn('purchases', 'Purchases'),
+      moneyColumn('payments', 'Payments'),
+      { key: 'balance', label: 'Balance', width: 120, align: 'right', render: (d) => <PartyBalance position={positionOf(d)} compact /> },
+      { key: 'status', label: 'Status', width: 130, render: (d) => <StatusBadges status={d.status} overdue={d.overdue > 0} /> },
+    ];
+
+    // The listed rows' own figures added up (every page, not just this one), so
+    // the footer always agrees with the list above it.
+    const footerNet = filtered.reduce((sum, d) => sum + d.balance, 0);
+    const footerPosition = partyPosition({ receivable: footerNet, payable: 0 });
 
     return (
       <BookPage wide={layout.wide}>
         {toolbar}
+        {summaryCards}
+        {addForm}
+        {bulkBar}
 
-        <BookStats>
-          <BookStat label="To receive" value={`NPR ${bookMoney(totalReceivable)}`} color="#047857" onPress={() => router.push(`${basePath}/to-receive` as any)} />
-          <BookStat label="To pay" value={`NPR ${bookMoney(totalPayable)}`} color="#B91C1C" onPress={() => router.push(`${basePath}/to-give` as any)} />
-          <BookStat
-            label="Net position"
-            value={`${totalReceivable - totalPayable < 0 ? '−' : ''}NPR ${bookMoney(Math.abs(totalReceivable - totalPayable))}`}
-            color={totalReceivable - totalPayable >= 0 ? '#047857' : '#B91C1C'}
-          />
-          <BookStat label="Parties" value={String(merged.length)} color="#374151" />
-        </BookStats>
-
-        {showAddForm && userId && <AddCustomerForm userId={userId} basePath={basePath} onDone={() => setShowAddForm(false)} />}
-
-        {filteredMerged.length === 0 ? (
-          <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
-            <Ionicons name="people-outline" size={28} color="#D1D5DB" />
-            <Text className="mt-2 text-gray-500">{merged.length > 0 ? 'No matches.' : 'No customers yet.'}</Text>
-            <Text className="text-xs text-gray-400">Add one with New party, or they'll be saved when you record a bill for them.</Text>
-          </View>
+        {filtered.length === 0 ? (
+          emptyState
         ) : (
           <BookTable
             columns={columns}
-            rows={filteredMerged}
-            rowKey={(row) => `${row.kind}-${row.id}`}
-            onRowPress={(row) => row.kind === 'customer' && router.push(`${basePath}/customer/${row.id}` as any)}
+            rows={filtered}
+            rowKey={(d) => `${d.row.kind}-${d.row.id}`}
+            onRowPress={open}
             footer={{
-              label: `${filteredMerged.length} ${filteredMerged.length === 1 ? 'party' : 'parties'} · Net`,
-              cells: { balance: <PartyBalance position={shownNet} /> },
+              label: `${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`,
+              cells: {
+                sales: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.sales, 0))}</Text>,
+                purchases: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.purchases, 0))}</Text>,
+                payments: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.payments, 0))}</Text>,
+                balance: <PartyBalance position={footerPosition} compact />,
+              },
             }}
           />
         )}
 
-        <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-          Tap a party to open their ledger. Each balance is where that party stands overall: To receive is what they owe you, To pay is what you owe them. Someone who is both a customer and a vendor is netted into one figure.
-        </Text>
+        {typeMenu}
       </BookPage>
     );
   }
 
+  // ---------------- phone / narrow window: cards ----------------
   return (
-    <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-3 flex-row items-center gap-2">
-        <View className="flex-1">
-          <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
-        </View>
-        <Pressable
-          onPress={() => setShowAddForm(true)}
-          className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500"
-        >
-          <Ionicons name="add" size={22} color="white" />
-        </Pressable>
-      </View>
-
-      {/* What every ledger adds up to, before the names themselves. */}
-      <View className="mb-3 flex-row" style={{ gap: 10 }}>
-        <Pressable
-          onPress={() => router.push(`${basePath}/to-receive` as any)}
-          className="flex-1 rounded-2xl border p-3.5"
-          style={{ backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }}
-        >
-          <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#047857' }}>
-            To receive
-          </Text>
-          <Text className="mt-0.5 text-[19px] font-extrabold" style={{ color: '#047857' }}>
-            NPR {money(totalReceivable)}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push(`${basePath}/to-give` as any)}
-          className="flex-1 rounded-2xl border p-3.5"
-          style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}
-        >
-          <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#B91C1C' }}>
-            To pay
-          </Text>
-          <Text className="mt-0.5 text-[19px] font-extrabold" style={{ color: '#B91C1C' }}>
-            NPR {money(totalPayable)}
-          </Text>
-        </Pressable>
-      </View>
-
-      {userId && <PhoneContactsSyncButton userId={userId} />}
-
-      {showAddForm && userId && <AddCustomerForm userId={userId} basePath={basePath} onDone={() => setShowAddForm(false)} />}
-
-      <FlatList
-        data={filteredMerged}
-        keyExtractor={(item) => `${item.kind}-${item.id}`}
-        renderItem={({ item }) =>
-          item.kind === 'customer' ? (
-            <CustomerRow
-              customer={item.customer}
-              basePath={basePath}
-              isApp={item.isApp}
-              balance={byParty.get(item.id)}
-              typeName={item.customer.party_type_id ? partyTypeName.get(item.customer.party_type_id) : undefined}
-            />
-          ) : (
-            <AppCustomerRow entry={item.entry} />
-          )
-        }
-        contentContainerStyle={{ paddingBottom: 40 }}
-        ListEmptyComponent={
-          <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
-            <Ionicons name="people-outline" size={28} color="#D1D5DB" />
-            <Text className="mt-2 text-gray-500">{merged.length > 0 ? 'No matches.' : 'No customers yet.'}</Text>
-            <Text className="text-xs text-gray-400">
-              Add one above, or they'll be saved automatically when you book a job for them.
-            </Text>
+    <View className="flex-1 bg-gray-50">
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }} keyboardShouldPersistTaps="handled">
+        <View className="flex-row items-center gap-2">
+          <View className="flex-1">
+            <SearchBar value={search} onChangeText={setSearch} placeholder="Search by name or phone" />
           </View>
-        }
-      />
+          <Pressable onPress={() => setShowAddForm(true)} className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500">
+            <Ionicons name="add" size={22} color="white" />
+          </Pressable>
+        </View>
+
+        {summaryCards}
+
+        {userId && <PhoneContactsSyncButton userId={userId} />}
+
+        <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
+          <Pressable
+            onPress={() => (selecting ? clearSelection() : setSelecting(true))}
+            className="h-9 flex-row items-center rounded-lg border px-3"
+            style={{ gap: 6, borderColor: selecting ? '#2563EB' : '#D1D5DB', backgroundColor: selecting ? '#EFF6FF' : '#FFFFFF' }}
+          >
+            <Ionicons name="checkbox-outline" size={14} color={selecting ? '#1D4ED8' : '#4B5563'} />
+            <Text className={`text-[13px] font-semibold ${selecting ? 'text-blue-700' : 'text-gray-700'}`}>{selecting ? 'Done' : 'Select'}</Text>
+          </Pressable>
+          <ExportButton onPress={() => exportRows(false)} busy={exporting} />
+        </View>
+
+        {addForm}
+        {bulkBar}
+
+        {filtered.length === 0 ? (
+          emptyState
+        ) : (
+          <View>
+            {filtered.map((d) => (
+              <PartyCard
+                key={`${d.row.kind}-${d.row.id}`}
+                data={d}
+                basePath={basePath}
+                today={today}
+                selecting={selecting}
+                selected={selected.has(d.row.id)}
+                onToggle={() => toggle(d.row.id)}
+              />
+            ))}
+          </View>
+        )}
+
+        {typeMenu}
+      </ScrollView>
     </View>
   );
 }

@@ -565,6 +565,7 @@ function TransactionForm({
   customers,
   products,
   voicePrefill,
+  presetPartyId,
   onOpenRecent,
   onDone,
   onCancel,
@@ -576,6 +577,8 @@ function TransactionForm({
   customers: Customer[];
   products: Product[];
   voicePrefill?: { amount?: string; party?: string; date?: string; note?: string } | null;
+  /** A saved party to start the bill with - "New Sale" from their statement. */
+  presetPartyId?: string;
   /** Opens an entry from the Recent list (web) - see RecentEntriesCard. */
   onOpenRecent?: (tx: BusinessTransaction) => void;
   onDone: () => void;
@@ -985,6 +988,20 @@ function TransactionForm({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voicePrefill]);
+
+  // Starts a new bill with the party it was opened for. The customer list can
+  // still be loading on the first render, so this waits for it - and runs once,
+  // so choosing someone else afterwards is never undone.
+  const presetApplied = useRef(false);
+  useEffect(() => {
+    if (presetApplied.current || !presetPartyId || initial || !isBill) return;
+    const party = customers.find((c) => c.id === presetPartyId);
+    if (!party) return;
+    presetApplied.current = true;
+    setPartyName(party.name);
+    setCustomerId(party.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetPartyId, customers]);
 
   // Fills in whatever Scan Bill could read off the photo; the reseller still
   // reviews and can edit every field afterward, and still has to actually
@@ -2458,6 +2475,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     type: typeParam,
     add: addParam,
     edit: editParam,
+    partyId: partyIdParam,
     voiceAmount,
     voiceParty,
     voiceDate,
@@ -2466,6 +2484,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     type?: string;
     add?: string;
     edit?: string;
+    partyId?: string;
     voiceAmount?: string;
     voiceParty?: string;
     voiceDate?: string;
@@ -2882,6 +2901,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 customers={customers ?? []}
                 products={products ?? []}
                 voicePrefill={editingTx || formKey > 0 ? null : voicePrefill}
+                presetPartyId={editingTx || formKey > 0 ? undefined : partyIdParam}
                 onOpenRecent={desktopWeb ? setViewingTx : undefined}
                 onDone={() => {
                   if (editLinkTx) {

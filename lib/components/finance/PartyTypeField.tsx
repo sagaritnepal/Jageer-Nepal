@@ -8,24 +8,28 @@ import { showAlert, getErrorMessage } from '../../utils/alert';
 const MAX_NAME_LENGTH = 30;
 
 /**
- * "Party type" picker for the party forms: one chip per type (Customer,
- * Vendor, Employee and any the reseller added) - tap to choose, tap the chosen
- * one again to clear it. "Edit types" turns the chips into rename / delete
- * controls, and "Add type" makes a new one, so the list is the reseller's own.
- * Renders nothing when the types can't be loaded, so a form never breaks over
- * an optional label.
+ * "Ledger type" dropdown for the party forms: a box showing the chosen type that
+ * opens a list of them (Customer, Vendor, Employee and any the reseller added) right
+ * under it - in the page rather than floating over it, so a popup cannot clip it.
+ * Pick one and the list closes. In the list a type can be renamed or deleted, and
+ * "Add new ledger type" makes one and chooses it, so the list is the reseller's own.
+ * Renders nothing when the types can't be loaded, so a form never breaks over an
+ * optional label.
  */
 export function PartyTypeField({
   ownerId,
   value,
   onChange,
+  required,
 }: {
   ownerId: string | undefined;
   value: string | null;
   onChange: (id: string | null) => void;
+  /** Marks the label with a star - the form checks it. */
+  required?: boolean;
 }) {
   const { types, available, create, rename, remove } = usePartyTypes(ownerId);
-  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -34,17 +38,39 @@ export function PartyTypeField({
 
   if (!available) return null;
 
+  const current = types.find((t) => t.id === value);
+
+  function toggle() {
+    setOpen((v) => !v);
+    setAdding(false);
+    setNewName('');
+    setRenamingId(null);
+  }
+
+  function pick(id: string) {
+    onChange(id);
+    setOpen(false);
+  }
+
   async function handleAdd() {
     const name = newName.trim();
     if (!name) return;
+    // A name already in the list just picks it, instead of failing on a duplicate.
+    const existing = types.find((t) => t.name.trim().toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setNewName('');
+      setAdding(false);
+      pick(existing.id);
+      return;
+    }
     setSaving(true);
     try {
       const created = await create(name);
       setNewName('');
       setAdding(false);
-      onChange(created.id);
+      pick(created.id);
     } catch (err) {
-      showAlert('Could not add the type', getErrorMessage(err, 'A type with that name may already exist.'));
+      showAlert('Could not add the ledger type', getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -58,14 +84,14 @@ export function PartyTypeField({
       await rename(id, name);
       setRenamingId(null);
     } catch (err) {
-      showAlert('Could not rename the type', getErrorMessage(err, 'A type with that name may already exist.'));
+      showAlert('Could not rename the ledger type', getErrorMessage(err, 'A type with that name may already exist.'));
     } finally {
       setSaving(false);
     }
   }
 
   function confirmRemove(id: string, name: string) {
-    showAlert(`Delete "${name}"?`, 'Parties with this type are kept - they just have no type.', [
+    showAlert(`Delete "${name}"?`, 'People with this ledger type are kept - they just have no ledger type.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -75,60 +101,78 @@ export function PartyTypeField({
             await remove(id);
             if (value === id) onChange(null);
           } catch (err) {
-            showAlert('Could not delete the type', getErrorMessage(err));
+            showAlert('Could not delete the ledger type', getErrorMessage(err));
           }
         },
       },
     ]);
   }
 
+  // A text box inside a row of the list: the row's own border is the focus mark, so
+  // the browser's black outline on top of it is switched off.
+  const typing = { outlineStyle: 'none' } as object;
+
   return (
     <View className="mb-2.5">
-      <View className="mb-1.5 flex-row items-center justify-between">
-        <Text className="text-xs font-semibold text-gray-500">Party type</Text>
-        <Pressable
-          onPress={() => {
-            setEditing((v) => !v);
-            setRenamingId(null);
-            setAdding(false);
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-        >
-          <Text className="text-xs font-semibold text-blue-700">{editing ? 'Done' : 'Edit types'}</Text>
-        </Pressable>
-      </View>
+      <Text className="mb-1.5 text-xs font-semibold text-gray-600">{required ? 'Ledger type *' : 'Ledger type'}</Text>
 
-      <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
-        {types.map((t) => {
-          const selected = value === t.id;
+      <Pressable
+        onPress={toggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Ledger type"
+        className="flex-row items-center justify-between rounded-lg border bg-white px-3 py-2.5"
+        style={{ borderColor: open ? '#2563EB' : '#D1D5DB' }}
+      >
+        <Text className={`text-sm ${current ? 'text-gray-900' : 'text-gray-400'}`} numberOfLines={1}>
+          {current?.name ?? 'Select ledger type'}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color="#9CA3AF" />
+      </Pressable>
 
-          if (editing && renamingId === t.id) {
+      {open && (
+        <View className="mt-1.5 overflow-hidden rounded-lg border border-gray-200 bg-white">
+          {types.map((t) => {
+            const selected = t.id === value;
+            if (renamingId === t.id) {
+              return (
+                <View key={t.id} className="flex-row items-center border-b border-gray-100 px-3 py-1.5" style={{ gap: 10 }}>
+                  <TextInput
+                    value={renameValue}
+                    onChangeText={setRenameValue}
+                    onSubmitEditing={() => handleRename(t.id)}
+                    maxLength={MAX_NAME_LENGTH}
+                    autoFocus
+                    className="flex-1 py-1.5 text-sm text-gray-900"
+                    style={typing}
+                  />
+                  <Pressable onPress={() => handleRename(t.id)} disabled={saving} hitSlop={8} accessibilityLabel="Save name">
+                    <Ionicons name="checkmark" size={18} color="#059669" />
+                  </Pressable>
+                  <Pressable onPress={() => setRenamingId(null)} hitSlop={8} accessibilityLabel="Cancel rename">
+                    <Ionicons name="close" size={18} color="#9CA3AF" />
+                  </Pressable>
+                </View>
+              );
+            }
             return (
-              <View key={t.id} className="flex-row items-center rounded-full border border-blue-600 bg-white pl-3 pr-2" style={{ gap: 6 }}>
-                <TextInput
-                  value={renameValue}
-                  onChangeText={setRenameValue}
-                  onSubmitEditing={() => handleRename(t.id)}
-                  maxLength={MAX_NAME_LENGTH}
-                  autoFocus
-                  className="py-1.5 text-sm text-gray-900"
-                  style={{ minWidth: 90 }}
-                />
-                <Pressable onPress={() => handleRename(t.id)} disabled={saving} hitSlop={8} accessibilityLabel="Save name">
-                  <Ionicons name="checkmark" size={18} color="#059669" />
+              <View
+                key={t.id}
+                className="flex-row items-center border-b border-gray-100 pr-3"
+                style={{ backgroundColor: selected ? '#EFF6FF' : '#FFFFFF' }}
+              >
+                <Pressable
+                  onPress={() => pick(t.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  className="flex-1 flex-row items-center py-2.5 pl-3"
+                  style={{ gap: 10 }}
+                >
+                  <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={selected ? '#2563EB' : '#D1D5DB'} />
+                  <Text className={`flex-1 text-sm ${selected ? 'font-semibold text-blue-700' : 'text-gray-900'}`} numberOfLines={1}>
+                    {t.name}
+                  </Text>
                 </Pressable>
-                <Pressable onPress={() => setRenamingId(null)} hitSlop={8} accessibilityLabel="Cancel rename">
-                  <Ionicons name="close" size={18} color="#9CA3AF" />
-                </Pressable>
-              </View>
-            );
-          }
-
-          if (editing) {
-            return (
-              <View key={t.id} className="flex-row items-center rounded-full border border-gray-300 bg-white pl-3.5 pr-2.5" style={{ gap: 10, minHeight: 36 }}>
-                <Text className="text-sm font-semibold text-gray-700">{t.name}</Text>
                 <Pressable
                   onPress={() => {
                     setRenamingId(t.id);
@@ -136,70 +180,52 @@ export function PartyTypeField({
                   }}
                   hitSlop={8}
                   accessibilityLabel={`Rename ${t.name}`}
+                  className="px-2"
                 >
-                  <Ionicons name="pencil-outline" size={15} color="#6B7280" />
+                  <Ionicons name="pencil-outline" size={15} color="#9CA3AF" />
                 </Pressable>
-                <Pressable onPress={() => confirmRemove(t.id, t.name)} hitSlop={8} accessibilityLabel={`Delete ${t.name}`}>
-                  <Ionicons name="trash-outline" size={15} color="#DC2626" />
+                <Pressable onPress={() => confirmRemove(t.id, t.name)} hitSlop={8} accessibilityLabel={`Delete ${t.name}`} className="pl-1">
+                  <Ionicons name="trash-outline" size={15} color="#9CA3AF" />
                 </Pressable>
               </View>
             );
-          }
+          })}
 
-          return (
-            <Pressable
-              key={t.id}
-              onPress={() => onChange(selected ? null : t.id)}
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              className={`items-center justify-center rounded-full border px-3.5 ${selected ? 'border-blue-600 bg-blue-600' : 'border-gray-300 bg-white'}`}
-              style={{ minHeight: 36 }}
-            >
-              <Text className={`text-sm font-semibold ${selected ? 'text-white' : 'text-gray-700'}`}>{t.name}</Text>
+          {adding ? (
+            <View className="flex-row items-center px-3 py-1.5" style={{ gap: 10 }}>
+              <TextInput
+                value={newName}
+                onChangeText={setNewName}
+                onSubmitEditing={handleAdd}
+                placeholder="New ledger type"
+                placeholderTextColor="#9CA3AF"
+                maxLength={MAX_NAME_LENGTH}
+                autoFocus
+                className="flex-1 py-1.5 text-sm text-gray-900"
+                style={typing}
+              />
+              <Pressable onPress={handleAdd} disabled={saving || !newName.trim()} hitSlop={8} accessibilityLabel="Add ledger type">
+                <Ionicons name="checkmark" size={18} color={newName.trim() && !saving ? '#059669' : '#D1D5DB'} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setAdding(false);
+                  setNewName('');
+                }}
+                hitSlop={8}
+                accessibilityLabel="Cancel"
+              >
+                <Ionicons name="close" size={18} color="#9CA3AF" />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable onPress={() => setAdding(true)} accessibilityRole="button" className="flex-row items-center px-3 py-2.5" style={{ gap: 8 }}>
+              <Ionicons name="add" size={16} color="#1D4ED8" />
+              <Text className="text-sm font-semibold text-blue-700">Add new ledger type</Text>
             </Pressable>
-          );
-        })}
-
-        {adding ? (
-          <View className="flex-row items-center rounded-full border border-blue-600 bg-white pl-3 pr-2" style={{ gap: 6 }}>
-            <TextInput
-              value={newName}
-              onChangeText={setNewName}
-              onSubmitEditing={handleAdd}
-              placeholder="New type"
-              maxLength={MAX_NAME_LENGTH}
-              autoFocus
-              className="py-1.5 text-sm text-gray-900"
-              style={{ minWidth: 100 }}
-            />
-            <Pressable onPress={handleAdd} disabled={saving || !newName.trim()} hitSlop={8} accessibilityLabel="Add type">
-              <Ionicons name="checkmark" size={18} color={newName.trim() ? '#059669' : '#D1D5DB'} />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setAdding(false);
-                setNewName('');
-              }}
-              hitSlop={8}
-              accessibilityLabel="Cancel"
-            >
-              <Ionicons name="close" size={18} color="#9CA3AF" />
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => setAdding(true)}
-            hitSlop={4}
-            accessibilityRole="button"
-            className="flex-row items-center rounded-full border border-dashed border-gray-300 px-3"
-            style={{ gap: 4, minHeight: 36 }}
-          >
-            <Ionicons name="add" size={16} color="#1D4ED8" />
-            <Text className="text-sm font-semibold text-blue-700">Add type</Text>
-          </Pressable>
-        )}
-      </View>
+          )}
+        </View>
+      )}
     </View>
   );
 }
