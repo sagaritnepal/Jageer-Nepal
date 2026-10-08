@@ -12,7 +12,61 @@ export interface WebNavItem {
   // collapse dropdown) - for a section like Finance with several
   // destinations (Payment In, Purchase, Report, ...) that would otherwise
   // mean going back to a dashboard and re-picking a shortcut tile every time.
+  // A child can have its own children too (e.g. Report's family of report
+  // types under Finance), indented one step further each level down.
   children?: WebNavItem[];
+}
+
+/** One row of the nav list, indented by how deep it sits (0 = Home/Finance,
+ * 1 = Finance's own children, 2 = a child's own children, ...), and its
+ * children drawn the same way one level deeper. Defined outside
+ * WebSidebarShell so its identity is stable across renders - an inline
+ * component here would remount this whole branch (and its children) on
+ * every render instead of just updating it. */
+function NavRow({ item, depth, isActive }: { item: WebNavItem; depth: number; isActive: (href: string) => boolean }) {
+  const active = isActive(item.href);
+  const top = depth === 0;
+  return (
+    <View>
+      <Pressable
+        onPress={() => router.push(item.href as any)}
+        accessibilityRole="link"
+        accessibilityLabel={item.label}
+        accessibilityState={{ selected: active }}
+        aria-current={active ? 'page' : undefined}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: top ? 12 : 10,
+          paddingVertical: 10,
+          paddingLeft: 14 + depth * 20,
+          paddingRight: 14,
+          borderRadius: top ? 10 : 8,
+          backgroundColor: active ? '#EFF6FF' : 'transparent',
+        }}
+      >
+        <Ionicons
+          name={active ? item.icon : (`${item.icon}-outline` as keyof typeof Ionicons.glyphMap)}
+          size={top ? 19 : 15}
+          color={active ? '#2563EB' : top ? '#6B7280' : '#9CA3AF'}
+        />
+        <Text
+          numberOfLines={top ? undefined : 1}
+          style={{ flex: 1, fontSize: top ? 14 : 13, fontWeight: '600', color: active ? '#2563EB' : '#6B7280' }}
+        >
+          {item.label}
+        </Text>
+      </Pressable>
+
+      {!!item.children && (
+        <View style={{ marginTop: 2, marginBottom: 4, gap: 1 }}>
+          {item.children.map((child) => (
+            <NavRow key={child.href} item={child} depth={depth + 1} isActive={isActive} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
 }
 
 function initialsOf(name: string | null | undefined) {
@@ -144,84 +198,12 @@ export function WebSidebarShell({
           contentContainerStyle={{ gap: 2 }}
           showsVerticalScrollIndicator={false}
         >
-          {items.map((item) => {
-            const active = isActive(item.href);
-            // A parent with children (e.g. Finance) is "active" only by its
-            // own href, not by whichever child route is open - the child
-            // rows below carry their own highlight for that instead, so the
-            // parent doesn't stay lit up while browsing an unrelated child.
-            return (
-              <View key={item.href}>
-                <Pressable
-                  onPress={() => router.push(item.href as any)}
-                  accessibilityRole="link"
-                  accessibilityLabel={item.label}
-                  accessibilityState={{ selected: active }}
-                  aria-current={active ? 'page' : undefined}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                    paddingVertical: 10,
-                    paddingHorizontal: 14,
-                    borderRadius: 10,
-                    backgroundColor: active ? '#EFF6FF' : 'transparent',
-                  }}
-                >
-                  <Ionicons
-                    name={active ? item.icon : (`${item.icon}-outline` as keyof typeof Ionicons.glyphMap)}
-                    size={19}
-                    color={active ? '#2563EB' : '#6B7280'}
-                  />
-                  <Text
-                    style={{ flex: 1, fontSize: 14, fontWeight: '600', color: active ? '#2563EB' : '#6B7280' }}
-                  >
-                    {item.label}
-                  </Text>
-                </Pressable>
-
-                {!!item.children && (
-                  <View style={{ marginTop: 2, marginBottom: 4, gap: 1 }}>
-                    {item.children.map((child) => {
-                      const childActive = isActive(child.href);
-                      return (
-                        <Pressable
-                          key={child.href}
-                          onPress={() => router.push(child.href as any)}
-                          accessibilityRole="link"
-                          accessibilityLabel={child.label}
-                          accessibilityState={{ selected: childActive }}
-                          aria-current={childActive ? 'page' : undefined}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 10,
-                            paddingVertical: 10,
-                            paddingLeft: 34,
-                            paddingRight: 14,
-                            borderRadius: 8,
-                            backgroundColor: childActive ? '#EFF6FF' : 'transparent',
-                          }}
-                        >
-                          <Ionicons
-                            name={childActive ? child.icon : (`${child.icon}-outline` as keyof typeof Ionicons.glyphMap)}
-                            size={15}
-                            color={childActive ? '#2563EB' : '#9CA3AF'}
-                          />
-                          <Text
-                            numberOfLines={1}
-                            style={{ fontSize: 13, fontWeight: '600', color: childActive ? '#2563EB' : '#6B7280' }}
-                          >
-                            {child.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            );
-          })}
+          {/* A parent (Finance, Report, ...) is "active" only by its own href, not by
+              whichever descendant route is open - that one carries its own highlight
+              instead, so the parent doesn't stay lit up while browsing a child. */}
+          {items.map((item) => (
+            <NavRow key={item.href} item={item} depth={0} isActive={isActive} />
+          ))}
         </ScrollView>
 
         <Pressable
