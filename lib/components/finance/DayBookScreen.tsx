@@ -14,6 +14,7 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
 import { DateFilterButton } from './DateRangeFilter';
+import { DropdownPanel, useDropdown } from './DropdownMenu';
 import { FilterTabs, useBookToolbar } from './BookKit';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { MONEY } from './moneyColors';
@@ -697,15 +698,16 @@ const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
 }));
 
 function NewEntryMenu({ basePath }: { basePath: string }) {
-  const [open, setOpen] = useState(false);
+  const dropdown = useDropdown(230);
 
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
+        ref={dropdown.buttonRef}
+        onPress={dropdown.show}
         accessibilityRole="button"
         accessibilityLabel="New entry, choose what to record"
-        accessibilityState={{ expanded: open }}
+        accessibilityState={{ expanded: dropdown.open }}
         className="flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
         style={{ minHeight: 36, backgroundColor: '#1D4ED8' }}
       >
@@ -714,34 +716,27 @@ function NewEntryMenu({ basePath }: { basePath: string }) {
         <Ionicons name="chevron-down" size={14} color="#FFFFFF" />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1 items-center justify-center bg-black/50 px-4" onPress={() => setOpen(false)}>
-          <Pressable onPress={() => {}} accessibilityViewIsModal className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 380 }}>
-            <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: '#1D4ED8' }}>
-              <Text className="flex-1 text-[16px] font-bold text-white">What are you recording?</Text>
-              <Pressable onPress={() => setOpen(false)} hitSlop={8} accessibilityLabel="Close">
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </Pressable>
-            </View>
-            {NEW_ENTRY_KINDS.map((kind, i) => (
-              <Pressable
-                key={kind.key}
-                accessibilityRole="button"
-                accessibilityLabel={kind.label}
-                onPress={() => {
-                  setOpen(false);
-                  router.push(`${basePath}${kind.path}` as any);
-                }}
-                className={`flex-row items-center gap-3 px-5 py-3.5 ${i === NEW_ENTRY_KINDS.length - 1 ? '' : 'border-b border-gray-100'}`}
-              >
-                <Ionicons name={kind.icon} size={20} color={kind.color} />
-                <Text className="flex-1 text-[15px] font-semibold text-gray-900">{kind.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-              </Pressable>
-            ))}
+      <DropdownPanel dropdown={dropdown}>
+        <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          What are you recording?
+        </Text>
+        {NEW_ENTRY_KINDS.map((kind) => (
+          <Pressable
+            key={kind.key}
+            accessibilityRole="button"
+            accessibilityLabel={kind.label}
+            onPress={() => {
+              dropdown.hide();
+              router.push(`${basePath}${kind.path}` as any);
+            }}
+            className="flex-row items-center px-4 py-3"
+            style={{ gap: 10 }}
+          >
+            <Ionicons name={kind.icon} size={18} color={kind.color} />
+            <Text className="flex-1 text-[14px] font-medium text-gray-900">{kind.label}</Text>
           </Pressable>
-        </Pressable>
-      </Modal>
+        ))}
+      </DropdownPanel>
     </>
   );
 }
@@ -1206,6 +1201,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             to={isToday ? '' : range.to}
             idleLabel={isToday ? 'Today' : 'All time'}
             onApply={applyRange}
+            shortcuts={[
+              { label: 'Today', on: isToday, onSelect: () => setRange({ from: today, to: today }) },
+              { label: 'All time', on: !range.from && !range.to, onSelect: () => setRange({ from: '', to: '' }) },
+            ]}
           />
           <NewEntryMenu basePath={basePath} />
         </>
