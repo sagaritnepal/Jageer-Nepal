@@ -21,7 +21,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Speech from 'expo-speech';
 import { useAuthStore } from '../hooks/useAuth';
 import { useChatAssistant, type ChatTurnResult } from '../hooks/useChatAssistant';
+import { useStatementImport, usePendingStatementRows } from '../hooks/useStatementImport';
 import { assistantStartPosition } from '../utils/assistantBubble';
+import { useAlertStore } from '../utils/alert';
 import { FINANCE_ACTION_META, buildFinancePrefillRoute } from '../utils/financeVoiceActions';
 
 function clamp(value: number, min: number, max: number) {
@@ -40,6 +42,8 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const profile = useAuthStore((state) => state.profile);
+  const userId = useAuthStore((state) => state.session?.user.id);
+  const { picking, pickAndParse } = useStatementImport(userId);
   const assistantName = profile?.full_name ? `${profile.full_name.split(' ')[0]} AI Assistant` : 'Jageer Assistant';
   const { messages, recording, sending, sendText, startRecording, stopRecordingAndSend, reset } = useChatAssistant();
   const [open, setOpen] = useState(false);
@@ -140,6 +144,24 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
     }
     Speech.stop();
     await startRecording();
+  }
+
+  // An attached Excel file is a bank/wallet statement: parse it here, then
+  // hand the rows to the same review screen as Finance > Import Statement
+  // (nothing is saved until the owner confirms there).
+  async function handleAttach() {
+    Speech.stop();
+    const rows = await pickAndParse();
+    if (!rows) {
+      // A bad file is reported as a toast, which renders under this modal -
+      // close it so the reason is actually visible. (A cancelled picker
+      // queues nothing, so the chat stays open then.)
+      if (useAlertStore.getState().queue.length > 0) close();
+      return;
+    }
+    usePendingStatementRows.getState().setRows(rows);
+    close();
+    router.push(`${basePath}/import-statement` as any);
   }
 
   function handleOpenForm() {
@@ -270,7 +292,7 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
               <ScrollView className="flex-1 px-4 py-3" keyboardShouldPersistTaps="handled">
                 {messages.length === 0 && (
                   <Text className="mt-6 text-center text-sm text-gray-400">
-                    Try "add expense 500 for tea" or tap the mic and just say it.
+                    Try "add expense 500 for tea", tap the mic and just say it, or attach a statement (.xlsx).
                   </Text>
                 )}
                 {messages.map((m, i) => (
@@ -312,6 +334,14 @@ export function FloatingAssistantChat({ basePath }: { basePath: string }) {
                   style={{ backgroundColor: recording ? '#FEF2F2' : '#EFF6FF' }}
                 >
                   <Ionicons name={recording ? 'stop-circle' : 'mic-outline'} size={20} color={recording ? '#DC2626' : '#2563EB'} />
+                </Pressable>
+                <Pressable
+                  onPress={handleAttach}
+                  disabled={recording || picking}
+                  accessibilityLabel="Attach an Excel statement"
+                  className="h-10 w-10 items-center justify-center rounded-full bg-gray-100 disabled:opacity-40"
+                >
+                  <Ionicons name={picking ? 'hourglass-outline' : 'attach'} size={20} color="#4B5563" />
                 </Pressable>
                 <TextInput
                   value={draft}
