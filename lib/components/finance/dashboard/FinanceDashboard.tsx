@@ -31,16 +31,19 @@ export function Card({
   right,
   children,
   style,
+  compact,
 }: {
   title: string;
   subtitle?: string;
   right?: ReactNode;
   children: ReactNode;
   style?: ViewStyle;
+  /** Less padding, for a page that has to fit on one screen. */
+  compact?: boolean;
 }) {
   return (
-    <View className="rounded-2xl bg-white p-5" style={[CARD_SHADOW, { flexGrow: 1 }, style]}>
-      <View className="mb-4 flex-row flex-wrap items-start justify-between" style={{ gap: 12 }}>
+    <View className={`rounded-2xl bg-white ${compact ? 'p-4' : 'p-5'}`} style={[CARD_SHADOW, { flexGrow: 1 }, style]}>
+      <View className={`${compact ? 'mb-2.5' : 'mb-4'} flex-row flex-wrap items-start justify-between`} style={{ gap: 12 }}>
         <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 150 }}>
           <Text className="text-[15px] font-bold text-gray-900">{title}</Text>
           {!!subtitle && <Text className="mt-0.5 text-xs text-gray-400">{subtitle}</Text>}
@@ -67,10 +70,16 @@ function useTransactions() {
   return useMemo(() => data ?? [], [data]);
 }
 
-/** Sales over time as a line, with a 7 days / 30 days / 6 months / 12 months switch. */
-export function SalesTrendCard() {
+/** The least height the chart is drawn at when it fills the card (see `fill`). */
+const MIN_CHART_HEIGHT = 150;
+
+/** Sales over time as a line, with a 7 days / 30 days / 6 months / 12 months switch.
+ * With `fill` the chart takes whatever height the card has left (the page is
+ * fitted to the screen); otherwise it is a fixed 270px. */
+export function SalesTrendCard({ fill }: { fill?: boolean }) {
   const txs = useTransactions();
   const [period, setPeriod] = useState<PeriodKey>('1m');
+  const [bodyHeight, setBodyHeight] = useState(0);
 
   const range = useMemo(() => buildRange(period), [period]);
   const labels = useMemo(() => range.buckets.map((b) => b.label), [range]);
@@ -79,8 +88,19 @@ export function SalesTrendCard() {
   const sales = useMemo(() => seriesByBucket(txs, 'sale', range.buckets).slice(0, range.upTo), [txs, range]);
   const salesTotal = useMemo(() => sumType(txs, 'sale', range.from, range.to), [txs, range]);
 
+  const chart = (height: number) => (
+    <LineChart
+      labels={labels}
+      series={[{ key: 'sale', label: 'Sales', color: SALES, values: sales, area: true }]}
+      height={height}
+      formatValue={npr}
+      emptyText="No sales recorded in this period yet"
+    />
+  );
+
   return (
     <Card
+      compact={fill}
       title="Sales trend"
       subtitle={`${npr(salesTotal)} ${periodMeta.caption}`}
       right={
@@ -101,28 +121,77 @@ export function SalesTrendCard() {
         </View>
       }
     >
-      <LineChart
-        labels={labels}
-        series={[{ key: 'sale', label: 'Sales', color: SALES, values: sales, area: true }]}
-        height={270}
-        formatValue={npr}
-        emptyText="No sales recorded in this period yet"
-      />
+      {fill ? (
+        // The space under the header, whatever it is. The chart is laid over it rather
+        // than inside it, so the chart's own height can never change the space it is measured in.
+        <View style={{ flex: 1, minHeight: MIN_CHART_HEIGHT }} onLayout={(e) => setBodyHeight(Math.floor(e.nativeEvent.layout.height))}>
+          {bodyHeight > 0 && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: bodyHeight }}>{chart(bodyHeight)}</View>}
+        </View>
+      ) : (
+        chart(270)
+      )}
     </Card>
   );
 }
 
-/** The latest sales, purchases and expenses, newest first. */
-export function RecentActivityCard({ basePath }: { basePath: string }) {
+/** One row of the recent-activity list: 20px of padding, two lines of text, a 1px rule -
+ * a little over what it measures, so the last row shown is never clipped. */
+const ACTIVITY_ROW_HEIGHT = 58;
+const MIN_ACTIVITY_ROWS = 2;
+
+/** The latest sales, purchases and expenses, newest first. With `fill` it shows as
+ * many as fit the height the card has (2 to 10); otherwise the latest 6. */
+export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?: boolean }) {
   const txs = useTransactions();
+  const [bodyHeight, setBodyHeight] = useState(0);
+  const limit = fill && bodyHeight > 0 ? Math.min(10, Math.max(MIN_ACTIVITY_ROWS, Math.floor(bodyHeight / ACTIVITY_ROW_HEIGHT))) : 6;
   const recent = useMemo(
-    () => [...txs].sort((a, b) => txTime(b) - txTime(a) || b.created_at.localeCompare(a.created_at)).slice(0, 6),
-    [txs]
+    () => [...txs].sort((a, b) => txTime(b) - txTime(a) || b.created_at.localeCompare(a.created_at)).slice(0, limit),
+    [txs, limit]
   );
   const go = (path: string) => router.push(`${basePath}${path}` as never);
 
+  const list =
+    recent.length === 0 ? (
+      <View className="items-center justify-center py-10">
+        <Text className="text-center text-sm text-gray-400">Nothing recorded yet</Text>
+      </View>
+    ) : (
+      <View>
+        {recent.map((t, i) => {
+          const meta = TYPE_STYLE[t.type];
+          return (
+            <Pressable
+              key={t.id}
+              onPress={() => go(`/transactions?type=${t.type}`)}
+              className={`flex-row items-center justify-between py-2.5 ${i < recent.length - 1 ? 'border-b border-gray-100' : ''}`}
+              style={{ gap: 10 }}
+            >
+              <View className="flex-1 flex-row items-center" style={{ gap: 10, minWidth: 0 }}>
+                <View className="h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${meta.color}1A` }}>
+                  <Ionicons name={meta.icon} size={14} color={meta.color} />
+                </View>
+                <View className="flex-1" style={{ minWidth: 0 }}>
+                  <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+                    {t.party_name || meta.label}
+                  </Text>
+                  <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+                    {toBsHistoryLabel(t.bill_date ?? t.created_at)}
+                  </Text>
+                </View>
+              </View>
+              <Text className="text-[13px] font-bold" style={{ color: meta.color }} numberOfLines={1}>
+                {t.type === 'sale' ? '+' : '−'} {npr(t.amount)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+
   return (
     <Card
+      compact={fill}
       title="Recent activity"
       subtitle="Latest sales, purchases and expenses"
       right={
@@ -131,41 +200,13 @@ export function RecentActivityCard({ basePath }: { basePath: string }) {
         </Pressable>
       }
     >
-      {recent.length === 0 ? (
-        <View className="items-center justify-center py-10">
-          <Text className="text-center text-sm text-gray-400">Nothing recorded yet</Text>
+      {fill ? (
+        // Measured, not sized by its rows: the rows shown are worked out from this height.
+        <View style={{ flex: 1, minHeight: MIN_ACTIVITY_ROWS * ACTIVITY_ROW_HEIGHT, overflow: 'hidden' }} onLayout={(e) => setBodyHeight(Math.floor(e.nativeEvent.layout.height))}>
+          {list}
         </View>
       ) : (
-        <View>
-          {recent.map((t, i) => {
-            const meta = TYPE_STYLE[t.type];
-            return (
-              <Pressable
-                key={t.id}
-                onPress={() => go(`/transactions?type=${t.type}`)}
-                className={`flex-row items-center justify-between py-2.5 ${i < recent.length - 1 ? 'border-b border-gray-100' : ''}`}
-                style={{ gap: 10 }}
-              >
-                <View className="flex-1 flex-row items-center" style={{ gap: 10, minWidth: 0 }}>
-                  <View className="h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${meta.color}1A` }}>
-                    <Ionicons name={meta.icon} size={14} color={meta.color} />
-                  </View>
-                  <View className="flex-1" style={{ minWidth: 0 }}>
-                    <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
-                      {t.party_name || meta.label}
-                    </Text>
-                    <Text className="text-[11px] text-gray-400" numberOfLines={1}>
-                      {toBsHistoryLabel(t.bill_date ?? t.created_at)}
-                    </Text>
-                  </View>
-                </View>
-                <Text className="text-[13px] font-bold" style={{ color: meta.color }} numberOfLines={1}>
-                  {t.type === 'sale' ? '+' : '−'} {npr(t.amount)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        list
       )}
     </Card>
   );

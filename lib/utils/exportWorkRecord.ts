@@ -33,7 +33,7 @@ export const WORK_COLUMNS: (keyof WorkRecordRow)[] = [
   'Amount',
 ];
 
-function escapeHtml(value: unknown): string {
+export function escapeHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -77,7 +77,7 @@ function buildHtml(title: string, subtitle: string, rows: WorkRecordRow[]): stri
 /** Hands the finished file to the person: the share sheet on a phone, a
  * download in a browser. Web has no share sheet and expo-sharing is a
  * no-op there, so the two platforms genuinely need different endings. */
-async function deliver(base64: string, filename: string, mimeType: string) {
+export async function deliver(base64: string, filename: string, mimeType: string) {
   if (Platform.OS === 'web') {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -106,8 +106,12 @@ async function deliver(base64: string, filename: string, mimeType: string) {
  * dialog ("Save as PDF") does the saving - expo-print there just prints
  * the app page itself, so it opens the table in its own window instead. */
 export async function exportWorkPdf(title: string, subtitle: string, rows: WorkRecordRow[]) {
-  const html = buildHtml(title, subtitle, rows);
+  await printHtml(buildHtml(title, subtitle, rows));
+}
 
+/** Prints a finished HTML document: the browser's print dialog on web, a PDF
+ * handed to the share sheet on a phone. */
+export async function printHtml(html: string) {
   if (Platform.OS === 'web') {
     const win = window.open('', '_blank');
     if (!win) throw new Error('Your browser blocked the window - allow pop-ups for this site and try again.');

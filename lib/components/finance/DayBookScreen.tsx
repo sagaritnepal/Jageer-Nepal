@@ -2,6 +2,7 @@
 import { Fragment, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -13,9 +14,11 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
 import { DateFilterButton } from './DateRangeFilter';
+import { DropdownPanel, useDropdown } from './DropdownMenu';
 import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { ENTRY_KINDS } from './entryKinds';
 
 type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer';
 
@@ -170,18 +173,18 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   const dayBand = (r: BookRow, index: number) =>
     dayLabel && r.kind !== 'opening' && rows[index - 1]?.date !== r.date ? (
       <View className="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5">
-        <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500">{dayLabel(r.date)}</Text>
+        <Text className="text-xs font-bold uppercase tracking-wide text-gray-500">{dayLabel(r.date)}</Text>
       </View>
     ) : null;
   const headCell = (label: string, style: object, right = false) => (
-    <Text className={`${cell} text-[11.5px] font-bold text-gray-600 ${right ? 'text-right' : ''}`} style={style}>
+    <Text className={`${cell} text-xs font-bold text-gray-600 ${right ? 'text-right' : ''}`} style={style}>
       {label}
     </Text>
   );
   const num = (value: number | null, style: object, color = '#111827', bold = false) => (
     <Text
       className={`${cell} text-right text-[12.5px] ${bold ? 'font-bold' : 'font-medium'}`}
-      style={[style, { color: value == null ? '#9CA3AF' : color }]}
+      style={[style, { color: value == null ? '#6B7280' : color }]}
       numberOfLines={1}
     >
       {value == null ? '—' : money(value)}
@@ -199,7 +202,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
           {headCell('Time', { width: 50 })}
           {headCell('Transaction details', { flex: 1 })}
           {headCell('Amount', { width: 82 }, true)}
-          <Text className="px-2.5 py-2 text-right text-[11.5px] font-bold text-gray-600" style={{ width: 84 }}>
+          <Text className="px-2.5 py-2 text-right text-xs font-bold text-gray-600" style={{ width: 84 }}>
             Balance
           </Text>
         </View>
@@ -211,7 +214,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             <Fragment key={r.id}>
             {dayBand(r, index)}
             <Pressable onPress={open(r)} disabled={!r.edit && !r.href} className="flex-row border-b border-gray-200">
-              <Text className={`${cell} text-[11.5px] text-gray-500`} style={{ width: 50 }} numberOfLines={1}>
+              <Text className={`${cell} text-xs text-gray-500`} style={{ width: 50 }} numberOfLines={1}>
                 {r.time}
               </Text>
               <View className={cell} style={{ flex: 1, gap: 2 }}>
@@ -223,12 +226,12 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
                   <AccountPill row={r} />
                 </View>
                 {!!r.sub && (
-                  <Text className="text-[11px] text-gray-400" numberOfLines={r.kind === 'opening' ? undefined : 2}>
+                  <Text className="text-xs text-gray-500" numberOfLines={r.kind === 'opening' ? undefined : 2}>
                     {r.sub}
                   </Text>
                 )}
                 {r.invoice != null && (
-                  <Text className="text-[11px] text-gray-500">
+                  <Text className="text-xs text-gray-500">
                     Invoice {money(r.invoice)}
                     {r.discount ? ` · Discount ${money(r.discount)}` : ''}
                   </Text>
@@ -236,13 +239,13 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
               </View>
               <Text
                 className={`${cell} text-right text-[12.5px] ${cash != null ? 'font-bold' : 'font-medium'}`}
-                style={{ width: 82, color: r.kind === 'opening' ? '#9CA3AF' : amountColor }}
+                style={{ width: 82, color: r.kind === 'opening' ? '#6B7280' : amountColor }}
               >
                 {r.kind === 'opening' ? '—' : amountText}
               </Text>
               <Text
                 className="px-2.5 py-2 text-right text-[12.5px] font-semibold"
-                style={{ width: 84, color: r.balance == null ? '#9CA3AF' : '#111827' }}
+                style={{ width: 84, color: r.balance == null ? '#6B7280' : '#111827' }}
               >
                 {money(r.balance)}
               </Text>
@@ -275,7 +278,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             {headCell('Bill amount', { width: COL.amount }, true)}
             {headCell('Cash in', { width: COL.cashIn }, true)}
             {headCell('Cash out', { width: COL.cashOut }, true)}
-            <Text className="px-2.5 py-2 text-right text-[11.5px] font-bold text-gray-600" style={{ width: COL.balance }}>
+            <Text className="px-2.5 py-2 text-right text-xs font-bold text-gray-600" style={{ width: COL.balance }}>
               Balance
             </Text>
           </View>
@@ -297,7 +300,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
                   {r.details}
                 </Text>
                 {!!r.sub && (
-                  <Text className="text-[11px] text-gray-400" numberOfLines={r.kind === 'opening' ? undefined : 1}>
+                  <Text className="text-xs text-gray-500" numberOfLines={r.kind === 'opening' ? undefined : 1}>
                     {r.sub}
                   </Text>
                 )}
@@ -313,7 +316,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
               {num(r.cashOut, { width: COL.cashOut }, '#B91C1C', true)}
               <Text
                 className="px-2.5 py-2 text-right text-[13px] font-bold"
-                style={{ width: COL.balance, color: r.balance == null ? '#9CA3AF' : '#111827' }}
+                style={{ width: COL.balance, color: r.balance == null ? '#6B7280' : '#111827' }}
               >
                 {money(r.balance)}
               </Text>
@@ -483,7 +486,7 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
             <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: '#1D4ED8' }}>
               <View className="flex-1">
                 <Text className="text-[16px] font-bold text-white">{locked ? 'Entry details' : 'Edit entry'}</Text>
-                <Text className="mt-0.5 text-[11.5px] text-white/85">{target.title}</Text>
+                <Text className="mt-0.5 text-xs text-white/85">{target.title}</Text>
               </View>
               <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
                 <Ionicons name="close" size={22} color="#FFFFFF" />
@@ -615,7 +618,7 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
                     </Text>
                   </Pressable>
                   {confirmingDelete && (
-                    <Text className="mt-2 text-center text-[11px] text-gray-400">
+                    <Text className="mt-2 text-center text-xs text-gray-500">
                       It disappears from the Day Book and from every total that counted it.
                     </Text>
                   )}
@@ -641,55 +644,54 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
 
 /** The five things a day can gain, behind one button - the same forms the
  * Finance menu opens, without leaving the Day Book to find them. */
-const NEW_ENTRY_KINDS: { key: string; label: string; icon: ComponentProps<typeof Ionicons>['name']; color: string; path: string }[] = [
-  { key: 'received', label: 'Received', icon: 'arrow-down-circle', color: '#059669', path: '/quick-payment?type=in' },
-  { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', color: '#DC2626', path: '/quick-payment?type=out' },
-  { key: 'sale', label: 'Sale', icon: 'trending-up', color: '#059669', path: '/transactions?type=sale&add=1' },
-  { key: 'purchase', label: 'Purchase', icon: 'cart', color: '#DC2626', path: '/transactions?type=purchase&add=1' },
-  { key: 'expense', label: 'Expense', icon: 'receipt', color: '#DC2626', path: '/transactions?type=expense&add=1' },
-];
+const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
+  key: kind.key,
+  label: kind.menuLabel ?? kind.label,
+  icon: kind.icon,
+  color: kind.color,
+  path: kind.path,
+}));
 
 function NewEntryMenu({ basePath }: { basePath: string }) {
-  const [open, setOpen] = useState(false);
+  const dropdown = useDropdown(230);
 
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
-        className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
-        style={{ backgroundColor: '#1D4ED8' }}
+        ref={dropdown.buttonRef}
+        onPress={dropdown.show}
+        accessibilityRole="button"
+        accessibilityLabel="New entry, choose what to record"
+        accessibilityState={{ expanded: dropdown.open }}
+        className="flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
+        style={{ minHeight: 36, backgroundColor: '#1D4ED8' }}
       >
         <Ionicons name="add" size={16} color="#FFFFFF" />
         <Text className="text-[13px] font-semibold text-white">New entry</Text>
         <Ionicons name="chevron-down" size={14} color="#FFFFFF" />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1 items-center justify-center bg-black/50 px-4" onPress={() => setOpen(false)}>
-          <Pressable onPress={() => {}} className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 380 }}>
-            <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: '#1D4ED8' }}>
-              <Text className="flex-1 text-[16px] font-bold text-white">What are you recording?</Text>
-              <Pressable onPress={() => setOpen(false)} hitSlop={8} accessibilityLabel="Close">
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </Pressable>
-            </View>
-            {NEW_ENTRY_KINDS.map((kind, i) => (
-              <Pressable
-                key={kind.key}
-                onPress={() => {
-                  setOpen(false);
-                  router.push(`${basePath}${kind.path}` as any);
-                }}
-                className={`flex-row items-center gap-3 px-5 py-3.5 ${i === NEW_ENTRY_KINDS.length - 1 ? '' : 'border-b border-gray-100'}`}
-              >
-                <Ionicons name={kind.icon} size={20} color={kind.color} />
-                <Text className="flex-1 text-[15px] font-semibold text-gray-900">{kind.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-              </Pressable>
-            ))}
+      <DropdownPanel dropdown={dropdown}>
+        <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          What are you recording?
+        </Text>
+        {NEW_ENTRY_KINDS.map((kind) => (
+          <Pressable
+            key={kind.key}
+            accessibilityRole="button"
+            accessibilityLabel={kind.label}
+            onPress={() => {
+              dropdown.hide();
+              router.push(`${basePath}${kind.path}` as any);
+            }}
+            className="flex-row items-center px-4 py-3"
+            style={{ gap: 10 }}
+          >
+            <Ionicons name={kind.icon} size={18} color={kind.color} />
+            <Text className="flex-1 text-[14px] font-medium text-gray-900">{kind.label}</Text>
           </Pressable>
-        </Pressable>
-      </Modal>
+        ))}
+      </DropdownPanel>
     </>
   );
 }
@@ -705,6 +707,7 @@ function AccountPicker({ options, selected, onSelect }: {
   onSelect: (key: AccountKey | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const insets = useSafeAreaInsets();
   type IconName = ComponentProps<typeof Ionicons>['name'];
   const iconFor = (key: AccountKey | null): IconName => (key == null ? 'wallet-outline' : key === CASH ? 'cash-outline' : 'business-outline');
   const current = options.find((o) => o.key === selected);
@@ -719,13 +722,13 @@ function AccountPicker({ options, selected, onSelect }: {
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
         />
       )}
-      <View style={{ position: 'absolute', right: 16, bottom: 16, alignItems: 'flex-end', gap: 8, zIndex: 11 }}>
+      <View style={{ position: 'absolute', right: 16 + insets.right, bottom: 16 + insets.bottom, alignItems: 'flex-end', gap: 8, zIndex: 11 }}>
         {open && (
           <View
             className="overflow-hidden rounded-xl border border-gray-200 bg-white"
             style={{ minWidth: 210, maxHeight: 340, boxShadow: '0 12px 32px rgba(16,24,40,0.22)' }}
           >
-            <Text className="border-b border-gray-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
               Show money through
             </Text>
             <ScrollView>
@@ -759,8 +762,8 @@ function AccountPicker({ options, selected, onSelect }: {
           accessibilityRole="button"
           accessibilityLabel={`Showing ${current?.name ?? 'all accounts'}. Choose an account`}
           accessibilityState={{ expanded: open }}
-          className="h-11 flex-row items-center rounded-full px-4"
-          style={{ gap: 8, backgroundColor: '#1D4ED8', boxShadow: '0 8px 20px rgba(29,78,216,0.35)' }}
+          className="flex-row items-center rounded-full px-4"
+          style={{ minHeight: 44, gap: 8, backgroundColor: '#1D4ED8', boxShadow: '0 8px 20px rgba(29,78,216,0.35)' }}
         >
           <Ionicons name={iconFor(current?.key ?? null)} size={17} color="#FFFFFF" />
           <Text className="max-w-[180px] text-[14px] font-semibold text-white" numberOfLines={1}>
@@ -1106,10 +1109,12 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       right: () => (
         <>
           <DateFilterButton
+            dropdown
             from={isToday ? '' : range.from}
             to={isToday ? '' : range.to}
             idleLabel="Today"
             onApply={applyRange}
+            shortcuts={[{ label: 'Today', on: isToday, onSelect: () => setRange({ from: today, to: today }) }]}
           />
           <NewEntryMenu basePath={basePath} />
         </>
@@ -1151,7 +1156,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             </Text>
           )}
 
-          <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
+          <Text className="px-1 text-xs leading-[17px] text-gray-500">
             Tap any entry to edit, save or delete it. The button at the bottom picks Cash, Esewa, a bank or all
             accounts - a transfer shows under an account as money in or out. Sale and purchase bills show what was billed that day - they
             don't change the balance until the money is received or paid, which appears as its own Received or Payment

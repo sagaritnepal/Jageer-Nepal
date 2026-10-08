@@ -20,12 +20,16 @@ export function buildCustomerSuggestions(
   customers: Customer[],
   phoneContacts: PhoneContactEntry[],
   query: string,
-  limit = 3000
+  limit = 3000,
+  /** Also match a saved customer's phone number, not only the name. */
+  matchPhone = false
 ): CustomerSuggestion[] {
   const q = query.trim().toLowerCase();
   const savedByPhone = new Set(customers.filter((c) => c.phone).map((c) => c.phone as string));
 
-  const matchingCustomers = q ? customers.filter((c) => c.name.toLowerCase().includes(q)) : customers;
+  const matchingCustomers = q
+    ? customers.filter((c) => c.name.toLowerCase().includes(q) || (matchPhone && (c.phone ?? '').includes(q)))
+    : customers;
   const fromCustomers: CustomerSuggestion[] = matchingCustomers.map((c) => ({
     key: c.id,
     name: c.name,

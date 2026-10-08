@@ -2,12 +2,47 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { useAccountBalances } from '../../hooks/useAccountBalances';
 import { useBarActions, useBookLayout } from './BookKit';
 
 type Period = 'month' | 'year' | 'all';
+
+type ReportLink = {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  path: string;
+  children?: ReportLink[];
+};
+
+/** The five report types. Total Received / Total Paid are the cards on top of the Receivable / Payable Report. */
+const REPORT_GROUPS: { heading: string; links: ReportLink[] }[] = [
+  {
+    heading: 'Reports',
+    links: [
+      { title: 'Sales Report', subtitle: 'Every sale bill, newest first', icon: 'trending-up', color: '#059669', path: '/sales-report' },
+      { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', icon: 'cart', color: '#DC2626', path: '/purchase-report' },
+      { title: 'Expense Report', subtitle: 'Every expense you recorded, newest first', icon: 'receipt', color: '#DC2626', path: '/expense-report' },
+      {
+        title: 'Receivable Report',
+        subtitle: 'Customers who owe you money',
+        icon: 'people',
+        color: '#059669',
+        path: '/to-receive',
+      },
+      {
+        title: 'Payable Report',
+        subtitle: 'Vendors you owe money to',
+        icon: 'storefront',
+        color: '#DC2626',
+        path: '/to-give',
+      },
+    ],
+  },
+];
 
 const PERIOD_LABEL: Record<Period, string> = { month: 'This Month', year: 'This Year', all: 'All Time' };
 
@@ -32,7 +67,6 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
-  const balances = useAccountBalances(userId);
   const [period, setPeriod] = useState<Period>('month');
 
   const inRange = useMemo(() => {
@@ -88,25 +122,44 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         <Row label="Net Profit" value={netProfit} color={netProfit >= 0 ? '#059669' : '#DC2626'} bold />
       </View>
 
-      <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-        <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Cash Position (as of today)</Text>
-        <Row label="Available Balance" value={balances.total} color={balances.total >= 0 ? '#2563EB' : '#DC2626'} bold />
-      </View>
-
-      <View className="flex-row gap-3">
-        <Pressable
-          onPress={() => router.push(`${basePath}/received` as any)}
-          className="flex-1 items-center rounded-2xl border border-emerald-200 bg-emerald-50 py-3"
-        >
-          <Text className="text-xs font-semibold text-emerald-700">View Total Received →</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push(`${basePath}/paid` as any)}
-          className="flex-1 items-center rounded-2xl border border-red-200 bg-red-50 py-3"
-        >
-          <Text className="text-xs font-semibold text-red-600">View Total Paid →</Text>
-        </Pressable>
-      </View>
+      {REPORT_GROUPS.map((group, g) => (
+        <View key={group.heading} className={`rounded-2xl border border-gray-200 bg-white p-4 ${g > 0 ? 'mt-4' : ''}`}>
+          <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">{group.heading}</Text>
+          {group.links.map((r, i) => (
+            <View key={r.title} className={i > 0 ? 'border-t border-gray-100' : ''}>
+              <ReportMenuLink report={r} basePath={basePath} />
+              {r.children?.map((child) => (
+                <View key={child.title} className="ml-11 border-t border-gray-100">
+                  <ReportMenuLink report={child} basePath={basePath} compact />
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      ))}
     </ScrollView>
+  );
+}
+
+function ReportMenuLink({ report, basePath, compact = false }: { report: ReportLink; basePath: string; compact?: boolean }) {
+  return (
+    <Pressable
+      onPress={() => router.push(`${basePath}${report.path}` as any)}
+      accessibilityRole="button"
+      accessibilityLabel={report.title}
+      className={`flex-row items-center ${compact ? 'py-2' : 'py-3'}`}
+      style={{ gap: 12 }}
+    >
+      <View className={`${compact ? 'h-7 w-7' : 'h-9 w-9'} items-center justify-center rounded-full`} style={{ backgroundColor: `${report.color}1A` }}>
+        <Ionicons name={report.icon} size={compact ? 15 : 18} color={report.color} />
+      </View>
+      <View className="flex-1" style={{ minWidth: 0 }}>
+        <Text className={`${compact ? 'text-xs' : 'text-sm'} font-bold text-gray-900`}>{report.title}</Text>
+        <Text className="text-xs text-gray-500" numberOfLines={1}>
+          {report.subtitle}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+    </Pressable>
   );
 }

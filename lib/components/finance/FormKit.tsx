@@ -4,7 +4,8 @@
 // customer's details and ledger entries): a small titled card, fields side by
 // side that wrap on a narrow screen, and Cancel / Save on the right.
 import { type ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text } from './CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 

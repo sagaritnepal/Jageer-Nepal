@@ -24,16 +24,18 @@ export const ROLE_ROUTES: Record<UserRole, string[]> = {
   ],
   reseller: [
     'bank-accounts', 'bank-balances', 'checkout', 'company', 'customers', 'dashboard', 'daybook', 'edit-request',
-    'employees', 'finance', 'import-statement', 'inventory', 'new-request', 'notifications', 'paid', 'profile', 'quick-payment',
-    'quotation/new', 'received', 'report', 'request-details', 'requests', 'rewards', 'shop', 'to-give', 'to-receive',
+    'employees', 'expense-report', 'finance', 'import-statement', 'inventory', 'new-request', 'notifications', 'paid', 'profile',
+    'purchase-report', 'quick-payment', 'quotation/new', 'received', 'report', 'request-details', 'requests', 'rewards',
+    'sales-report', 'shop', 'to-give', 'to-receive',
     'transactions', 'wholesale', 'workhub',
   ],
   technician: [
     'dashboard', 'earnings', 'employment', 'inbox', 'jobs', 'notifications', 'profile', 'rewards', 'statement', 'workhub',
   ],
   wholesaler: [
-    'bank-accounts', 'bank-balances', 'customers', 'daybook', 'finance', 'import-statement', 'inventory', 'market',
-    'marketplace', 'orders', 'paid', 'profile', 'quick-payment', 'received', 'report', 'to-give', 'to-receive',
+    'bank-accounts', 'bank-balances', 'customers', 'daybook', 'expense-report', 'finance', 'import-statement', 'inventory',
+    'market', 'marketplace', 'orders', 'paid', 'profile', 'purchase-report', 'quick-payment', 'received', 'report',
+    'sales-report', 'to-give', 'to-receive',
     'transactions', 'rewards',
   ],
   admin: ['catalog', 'categories', 'dashboard', 'products', 'profile', 'reports', 'requests', 'support', 'users'],

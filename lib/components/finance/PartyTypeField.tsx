@@ -1,6 +1,7 @@
 // lib/components/finance/PartyTypeField.tsx
-import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Text, useCaps } from './CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -8,198 +9,189 @@ import { showAlert, getErrorMessage } from '../../utils/alert';
 const MAX_NAME_LENGTH = 30;
 
 /**
- * "Party type" picker for the party forms: one chip per type (Customer,
- * Vendor, Employee and any the reseller added) - tap to choose, tap the chosen
- * one again to clear it. "Edit types" turns the chips into rename / delete
- * controls, and "Add type" makes a new one, so the list is the reseller's own.
- * Renders nothing when the types can't be loaded, so a form never breaks over
- * an optional label.
+ * "Ledger type" for the party forms: a box you type in. The types that match what is
+ * typed (Customer, Vendor, Employee and any the reseller added) are listed under it -
+ * all of them when the box is empty, attached right under it - and tapping one chooses it. Typing a name that is
+ * not there offers `Add "x" as a new ledger type` in the same list, which makes it and
+ * chooses it. Typing a name that is there exactly chooses it, so the same type is never
+ * made twice. When the party already has a type (editing it), the box starts with that
+ * type in it and tapping the box selects it, so it works the same as on a new party.
+ *
+ * The form is told the chosen type's id, or null while what is typed is not a type
+ * (yet), so "required" always means a real type was picked or added. Renders nothing
+ * when the types can't be loaded, so a form never breaks over an optional label.
  */
 export function PartyTypeField({
   ownerId,
   value,
   onChange,
+  required,
 }: {
   ownerId: string | undefined;
   value: string | null;
   onChange: (id: string | null) => void;
+  /** Marks the label with a star - the form checks it. */
+  required?: boolean;
 }) {
-  const { types, available, create, rename, remove } = usePartyTypes(ownerId);
-  const [editing, setEditing] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
+  const { types, available, create } = usePartyTypes(ownerId);
+  // What has been typed; null means "show the chosen type's own name".
+  const [text, setText] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [saving, setSaving] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while a row in the list is being pressed. Pressing a row takes the focus off the box,
+  // and a press that lasts longer than the delay below used to lose its list (and so its tap)
+  // before the button was let go - so the list stays for as long as a press is under way.
+  const pressing = useRef(false);
+  const caps = useCaps();
 
   if (!available) return null;
 
-  async function handleAdd() {
-    const name = newName.trim();
-    if (!name) return;
+  const current = types.find((t) => t.id === value);
+  const shown = text ?? current?.name ?? '';
+  const typed = (text ?? '').trim();
+  const lower = typed.toLowerCase();
+  const matches = lower ? types.filter((t) => t.name.toLowerCase().includes(lower)) : types;
+  const exact = types.find((t) => t.name.trim().toLowerCase() === lower);
+  const canAdd = !!typed && !exact;
+
+  function choose(id: string) {
+    onChange(id);
+    setText(null);
+    setOpen(false);
+  }
+
+  function handleType(v: string) {
+    setText(v);
+    setOpen(true);
+    // A name that is exactly a type chooses it; anything else is not a type yet.
+    const hit = types.find((t) => t.name.trim().toLowerCase() === v.trim().toLowerCase());
+    onChange(hit ? hit.id : null);
+  }
+
+  async function addTyped() {
+    if (!typed || saving) return;
+    if (exact) {
+      choose(exact.id);
+      return;
+    }
     setSaving(true);
     try {
-      const created = await create(name);
-      setNewName('');
-      setAdding(false);
-      onChange(created.id);
+      choose((await create(typed)).id);
     } catch (err) {
-      showAlert('Could not add the type', getErrorMessage(err, 'A type with that name may already exist.'));
+      showAlert('Could not add the ledger type', getErrorMessage(err));
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleRename(id: string) {
-    const name = renameValue.trim();
-    if (!name) return;
-    setSaving(true);
-    try {
-      await rename(id, name);
-      setRenamingId(null);
-    } catch (err) {
-      showAlert('Could not rename the type', getErrorMessage(err, 'A type with that name may already exist.'));
-    } finally {
-      setSaving(false);
-    }
+  // Enter: take the one type that matches, else add what was typed.
+  function handleSubmit() {
+    if (!typed) return;
+    if (exact) choose(exact.id);
+    else if (matches.length === 1) choose(matches[0].id);
+    else addTyped();
   }
 
-  function confirmRemove(id: string, name: string) {
-    showAlert(`Delete "${name}"?`, 'Parties with this type are kept - they just have no type.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await remove(id);
-            if (value === id) onChange(null);
-          } catch (err) {
-            showAlert('Could not delete the type', getErrorMessage(err));
-          }
-        },
-      },
-    ]);
+  // The list goes a moment after the box loses focus, so a tap on a row still lands first...
+  function closeSoon() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
+      if (!pressing.current) setOpen(false);
+    }, 150);
   }
+  // ...and not at all while a row is being held down; if that press is let go without choosing
+  // (dragged away), the list then closes as it would have.
+  const rowPress = {
+    onPressIn: () => {
+      pressing.current = true;
+    },
+    onPressOut: () => {
+      pressing.current = false;
+      if (!focused) closeSoon();
+    },
+  };
+
+  // The browser's black outline on a text box is switched off where the box has a
+  // border of its own to show focus with.
+  const typing = { outlineStyle: 'none', ...(caps ? { textTransform: 'uppercase' } : null) } as object;
+
+  const addRow = (
+    <Pressable
+      onPress={addTyped}
+      disabled={saving}
+      {...rowPress}
+      accessibilityRole="button"
+      className="flex-row items-center px-1 py-2.5"
+      style={{ gap: 8, opacity: saving ? 0.5 : 1 }}
+    >
+      <Ionicons name="add-circle-outline" size={15} color="#EA580C" />
+      <Text className="flex-1 text-sm font-semibold text-blue-700" numberOfLines={2}>
+        Add "{typed}" as a new ledger type
+      </Text>
+    </Pressable>
+  );
 
   return (
     <View className="mb-2.5">
-      <View className="mb-1.5 flex-row items-center justify-between">
-        <Text className="text-xs font-semibold text-gray-500">Party type</Text>
-        <Pressable
-          onPress={() => {
-            setEditing((v) => !v);
-            setRenamingId(null);
-            setAdding(false);
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-        >
-          <Text className="text-xs font-semibold text-blue-700">{editing ? 'Done' : 'Edit types'}</Text>
-        </Pressable>
-      </View>
+      <Text className="mb-1.5 text-xs font-semibold text-gray-600">{required ? 'Ledger type *' : 'Ledger type'}</Text>
 
-      <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
-        {types.map((t) => {
-          const selected = value === t.id;
+      <TextInput
+        value={shown}
+        onChangeText={handleType}
+        onSubmitEditing={handleSubmit}
+        onFocus={() => {
+          if (closeTimer.current) clearTimeout(closeTimer.current);
+          setFocused(true);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          closeSoon();
+        }}
+        placeholder={caps ? 'TYPE A LEDGER TYPE' : 'Type a ledger type'}
+        placeholderTextColor="#9CA3AF"
+        // Editing a party opens with its type already in the box: select it on tap so typing
+        // replaces it (the way the empty New party box starts) instead of adding on to it.
+        selectTextOnFocus
+        maxLength={MAX_NAME_LENGTH}
+        accessibilityLabel="Ledger type"
+        className="rounded-lg border bg-white px-3 py-2.5 text-sm text-gray-900"
+        style={[{ borderColor: focused ? '#2563EB' : '#D1D5DB' }, typing]}
+      />
 
-          if (editing && renamingId === t.id) {
-            return (
-              <View key={t.id} className="flex-row items-center rounded-full border border-blue-600 bg-white pl-3 pr-2" style={{ gap: 6 }}>
-                <TextInput
-                  value={renameValue}
-                  onChangeText={setRenameValue}
-                  onSubmitEditing={() => handleRename(t.id)}
-                  maxLength={MAX_NAME_LENGTH}
-                  autoFocus
-                  className="py-1.5 text-sm text-gray-900"
-                  style={{ minWidth: 90 }}
-                />
-                <Pressable onPress={() => handleRename(t.id)} disabled={saving} hitSlop={8} accessibilityLabel="Save name">
-                  <Ionicons name="checkmark" size={18} color="#059669" />
-                </Pressable>
-                <Pressable onPress={() => setRenamingId(null)} hitSlop={8} accessibilityLabel="Cancel rename">
-                  <Ionicons name="close" size={18} color="#9CA3AF" />
-                </Pressable>
-              </View>
-            );
-          }
-
-          if (editing) {
-            return (
-              <View key={t.id} className="flex-row items-center rounded-full border border-gray-300 bg-white pl-3.5 pr-2.5" style={{ gap: 10, minHeight: 36 }}>
-                <Text className="text-sm font-semibold text-gray-700">{t.name}</Text>
+      {open ? (
+        // Straight under the box, the way "Pick a customer" lists under its search box: just
+        // the rows and their dividers, with no second bordered box around them.
+        <View className="mt-2">
+          <ScrollView style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled">
+            {matches.length === 0 && !canAdd && <Text className="px-1 py-3 text-center text-sm text-gray-400">No ledger types yet.</Text>}
+            {matches.map((t) => {
+              const selected = t.id === value;
+              return (
                 <Pressable
-                  onPress={() => {
-                    setRenamingId(t.id);
-                    setRenameValue(t.name);
-                  }}
-                  hitSlop={8}
-                  accessibilityLabel={`Rename ${t.name}`}
+                  key={t.id}
+                  onPress={() => choose(t.id)}
+                  {...rowPress}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  className="flex-row items-center justify-between border-b border-gray-100 px-1 py-2.5"
                 >
-                  <Ionicons name="pencil-outline" size={15} color="#6B7280" />
+                  <Text className={`text-sm font-semibold ${selected ? 'text-blue-700' : 'text-gray-900'}`} numberOfLines={1}>
+                    {t.name}
+                  </Text>
+                  {selected && <Ionicons name="checkmark-circle" size={16} color="#2563EB" />}
                 </Pressable>
-                <Pressable onPress={() => confirmRemove(t.id, t.name)} hitSlop={8} accessibilityLabel={`Delete ${t.name}`}>
-                  <Ionicons name="trash-outline" size={15} color="#DC2626" />
-                </Pressable>
-              </View>
-            );
-          }
-
-          return (
-            <Pressable
-              key={t.id}
-              onPress={() => onChange(selected ? null : t.id)}
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              className={`items-center justify-center rounded-full border px-3.5 ${selected ? 'border-blue-600 bg-blue-600' : 'border-gray-300 bg-white'}`}
-              style={{ minHeight: 36 }}
-            >
-              <Text className={`text-sm font-semibold ${selected ? 'text-white' : 'text-gray-700'}`}>{t.name}</Text>
-            </Pressable>
-          );
-        })}
-
-        {adding ? (
-          <View className="flex-row items-center rounded-full border border-blue-600 bg-white pl-3 pr-2" style={{ gap: 6 }}>
-            <TextInput
-              value={newName}
-              onChangeText={setNewName}
-              onSubmitEditing={handleAdd}
-              placeholder="New type"
-              maxLength={MAX_NAME_LENGTH}
-              autoFocus
-              className="py-1.5 text-sm text-gray-900"
-              style={{ minWidth: 100 }}
-            />
-            <Pressable onPress={handleAdd} disabled={saving || !newName.trim()} hitSlop={8} accessibilityLabel="Add type">
-              <Ionicons name="checkmark" size={18} color={newName.trim() ? '#059669' : '#D1D5DB'} />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setAdding(false);
-                setNewName('');
-              }}
-              hitSlop={8}
-              accessibilityLabel="Cancel"
-            >
-              <Ionicons name="close" size={18} color="#9CA3AF" />
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => setAdding(true)}
-            hitSlop={4}
-            accessibilityRole="button"
-            className="flex-row items-center rounded-full border border-dashed border-gray-300 px-3"
-            style={{ gap: 4, minHeight: 36 }}
-          >
-            <Ionicons name="add" size={16} color="#1D4ED8" />
-            <Text className="text-sm font-semibold text-blue-700">Add type</Text>
-          </Pressable>
-        )}
-      </View>
+              );
+            })}
+            {canAdd && addRow}
+          </ScrollView>
+        </View>
+      ) : (
+        // Typed but not chosen, and the list has closed: the way to add it stays in sight.
+        canAdd && <View className="mt-2">{addRow}</View>
+      )}
     </View>
   );
 }

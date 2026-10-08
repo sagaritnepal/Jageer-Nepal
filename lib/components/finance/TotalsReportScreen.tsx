@@ -13,7 +13,8 @@ import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill,
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-type Kind = 'received' | 'paid';
+/** Total Received / Total Paid are money that actually moved; Sales / Purchase / Expense are the bills themselves, paid or not. */
+type Kind = 'received' | 'paid' | 'sale' | 'purchase' | 'expense';
 type Granularity = 'week' | 'month';
 
 type NavTarget = { kind: 'transactions'; type: 'expense' | 'sale' | 'purchase' } | { kind: 'party'; partyId: string };
@@ -53,6 +54,9 @@ const GRANULARITIES: { key: Granularity; label: string }[] = [
 const KIND_META: Record<Kind, { title: string; subtitle: string; color: string }> = {
   received: { title: 'Total Received', subtitle: 'Money actually collected, newest first', color: '#059669' },
   paid: { title: 'Total Paid', subtitle: 'Money that actually left the business, newest first', color: '#DC2626' },
+  sale: { title: 'Sales Report', subtitle: 'Every sale bill, newest first', color: '#059669' },
+  purchase: { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', color: '#DC2626' },
+  expense: { title: 'Expense Report', subtitle: 'Every expense you recorded, newest first', color: '#DC2626' },
 };
 
 function startOfDay(d: Date) {
@@ -133,6 +137,29 @@ export function TotalsReportScreen({ kind, basePath }: { kind: Kind; basePath: s
   // are excluded since those represent money owed, not money that's left
   // the business yet.
   const entries = useMemo((): Entry[] => {
+    // A Sales / Purchase / Expense report is just that kind of bill - every one, whether or not the
+    // money has moved yet - so none of the cash rules below apply to it.
+    if (kind === 'sale' || kind === 'purchase' || kind === 'expense') {
+      return (transactions ?? [])
+        .filter((t) => t.type === kind)
+        .map((t): Entry => {
+          // Same as the Statement: an expense is named for its payee if it has one, else its category.
+          const category = t.expense_category_id ? categoryById.get(t.expense_category_id) : undefined;
+          return {
+            id: t.id,
+            date: t.bill_date ?? t.created_at,
+            amount: t.amount,
+            party: kind === 'expense' ? t.party_name || category || '' : t.party_name ?? '',
+            note:
+              kind === 'expense'
+                ? [t.party_name ? category : null, t.note].filter(Boolean).join(' · ')
+                : [t.bill_no ? `Bill #${t.bill_no}` : null, t.note].filter(Boolean).join(' · '),
+            type: PILL[kind],
+            nav: { kind: 'transactions', type: kind },
+          };
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
     const list: Entry[] = [];
     for (const t of transactions ?? []) {
       // A Sale/Purchase with no party has no ledger to settle it later (a
@@ -339,7 +366,9 @@ export function TotalsReportScreen({ kind, basePath }: { kind: Kind; basePath: s
         Tap an entry to open it.{' '}
         {kind === 'received'
           ? "Only money actually collected counts here - a sale bill on credit shows up once the customer pays."
-          : "Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor."}
+          : kind === 'paid'
+            ? "Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor."
+            : `Every ${kind} bill counts here, whether or not the money has moved yet - see Total ${kind === 'sale' ? 'Received' : 'Paid'} for what actually has.`}
       </Text>
     </BookPage>
   );

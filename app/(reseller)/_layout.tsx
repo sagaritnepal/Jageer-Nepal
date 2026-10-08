@@ -18,6 +18,38 @@ import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/co
 // (Payment In, Purchase, Report, ...) are nested under it too, reusing the
 // exact same list the Finance dashboard's tiles use, so switching between
 // them never means going back to that dashboard to pick another tile.
+// Already reachable from the Day Book's "What are you recording?" menu.
+const DAYBOOK_ENTRY_KEYS = new Set(['payment-in', 'payment-out', 'sales', 'purchase', 'expenses']);
+
+// The order Finance's pages run down the side panel (the Finance page's own tiles keep theirs).
+// Anything not named here goes after them, in the order it comes.
+const FINANCE_NAV_ORDER = [
+  'daybook',
+  'customers',
+  'transactions',
+  'import-statement',
+  'inventory',
+  'report',
+  'quotation',
+  'bank-accounts',
+  'buy-stock',
+];
+const financeNavRank = (key: string) => {
+  const i = FINANCE_NAV_ORDER.indexOf(key);
+  return i === -1 ? FINANCE_NAV_ORDER.length : i;
+};
+
+// Every report there is (the same list the Report page itself shows, see ReportScreen.tsx),
+// nested under Report in the side panel instead of sitting flat beside Day Book and Ledger -
+// a family of report types one step in, all reachable without opening the Report page first.
+const REPORT_FAMILY: WebNavItem[] = [
+  { href: '/(reseller)/sales-report', label: 'Sales Report', icon: 'trending-up' },
+  { href: '/(reseller)/purchase-report', label: 'Purchase Report', icon: 'cart' },
+  { href: '/(reseller)/expense-report', label: 'Expense Report', icon: 'receipt' },
+  { href: '/(reseller)/to-receive', label: 'Receivable Report', icon: 'people' },
+  { href: '/(reseller)/to-give', label: 'Payable Report', icon: 'storefront' },
+];
+
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/dashboard', label: 'Home', icon: 'home' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
@@ -26,7 +58,10 @@ const NAV_ITEMS: WebNavItem[] = [
     href: '/(reseller)/finance',
     label: 'Finance',
     icon: 'wallet',
-    children: financeShortcuts('/(reseller)').map((s) => ({ href: s.href, label: s.label, icon: s.icon })),
+    children: financeShortcuts('/(reseller)')
+      .filter((s) => !DAYBOOK_ENTRY_KEYS.has(s.key))
+      .sort((a, b) => financeNavRank(a.key) - financeNavRank(b.key))
+      .map((s) => (s.key === 'report' ? { href: s.href, label: s.label, icon: s.icon, children: REPORT_FAMILY } : { href: s.href, label: s.label, icon: s.icon })),
   },
 ];
 
@@ -162,8 +197,11 @@ export default function ResellerLayout() {
         <Tabs.Screen name="quick-payment" options={{ href: null, title: 'Quick Payment' }} />
         <Tabs.Screen name="received" options={{ href: null, title: 'Total Received' }} />
         <Tabs.Screen name="paid" options={{ href: null, title: 'Total Paid' }} />
-        <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable' }} />
-        <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable' }} />
+        <Tabs.Screen name="sales-report" options={{ href: null, title: 'Sales Report' }} />
+        <Tabs.Screen name="purchase-report" options={{ href: null, title: 'Purchase Report' }} />
+        <Tabs.Screen name="expense-report" options={{ href: null, title: 'Expense Report' }} />
+        <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable Report' }} />
+        <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable Report' }} />
         <Tabs.Screen name="bank-accounts" options={{ href: null, title: 'Bank Accounts' }} />
         <Tabs.Screen name="bank-balances" options={{ href: null, title: 'Available Balance' }} />
         <Tabs.Screen name="import-statement" options={{ href: null, title: 'Import Statement' }} />
