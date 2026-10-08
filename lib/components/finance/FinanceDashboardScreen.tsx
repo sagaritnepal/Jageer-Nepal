@@ -63,7 +63,6 @@ export function shortcuts(basePath: string): {
 }[] {
   return [
     { key: 'daybook', label: 'Day Book', icon: 'book', href: `${basePath}/daybook` },
-    { key: 'transactions', label: 'Statement', icon: 'document-text', href: `${basePath}/transactions` },
     { key: 'customers', label: 'Ledger', icon: 'people', href: `${basePath}/customers` },
     ...ENTRY_KINDS.map((kind) => ({
       key: kind.key,
@@ -92,7 +91,6 @@ export function shortcuts(basePath: string): {
 // key/label/icon/href it returns.
 const SHORTCUT_COLORS: Record<string, { bg: string; fg: string }> = {
   daybook: { bg: '#EFF6FF', fg: '#1D4ED8' },
-  transactions: { bg: '#EFF6FF', fg: '#2563EB' },
   customers: { bg: '#EFF6FF', fg: '#2563EB' },
   'payment-in': { bg: '#ECFDF5', fg: '#059669' },
   'payment-out': { bg: '#FEF2F2', fg: '#DC2626' },
@@ -379,9 +377,9 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
 
   const balanceText = `NPR ${availableBalance.toLocaleString()}`;
   const metrics = [
-    { label: 'Sales', value: totals.sale, caption: 'All time', icon: 'trending-up' as const, color: MONEY.in.base, path: '/transactions?type=sale' },
-    { label: 'Purchase', value: totals.purchase, caption: 'All time', icon: 'cart' as const, color: MONEY.out.base, path: '/transactions?type=purchase' },
-    { label: 'Expense', value: totals.expense, caption: 'All time', icon: 'receipt' as const, color: MONEY.out.base, path: '/transactions?type=expense' },
+    { label: 'Sales', value: totals.sale, caption: 'All time', icon: 'trending-up' as const, color: MONEY.in.base, path: '/daybook?show=sale' },
+    { label: 'Purchase', value: totals.purchase, caption: 'All time', icon: 'cart' as const, color: MONEY.out.base, path: '/daybook?show=purchase' },
+    { label: 'Expense', value: totals.expense, caption: 'All time', icon: 'receipt' as const, color: MONEY.out.base, path: '/daybook?show=expense' },
     { label: 'Total received', value: yearReceived, caption: 'This year', icon: 'arrow-down-circle' as const, color: MONEY.in.base, path: '/received' },
     { label: 'Total paid', value: yearPaid, caption: 'This year', icon: 'arrow-up-circle' as const, color: MONEY.out.base, path: '/paid' },
     {

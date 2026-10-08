@@ -163,7 +163,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="technician/[id]" options={{ href: null, title: 'Work History' }} />
         <Tabs.Screen name="customers" options={{ href: null, title: 'Ledger' }} />
         <Tabs.Screen name="customer/[id]" options={{ href: null, title: 'Customer' }} />
-        <Tabs.Screen name="transactions" options={{ href: null, title: 'Statement' }} />
+        <Tabs.Screen name="transactions" options={{ href: null, title: 'Bill' }} />
         <Tabs.Screen name="quick-payment" options={{ href: null, title: 'Quick Payment' }} />
         <Tabs.Screen name="received" options={{ href: null, title: 'Total Received' }} />
         <Tabs.Screen name="paid" options={{ href: null, title: 'Total Paid' }} />

@@ -1,7 +1,7 @@
 // lib/components/finance/DayBookScreen.tsx
 import { Fragment, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
@@ -14,12 +14,27 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
 import { DateFilterButton } from './DateRangeFilter';
-import { useBookToolbar } from './BookKit';
+import { FilterTabs, useBookToolbar } from './BookKit';
+import { TransactionDetailModal } from './TransactionsScreen';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { ENTRY_KINDS } from './entryKinds';
+import type { BusinessTransaction } from '../../../types/database.types';
 
 type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer';
+
+/** What the tabs above the table narrow the Day Book to: everything, or just one kind of bill. */
+type KindFilter = 'all' | 'sale' | 'purchase' | 'expense';
+const KIND_TABS: { key: KindFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'sale', label: 'Sales' },
+  { key: 'purchase', label: 'Purchase' },
+  { key: 'expense', label: 'Expense' },
+];
+const KIND_TOTAL: Record<Exclude<KindFilter, 'all'>, string> = { sale: 'Total sales', purchase: 'Total purchases', expense: 'Total expenses' };
+
+/** The line under a one-kind view: what its entries add up to, and which column it belongs under. */
+type Summary = { label: string; amount: number; column: 'amount' | 'cashOut'; color: string };
 
 /** Where money sits: 'cash' for cash in hand, otherwise a bank_accounts id
  * (eSewa, Khalti, a bank...). */
@@ -52,7 +67,8 @@ type BookRow = {
   /** The same movement per account, so one account can be viewed on its own. */
   moves: Move[];
   sortKey: string;
-  href?: string;
+  /** A sale / purchase / expense bill: opens as the bill card, with Edit and Delete. */
+  bill?: BusinessTransaction;
   /** What this row actually is in the database, so it can be edited here. */
   edit?: EditTarget;
 };
@@ -156,13 +172,18 @@ function AccountPill({ row }: { row: BookRow }) {
  * time order: opening balance first, then cash in / paid out / expenses (which
  * move the running balance) mixed with the sales and purchase bills and
  * transfers (which don't), closing balance last. `dayLabel` is given for a
- * view of more than one day, and puts a date band above each day's entries. */
-function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabel, onOpenRow }: {
+ * view of more than one day, and puts a date band above each day's entries.
+ *
+ * A view of one kind of bill (the Sales / Purchase / Expense tabs) has no opening or
+ * closing balance - most of the cash is left out of it - so it ends with `summary`, what
+ * those entries add up to, instead. */
+function DayBookTable({ rows, opening, totalIn, totalOut, closing, summary, full, dayLabel, onOpenRow }: {
   rows: BookRow[];
   opening: number;
   totalIn: number;
   totalOut: number;
   closing: number;
+  summary: Summary | null;
   /** Show every column; otherwise Time | Details | Amount | Balance. */
   full: boolean;
   dayLabel?: (date: string) => string;
@@ -189,9 +210,9 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
       {value == null ? '—' : money(value)}
     </Text>
   );
-  // Tapping an entry opens it for editing; the opening-balance line and
-  // anything without a record behind it stays inert.
-  const open = (r: BookRow) => (r.edit ? () => onOpenRow(r) : r.href ? () => router.push(r.href as any) : undefined);
+  // Tapping an entry opens it (an entry for editing, a bill as its card); the
+  // opening-balance line and anything without a record behind it stays inert.
+  const open = (r: BookRow) => (r.edit || r.bill ? () => onOpenRow(r) : undefined);
 
   if (!full) {
     // Narrow: Time | Details (type, notes, invoice) | Amount | Balance.
@@ -212,7 +233,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
           return (
             <Fragment key={r.id}>
             {dayBand(r, index)}
-            <Pressable onPress={open(r)} disabled={!r.edit && !r.href} className="flex-row border-b border-gray-200">
+            <Pressable onPress={open(r)} disabled={!r.edit && !r.bill} className="flex-row border-b border-gray-200">
               <Text className={`${cell} text-xs text-gray-500`} style={{ width: 50 }} numberOfLines={1}>
                 {r.time}
               </Text>
@@ -252,15 +273,25 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             </Fragment>
           );
         })}
-        <View className="flex-row bg-gray-50">
-          <Text className={`${cell} flex-1 text-right text-[12.5px] font-bold text-gray-700`}>Closing balance</Text>
-          <Text
-            className="px-2.5 py-2 text-right text-[14px] font-extrabold"
-            style={{ width: 84, color: closing >= 0 ? '#2563EB' : '#DC2626' }}
-          >
-            {money(closing)}
-          </Text>
-        </View>
+        {summary ? (
+          <View className="flex-row bg-gray-50">
+            <Text className={`${cell} flex-1 text-right text-[12.5px] font-bold text-gray-700`}>{summary.label}</Text>
+            <Text className={`${cell} text-right text-[13px] font-extrabold`} style={{ width: 82, color: summary.color }}>
+              {money(summary.amount)}
+            </Text>
+            <View style={{ width: 84 }} />
+          </View>
+        ) : (
+          <View className="flex-row bg-gray-50">
+            <Text className={`${cell} flex-1 text-right text-[12.5px] font-bold text-gray-700`}>Closing balance</Text>
+            <Text
+              className="px-2.5 py-2 text-right text-[14px] font-extrabold"
+              style={{ width: 84, color: closing >= 0 ? '#2563EB' : '#DC2626' }}
+            >
+              {money(closing)}
+            </Text>
+          </View>
+        )}
       </View>
     );
   }
@@ -287,7 +318,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             {dayBand(r, index)}
             <Pressable
               onPress={open(r)}
-              disabled={!r.edit && !r.href}
+              disabled={!r.edit && !r.bill}
               className="flex-row border-b border-gray-200"
               style={r.kind === 'opening' ? { backgroundColor: '#FAFAFA' } : undefined}
             >
@@ -323,23 +354,37 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             </Fragment>
           ))}
 
-          <View className="flex-row bg-gray-50">
-            <Text className={`${cell} flex-1 text-right text-[12.5px] font-bold text-gray-700`}>
-              Opening {money(opening)} + In {money(totalIn)} − Out {money(totalOut)} = Closing balance
-            </Text>
-            <Text className={`${cell} text-right text-[13px] font-extrabold`} style={{ width: COL.cashIn, color: '#047857' }}>
-              {money(totalIn)}
-            </Text>
-            <Text className={`${cell} text-right text-[13px] font-extrabold`} style={{ width: COL.cashOut, color: '#B91C1C' }}>
-              {money(totalOut)}
-            </Text>
-            <Text
-              className="px-2.5 py-2 text-right text-[14px] font-extrabold"
-              style={{ width: COL.balance, color: closing >= 0 ? '#2563EB' : '#DC2626' }}
-            >
-              {money(closing)}
-            </Text>
-          </View>
+          {summary ? (
+            <View className="flex-row bg-gray-50">
+              <Text className={`${cell} flex-1 text-right text-[12.5px] font-bold text-gray-700`}>{summary.label}</Text>
+              <Text className={`${cell} text-right text-[13px] font-extrabold`} style={{ width: COL.amount, color: summary.column === 'amount' ? summary.color : '#6B7280' }}>
+                {summary.column === 'amount' ? money(summary.amount) : ''}
+              </Text>
+              <Text className={cell} style={{ width: COL.cashIn }} />
+              <Text className={`${cell} text-right text-[13px] font-extrabold`} style={{ width: COL.cashOut, color: summary.color }}>
+                {summary.column === 'cashOut' ? money(summary.amount) : ''}
+              </Text>
+              <View style={{ width: COL.balance }} />
+            </View>
+          ) : (
+            <View className="flex-row bg-gray-50">
+              <Text className={`${cell} flex-1 text-right text-[12.5px] font-bold text-gray-700`}>
+                Opening {money(opening)} + In {money(totalIn)} − Out {money(totalOut)} = Closing balance
+              </Text>
+              <Text className={`${cell} text-right text-[13px] font-extrabold`} style={{ width: COL.cashIn, color: '#047857' }}>
+                {money(totalIn)}
+              </Text>
+              <Text className={`${cell} text-right text-[13px] font-extrabold`} style={{ width: COL.cashOut, color: '#B91C1C' }}>
+                {money(totalOut)}
+              </Text>
+              <Text
+                className="px-2.5 py-2 text-right text-[14px] font-extrabold"
+                style={{ width: COL.balance, color: closing >= 0 ? '#2563EB' : '#DC2626' }}
+              >
+                {money(closing)}
+              </Text>
+            </View>
+          )}
       </View>
     </View>
   );
@@ -794,14 +839,30 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const fullTable = wide && windowWidth >= FULL_TABLE_MIN_WINDOW;
   const [calendarMode] = useCalendarMode();
   const today = localDay(new Date().toISOString());
+  // A link from elsewhere (the Finance tiles, Recent activity, the reports) can ask for
+  // one kind of bill - `?show=sale|purchase|expense` - or for everything (`?show=all`), and
+  // either way means "all of it", not just today: the same view the Statement used to give.
+  const { show } = useLocalSearchParams<{ show?: string }>();
+  const linkedKind = KIND_TABS.find((tab) => tab.key === show)?.key;
+  const allTime = { from: '', to: '' };
   // What the Filter button sets: today by default, otherwise a range. An empty
   // From reaches back to the start of the books (so nothing is carried in as an
   // opening balance); an empty To runs through today.
-  const [range, setRange] = useState({ from: today, to: today });
+  const [range, setRange] = useState(linkedKind ? allTime : { from: today, to: today });
+  const [kindFilter, setKindFilter] = useState<KindFilter>(linkedKind ?? 'all');
+  // The same screen is reused when a different link to it is followed, so the view
+  // follows the link each time it changes (and goes back to today without one).
+  useEffect(() => {
+    setKindFilter(linkedKind ?? 'all');
+    setRange(linkedKind ? { from: '', to: '' } : { from: today, to: today });
+  }, [linkedKind, today]);
   const from = range.from;
   const day = range.to || today;
   const singleDay = from === day;
   const [editing, setEditing] = useState<EditTarget | null>(null);
+  // The bill whose card is open (a tapped sale, purchase or expense).
+  const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
+  const deleteTx = useSupabaseDelete('business_transactions');
   // null shows every account together; otherwise just what went through that one.
   const [selectedAccount, setSelectedAccount] = useState<AccountKey | null>(null);
 
@@ -870,9 +931,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         account: isExpense ? via(t.bank_account_id) : null,
         moves: isExpense ? [{ account: keyOf(t.bank_account_id), amount: t.amount, dir: 'out' }] : [],
         sortKey: t.created_at,
-        // A bill opens on its own page - the very page that recorded it, with the
-        // bill loaded - rather than in a cut-down popup.
-        href: `${basePath}/transactions?type=${t.type}&add=1&edit=${t.id}`,
+        // A bill opens as its card (Edit goes to the page that recorded it, Delete is there too).
+        bill: t,
       });
     }
 
@@ -1020,6 +1080,32 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     // view reads in date order and the running balance follows it.
     rows.sort((a, b) => a.date.localeCompare(b.date) || a.sortKey.localeCompare(b.sortKey));
 
+    // One kind of bill on its own (the Sales / Purchase / Expense tabs): just those entries,
+    // newest first, and what they add up to. There is no opening or closing balance for it -
+    // that would leave out most of the cash - so the account picker has nothing to do either.
+    if (kindFilter !== 'all') {
+      const only = rows.filter((r) => r.kind === kindFilter).reverse();
+      const column = kindFilter === 'expense' ? 'cashOut' : 'amount';
+      const summary: Summary = {
+        label: KIND_TOTAL[kindFilter],
+        amount: only.reduce((sum, r) => sum + ((column === 'cashOut' ? r.cashOut : r.amount) ?? 0), 0),
+        column,
+        color: KIND[kindFilter].color,
+      };
+      return {
+        rows: only,
+        entryCount: only.length,
+        opening: 0,
+        totalIn: 0,
+        totalOut: 0,
+        closing: 0,
+        openingByAccount: [] as { name: string; amount: number }[],
+        accountOptions: [] as AccountOption[],
+        selected: null as AccountOption | null,
+        summary: summary as Summary | null,
+      };
+    }
+
     // Where the opening balance sits, account by account - what each account held
     // at the start of the period, which adds up to the Opening balance.
     // An entry can point at an account that isn't in the list (one that was
@@ -1095,8 +1181,9 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       openingByAccount,
       accountOptions,
       selected,
+      summary: null as Summary | null,
     };
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, basePath, selectedAccount]);
+  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, basePath, selectedAccount, kindFilter]);
 
   // The date band above each day of a longer view.
   const dayLabel = (date: string) => dateLabels(date, calendarMode).join('  ·  ');
@@ -1113,18 +1200,48 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       wide,
       right: () => (
         <>
+          <FilterTabs options={KIND_TABS} value={kindFilter} onChange={setKindFilter} />
           <DateFilterButton
             from={isToday ? '' : range.from}
             to={isToday ? '' : range.to}
-            idleLabel="Today"
+            idleLabel={isToday ? 'Today' : 'All time'}
             onApply={applyRange}
           />
           <NewEntryMenu basePath={basePath} />
         </>
       ),
     },
-    [range, isToday, today, basePath]
+    [range, isToday, today, basePath, kindFilter]
   );
+
+  // The bill card's Edit goes to the page that records bills, with this one loaded in it.
+  function editBill(tx: BusinessTransaction) {
+    setViewingTx(null);
+    router.push(`${basePath}/transactions?type=${tx.type}&add=1&edit=${tx.id}` as any);
+  }
+
+  // Names what is being removed so the right one goes (a sale also comes off its customer's ledger).
+  function deleteBill(tx: BusinessTransaction) {
+    setViewingTx(null);
+    showAlert(
+      `Delete this ${tx.type}?`,
+      `${tx.party_name || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}${tx.customer_id ? '. It is also taken off their ledger.' : ''}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTx.mutateAsync(tx.id);
+            } catch (err) {
+              showAlert('Could not delete', getErrorMessage(err));
+            }
+          },
+        },
+      ]
+    );
+  }
 
   const loaded = !(isLoading && !transactions);
 
@@ -1146,12 +1263,24 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             totalIn={book.totalIn}
             totalOut={book.totalOut}
             closing={book.closing}
+            summary={book.summary}
             full={fullTable}
             dayLabel={singleDay ? undefined : dayLabel}
-            onOpenRow={(row) => row.edit && setEditing(row.edit)}
+            onOpenRow={(row) => {
+              if (row.bill) setViewingTx(row.bill);
+              else if (row.edit) setEditing(row.edit);
+            }}
           />
 
           <EditEntryModal target={editing} onClose={() => setEditing(null)} />
+          <TransactionDetailModal
+            tx={viewingTx}
+            categoryName={viewingTx?.expense_category_id ? (categories ?? []).find((c) => c.id === viewingTx.expense_category_id)?.name ?? null : null}
+            bankAccountName={viewingTx?.bank_account_id ? (accounts ?? []).find((a) => a.id === viewingTx.bank_account_id)?.name ?? null : null}
+            onClose={() => setViewingTx(null)}
+            onEdit={() => viewingTx && editBill(viewingTx)}
+            onDelete={viewingTx ? () => deleteBill(viewingTx) : undefined}
+          />
 
           {book.entryCount === 0 && (
             <Text className="px-1 text-[13px] text-gray-500">
@@ -1168,7 +1297,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         </>
       )}
     </ScrollView>
-    {loaded && <AccountPicker options={book.accountOptions} selected={book.selected?.key ?? null} onSelect={setSelectedAccount} />}
+    {loaded && kindFilter === 'all' && <AccountPicker options={book.accountOptions} selected={book.selected?.key ?? null} onSelect={setSelectedAccount} />}
     </View>
   );
 }

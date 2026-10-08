@@ -43,7 +43,7 @@ function ActivityRow({
         }
         router.push(
           (item.nav.kind === 'transactions'
-            ? `${basePath}/transactions?type=${item.nav.type}`
+            ? `${basePath}/daybook?show=${item.nav.type}`
             : `${basePath}/customer/${item.nav.partyId}`) as any
         );
       }}

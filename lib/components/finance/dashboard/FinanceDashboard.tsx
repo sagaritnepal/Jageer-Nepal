@@ -163,7 +163,7 @@ export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?
           return (
             <Pressable
               key={t.id}
-              onPress={() => go(`/transactions?type=${t.type}`)}
+              onPress={() => go(`/daybook?show=${t.type}`)}
               className={`flex-row items-center justify-between py-2.5 ${i < recent.length - 1 ? 'border-b border-gray-100' : ''}`}
               style={{ gap: 10 }}
             >
@@ -195,7 +195,7 @@ export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?
       title="Recent activity"
       subtitle="Latest sales, purchases and expenses"
       right={
-        <Pressable onPress={() => go('/transactions')}>
+        <Pressable onPress={() => go('/daybook?show=all')}>
           <Text className="text-xs font-bold text-blue-600">View all</Text>
         </Pressable>
       }

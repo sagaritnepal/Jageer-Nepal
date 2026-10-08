@@ -255,7 +255,7 @@ export function TotalsReportScreen({ kind, basePath }: { kind: Kind; basePath: s
 
   const open = (e: Entry) =>
     router.push(
-      (e.nav.kind === 'transactions' ? `${basePath}/transactions?type=${e.nav.type}` : `${basePath}/customer/${e.nav.partyId}`) as never
+      (e.nav.kind === 'transactions' ? `${basePath}/daybook?show=${e.nav.type}` : `${basePath}/customer/${e.nav.partyId}`) as never
     );
 
   const amountCell = (e: Entry) => (

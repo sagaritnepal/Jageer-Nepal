@@ -25,7 +25,8 @@ import { supabase } from '../../supabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { nameCaps } from '../../utils/nameCaps';
 import { deleteErrorMessage } from '../../utils/dbErrors';
-import { fetchAllRows } from '../../utils/fetchAllRows';
+import { nextEntryNo } from '../../utils/nextEntryNo';
+import { useEntryNo } from '../../hooks/useEntryNo';
 import { isValidPhone10 } from '../../utils/phone';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import { localTodayIso } from '../../utils/localDate';
@@ -305,6 +306,8 @@ function AddEntryForm({
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  // A new entry opens with the next receipt number already in the box (see useEntryNo).
+  const entryNo = useEntryNo({ table: 'customer_ledger_entries', ownerId, entryType, auto: !initial, existing: initial?.receipt_no });
 
   const selectedAccountName = bankAccountId
     ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
@@ -321,7 +324,13 @@ function AddEntryForm({
       if (initial) {
         await updateEntry.mutateAsync({
           id: initial.id,
-          values: { entry_type: entryType, amount: value, note: note.trim() || null, bank_account_id: bankAccountId },
+          values: {
+            entry_type: entryType,
+            amount: value,
+            note: note.trim() || null,
+            bank_account_id: bankAccountId,
+            receipt_no: entryNo.receiptNo.trim() || null,
+          },
         });
       } else {
         await insertEntry.mutateAsync({
@@ -332,6 +341,7 @@ function AddEntryForm({
           note: note.trim() || null,
           source: 'manual',
           bank_account_id: bankAccountId,
+          receipt_no: entryNo.receiptNo.trim() || null,
         });
       }
       onDone();
@@ -363,6 +373,15 @@ function AddEntryForm({
     <FormCard icon="document-text-outline" title={initial ? 'Edit ledger entry' : 'Add ledger entry'}>
       <Segmented value={entryType} onChange={setEntryType} options={typeOptions} />
       <FieldRow>
+        <Field label={entryType === 'credit' ? 'Receipt no.' : 'Payment no.'} basis={110}>
+          <TextInput
+            value={entryNo.receiptNo}
+            onChangeText={entryNo.onChange}
+            placeholder="001"
+            placeholderTextColor="#9CA3AF"
+            className={INPUT}
+          />
+        </Field>
         <Field label="Amount (NPR)" basis={160}>
           <TextInput
             value={amount}
@@ -392,25 +411,6 @@ function AddEntryForm({
       {accountPicker}
     </FormCard>
   );
-}
-
-/** The next Payment In receipt number (001, 002, ...), worked out the way the
- * Payment In screen does it: one past the highest number already used by a
- * manual payment received, falling back to how many there are when none of
- * them carry a number. */
-async function nextReceivedReceiptNo(ownerId: string): Promise<string> {
-  const rows = await fetchAllRows<{ receipt_no: string | null }>(
-    (from, to) =>
-      (supabase.from('customer_ledger_entries') as any)
-        .select('receipt_no', { count: 'exact' })
-        .eq('owner_id', ownerId)
-        .eq('entry_type', 'credit')
-        .eq('source', 'manual')
-        .order('id')
-        .range(from, to)
-  );
-  const numbers = rows.map((r) => Number((r.receipt_no ?? '').replace(/\D/g, ''))).filter((n) => Number.isFinite(n) && n > 0);
-  return String((numbers.length ? Math.max(...numbers) : rows.length) + 1).padStart(3, '0');
 }
 
 /** The vendor-payable side: "You paid" (credit - settles part of what you owe
@@ -446,6 +446,15 @@ function AddVendorEntryForm({
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  // The payment / receipt number: a new entry, or one being moved to Received, opens with the next
+  // number of its own ledger already in the box; an existing Payment Out keeps its number.
+  const entryNo = useEntryNo({
+    table: kind === 'received' ? 'customer_ledger_entries' : 'vendor_ledger_entries',
+    ownerId,
+    entryType: 'credit',
+    auto: !initial || kind === 'received',
+    existing: initial?.receipt_no,
+  });
 
   const selectedAccountName = bankAccountId
     ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
@@ -465,7 +474,7 @@ function AddVendorEntryForm({
       source: 'manual',
       bank_account_id: bankAccountId,
       ...(entry ? { entry_date: entry.entry_date ?? entry.created_at.slice(0, 10) } : {}),
-      receipt_no: await nextReceivedReceiptNo(ownerId),
+      receipt_no: entryNo.receiptNo.trim() || (await nextEntryNo('customer_ledger_entries', ownerId, 'credit')),
     });
     if (!entry) return;
     try {
@@ -492,7 +501,13 @@ function AddVendorEntryForm({
       } else if (initial) {
         await updateEntry.mutateAsync({
           id: initial.id,
-          values: { entry_type: kind === 'paid' ? 'credit' : 'debit', amount: value, note: note.trim() || null, bank_account_id: bankAccountId },
+          values: {
+            entry_type: kind === 'paid' ? 'credit' : 'debit',
+            amount: value,
+            note: note.trim() || null,
+            bank_account_id: bankAccountId,
+            ...(kind === 'paid' ? { receipt_no: entryNo.receiptNo.trim() || null } : {}),
+          },
         });
       } else {
         await insertEntry.mutateAsync({
@@ -503,6 +518,7 @@ function AddVendorEntryForm({
           note: note.trim() || null,
           source: 'manual',
           bank_account_id: bankAccountId,
+          receipt_no: entryNo.receiptNo.trim() || null,
         });
       }
       onDone();
@@ -534,6 +550,17 @@ function AddVendorEntryForm({
     <FormCard icon="cart-outline" title={initial ? 'Edit vendor entry' : 'Add vendor entry'}>
       <Segmented value={kind} onChange={setKind} options={kindOptions} />
       <FieldRow>
+        {kind !== 'onCredit' && (
+          <Field label={kind === 'received' ? 'Receipt no.' : 'Payment no.'} basis={110}>
+            <TextInput
+              value={entryNo.receiptNo}
+              onChangeText={entryNo.onChange}
+              placeholder="001"
+              placeholderTextColor="#9CA3AF"
+              className={INPUT}
+            />
+          </Field>
+        )}
         <Field label="Amount (NPR)" basis={160}>
           <TextInput
             value={amount}
