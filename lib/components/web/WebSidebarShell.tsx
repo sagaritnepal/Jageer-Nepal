@@ -256,7 +256,7 @@ export function WebSidebarShell({
             <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
               {profile?.full_name ?? 'Account'}
             </Text>
-            <Text style={{ fontSize: 11, color: '#9CA3AF' }}>{roleLabel}</Text>
+            <Text style={{ fontSize: 12, color: '#6B7280' }}>{roleLabel}</Text>
           </View>
         </Pressable>
       </View>

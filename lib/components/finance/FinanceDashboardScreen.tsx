@@ -188,7 +188,7 @@ function Metric({
         <Text className="mt-0.5 font-extrabold" style={{ color, fontSize: fitFont(text, width - 2 * 12 - 2, 16), lineHeight: 20 }} numberOfLines={1}>
           {text}
         </Text>
-        <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+        <Text className="text-xs text-gray-500" numberOfLines={1}>
           {caption}
         </Text>
       </Pressable>
@@ -212,7 +212,7 @@ function Metric({
       <Text className="mt-0.5 font-extrabold" style={{ color, fontSize: fitFont(text, inner, 17), lineHeight: 22 }} numberOfLines={1}>
         {text}
       </Text>
-      <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
+      <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
         {caption}
       </Text>
     </Pressable>
@@ -368,7 +368,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
         <Text className="mt-1 font-extrabold" style={{ color: tone.text, fontSize: fitFont(text, halfTile - 24, 15) }} numberOfLines={1}>
           {text}
         </Text>
-        <Text className="mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
+        <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
           {caption}
         </Text>
       </Pressable>
@@ -430,7 +430,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
               >
                 {balanceText}
               </Text>
-              <Text className="mt-1 text-[11px] text-gray-400">Cash in hand + all bank accounts</Text>
+              <Text className="mt-1 text-xs text-gray-500">Cash in hand + all bank accounts</Text>
             </View>
           </Pressable>
 
