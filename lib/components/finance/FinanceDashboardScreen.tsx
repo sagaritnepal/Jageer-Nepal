@@ -174,6 +174,8 @@ function Metric({
     return (
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
         className="justify-center overflow-hidden rounded-xl bg-white px-3 py-2"
         style={{ flex: 1, minWidth: 0, borderWidth: 1, borderColor: `${color}40` }}
       >
@@ -196,6 +198,8 @@ function Metric({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       className="overflow-hidden rounded-2xl bg-white p-3.5"
       style={{ width, borderWidth: 1, borderColor: `${color}40` }}
     >
@@ -356,7 +360,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const overviewTile = (label: string, caption: string, value: number, tone: MoneyTone, path: string) => {
     const text = `NPR ${value.toLocaleString()}`;
     return (
-      <Pressable onPress={go(path)} className={`flex-1 overflow-hidden rounded-xl ${fit ? 'px-3 py-2' : 'p-3'}`} style={{ backgroundColor: tone.bg }}>
+      <Pressable onPress={go(path)} accessibilityRole="button" accessibilityLabel={label} className={`flex-1 overflow-hidden rounded-xl ${fit ? 'px-3 py-2' : 'p-3'}`} style={{ backgroundColor: tone.bg }}>
         <View className="flex-row items-center" style={{ gap: 6 }}>
           <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tone.base }} />
           <Text className="text-xs font-semibold text-gray-600">{label}</Text>
@@ -396,7 +400,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
       <View style={{ flexDirection: twoColumn ? 'row' : 'column', gap: ZONE_GAP, alignItems: 'stretch' }}>
         <View style={{ width: zoneLeft }}>
           {/* Grows to take whatever height the row gives it, so it never ends in a blank strip. */}
-          <Pressable onPress={go('/bank-balances')} style={{ flexGrow: 1 }}>
+          <Pressable onPress={go('/bank-balances')} accessibilityRole="button" accessibilityLabel="Available balance" style={{ flexGrow: 1 }}>
             {/* A quiet neutral tile like the ones beside it - the amount in dark ink,
                 red only when the balance is below zero - so it doesn't pull the eye
                 away from everything else on the page. */}
@@ -470,6 +474,8 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
             <Pressable
               key={s.key}
               onPress={() => router.push(s.href as any)}
+              accessibilityRole="button"
+              accessibilityLabel={s.label}
               className="items-center rounded-2xl bg-white py-4"
               style={{ width: thirdTileWidth, ...CARD_SHADOW }}
             >
@@ -485,7 +491,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   );
 
   const profileCompletionCard = profileCompletion < 100 && (
-    <Pressable onPress={go('/profile')} className="overflow-hidden rounded-2xl">
+    <Pressable onPress={go('/profile')} accessibilityRole="button" accessibilityLabel="Complete your profile" className="overflow-hidden rounded-2xl">
       <LinearGradient
         colors={['#2563EB', '#1D4ED8']}
         start={{ x: 0, y: 0 }}

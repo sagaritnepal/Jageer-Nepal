@@ -656,6 +656,9 @@ function NewEntryMenu({ basePath }: { basePath: string }) {
     <>
       <Pressable
         onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="New entry, choose what to record"
+        accessibilityState={{ expanded: open }}
         className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
         style={{ backgroundColor: '#1D4ED8' }}
       >
@@ -666,7 +669,7 @@ function NewEntryMenu({ basePath }: { basePath: string }) {
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable className="flex-1 items-center justify-center bg-black/50 px-4" onPress={() => setOpen(false)}>
-          <Pressable onPress={() => {}} className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 380 }}>
+          <Pressable onPress={() => {}} accessibilityViewIsModal className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 380 }}>
             <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: '#1D4ED8' }}>
               <Text className="flex-1 text-[16px] font-bold text-white">What are you recording?</Text>
               <Pressable onPress={() => setOpen(false)} hitSlop={8} accessibilityLabel="Close">
@@ -676,6 +679,8 @@ function NewEntryMenu({ basePath }: { basePath: string }) {
             {NEW_ENTRY_KINDS.map((kind, i) => (
               <Pressable
                 key={kind.key}
+                accessibilityRole="button"
+                accessibilityLabel={kind.label}
                 onPress={() => {
                   setOpen(false);
                   router.push(`${basePath}${kind.path}` as any);

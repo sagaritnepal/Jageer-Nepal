@@ -154,6 +154,10 @@ export function WebSidebarShell({
               <View key={item.href}>
                 <Pressable
                   onPress={() => router.push(item.href as any)}
+                  accessibilityRole="link"
+                  accessibilityLabel={item.label}
+                  accessibilityState={{ selected: active }}
+                  aria-current={active ? 'page' : undefined}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -184,6 +188,10 @@ export function WebSidebarShell({
                         <Pressable
                           key={child.href}
                           onPress={() => router.push(child.href as any)}
+                          accessibilityRole="link"
+                          accessibilityLabel={child.label}
+                          accessibilityState={{ selected: childActive }}
+                          aria-current={childActive ? 'page' : undefined}
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
