@@ -56,7 +56,6 @@ const TX_TYPE_LABEL: Record<BusinessTransactionType, string> = {
 // The two colours a choice or tag takes: green for money in, red for money out.
 const IN_TONE = { color: MONEY.in.text, bg: MONEY.in.bg, border: MONEY.in.base };
 const OUT_TONE = { color: MONEY.out.text, bg: MONEY.out.bg, border: MONEY.out.base };
-const NEUTRAL_TONE = { color: '#374151', bg: '#F3F4F6', border: '#9CA3AF' };
 
 /** Whether `phone` is already used by a different customer of this owner. */
 async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerId: string) {
@@ -290,20 +289,17 @@ function AddEntryForm({
   customerId,
   ownerId,
   initial,
-  defaultType,
   onDone,
 }: {
   customerId: string;
   ownerId: string;
   initial?: CustomerLedgerEntry | null;
-  /** Which way a new entry starts: Received or Customer owes. */
-  defaultType?: LedgerEntryType;
   onDone: () => void;
 }) {
   const insertEntry = useSupabaseInsert('customer_ledger_entries');
   const updateEntry = useSupabaseUpdate('customer_ledger_entries');
   const bankAccounts = useBankAccounts(ownerId);
-  const [entryType, setEntryType] = useState<LedgerEntryType>(initial?.entry_type ?? defaultType ?? 'credit');
+  const [entryType, setEntryType] = useState<LedgerEntryType>(initial?.entry_type ?? 'credit');
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
@@ -357,10 +353,11 @@ function AddEntryForm({
       onDelete={bankAccounts.remove}
     />
   );
-  const typeOptions = [
-    { key: 'credit' as const, label: 'Received', ...IN_TONE },
-    { key: 'debit' as const, label: 'Customer owes', ...OUT_TONE },
-  ];
+  // A new entry is always a payment received: what is receivable from a customer comes from
+  // their bills (New Sale), so there is no other choice. An older Payment Out / Receivable entry
+  // opens with Received unselected - tap it to turn that entry into a received one, or just fix
+  // its amount or remarks.
+  const typeOptions = [{ key: 'credit' as const, label: 'Received', ...IN_TONE }];
 
   return (
     <FormCard icon="document-text-outline" title={initial ? 'Edit ledger entry' : 'Add ledger entry'}>
@@ -684,8 +681,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const { data: partyRow } = useSupabaseRow('customers', id);
   const profile = useAuthStore((state) => state.profile);
   const { nameById: partyTypeName } = usePartyTypes(partyRow?.owner_id);
-  // Which way "Add entry" opens its form: Received (credit) or Customer owes (debit).
-  const [entryPreset, setEntryPreset] = useState<LedgerEntryType>('credit');
 
   // ---- The statement: both ledgers as one account (see ledgerStatement.ts) ----
   const [exportMenu, setExportMenu] = useState(false);
@@ -766,11 +761,13 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         continue;
       }
       const owes = e.entry_type === 'debit';
+      // Money going out to them (entered by hand) is a Payment Out; any other amount they
+      // still have to pay you is Receivable. Only money they paid you is Received.
       const outgoing = owes && e.source === 'manual';
       lines.push({
         key: `ledger-${e.id}`,
-        label: syncedFromBill ? TX_TYPE_LABEL.sale : owes ? 'Owes' : 'Received',
-        tone: owes ? (syncedFromBill ? IN_TONE : NEUTRAL_TONE) : IN_TONE,
+        label: syncedFromBill ? TX_TYPE_LABEL.sale : !owes ? 'Received' : outgoing ? 'Payment Out' : 'Receivable',
+        tone: outgoing ? OUT_TONE : IN_TONE,
         detail: e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
         reference: e.receipt_no ?? '',
         dateLabel: toBsHistoryLabel(day),
@@ -886,10 +883,9 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const showCustomer = !isPureVendor;
   const showVendor = !isPureCustomer;
 
-  function openCustomerForm(type: LedgerEntryType) {
+  function openCustomerForm() {
     closeVendorForm();
     setEditingEntry(null);
-    setEntryPreset(type);
     setShowAddEntry(true);
   }
   function openVendorForm() {
@@ -917,7 +913,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
               onPress={() => router.push(`${basePath}/transactions?type=sale&add=1&partyId=${id}` as any)}
             />
           )}
-          {showCustomer && <HeaderButton icon="add" label="Add Entry" onPress={() => openCustomerForm('credit')} />}
+          {showCustomer && <HeaderButton icon="add" label="Add Entry" onPress={openCustomerForm} />}
           <HeaderButton icon="print-outline" label="Print / Download" onPress={() => setExportMenu(true)} />
         </>
       ),
@@ -982,7 +978,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // --- History: a bordered table on the web, flat cards on a phone ---
   // What a line says under "Details": its receipt / bill number, then the note.
   const detailText = (row: HistoryRow) => {
-    const kind = row.tx ? 'Bill' : row.vendor || row.ledger?.entry_type === 'debit' ? 'Payment' : 'Receipt';
+    const kind = row.tx ? 'Bill' : row.vendor || (row.ledger?.entry_type === 'debit' && row.manual) ? 'Payment' : 'Receipt';
     return [row.reference ? `${kind} No. ${row.reference}` : null, row.detail].filter(Boolean).join(' · ');
   };
   const detailsCell = (row: HistoryRow, withDate: boolean) => (
@@ -997,6 +993,24 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       )}
     </View>
   );
+  // What is still left on the account after this line (both ledgers netted, like the name
+  // card): green = still to receive, red = still to pay, grey 0 = settled. A bill that is
+  // not part of the balance (an Expense) has no figure of its own, so it gets none.
+  const balanceNote = (row: HistoryRow) => {
+    if (row.info) return null;
+    const left = Math.round(row.balance);
+    const note =
+      left > 0
+        ? { text: `To receive ${left.toLocaleString()}`, color: MONEY.in.text }
+        : left < 0
+          ? { text: `To pay ${Math.abs(left).toLocaleString()}`, color: MONEY.out.text }
+          : { text: 'Settled 0', color: '#6B7280' };
+    return (
+      <Text className="mt-0.5 text-[11px] font-semibold" style={{ color: note.color }} numberOfLines={1}>
+        {note.text}
+      </Text>
+    );
+  };
   const typeColumn: BookColumn<HistoryRow> = {
     key: 'type',
     label: 'Type',
@@ -1009,9 +1023,12 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     width: 140,
     align: 'right',
     render: (row) => (
-      <Text className="text-[13px] font-bold" style={{ color: row.amountColor }}>
-        {row.amount.toLocaleString()}
-      </Text>
+      <View className="items-end">
+        <Text className="text-[13px] font-bold" style={{ color: row.amountColor }}>
+          {row.amount.toLocaleString()}
+        </Text>
+        {balanceNote(row)}
+      </View>
     ),
   };
   const actionColumn: BookColumn<HistoryRow> = {
@@ -1100,9 +1117,12 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
                 {row.dateLabel}
               </Text>
             </View>
-            <Text className="text-sm font-extrabold" style={{ color: row.amountColor }}>
-              NPR {row.amount.toLocaleString()}
-            </Text>
+            <View className="items-end">
+              <Text className="text-sm font-extrabold" style={{ color: row.amountColor }}>
+                NPR {row.amount.toLocaleString()}
+              </Text>
+              {balanceNote(row)}
+            </View>
             {row.tx ? <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginLeft: 6 }} /> : row.manual ? removeButton(row) : null}
           </Pressable>
         ))}
@@ -1141,8 +1161,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
 
         {!isPureVendor && addFormOpen && (
           <AddEntryForm
-            key={editingEntry?.id ?? `new-${entryPreset}`}
-            defaultType={entryPreset}
+            key={editingEntry?.id ?? 'new'}
             customerId={id}
             ownerId={userId}
             initial={editingEntry}

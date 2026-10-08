@@ -2374,7 +2374,7 @@ function dayLabel(dateStr: string): string {
 
 function LedgerRow({ item, customerName, basePath }: { item: CustomerLedgerEntry; customerName: string | null; basePath?: string }) {
   const isDebit = item.entry_type === 'debit';
-  // Money we gave the customer is red; money they paid, or still owe us, is green.
+  // Money we gave the customer (Payment Out) is red; money they paid, or that is still receivable, is green.
   const isOut = isDebit && item.source === 'manual';
   return (
     <Pressable
@@ -2386,7 +2386,7 @@ function LedgerRow({ item, customerName, basePath }: { item: CustomerLedgerEntry
       </View>
       <View className="flex-1">
         <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-          {isDebit ? 'Owes' : 'Received'} · {customerName ?? 'Unknown customer'}
+          {!isDebit ? 'Received' : isOut ? 'Payment Out' : 'Receivable'} · {customerName ?? 'Unknown customer'}
         </Text>
         <Text className="text-xs text-gray-400" numberOfLines={1}>
           {item.note ?? (item.source === 'booking' ? 'From a booked job' : 'Manual entry')} ·{' '}

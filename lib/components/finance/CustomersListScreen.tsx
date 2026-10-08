@@ -920,7 +920,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
       if (d.row.kind === 'customer') router.push(`${basePath}/customer/${d.row.id}` as any);
     };
 
-    const moneyColumn = (key: 'sales' | 'purchases' | 'payments', label: string): BookColumn<PartyRowData> => ({
+    const moneyColumn = (key: 'sales' | 'purchases', label: string): BookColumn<PartyRowData> => ({
       key,
       label,
       width: 95,
@@ -932,9 +932,37 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
       moneyColumn('sales', 'Sales'),
       moneyColumn('purchases', 'Purchases'),
-      moneyColumn('payments', 'Payments'),
+      {
+        // The part of the balance that is money coming in (green), blank when it runs the other way.
+        key: 'receivable',
+        label: 'Receivable',
+        width: 105,
+        align: 'right',
+        render: (d) =>
+          d.status === 'receivable' ? (
+            <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.receivable.text }}>
+              {bookMoney(d.balance)}
+            </Text>
+          ) : (
+            <Text className="text-[12.5px] text-gray-300">—</Text>
+          ),
+      },
+      {
+        // The part of the balance that is money going out (red), blank when it runs the other way.
+        key: 'payable',
+        label: 'Payable',
+        width: 105,
+        align: 'right',
+        render: (d) =>
+          d.status === 'payable' ? (
+            <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.payable.text }}>
+              {bookMoney(-d.balance)}
+            </Text>
+          ) : (
+            <Text className="text-[12.5px] text-gray-300">—</Text>
+          ),
+      },
       { key: 'balance', label: 'Balance', width: 120, align: 'right', render: (d) => <PartyBalance position={positionOf(d)} compact /> },
-      { key: 'status', label: 'Status', width: 130, render: (d) => <StatusBadges status={d.status} overdue={d.overdue > 0} /> },
     ];
 
     // The listed rows' own figures added up (every page, not just this one), so
@@ -962,7 +990,16 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
               cells: {
                 sales: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.sales, 0))}</Text>,
                 purchases: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.purchases, 0))}</Text>,
-                payments: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.payments, 0))}</Text>,
+                receivable: (
+                  <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.receivable.text }}>
+                    {bookMoney(filtered.reduce((sum, d) => (d.status === 'receivable' ? sum + d.balance : sum), 0))}
+                  </Text>
+                ),
+                payable: (
+                  <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.payable.text }}>
+                    {bookMoney(filtered.reduce((sum, d) => (d.status === 'payable' ? sum - d.balance : sum), 0))}
+                  </Text>
+                ),
                 balance: <PartyBalance position={footerPosition} compact />,
               },
             }}

@@ -196,7 +196,7 @@ export function TransactionsBook({
           id: `l-${e.id}`,
           group,
           time: timeOf(e.created_at),
-          details: isIn ? `Received from ${name}` : manual ? `Payment Out to ${name}` : `${name} owes`,
+          details: isIn ? `Received from ${name}` : manual ? `Payment Out to ${name}` : `Receivable from ${name}`,
           sub: [e.receipt_no ? `${isIn ? 'Receipt' : 'Payment'} No. ${e.receipt_no}` : null, e.note ?? (manual ? null : 'From a booked job')].filter(Boolean).join(' · ') || null,
           pill: isIn ? PILL.received : manual ? PILL.paid : PILL.creditSale,
           invoice: null,
