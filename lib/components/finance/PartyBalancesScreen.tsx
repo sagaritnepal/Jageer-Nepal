@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useBarActions, useBookLayout } from './BookKit';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { useYearCashTotals } from '../../hooks/useYearCashTotals';
 import { nameCaps } from '../../utils/nameCaps';
 
 type Direction = 'receive' | 'give';
@@ -21,24 +22,40 @@ interface Row {
 // opening either one feels like the same card, just expanded.
 const META: Record<
   Direction,
-  { title: string; subtitle?: string; color: string; bg: string; border: string; icon: keyof typeof Ionicons.glyphMap; empty: string }
+  {
+    subtitle: string;
+    color: string;
+    bg: string;
+    border: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    empty: string;
+    /** The second card: money that actually moved this year, opening its full report. */
+    cashLabel: string;
+    cashIcon: keyof typeof Ionicons.glyphMap;
+    cashPath: string;
+  }
 > = {
   receive: {
-    title: 'To Receive',
     subtitle: 'Customers who owe you money',
     color: '#047857',
     bg: '#ECFDF5',
     border: '#A7F3D0',
     icon: 'people-outline',
     empty: 'No customer owes you anything right now.',
+    cashLabel: 'Total received',
+    cashIcon: 'arrow-down-circle-outline',
+    cashPath: '/received',
   },
   give: {
-    title: 'To Give',
+    subtitle: 'Vendors you owe money to',
     color: '#DC2626',
     bg: '#FEF2F2',
     border: '#FECACA',
     icon: 'cart-outline',
     empty: "You don't owe any vendor right now.",
+    cashLabel: 'Total paid',
+    cashIcon: 'arrow-up-circle-outline',
+    cashPath: '/paid',
   },
 };
 
@@ -90,6 +107,8 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
   }, [direction, customerEntries, vendorEntries, nameById]);
 
   const total = rows.reduce((sum, r) => sum + r.balance, 0);
+  const cash = useYearCashTotals(userId);
+  const cashTotal = direction === 'receive' ? cash.received : cash.paid;
 
   // The name (and the back button on a phone) are in the top bar.
   const layout = useBookLayout();
@@ -97,18 +116,36 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">
-      <View className="mb-4 rounded-2xl border p-4" style={{ backgroundColor: meta.bg, borderColor: meta.border }}>
-        {!!meta.subtitle && (
+      <View className="mb-4 flex-row gap-3">
+        <View className="flex-1 justify-between rounded-2xl border p-4" style={{ backgroundColor: meta.bg, borderColor: meta.border }}>
           <View className="mb-1 flex-row items-center gap-2">
             <Ionicons name={meta.icon} size={16} color={meta.color} />
-            <Text className="text-xs font-semibold" style={{ color: meta.color }}>
+            <Text className="flex-1 text-xs font-semibold" style={{ color: meta.color }}>
               {meta.subtitle}
             </Text>
           </View>
-        )}
-        <Text className="text-2xl font-extrabold" style={{ color: meta.color }}>
-          NPR {total.toLocaleString()}
-        </Text>
+          <Text className="text-xl font-extrabold" style={{ color: meta.color }} numberOfLines={1}>
+            NPR {total.toLocaleString()}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={() => router.push(`${basePath}${meta.cashPath}` as any)}
+          accessibilityRole="button"
+          accessibilityLabel={meta.cashLabel}
+          className="flex-1 justify-between rounded-2xl border p-4"
+          style={{ backgroundColor: meta.bg, borderColor: meta.border }}
+        >
+          <View className="mb-1 flex-row items-center gap-2">
+            <Ionicons name={meta.cashIcon} size={16} color={meta.color} />
+            <Text className="flex-1 text-xs font-semibold" style={{ color: meta.color }}>
+              {meta.cashLabel} · This year
+            </Text>
+          </View>
+          <Text className="text-xl font-extrabold" style={{ color: meta.color }} numberOfLines={1}>
+            NPR {cashTotal.toLocaleString()}
+          </Text>
+        </Pressable>
       </View>
 
       <FlatList
