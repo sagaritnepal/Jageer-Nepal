@@ -503,7 +503,8 @@ type MergedRow =
   | { kind: 'customer'; id: string; name: string; phone: string | null; customer: Customer; isApp: boolean }
   | { kind: 'app'; id: string; name: string; phone: string | null; entry: AppCustomer };
 
-type StatusFilter = 'all' | 'receivable' | 'payable';
+/** What the summary cards narrow the list to: 'open' is everyone with a balance either way (the Net balance card). */
+type StatusFilter = 'all' | 'receivable' | 'payable' | 'open';
 
 /** "No ledger type" in the bulk menu - the key can't clash with a real type's id. */
 const NO_TYPE = '__none__';
@@ -677,7 +678,15 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   }, [itemsByParty]);
 
   // In name order (A-Z): `merged` is already sorted that way and filtering keeps the order.
-  const filtered = useMemo(() => (filter === 'all' ? analysed : analysed.filter((d) => d.status === filter)), [analysed, filter]);
+  const filtered = useMemo(
+    () =>
+      filter === 'all'
+        ? analysed
+        : filter === 'open'
+          ? analysed.filter((d) => d.status !== 'settled')
+          : analysed.filter((d) => d.status === filter),
+    [analysed, filter]
+  );
 
   // --- selection (phone: the Select button): only saved parties - an app-only row has no ledger to act on ---
   const toggle = (id: string) =>
@@ -782,6 +791,14 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   const summaryCards = (
     <BookStats>
       <SummaryCard
+        label="Net balance"
+        value={`${cards.net < 0 ? '−' : ''}NPR ${bookMoney(Math.abs(cards.net))}`}
+        color={cards.net > 0 ? LEDGER_TONE.receivable.text : cards.net < 0 ? LEDGER_TONE.payable.text : LEDGER_TONE.settled.text}
+        accent={cards.net > 0 ? LEDGER_TONE.receivable.base : cards.net < 0 ? LEDGER_TONE.payable.base : LEDGER_TONE.settled.base}
+        active={filter === 'open'}
+        onPress={() => setFilter(filter === 'open' ? 'all' : 'open')}
+      />
+      <SummaryCard
         label="Total receivable"
         value={`NPR ${bookMoney(cards.receivable)}`}
         color={LEDGER_TONE.receivable.text}
@@ -798,12 +815,13 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
         onPress={() => setFilter(filter === 'payable' ? 'all' : 'payable')}
       />
       <SummaryCard
-        label="Net balance"
-        value={`${cards.net < 0 ? '−' : ''}NPR ${bookMoney(Math.abs(cards.net))}`}
-        color={cards.net > 0 ? LEDGER_TONE.receivable.text : cards.net < 0 ? LEDGER_TONE.payable.text : LEDGER_TONE.settled.text}
-        accent={cards.net > 0 ? LEDGER_TONE.receivable.base : cards.net < 0 ? LEDGER_TONE.payable.base : LEDGER_TONE.settled.base}
+        label="Parties"
+        value={String(merged.length)}
+        color={LEDGER_TONE.settled.text}
+        accent={LEDGER_TONE.settled.base}
+        active={filter === 'all'}
+        onPress={() => setFilter('all')}
       />
-      <SummaryCard label="Parties" value={String(merged.length)} color={LEDGER_TONE.settled.text} accent={LEDGER_TONE.settled.base} />
     </BookStats>
   );
 

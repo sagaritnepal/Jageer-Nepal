@@ -13,7 +13,8 @@ const MAX_NAME_LENGTH = 30;
  * all of them when the box is empty, attached right under it - and tapping one chooses it. Typing a name that is
  * not there offers `Add "x" as a new ledger type` in the same list, which makes it and
  * chooses it. Typing a name that is there exactly chooses it, so the same type is never
- * made twice.
+ * made twice. When the party already has a type (editing it), the box starts with that
+ * type in it and tapping the box selects it, so it works the same as on a new party.
  *
  * The form is told the chosen type's id, or null while what is typed is not a type
  * (yet), so "required" always means a real type was picked or added. Renders nothing
@@ -120,6 +121,9 @@ export function PartyTypeField({
         }}
         placeholder="Type a ledger type"
         placeholderTextColor="#9CA3AF"
+        // Editing a party opens with its type already in the box: select it on tap so typing
+        // replaces it (the way the empty New party box starts) instead of adding on to it.
+        selectTextOnFocus
         maxLength={MAX_NAME_LENGTH}
         accessibilityLabel="Ledger type"
         className="rounded-lg border bg-white px-3 py-2.5 text-sm text-gray-900"
