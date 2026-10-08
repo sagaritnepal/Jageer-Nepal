@@ -24,6 +24,7 @@ import { useAvailableAmounts, optionLabel } from '../../hooks/useAvailableAmount
 import { ExpenseEntryTable, type ExpenseEntryRow as ExpenseRow, type ExpenseEntryTableHandle } from './ExpenseEntryTable';
 import { KeyInput } from './KeyInput';
 import { useConfirmSave } from './ConfirmSave';
+import { TransactionsBook } from './TransactionsBook';
 import { BookTable, type BookColumn } from './BookKit';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
@@ -1299,7 +1300,7 @@ function TransactionForm({
     desktopWeb
       ? {
           title: newExpenses ? 'Expenses' : `${initial ? 'Edit' : 'New'} ${TYPE_META[type].label}`,
-          resetTitle: 'Bill',
+          resetTitle: 'Statement',
           headerRight: () => (
             <Pressable
               onPress={() => scanRef.current()}
@@ -2664,7 +2665,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   // page - lands on this same page as "New", with that bill loaded into the form.
   // It is read straight from the link, so it needs no effect to open: the form
   // shows as soon as the bill has loaded, and is gone when the link is.
-  const { data: editRow, isLoading: editLoading } = useSupabaseRow('business_transactions', editParam);
+  const { data: editRow } = useSupabaseRow('business_transactions', editParam);
   const editLinkTx = editParam && editRow && editRow.id === editParam ? editRow : null;
   const editingTx = editLinkTx ?? editingTxState;
   const showForm = showFormState || !!editLinkTx;
@@ -2720,12 +2721,12 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   }
 
   // Done with, or backed out of, an edit that was opened by a link: back to
-  // wherever it was opened from (or the Day Book, if the page was opened directly).
+  // wherever it was opened from (or the list, if the page was opened directly).
   function leaveEdit() {
     const type = editingTx?.type;
     setEditingTx(null);
     if (router.canGoBack()) router.back();
-    else router.replace(`${basePath}/daybook?show=${type ?? 'all'}` as any);
+    else router.replace(`${basePath}/transactions${type ? `?type=${type}` : ''}` as any);
   }
 
   // Pressing the Android hardware back button while editing an existing
@@ -2858,20 +2859,44 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     );
   }
 
-  // The list of entries that used to be this page's web view - the Statement - is the Day Book
-  // now (see app/(reseller)/transactions.tsx), so this page is only ever the entry form. A bill
-  // opened for editing from a link has no form until it has loaded: say so, instead of flashing
-  // up a list, and if it is not there to be found, point the way back.
-  if (editParam && !editLinkTx) {
+  // Web: the list view is a Day Book style cash-book table (the entry form
+  // keeps its own layout below). Phones keep the card list.
+  if (Platform.OS === 'web' && !showForm) {
     return (
-      <View className="flex-1 items-center justify-center bg-gray-50 px-6">
-        <Text className="text-sm text-gray-500">{editLoading ? 'Loading…' : 'This bill could not be found.'}</Text>
-        {!editLoading && (
-          <Pressable onPress={() => router.replace(`${basePath}/daybook` as any)} className="mt-3 rounded-lg border border-gray-300 bg-white px-4 py-2">
-            <Text className="text-sm font-semibold text-gray-700">Back to Day Book</Text>
-          </Pressable>
-        )}
-      </View>
+      <>
+        <TransactionsBook
+          feed={feed}
+          filters={FILTERS}
+          filter={filter}
+          onFilter={setFilter}
+          locked={isLockedToType}
+          title={isLockedToType ? `${TYPE_META[initialFilter].label}s` : 'Statement'}
+          onBack={isLockedToType ? () => router.back() : undefined}
+          basePath={basePath}
+          categoryNameById={categoryNameById}
+          bankAccountNameById={bankAccountNameById}
+          accountName={(id) => (id ? (bankAccountNameById.get(id) ?? 'Bank') : 'Cash')}
+          onOpenTx={setViewingTx}
+          onDeleteTx={handleDelete}
+          onDeleteTransfer={(transfer) =>
+            showAlert('Remove this transfer?', 'This undoes the move between your accounts.', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Remove', style: 'destructive', onPress: () => deleteTransfer.mutate(transfer.id) },
+            ])
+          }
+        />
+        <TransactionDetailModal
+          tx={viewingTx}
+          categoryName={viewingTx?.expense_category_id ? categoryNameById.get(viewingTx.expense_category_id) ?? null : null}
+          bankAccountName={viewingTx?.bank_account_id ? bankAccountNameById.get(viewingTx.bank_account_id) ?? null : null}
+          onClose={() => setViewingTx(null)}
+          onEdit={() => {
+            setViewingTx(null);
+            editBill(viewingTx);
+          }}
+          onDelete={viewingTx ? () => handleDeleteFromReceipt(viewingTx) : undefined}
+        />
+      </>
     );
   }
 

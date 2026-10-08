@@ -21,6 +21,24 @@ import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/co
 // Already reachable from the Day Book's "What are you recording?" menu.
 const DAYBOOK_ENTRY_KEYS = new Set(['payment-in', 'payment-out', 'sales', 'purchase', 'expenses']);
 
+// The order Finance's pages run down the side panel (the Finance page's own tiles keep theirs).
+// Anything not named here goes after them, in the order it comes.
+const FINANCE_NAV_ORDER = [
+  'daybook',
+  'customers',
+  'transactions',
+  'import-statement',
+  'inventory',
+  'report',
+  'quotation',
+  'bank-accounts',
+  'buy-stock',
+];
+const financeNavRank = (key: string) => {
+  const i = FINANCE_NAV_ORDER.indexOf(key);
+  return i === -1 ? FINANCE_NAV_ORDER.length : i;
+};
+
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/dashboard', label: 'Home', icon: 'home' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
@@ -31,6 +49,7 @@ const NAV_ITEMS: WebNavItem[] = [
     icon: 'wallet',
     children: financeShortcuts('/(reseller)')
       .filter((s) => !DAYBOOK_ENTRY_KEYS.has(s.key))
+      .sort((a, b) => financeNavRank(a.key) - financeNavRank(b.key))
       .map((s) => ({ href: s.href, label: s.label, icon: s.icon })),
   },
 ];
@@ -163,7 +182,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="technician/[id]" options={{ href: null, title: 'Work History' }} />
         <Tabs.Screen name="customers" options={{ href: null, title: 'Ledger' }} />
         <Tabs.Screen name="customer/[id]" options={{ href: null, title: 'Customer' }} />
-        <Tabs.Screen name="transactions" options={{ href: null, title: 'Bill' }} />
+        <Tabs.Screen name="transactions" options={{ href: null, title: 'Statement' }} />
         <Tabs.Screen name="quick-payment" options={{ href: null, title: 'Quick Payment' }} />
         <Tabs.Screen name="received" options={{ href: null, title: 'Total Received' }} />
         <Tabs.Screen name="paid" options={{ href: null, title: 'Total Paid' }} />

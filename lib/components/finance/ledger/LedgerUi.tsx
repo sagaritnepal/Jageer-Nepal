@@ -70,7 +70,7 @@ export function SummaryCard({
       <View className="flex-row">
         <View style={{ width: 4, backgroundColor: accent ?? color }} />
         <View className="flex-1 px-3 py-2.5">
-          <Text className="text-[11px] font-semibold uppercase tracking-wide text-gray-400" numberOfLines={1}>
+          <Text heading className="text-[11px] font-semibold tracking-wide text-gray-400" numberOfLines={1}>
             {label}
           </Text>
           <Text className="mt-0.5 text-[17px] font-extrabold" style={{ color }} numberOfLines={1}>

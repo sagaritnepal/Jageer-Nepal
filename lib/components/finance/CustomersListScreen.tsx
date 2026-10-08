@@ -828,9 +828,6 @@ function LedgerList({ basePath }: { basePath: string }) {
   };
   const toolbar = useBookToolbar(
     {
-      // The page's name in the top bar is in capitals like the rest of it; it goes back to the layout's own on leaving.
-      title: 'LEDGER',
-      resetTitle: 'Ledger',
       wide: layout.wide,
       // Drawn in the app's top bar, outside this page's own tree - so it carries the capitals with it.
       right: (inBar) => (
@@ -999,7 +996,7 @@ function LedgerList({ basePath }: { basePath: string }) {
       {
         // The number on that last transaction, with what it is the number of underneath.
         key: 'reference',
-        label: 'REF NO.',
+        label: 'Ref No.',
         width: 120,
         render: (d) =>
           d.lastReference ? (

@@ -2,12 +2,23 @@
 import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useAccountBalances } from '../../hooks/useAccountBalances';
 import { useBarActions, useBookLayout } from './BookKit';
 
 type Period = 'month' | 'year' | 'all';
+
+/** Every report there is, each on its own page: the three kinds of bill (listed on the Statement
+ * for just that kind) and the money actually received and paid. Same icons as the Finance page's tiles. */
+const REPORTS: { title: string; subtitle: string; icon: keyof typeof Ionicons.glyphMap; color: string; path: string }[] = [
+  { title: 'Sales Report', subtitle: 'Every sale bill, newest first', icon: 'trending-up', color: '#059669', path: '/transactions?type=sale' },
+  { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', icon: 'cart', color: '#DC2626', path: '/transactions?type=purchase' },
+  { title: 'Expense Report', subtitle: 'Every expense you recorded, newest first', icon: 'receipt', color: '#DC2626', path: '/transactions?type=expense' },
+  { title: 'Total Received', subtitle: 'Money actually collected, newest first', icon: 'arrow-down-circle', color: '#059669', path: '/received' },
+  { title: 'Total Paid', subtitle: 'Money that actually left the business, newest first', icon: 'arrow-up-circle', color: '#DC2626', path: '/paid' },
+];
 
 const PERIOD_LABEL: Record<Period, string> = { month: 'This Month', year: 'This Year', all: 'All Time' };
 
@@ -93,19 +104,29 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         <Row label="Available Balance" value={balances.total} color={balances.total >= 0 ? '#2563EB' : '#DC2626'} bold />
       </View>
 
-      <View className="flex-row gap-3">
-        <Pressable
-          onPress={() => router.push(`${basePath}/received` as any)}
-          className="flex-1 items-center rounded-2xl border border-emerald-200 bg-emerald-50 py-3"
-        >
-          <Text className="text-xs font-semibold text-emerald-700">View Total Received →</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push(`${basePath}/paid` as any)}
-          className="flex-1 items-center rounded-2xl border border-red-200 bg-red-50 py-3"
-        >
-          <Text className="text-xs font-semibold text-red-600">View Total Paid →</Text>
-        </Pressable>
+      <View className="rounded-2xl border border-gray-200 bg-white p-4">
+        <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Reports</Text>
+        {REPORTS.map((r, i) => (
+          <Pressable
+            key={r.title}
+            onPress={() => router.push(`${basePath}${r.path}` as any)}
+            accessibilityRole="button"
+            accessibilityLabel={r.title}
+            className={`flex-row items-center py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}
+            style={{ gap: 12 }}
+          >
+            <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: `${r.color}1A` }}>
+              <Ionicons name={r.icon} size={18} color={r.color} />
+            </View>
+            <View className="flex-1" style={{ minWidth: 0 }}>
+              <Text className="text-sm font-bold text-gray-900">{r.title}</Text>
+              <Text className="text-xs text-gray-500" numberOfLines={1}>
+                {r.subtitle}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+          </Pressable>
+        ))}
       </View>
     </ScrollView>
   );
