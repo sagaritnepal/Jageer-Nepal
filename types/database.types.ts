@@ -176,6 +176,10 @@ export interface ServiceRequest {
   hold_resolved_at: string | null;
   /** When the job was last offered to its technician (migration 0080). */
   assigned_at: string | null;
+  /** The job's permanent ticket number (migration 0086): a plain serial the
+   * database gives at creation and never changes. Null until that migration
+   * has been run. Show it with ticketLabel(). */
+  ticket_no: number | null;
   created_at: string;
   updated_at: string;
   /** Offered to the whole team: any of this reseller's employees can take

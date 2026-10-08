@@ -11,7 +11,7 @@ const toneOf = (leg: JourneyLeg): Tone => (leg.warn ? 'warn' : leg.state);
 
 /** The line between two moments: solid blue once it is over, light blue while
  * the job is in it, amber when an offer has sat unanswered, grey if not reached. */
-const LINE: Record<Tone, string> = { done: BLUE, now: '#93C5FD', warn: '#FCD34D', todo: '#E5E7EB' };
+const LINE: Record<Tone, string> = { done: BLUE, now: '#93C5FD', warn: '#FCD34D', todo: '#D1D5DB' };
 
 /** How long it took, as a soft badge - the same pairs the status chips use. */
 const PILL = {
@@ -40,7 +40,7 @@ function Dot({ node }: { node: JourneyNode }) {
       style={
         node.reached
           ? { width: 14, height: 14, borderRadius: 7, backgroundColor: BLUE }
-          : { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#D1D5DB', backgroundColor: '#FFFFFF' }
+          : { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#9CA3AF', backgroundColor: '#FFFFFF' }
       }
     />
   );
