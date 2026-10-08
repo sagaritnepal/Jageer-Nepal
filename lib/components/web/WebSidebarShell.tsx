@@ -154,6 +154,10 @@ export function WebSidebarShell({
               <View key={item.href}>
                 <Pressable
                   onPress={() => router.push(item.href as any)}
+                  accessibilityRole="link"
+                  accessibilityLabel={item.label}
+                  accessibilityState={{ selected: active }}
+                  aria-current={active ? 'page' : undefined}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -184,11 +188,15 @@ export function WebSidebarShell({
                         <Pressable
                           key={child.href}
                           onPress={() => router.push(child.href as any)}
+                          accessibilityRole="link"
+                          accessibilityLabel={child.label}
+                          accessibilityState={{ selected: childActive }}
+                          aria-current={childActive ? 'page' : undefined}
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
                             gap: 10,
-                            paddingVertical: 7,
+                            paddingVertical: 10,
                             paddingLeft: 34,
                             paddingRight: 14,
                             borderRadius: 8,
@@ -248,7 +256,7 @@ export function WebSidebarShell({
             <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
               {profile?.full_name ?? 'Account'}
             </Text>
-            <Text style={{ fontSize: 11, color: '#9CA3AF' }}>{roleLabel}</Text>
+            <Text style={{ fontSize: 12, color: '#6B7280' }}>{roleLabel}</Text>
           </View>
         </Pressable>
       </View>

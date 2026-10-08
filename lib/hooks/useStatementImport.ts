@@ -1,6 +1,7 @@
 // lib/hooks/useStatementImport.ts
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { create } from 'zustand';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { supabase } from '../supabase';
@@ -14,6 +15,20 @@ export interface ReviewRow extends Omit<ParsedStatementRow, 'suggestedType' | 's
   party: string;
   expenseCategoryId: string | null;
 }
+
+/** Hand-off from the Sagar chat's attach button: the chat picks and parses
+ * the file, parks the review rows here, and ImportStatementScreen takes them
+ * (whether it mounts fresh or is already open) - too many rows for a route
+ * param. */
+export const usePendingStatementRows = create<{
+  rows: ReviewRow[] | null;
+  setRows: (rows: ReviewRow[]) => void;
+  clear: () => void;
+}>((set) => ({
+  rows: null,
+  setRows: (rows) => set({ rows }),
+  clear: () => set({ rows: null }),
+}));
 
 /** Picks a bank/wallet statement file (.xls/.xlsx), parses it, and finds
  * which rows (by Reference Code) were already imported before - so

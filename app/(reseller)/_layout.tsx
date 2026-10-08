@@ -18,6 +18,9 @@ import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/co
 // (Payment In, Purchase, Report, ...) are nested under it too, reusing the
 // exact same list the Finance dashboard's tiles use, so switching between
 // them never means going back to that dashboard to pick another tile.
+// Already reachable from the Day Book's "What are you recording?" menu.
+const DAYBOOK_ENTRY_KEYS = new Set(['payment-in', 'payment-out', 'sales', 'purchase', 'expenses']);
+
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/dashboard', label: 'Home', icon: 'home' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
@@ -26,7 +29,9 @@ const NAV_ITEMS: WebNavItem[] = [
     href: '/(reseller)/finance',
     label: 'Finance',
     icon: 'wallet',
-    children: financeShortcuts('/(reseller)').map((s) => ({ href: s.href, label: s.label, icon: s.icon })),
+    children: financeShortcuts('/(reseller)')
+      .filter((s) => !DAYBOOK_ENTRY_KEYS.has(s.key))
+      .map((s) => ({ href: s.href, label: s.label, icon: s.icon })),
   },
 ];
 

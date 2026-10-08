@@ -1,5 +1,5 @@
 // lib/components/finance/ImportStatementScreen.tsx
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBarActions, useBookLayout } from './BookKit';
@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { useStatementImport, type ReviewRow } from '../../hooks/useStatementImport';
+import { useStatementImport, usePendingStatementRows, type ReviewRow } from '../../hooks/useStatementImport';
 import { showAlert } from '../../utils/alert';
 import { DEBIT_TYPES, CREDIT_TYPES, type StatementAction } from '../../utils/parseStatement';
 import type { Customer } from '../../../types/database.types';
@@ -46,6 +46,15 @@ export function ImportStatementScreen() {
   const { picking, importing, pickAndParse, importSelected } = useStatementImport(userId);
   const [rows, setRows] = useState<ReviewRow[] | null>(null);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+
+  // A file attached in the Sagar chat arrives already parsed.
+  const pendingRows = usePendingStatementRows((state) => state.rows);
+  useEffect(() => {
+    if (!pendingRows) return;
+    setRows(pendingRows);
+    setOpenMenu(null);
+    usePendingStatementRows.getState().clear();
+  }, [pendingRows]);
 
   async function handlePick() {
     setOpenMenu(null);
