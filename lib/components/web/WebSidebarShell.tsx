@@ -196,7 +196,7 @@ export function WebSidebarShell({
                             flexDirection: 'row',
                             alignItems: 'center',
                             gap: 10,
-                            paddingVertical: 7,
+                            paddingVertical: 10,
                             paddingLeft: 34,
                             paddingRight: 14,
                             borderRadius: 8,

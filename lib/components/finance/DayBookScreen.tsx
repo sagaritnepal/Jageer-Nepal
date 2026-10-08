@@ -2,6 +2,7 @@
 import { Fragment, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -710,6 +711,7 @@ function AccountPicker({ options, selected, onSelect }: {
   onSelect: (key: AccountKey | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const insets = useSafeAreaInsets();
   type IconName = ComponentProps<typeof Ionicons>['name'];
   const iconFor = (key: AccountKey | null): IconName => (key == null ? 'wallet-outline' : key === CASH ? 'cash-outline' : 'business-outline');
   const current = options.find((o) => o.key === selected);
@@ -724,7 +726,7 @@ function AccountPicker({ options, selected, onSelect }: {
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
         />
       )}
-      <View style={{ position: 'absolute', right: 16, bottom: 16, alignItems: 'flex-end', gap: 8, zIndex: 11 }}>
+      <View style={{ position: 'absolute', right: 16 + insets.right, bottom: 16 + insets.bottom, alignItems: 'flex-end', gap: 8, zIndex: 11 }}>
         {open && (
           <View
             className="overflow-hidden rounded-xl border border-gray-200 bg-white"
