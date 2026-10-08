@@ -11,6 +11,7 @@ import { useAccountBalances, isSettledOnTheSpot } from '../../hooks/useAccountBa
 import { WEB_SIDEBAR_MIN_WIDTH } from '../web/WebSidebarShell';
 import { MONEY, type MoneyTone } from './moneyColors';
 import { CARD_SHADOW, Card, RecentActivityCard, SalesTrendCard } from './dashboard/FinanceDashboard';
+import { ENTRY_KINDS } from './entryKinds';
 
 const BLUE = '#2563EB';
 
@@ -64,11 +65,12 @@ export function shortcuts(basePath: string): {
     { key: 'daybook', label: 'Day Book', icon: 'book', href: `${basePath}/daybook` },
     { key: 'transactions', label: 'Statement', icon: 'document-text', href: `${basePath}/transactions` },
     { key: 'customers', label: 'Ledger', icon: 'people', href: `${basePath}/customers` },
-    { key: 'payment-in', label: 'Received', icon: 'arrow-down-circle', href: `${basePath}/quick-payment?type=in` },
-    { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', href: `${basePath}/quick-payment?type=out` },
-    { key: 'sales', label: 'Sales', icon: 'trending-up', href: `${basePath}/transactions?type=sale&add=1` },
-    { key: 'purchase', label: 'Purchase', icon: 'cart', href: `${basePath}/transactions?type=purchase&add=1` },
-    { key: 'expenses', label: 'Expenses', icon: 'receipt', href: `${basePath}/transactions?type=expense&add=1` },
+    ...ENTRY_KINDS.map((kind) => ({
+      key: kind.key,
+      label: kind.label,
+      icon: kind.icon as keyof typeof Ionicons.glyphMap,
+      href: `${basePath}${kind.path}`,
+    })),
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
     { key: 'import-statement', label: 'Import Statement', icon: 'document-attach', href: `${basePath}/import-statement` },
     { key: 'inventory', label: 'Inventory', icon: 'cube', href: `${basePath}/inventory` },

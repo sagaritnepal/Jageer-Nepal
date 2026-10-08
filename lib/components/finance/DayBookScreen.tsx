@@ -17,6 +17,7 @@ import { DateFilterButton } from './DateRangeFilter';
 import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { ENTRY_KINDS } from './entryKinds';
 
 type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer';
 
@@ -642,13 +643,13 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
 
 /** The five things a day can gain, behind one button - the same forms the
  * Finance menu opens, without leaving the Day Book to find them. */
-const NEW_ENTRY_KINDS: { key: string; label: string; icon: ComponentProps<typeof Ionicons>['name']; color: string; path: string }[] = [
-  { key: 'received', label: 'Received', icon: 'arrow-down-circle', color: '#059669', path: '/quick-payment?type=in' },
-  { key: 'payment-out', label: 'Payment Out', icon: 'arrow-up-circle', color: '#DC2626', path: '/quick-payment?type=out' },
-  { key: 'sale', label: 'Sale', icon: 'trending-up', color: '#059669', path: '/transactions?type=sale&add=1' },
-  { key: 'purchase', label: 'Purchase', icon: 'cart', color: '#DC2626', path: '/transactions?type=purchase&add=1' },
-  { key: 'expense', label: 'Expense', icon: 'receipt', color: '#DC2626', path: '/transactions?type=expense&add=1' },
-];
+const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
+  key: kind.key,
+  label: kind.menuLabel ?? kind.label,
+  icon: kind.icon,
+  color: kind.color,
+  path: kind.path,
+}));
 
 function NewEntryMenu({ basePath }: { basePath: string }) {
   const [open, setOpen] = useState(false);
