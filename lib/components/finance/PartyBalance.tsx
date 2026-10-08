@@ -1,5 +1,6 @@
 // lib/components/finance/PartyBalance.tsx
-import { Text, View, type TextStyle } from 'react-native';
+import { View, type TextStyle } from 'react-native';
+import { Text } from './CapsText';
 import { money } from './BookKit';
 import type { PartyPosition } from '../../utils/partyBalance';
 

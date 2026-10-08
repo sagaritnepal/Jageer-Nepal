@@ -1,6 +1,7 @@
 // lib/components/finance/PartyTypeField.tsx
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Text, useCaps } from './CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -39,6 +40,11 @@ export function PartyTypeField({
   const [focused, setFocused] = useState(false);
   const [saving, setSaving] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while a row in the list is being pressed. Pressing a row takes the focus off the box,
+  // and a press that lasts longer than the delay below used to lose its list (and so its tap)
+  // before the button was let go - so the list stays for as long as a press is under way.
+  const pressing = useRef(false);
+  const caps = useCaps();
 
   if (!available) return null;
 
@@ -88,12 +94,38 @@ export function PartyTypeField({
     else addTyped();
   }
 
+  // The list goes a moment after the box loses focus, so a tap on a row still lands first...
+  function closeSoon() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
+      if (!pressing.current) setOpen(false);
+    }, 150);
+  }
+  // ...and not at all while a row is being held down; if that press is let go without choosing
+  // (dragged away), the list then closes as it would have.
+  const rowPress = {
+    onPressIn: () => {
+      pressing.current = true;
+    },
+    onPressOut: () => {
+      pressing.current = false;
+      if (!focused) closeSoon();
+    },
+  };
+
   // The browser's black outline on a text box is switched off where the box has a
   // border of its own to show focus with.
-  const typing = { outlineStyle: 'none' } as object;
+  const typing = { outlineStyle: 'none', ...(caps ? { textTransform: 'uppercase' } : null) } as object;
 
   const addRow = (
-    <Pressable onPress={addTyped} disabled={saving} accessibilityRole="button" className="flex-row items-center px-1 py-2.5" style={{ gap: 8, opacity: saving ? 0.5 : 1 }}>
+    <Pressable
+      onPress={addTyped}
+      disabled={saving}
+      {...rowPress}
+      accessibilityRole="button"
+      className="flex-row items-center px-1 py-2.5"
+      style={{ gap: 8, opacity: saving ? 0.5 : 1 }}
+    >
       <Ionicons name="add-circle-outline" size={15} color="#EA580C" />
       <Text className="flex-1 text-sm font-semibold text-blue-700" numberOfLines={2}>
         Add "{typed}" as a new ledger type
@@ -116,10 +148,9 @@ export function PartyTypeField({
         }}
         onBlur={() => {
           setFocused(false);
-          // A moment later, so a tap on a suggestion still lands before the list goes.
-          closeTimer.current = setTimeout(() => setOpen(false), 150);
+          closeSoon();
         }}
-        placeholder="Type a ledger type"
+        placeholder={caps ? 'TYPE A LEDGER TYPE' : 'Type a ledger type'}
         placeholderTextColor="#9CA3AF"
         // Editing a party opens with its type already in the box: select it on tap so typing
         // replaces it (the way the empty New party box starts) instead of adding on to it.
@@ -142,6 +173,7 @@ export function PartyTypeField({
                 <Pressable
                   key={t.id}
                   onPress={() => choose(t.id)}
+                  {...rowPress}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   className="flex-row items-center justify-between border-b border-gray-100 px-1 py-2.5"

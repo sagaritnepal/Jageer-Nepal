@@ -1,5 +1,5 @@
 // lib/components/finance/TransactionsScreen.tsx
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BackHandler, View, Text, TextInput, Pressable, Modal, ScrollView, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { KeyboardAwareSectionList } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -2187,6 +2187,74 @@ function TransactionRow({
   );
 }
 
+// The widths of the bill's item columns - the Total column is as wide as the Amount column
+// above it, so the sums line up under the figures they add up.
+const BILL_COL = { sn: 38, qty: 46, rate: 72, amount: 88 };
+
+/** One cell of the bill's item table. It is a View of its own so that its rule (the line on
+ * its right edge - the last cell has none) shows the same everywhere - a border on a Text does
+ * not. No width = the wide one. */
+function BillCell({
+  width,
+  ruled = true,
+  align = 'left',
+  head,
+  textClass = 'text-gray-700',
+  children,
+}: {
+  width?: number;
+  ruled?: boolean;
+  align?: 'left' | 'center' | 'right';
+  head?: boolean;
+  textClass?: string;
+  children: ReactNode;
+}) {
+  return (
+    <View
+      className={`px-2 py-2 ${ruled ? 'border-r border-gray-200' : ''}`}
+      style={[
+        width ? { width } : { flex: 1, minWidth: 0 },
+        { justifyContent: 'center', alignItems: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start' },
+      ]}
+    >
+      <Text className={head ? 'text-[11px] font-bold text-gray-600' : `text-xs ${textClass}`}>{children}</Text>
+    </View>
+  );
+}
+
+/** One line of a printed bill: what it is in a shaded cell on the left, its value on the right. */
+function BillLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <View className="flex-row border-t border-gray-300">
+      <View className="justify-center border-r border-gray-300 bg-gray-50 px-3 py-2" style={{ width: 104 }}>
+        <Text className="text-[11px] font-semibold text-gray-500">{label}</Text>
+      </View>
+      <View className="flex-1 justify-center px-3 py-2" style={{ minWidth: 0 }}>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+/** A line of the bill's sums: its name on the right of the wide cell, the figure under the Amount column. */
+function BillTotal({ label, value, tint, color, strong }: { label: string; value: string; tint?: string; color?: string; strong?: boolean }) {
+  return (
+    <View className={`flex-row ${strong ? `border-t border-gray-300 ${tint ?? ''}` : 'border-t border-gray-200'}`}>
+      <View className={`flex-1 justify-center border-r px-3 py-2 ${strong ? 'border-gray-300' : 'border-gray-200'}`} style={{ minWidth: 0 }}>
+        <Text className={`text-right ${strong ? 'text-xs font-bold text-gray-900' : 'text-xs text-gray-500'}`}>{label}</Text>
+      </View>
+      <View className="justify-center px-2 py-2" style={{ width: BILL_COL.amount, alignItems: 'flex-end' }}>
+        <Text
+          className={strong ? 'text-sm font-extrabold' : 'text-xs font-semibold text-gray-700'}
+          style={strong && color ? { color } : undefined}
+        >
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 // A read-only receipt view - tapping a past transaction should let you see
 // what's in it without immediately dropping into an editable form. Edit is
 // an explicit action from here, not the default, and so is Delete (beside it,
@@ -2213,115 +2281,125 @@ export function TransactionDetailModal({
   const accountLabel = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
   const isBill = tx.type !== 'expense';
 
+  // The bill's own sums, as the Sale / Purchase form works them out: the items add up to the
+  // sub-total, less the discount, plus the VAT.
+  const subtotal = tx.items.reduce((sum, item) => sum + item.amount, 0);
+  const showSubtotal = tx.items.length > 0 && (tx.discount_amount > 0 || tx.vat_amount > 0);
+  const hasBillNo = isBill && !!tx.bill_no;
+
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={onClose}>
-        <Pressable onPress={() => {}} className="w-full max-w-sm rounded-2xl bg-white" style={{ maxHeight: '85%' }}>
-          <ScrollView contentContainerStyle={{ padding: 18 }}>
-            <View className="mb-3 flex-row items-center justify-between">
-              <View className="flex-row items-center gap-2">
-                <View className={`h-8 w-8 items-center justify-center rounded-full ${meta.bg}`}>
-                  <Ionicons name={meta.icon} size={15} color={meta.color} />
+      <Pressable className="flex-1 items-center justify-center bg-black/40 px-4" onPress={onClose}>
+        <Pressable onPress={() => {}} className="w-full rounded-2xl bg-white" style={{ maxWidth: 640, maxHeight: '90%' }}>
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            {/* The bill itself: one bordered sheet ruled into rows and columns, like a printed bill. */}
+            <View className="overflow-hidden rounded-lg border border-gray-300 bg-white">
+              <View className={`flex-row items-center justify-between px-3 py-2.5 ${meta.bg}`}>
+                <View className="flex-row items-center gap-2">
+                  <Ionicons name={meta.icon} size={16} color={meta.color} />
+                  <Text className="text-sm font-extrabold uppercase tracking-wide" style={{ color: meta.color }}>
+                    {isBill ? `${meta.label} bill` : meta.label}
+                  </Text>
                 </View>
-                <Text className="text-base font-bold text-gray-900">{meta.label}</Text>
+                <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+                  <Ionicons name="close" size={20} color="#6B7280" />
+                </Pressable>
               </View>
-              <Pressable onPress={onClose} hitSlop={8}>
-                <Ionicons name="close" size={20} color="#6B7280" />
-              </Pressable>
+
+              {(hasBillNo || !!tx.bill_date) && (
+                <View className="flex-row border-t border-gray-300">
+                  {hasBillNo && (
+                    <View className={`flex-1 px-3 py-2 ${tx.bill_date ? 'border-r border-gray-300' : ''}`} style={{ minWidth: 0 }}>
+                      <Text className="text-[11px] font-semibold text-gray-500">Bill No.</Text>
+                      <Text className="text-sm font-bold text-gray-900">{tx.bill_no}</Text>
+                    </View>
+                  )}
+                  {!!tx.bill_date && (
+                    <View className="flex-1 px-3 py-2" style={{ minWidth: 0 }}>
+                      <Text className="text-[11px] font-semibold text-gray-500">Date</Text>
+                      <Text className="text-sm font-bold text-gray-900">{toBsLabel(tx.bill_date)}</Text>
+                      <Text className="text-[10px] text-gray-400">{new Date(tx.bill_date).toLocaleDateString()}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {!!tx.party_name && (
+                <BillLine label={tx.type === 'purchase' ? 'Vendor' : tx.type === 'expense' ? 'Paid to' : 'Party'}>
+                  <Text className="text-sm font-bold text-gray-900">{tx.party_name}</Text>
+                </BillLine>
+              )}
+              {!!tx.party_address && (
+                <BillLine label="Address">
+                  <Text className="text-xs text-gray-900">{tx.party_address}</Text>
+                </BillLine>
+              )}
+              {!!tx.vat_pan_no && (
+                <BillLine label="VAT/PAN">
+                  <Text className="text-xs text-gray-900">{tx.vat_pan_no}</Text>
+                </BillLine>
+              )}
+              {!!categoryName && (
+                <BillLine label="Category">
+                  <Text className="text-xs text-gray-900">{categoryName}</Text>
+                </BillLine>
+              )}
+              {tx.type === 'expense' && (
+                <BillLine label="Payment account">
+                  <Text className="text-xs text-gray-900">{accountLabel}</Text>
+                </BillLine>
+              )}
+
+              {tx.items.length > 0 && (
+                <>
+                  <View className="flex-row border-t border-gray-300 bg-gray-50">
+                    <BillCell head align="center" width={BILL_COL.sn}>
+                      S.N.
+                    </BillCell>
+                    <BillCell head>Item</BillCell>
+                    <BillCell head align="right" width={BILL_COL.qty}>
+                      Qty
+                    </BillCell>
+                    <BillCell head align="right" width={BILL_COL.rate}>
+                      Rate
+                    </BillCell>
+                    <BillCell head ruled={false} align="right" width={BILL_COL.amount}>
+                      Amount
+                    </BillCell>
+                  </View>
+                  {tx.items.map((item, idx) => (
+                    <View key={idx} className="flex-row border-t border-gray-200">
+                      <BillCell align="center" width={BILL_COL.sn} textClass="text-gray-500">
+                        {idx + 1}
+                      </BillCell>
+                      <BillCell textClass="text-gray-900">{item.description}</BillCell>
+                      <BillCell align="right" width={BILL_COL.qty}>
+                        {item.qty}
+                      </BillCell>
+                      <BillCell align="right" width={BILL_COL.rate}>
+                        {item.rate.toLocaleString()}
+                      </BillCell>
+                      <BillCell ruled={false} align="right" width={BILL_COL.amount} textClass="font-semibold text-gray-900">
+                        {item.amount.toLocaleString()}
+                      </BillCell>
+                    </View>
+                  ))}
+                </>
+              )}
+
+              {showSubtotal && <BillTotal label="Sub-total" value={subtotal.toLocaleString()} />}
+              {tx.discount_amount > 0 && <BillTotal label="Discount" value={`− ${tx.discount_amount.toLocaleString()}`} />}
+              {tx.vat_amount > 0 && <BillTotal label="VAT" value={`+ ${tx.vat_amount.toLocaleString()}`} />}
+              <BillTotal label="Total (NPR)" value={tx.amount.toLocaleString()} tint={meta.bg} color={meta.color} strong />
+
+              {!!tx.note && (
+                <BillLine label="Remarks">
+                  <Text className="text-xs text-gray-700">{tx.note}</Text>
+                </BillLine>
+              )}
             </View>
 
-            <Text className="mb-4 text-2xl font-extrabold" style={{ color: meta.color }}>
-              NPR {tx.amount.toLocaleString()}
-            </Text>
-
-            {isBill && !!tx.bill_no && (
-              <View className="mb-2 flex-row justify-between">
-                <Text className="text-xs text-gray-400">Bill No.</Text>
-                <Text className="text-xs font-medium text-gray-900">{tx.bill_no}</Text>
-              </View>
-            )}
-            {!!tx.bill_date && (
-              <View className="mb-2 flex-row justify-between">
-                <Text className="text-xs text-gray-400">Date</Text>
-                <View className="items-end">
-                  <Text className="text-xs font-bold text-gray-900">{toBsLabel(tx.bill_date)}</Text>
-                  <Text className="text-[10px] text-gray-400">{new Date(tx.bill_date).toLocaleDateString()}</Text>
-                </View>
-              </View>
-            )}
-            {!!tx.party_name && (
-              <View className="mb-2 flex-row justify-between">
-                <Text className="text-xs text-gray-400">{tx.type === 'purchase' ? 'Vendor' : tx.type === 'expense' ? 'Paid to' : 'Party'}</Text>
-                <Text className="text-xs font-medium text-gray-900">{tx.party_name}</Text>
-              </View>
-            )}
-            {!!tx.party_address && (
-              <View className="mb-2 flex-row justify-between">
-                <Text className="text-xs text-gray-400">Address</Text>
-                <Text className="flex-1 text-right text-xs font-medium text-gray-900">{tx.party_address}</Text>
-              </View>
-            )}
-            {!!tx.vat_pan_no && (
-              <View className="mb-2 flex-row justify-between">
-                <Text className="text-xs text-gray-400">VAT/PAN</Text>
-                <Text className="text-xs font-medium text-gray-900">{tx.vat_pan_no}</Text>
-              </View>
-            )}
-            {!!categoryName && (
-              <View className="mb-2 flex-row justify-between">
-                <Text className="text-xs text-gray-400">Category</Text>
-                <Text className="text-xs font-medium text-gray-900">{categoryName}</Text>
-              </View>
-            )}
-            {tx.type === 'expense' && (
-              <View className="mb-3 flex-row justify-between">
-                <Text className="text-xs text-gray-400">Payment account</Text>
-                <Text className="text-xs font-medium text-gray-900">{accountLabel}</Text>
-              </View>
-            )}
-
-            {tx.items.length > 0 && (
-              <View className="mb-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <Text className="mb-2 text-xs font-semibold text-gray-500">Items</Text>
-                {tx.items.map((item, idx) => (
-                  <View key={idx} className="mb-1.5 flex-row items-center justify-between">
-                    <Text className="flex-1 pr-2 text-xs text-gray-700" numberOfLines={2}>
-                      {item.description} × {item.qty}
-                    </Text>
-                    <Text className="text-xs font-semibold text-gray-900">NPR {item.amount.toLocaleString()}</Text>
-                  </View>
-                ))}
-                {(tx.discount_amount > 0 || tx.vat_amount > 0) && (
-                  <View className="mt-2 border-t border-gray-200 pt-2">
-                    {tx.discount_amount > 0 && (
-                      <View className="mb-1 flex-row justify-between">
-                        <Text className="text-xs text-gray-400">Discount</Text>
-                        <Text className="text-xs text-gray-700">− NPR {tx.discount_amount.toLocaleString()}</Text>
-                      </View>
-                    )}
-                    {tx.vat_amount > 0 && (
-                      <View className="flex-row justify-between">
-                        <Text className="text-xs text-gray-400">VAT</Text>
-                        <Text className="text-xs text-gray-700">+ NPR {tx.vat_amount.toLocaleString()}</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-                <View className="mt-2 flex-row justify-between border-t border-gray-200 pt-2">
-                  <Text className="text-xs font-bold text-gray-900">Total</Text>
-                  <Text className="text-xs font-bold text-gray-900">NPR {tx.amount.toLocaleString()}</Text>
-                </View>
-              </View>
-            )}
-
-            {!!tx.note && (
-              <View className="mb-3">
-                <Text className="mb-0.5 text-xs text-gray-400">Remarks</Text>
-                <Text className="text-xs text-gray-700">{tx.note}</Text>
-              </View>
-            )}
-
-            <View className="mt-2 flex-row" style={{ gap: 8 }}>
+            <View className="mt-3 flex-row" style={{ gap: 8 }}>
               <Pressable onPress={onEdit} className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg bg-orange-500 py-3">
                 <Ionicons name="pencil" size={14} color="white" />
                 <Text className="text-sm font-semibold text-white">Edit</Text>

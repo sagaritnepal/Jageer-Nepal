@@ -1,6 +1,6 @@
 // lib/components/finance/CustomersListScreen.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import { View, TextInput, Pressable, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,9 +14,11 @@ import { BookPage, BookStats, BookTable, Pill, ToolbarButton, money as bookMoney
 import { PartyBalance } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { Field, FieldRow, FormActions, INPUT, PopupCard } from './FormKit';
+import { CapsProvider, Text } from './CapsText';
 import { Checkbox, LEDGER_TONE, OptionMenuModal, StatusBadges, SummaryCard, type MenuOption } from './ledger/LedgerUi';
 import { partyPosition, type PartyPosition } from '../../utils/partyBalance';
 import {
+  compareItems,
   entryDay,
   overdueAmount,
   receivableAging,
@@ -36,13 +38,25 @@ import { localTodayIso } from '../../utils/localDate';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
-import type { Customer, Profile } from '../../../types/database.types';
+import type { BusinessTransactionType, Customer, CustomerLedgerEntry, Profile } from '../../../types/database.types';
+
+/** A reference number and what it is the number of ("Sales no.", "Payment no.", ...). */
+interface LedgerReference {
+  no: string;
+  kind: string;
+}
+
+const BILL_KIND: Record<BusinessTransactionType, string> = { sale: 'Sales no.', purchase: 'Purchase no.', expense: 'Expense no.' };
 
 /** Every ledger entry of every party, grouped by party. A party's two ledgers
  * (customer_ledger_entries, vendor_ledger_entries - opposite polarity, see
  * 0059_vendor_ledger.sql) are shown as the one account they add up to; the
- * arithmetic is in ledgerStatement.ts. */
-function useLedgerItems(userId: string | undefined): Map<string, LedgerItem[]> {
+ * arithmetic is in ledgerStatement.ts.
+ *
+ * `referenceById` is each entry's reference number (by entry id, only for entries that have
+ * one): the number of the bill it was posted from, else its own receipt / payment number -
+ * as a party's statement shows it - with what kind of number it is. */
+function useLedgerItems(userId: string | undefined): { byParty: Map<string, LedgerItem[]>; referenceById: Map<string, LedgerReference> } {
   // `all`: balances are sums over every entry, and the API cuts a plain read
   // off at 1000 rows - past that, each party's balance is silently wrong.
   const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', {
@@ -55,15 +69,47 @@ function useLedgerItems(userId: string | undefined): Map<string, LedgerItem[]> {
     all: true,
     enabled: !!userId,
   });
+  // A bill's number is on the bill, not on the ledger entry it posts: read just what is needed of it.
+  const { data: bills } = useSupabaseQuery('business_transactions', {
+    filters: userId ? { owner_id: userId } : {},
+    columns: 'id,bill_no,type',
+    all: true,
+    enabled: !!userId,
+  });
 
   return useMemo(() => {
     const byParty = new Map<string, LedgerItem[]>();
+    const referenceById = new Map<string, LedgerReference>();
     const add = (partyId: string, item: LedgerItem) => {
       const list = byParty.get(partyId);
       if (list) list.push(item);
       else byParty.set(partyId, [item]);
     };
+    const billById = new Map((bills ?? []).map((b) => [b.id, b]));
+    const note = (side: 'customer' | 'vendor', e: Pick<CustomerLedgerEntry, 'id' | 'entry_type' | 'source' | 'source_type' | 'source_id' | 'receipt_no'>) => {
+      const fromBill = e.source === 'booking' && e.source_type === 'business_transaction' && !!e.source_id;
+      const bill = fromBill ? billById.get(e.source_id!) : undefined;
+      const no = bill?.bill_no || e.receipt_no;
+      if (!no) return;
+      const debit = e.entry_type === 'debit';
+      // A bill is a sales / purchase / expense no.; money paid out is a payment no.; money received is a receipt no.
+      const kind = bill
+        ? BILL_KIND[bill.type]
+        : side === 'vendor'
+          ? debit
+            ? 'Purchase no.'
+            : 'Payment no.'
+          : debit
+            ? fromBill
+              ? 'Sales no.'
+              : e.source === 'manual'
+                ? 'Payment no.'
+                : 'Receipt no.'
+            : 'Receipt no.';
+      referenceById.set(e.id, { no, kind });
+    };
     for (const e of customerEntries ?? []) {
+      note('customer', e);
       add(e.customer_id, {
         id: e.id,
         side: 'customer',
@@ -74,6 +120,7 @@ function useLedgerItems(userId: string | undefined): Map<string, LedgerItem[]> {
       });
     }
     for (const e of vendorEntries ?? []) {
+      note('vendor', e);
       add(e.vendor_id, {
         id: e.id,
         side: 'vendor',
@@ -83,8 +130,8 @@ function useLedgerItems(userId: string | undefined): Map<string, LedgerItem[]> {
         createdAt: e.created_at,
       });
     }
-    return byParty;
-  }, [customerEntries, vendorEntries]);
+    return { byParty, referenceById };
+  }, [customerEntries, vendorEntries, bills]);
 }
 
 /** Id of the existing customer already using `phone` for this owner, if any. */
@@ -190,7 +237,7 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
               onChangeText={(v) => setName(nameCaps(v))}
               autoCapitalize="characters"
               autoFocus
-              placeholder="Name"
+              placeholder="NAME"
               placeholderTextColor="#9CA3AF"
               className="flex-1 px-3 py-2.5 text-sm text-gray-900"
             />
@@ -216,9 +263,11 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
           <TextInput
             value={address}
             onChangeText={setAddress}
-            placeholder="Address"
+            autoCapitalize="characters"
+            placeholder="ADDRESS"
             placeholderTextColor="#9CA3AF"
             className={INPUT}
+            style={{ textTransform: 'uppercase' }}
           />
         </Field>
       </FieldRow>
@@ -260,6 +309,8 @@ interface PartyRowData {
   overdue: number;
   /** Their ledger type, when one is set. */
   typeName: string | undefined;
+  /** The reference number (sales, purchase, payment or receipt no.) of their latest transaction - null when it has none. */
+  lastReference: LedgerReference | null;
 }
 
 /** The balance as the shared balance cell draws it. */
@@ -570,7 +621,16 @@ function BulkBar({
   );
 }
 
-export function CustomersListScreen({ basePath }: { basePath: string }) {
+/** The Ledger page: every word on it - table, cards, popups, top-bar controls - is in capitals. */
+export function CustomersListScreen(props: { basePath: string }) {
+  return (
+    <CapsProvider>
+      <LedgerList {...props} />
+    </CapsProvider>
+  );
+}
+
+function LedgerList({ basePath }: { basePath: string }) {
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const queryClient = useQueryClient();
@@ -592,11 +652,11 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     enabled: !!userId,
   });
   const appCustomers = useAppCustomers(userId);
-  const itemsByParty = useLedgerItems(userId);
+  const { byParty: itemsByParty, referenceById } = useLedgerItems(userId);
   const { types: partyTypes, nameById: partyTypeName } = usePartyTypes(userId);
 
   const layout = useBookLayout();
-  // The table has seven columns and needs the room (the sidebar takes 240px): below
+  // The table has eight columns and needs the room (the sidebar takes 240px): below
   // 1200px a phone-style card list reads better.
   const { width: windowWidth } = useWindowDimensions();
   const tableMode = layout.wide && windowWidth >= 1200;
@@ -639,6 +699,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
         const totals = summarize(all);
         const sides = sideTotals(all);
         const balance = totals.closing;
+        const latest = all.reduce<LedgerItem | null>((a, b) => (!a || compareItems(a, b) < 0 ? b : a), null);
         return {
           row,
           totals,
@@ -649,9 +710,10 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
           status: statusOf(balance),
           overdue: overdueAmount(balance, receivableAging(all, today)),
           typeName: row.kind === 'customer' && row.customer.party_type_id ? partyTypeName.get(row.customer.party_type_id) : undefined,
+          lastReference: (latest && referenceById.get(latest.id)) || null,
         };
       }),
-    [merged, itemsByParty, today, partyTypeName]
+    [merged, itemsByParty, referenceById, today, partyTypeName]
   );
 
   // The headline cards count the way the Finance dashboard does, so the two always
@@ -766,9 +828,13 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
   };
   const toolbar = useBookToolbar(
     {
+      // The page's name in the top bar is in capitals like the rest of it; it goes back to the layout's own on leaving.
+      title: 'LEDGER',
+      resetTitle: 'Ledger',
       wide: layout.wide,
+      // Drawn in the app's top bar, outside this page's own tree - so it carries the capitals with it.
       right: (inBar) => (
-        <>
+        <CapsProvider>
           <Pressable
             onPress={() => setPickerOpen(true)}
             accessibilityRole="button"
@@ -781,7 +847,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
           </Pressable>
           <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
           <ToolbarButton icon="add" label="New party" onPress={openNewParty} />
-        </>
+        </CapsProvider>
       ),
     },
     [exporting]
@@ -835,7 +901,7 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
         initialQuery=""
         customers={customers ?? []}
         phoneContacts={[]}
-        placeholder="Search by name or phone"
+        placeholder="SEARCH BY NAME OR PHONE"
         matchPhone
         onSelectCustomer={(c) => {
           setPickerOpen(false);
@@ -930,6 +996,25 @@ export function CustomersListScreen({ basePath }: { basePath: string }) {
     const columns: BookColumn<PartyRowData>[] = [
       { key: 'party', label: 'Party', render: partyCell },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
+      {
+        // The number on that last transaction, with what it is the number of underneath.
+        key: 'reference',
+        label: 'REF NO.',
+        width: 120,
+        render: (d) =>
+          d.lastReference ? (
+            <View style={{ minWidth: 0 }}>
+              <Text className="text-[12.5px] font-semibold text-gray-700" numberOfLines={1}>
+                {d.lastReference.no}
+              </Text>
+              <Text className="text-[10.5px] text-gray-400" numberOfLines={1}>
+                {d.lastReference.kind}
+              </Text>
+            </View>
+          ) : (
+            <Text className="text-[12.5px] text-gray-300">—</Text>
+          ),
+      },
       moneyColumn('sales', 'Sales'),
       moneyColumn('purchases', 'Purchases'),
       {

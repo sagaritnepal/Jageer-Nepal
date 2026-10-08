@@ -1,6 +1,7 @@
 // lib/components/ContactPickerModal.tsx
 import { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, TextInput, Pressable, FlatList, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, useCaps } from './finance/CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { buildCustomerSuggestions, type CustomerSuggestion } from '../utils/customerSuggestions';
 import type { Customer } from '../../types/database.types';
@@ -40,6 +41,8 @@ export function ContactPickerModal({
   onAddNewTyped?: (name: string) => void;
 }) {
   const [search, setSearch] = useState(initialQuery);
+  // On a page whose words are all capitals (the Ledger) what is typed here is too.
+  const caps = useCaps();
   // "Add as a new customer" no longer saves the instant it's tapped - it
   // switches this popup to a small confirm step (name + optional phone,
   // Save/Cancel) so a stray tap or typo doesn't silently create a customer.
@@ -129,6 +132,7 @@ export function ContactPickerModal({
                 placeholder={placeholder}
                 autoFocus
                 className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                style={caps ? { textTransform: 'uppercase' } : undefined}
               />
               <FlatList
                 data={suggestions}

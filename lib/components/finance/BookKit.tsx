@@ -4,7 +4,8 @@
 // bordered table with a totals footer, with each page's own controls up in the
 // top bar - as reusable pieces, so the book pages read as one family.
 import { type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
+import { Text } from './CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useScreenHeader } from '../../hooks/useScreenHeader';

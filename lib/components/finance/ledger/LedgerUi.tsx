@@ -3,7 +3,8 @@
 // The small pieces the Ledger list and a party's statement share: summary
 // cards, status badges, a dropdown and a checkbox.
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { Pill } from '../BookKit';
 import { MONEY } from '../moneyColors';
