@@ -34,7 +34,7 @@ const LIVE_STATUSES: ServiceRequest['status'][] = ['pending', 'approved', 'assig
 type Filter = 'active' | 'completed' | 'paid' | 'cancelled' | 'all';
 
 const FILTERS: { key: Filter; label: string; color: string }[] = [
-  { key: 'active', label: 'Still to do', color: '#2563EB' },
+  { key: 'active', label: 'My Jobs', color: '#2563EB' },
   { key: 'completed', label: 'Completed', color: '#16A34A' },
   { key: 'paid', label: 'Paid', color: '#047857' },
   { key: 'cancelled', label: 'Cancelled', color: '#6B7280' },
