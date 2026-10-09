@@ -18,6 +18,7 @@ import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
 import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
+import { formatScheduledWhen } from '../../utils/scheduledTime';
 import { exportWorkPdf, exportWorkXlsx, type WorkRecordRow } from '../../utils/exportWorkRecord';
 import type { Profile, ServiceRequest } from '../../../types/database.types';
 
@@ -26,11 +27,6 @@ const BLUE = '#2563EB';
 /** Jobs still in play - anything finished, paid or cancelled has no place
  * on a board about who is doing what today. */
 const LIVE_STATUSES: ServiceRequest['status'][] = ['pending', 'approved', 'assigned', 'in_progress'];
-
-/** The jobs the "Job in progress" stage of Requests lists: offered to a technician,
- * or being worked. Anything not handed to someone yet is a "My Jobs" job - it
- * still shows on the board view below, where it can be assigned or opened to the team. */
-const IN_PROGRESS_STATUSES: ServiceRequest['status'][] = ['assigned', 'in_progress'];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -338,11 +334,227 @@ function AssignSheet({
   );
 }
 
-/** The list the Work Hub opens on: one line per job with the few things
- * usually being checked - what it is, who it's for, who has it, and
- * whether it's been paid. The board (who's carrying what) is a tap away
- * rather than the first thing in the way. */
-function JobSheetLayout({
+/** What a hold on a job looks like, beside its status. */
+const HOLD_CHIP = {
+  requested: { label: 'Hold requested', color: '#92400E', bg: '#FFFBEB' },
+  on_hold: { label: 'On hold', color: '#92400E', bg: '#FFFBEB' },
+} as const;
+
+/** One fact about a job: a small label over its value. The cells of a card sit
+ * on a hairline, like the detail page's hero. */
+function Fact({ label, children, roomy }: { label: string; children: React.ReactNode; roomy: boolean }) {
+  return (
+    <View
+      className="bg-white px-4 py-3"
+      style={{ gap: 2, ...(roomy ? { flexGrow: 1, flexBasis: 170, minWidth: 170 } : null) }}
+    >
+      <Text className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+type CardAction = { label: string; icon: keyof typeof Ionicons.glyphMap; tone: 'primary' | 'ghost' | 'violet'; onPress: () => void };
+
+const ACTION_TONE = {
+  primary: { bg: BLUE, border: BLUE, fg: '#FFFFFF' },
+  ghost: { bg: '#FFFFFF', border: '#D1D5DB', fg: '#374151' },
+  violet: { bg: '#FFFFFF', border: '#DDD6FE', fg: '#6D28D9' },
+} as const;
+
+/** One job as a card, top to bottom: what it is and what it is worth; the few
+ * facts you act on (who it is for, where, when, who has it); where it has got
+ * to; and what you can do about it. */
+function JobRowCard({
+  request: r,
+  times,
+  now,
+  technicianName,
+  onAssign,
+  onRequest,
+  onCancelWork,
+  onOpenToTeam,
+  busy,
+  roomy,
+  expanded,
+}: {
+  request: ServiceRequest;
+  times: JobTimes | undefined;
+  now: number;
+  technicianName: (id: string) => string;
+  onAssign: (request: ServiceRequest) => void;
+  onRequest: (request: ServiceRequest) => void;
+  onCancelWork: (request: ServiceRequest) => void;
+  onOpenToTeam: (request: ServiceRequest, open: boolean) => void;
+  busy: boolean;
+  roomy: boolean;
+  expanded?: boolean;
+}) {
+  const open = () => router.push(`/(reseller)/request/${r.id}` as any);
+  const chip = statusChip(r);
+  const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
+  const hold = r.hold_status === 'requested' ? HOLD_CHIP.requested : r.hold_status === 'on_hold' ? HOLD_CHIP.on_hold : null;
+  const lines = expanded ? undefined : 2;
+  const scheduled = formatScheduledWhen(r.scheduled_date, r.scheduled_time);
+
+  // What you can do, most useful first. A hold waiting on you comes before everything.
+  const actions: CardAction[] = [];
+  if (r.hold_status === 'requested') {
+    actions.push({ label: 'Review hold request', icon: 'pause-circle-outline', tone: 'primary', onPress: open });
+  }
+  const mainTone = r.hold_status === 'requested' ? 'ghost' : 'primary';
+  if (r.technician_id) {
+    actions.push({ label: 'Reassign', icon: 'person-add-outline', tone: mainTone, onPress: () => onAssign(r) });
+  } else if (r.open_to_team) {
+    actions.push({ label: 'Assign instead', icon: 'person-add-outline', tone: mainTone, onPress: () => onAssign(r) });
+    actions.push({ label: 'Take back', icon: 'close-circle-outline', tone: 'ghost', onPress: () => onOpenToTeam(r, false) });
+  } else {
+    actions.push({ label: 'Assign', icon: 'person-add-outline', tone: mainTone, onPress: () => onAssign(r) });
+    actions.push({ label: 'Open to team', icon: 'megaphone-outline', tone: 'ghost', onPress: () => onOpenToTeam(r, true) });
+  }
+  actions.push({ label: 'Request', icon: 'paper-plane-outline', tone: 'violet', onPress: () => onRequest(r) });
+
+  return (
+    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+      <Pressable onPress={open} className="flex-row items-start gap-3 px-4 py-3.5">
+        <CategoryBadge category={r.issue_type} size={roomy ? 40 : 36} />
+        <View className="flex-1" style={{ gap: 6, minWidth: 0 }}>
+          <View className="flex-row items-center" style={{ gap: 8 }}>
+            <TicketChip no={r.ticket_no} />
+            <Text className="text-[14.5px] font-bold text-gray-900" style={{ flex: 1, minWidth: 0 }} numberOfLines={lines}>
+              {r.issue_type}
+            </Text>
+          </View>
+          <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
+            <Chip {...chip} />
+            {!!hold && <Chip {...hold} />}
+            {isOverdue(r) && <OverdueChip />}
+          </View>
+          {/* On a phone the price would squeeze the title, so it sits under the chips. */}
+          {!roomy && (
+            <View className="flex-row items-center" style={{ gap: 8 }}>
+              <Text className="text-[15px] font-extrabold text-gray-900">{money(r.quoted_price)}</Text>
+              <Chip {...pay} />
+            </View>
+          )}
+        </View>
+        {roomy && (
+          <View className="items-end" style={{ gap: 4 }}>
+            <Text className="text-[15px] font-extrabold text-gray-900">{money(r.quoted_price)}</Text>
+            <Chip {...pay} />
+          </View>
+        )}
+      </Pressable>
+
+      {/* White cells on a hairline ground with a 1px gap: the dividers stay right however the cells wrap. */}
+      <View
+        style={{
+          backgroundColor: '#F3F4F6',
+          gap: 1,
+          borderTopWidth: 1,
+          borderTopColor: '#F3F4F6',
+          flexDirection: roomy ? 'row' : 'column',
+          flexWrap: roomy ? 'wrap' : 'nowrap',
+        }}
+      >
+        <Fact label="Customer" roomy={roomy}>
+          <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
+            {r.customer_name ?? 'Customer'}
+          </Text>
+          {!!r.customer_phone && (
+            <Pressable onPress={() => Linking.openURL(`tel:${r.customer_phone}`)} className="flex-row items-center gap-1 self-start">
+              <Ionicons name="call-outline" size={12} color={BLUE} />
+              <Text className="text-[12.5px] font-medium" style={{ color: BLUE }}>
+                {r.customer_phone}
+              </Text>
+            </Pressable>
+          )}
+        </Fact>
+        <Fact label="Where" roomy={roomy}>
+          <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
+            {r.location_data?.address ?? 'No address'}
+          </Text>
+        </Fact>
+        <Fact label="When" roomy={roomy}>
+          <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
+            {scheduled ?? 'Not scheduled'}
+          </Text>
+        </Fact>
+        <Fact label="Technician" roomy={roomy}>
+          {r.technician_id ? (
+            <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
+              {technicianName(r.technician_id)}
+            </Text>
+          ) : (
+            <Text className="text-[13.5px] font-semibold" style={{ color: r.open_to_team ? '#047857' : '#B45309' }}>
+              {r.open_to_team ? 'Open to the team' : 'Nobody yet'}
+            </Text>
+          )}
+        </Fact>
+      </View>
+
+      {/* Where the job has got to. */}
+      {roomy ? (
+        <View className="border-t border-gray-100 bg-gray-50 pt-3">
+          <JobTimeline request={r} times={times} now={now} layout="strip" />
+        </View>
+      ) : (
+        <View className="px-4 pb-1">
+          <JobTimeline request={r} times={times} now={now} layout="list" />
+        </View>
+      )}
+
+      <View
+        className="flex-row flex-wrap items-center border-t border-gray-100 px-4 py-3"
+        style={{ gap: 8, justifyContent: roomy ? 'flex-end' : 'flex-start' }}
+      >
+        {actions.map((a) => {
+          const tone = ACTION_TONE[a.tone];
+          return (
+            <Pressable
+              key={a.label}
+              onPress={a.onPress}
+              disabled={busy}
+              className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg px-3.5 disabled:opacity-50"
+              style={{
+                backgroundColor: tone.bg,
+                borderWidth: 1,
+                borderColor: tone.border,
+                ...(roomy ? null : { flexGrow: 1, flexBasis: 120 }),
+              }}
+            >
+              <Ionicons name={a.icon} size={15} color={tone.fg} />
+              <Text className="text-[12.5px] font-semibold" style={{ color: tone.fg }}>
+                {a.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+        {canCancelWork(r) && (
+          <Pressable
+            onPress={() => onCancelWork(r)}
+            disabled={busy}
+            accessibilityLabel="Cancel work"
+            className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white px-3 disabled:opacity-50"
+            style={{ borderColor: '#FECACA', ...(roomy ? null : { flexGrow: 1, flexBasis: 120 }) }}
+          >
+            <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+            {!roomy && (
+              <Text className="text-[12.5px] font-semibold" style={{ color: '#DC2626' }}>
+                Cancel work
+              </Text>
+            )}
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** The jobs of a stage, one card each - side-by-side facts when the column is
+ * wide enough, stacked when it is not. Beside the sidebar a "wide" page can
+ * still leave this list a narrow column, so it goes by its own width. */
+function JobList({
   jobs,
   times,
   now,
@@ -350,10 +562,11 @@ function JobSheetLayout({
   onAssign,
   onRequest,
   onCancelWork,
+  onOpenToTeam,
   busyId,
-  asCards,
-  compact,
+  wide,
   expanded,
+  emptyText,
 }: {
   jobs: ServiceRequest[];
   /** Each job's start / finish moments, for its timeline. */
@@ -362,254 +575,79 @@ function JobSheetLayout({
   technicianName: (id: string) => string;
   onAssign: (request: ServiceRequest) => void;
   onRequest: (request: ServiceRequest) => void;
-  /** Calls off a job that is not finished yet (asks "are you sure?" first). */
   onCancelWork: (request: ServiceRequest) => void;
+  onOpenToTeam: (request: ServiceRequest, open: boolean) => void;
   busyId: string | null;
-  /** Stacked cards (a phone, or a column too narrow for a table). */
-  asCards: boolean;
-  /** A table without its Payment column - the payment chip rides in Status instead. */
-  compact: boolean;
+  wide: boolean;
   /** Full screen: nothing is cut short, however long the job's name is. */
   expanded?: boolean;
+  emptyText: string;
 }) {
-  // Lines inside a row are faint; the line between two jobs is the strong one.
-  const cell = 'justify-center border-r border-gray-200 px-3 py-3.5';
-  const head = (label: string, style: object, last?: boolean) => (
-    <Text
-      className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-gray-500 ${last ? '' : 'border-r border-gray-200'}`}
-      style={style}
-    >
-      {label}
-    </Text>
-  );
+  const [boxWidth, setBoxWidth] = useState(0);
+  const roomy = wide && !(boxWidth > 0 && boxWidth < 640);
 
   if (jobs.length === 0) {
     return (
       <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
         <Ionicons name="clipboard-outline" size={26} color="#D1D5DB" />
-        <Text className="mt-2 text-sm text-gray-500">No jobs in play right now.</Text>
-      </View>
-    );
-  }
-
-  if (asCards) {
-    return (
-      <View style={{ gap: 10 }}>
-        {jobs.map((r) => {
-          const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
-          const chip = statusChip(r);
-          return (
-            <View key={r.id} className="rounded-2xl border border-gray-200 bg-white p-3.5">
-              <Pressable onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}>
-                <View className="flex-row items-center" style={{ gap: 8 }}>
-                  <TicketChip no={r.ticket_no} />
-                  <Text
-                    className="text-[14px] font-bold text-gray-900"
-                    style={{ flex: 1, minWidth: 0 }}
-                    numberOfLines={expanded ? undefined : 1}
-                  >
-                    {r.issue_type}
-                  </Text>
-                </View>
-                <Text className="mt-0.5 text-[12px] text-gray-600" numberOfLines={expanded ? undefined : 1}>
-                  {r.customer_name ?? 'Customer'}
-                  {r.customer_phone ? ` · ${r.customer_phone}` : ''}
-                </Text>
-                <View className="mt-1.5 flex-row flex-wrap items-center" style={{ gap: 6 }}>
-                  <Chip {...chip} />
-                  {isOverdue(r) && <OverdueChip />}
-                  <Chip {...pay} />
-                  <Text className="text-[11.5px] text-gray-500">
-                    {r.technician_id ? technicianName(r.technician_id) : 'Nobody yet'}
-                  </Text>
-                </View>
-              </Pressable>
-              <JobTimeline request={r} times={times?.get(r.id)} now={now} layout="list" />
-              <View className="mt-2.5 flex-row" style={{ gap: 8 }}>
-                {!!r.customer_phone && (
-                  <Pressable
-                    onPress={() => Linking.openURL(`tel:${r.customer_phone}`)}
-                    className="h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white"
-                    accessibilityLabel="Call customer"
-                  >
-                    <Ionicons name="call-outline" size={15} color={BLUE} />
-                  </Pressable>
-                )}
-                <Pressable
-                  onPress={() => onAssign(r)}
-                  className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg"
-                  style={{ backgroundColor: BLUE }}
-                >
-                  <Ionicons name="person-add-outline" size={15} color="#FFFFFF" />
-                  <Text className="text-[12.5px] font-semibold text-white">
-                    {r.technician_id ? 'Reassign' : 'Assign'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onRequest(r)}
-                  className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white"
-                  style={{ borderColor: '#DDD6FE' }}
-                >
-                  <Ionicons name="paper-plane-outline" size={15} color="#6D28D9" />
-                  <Text className="text-[12.5px] font-semibold" style={{ color: '#6D28D9' }}>
-                    Request
-                  </Text>
-                </Pressable>
-              </View>
-              {canCancelWork(r) && (
-                <Pressable
-                  onPress={() => onCancelWork(r)}
-                  disabled={busyId === r.id}
-                  className="mt-2 h-9 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white disabled:opacity-50"
-                  style={{ borderColor: '#FECACA' }}
-                >
-                  <Ionicons name="close-circle-outline" size={15} color="#DC2626" />
-                  <Text className="text-[12.5px] font-semibold" style={{ color: '#DC2626' }}>
-                    {busyId === r.id ? 'Cancelling…' : 'Cancel work'}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          );
-        })}
+        <Text className="mt-2 text-sm text-gray-500">{emptyText}</Text>
       </View>
     );
   }
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-gray-400 bg-white">
-      <View className="flex-row border-b border-gray-400 bg-gray-50">
-        {head('Job', { flex: 1, minWidth: 200 })}
-        {head('Customer', { width: compact ? 190 : 220 })}
-        {head('With', { width: compact ? 130 : 150 })}
-        {head('Status', { width: 170 })}
-        {!compact && head('Payment', { width: 100 })}
-        {head('Assign', { width: 254 }, true)}
-      </View>
-      {jobs.map((r, index) => {
-        const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
-        return (
-          <View
-            key={r.id}
-            style={index === jobs.length - 1 ? undefined : { borderBottomWidth: 2, borderBottomColor: '#9CA3AF' }}
-          >
-          <View className="flex-row">
-            <Pressable
-              onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}
-              className={cell}
-              style={{ flex: 1, minWidth: 200 }}
-            >
-              <View className="flex-row items-center" style={{ gap: 8 }}>
-                <TicketChip no={r.ticket_no} />
-                <Text
-                  className="text-[13.5px] font-semibold text-gray-900"
-                  style={{ flex: 1, minWidth: 0 }}
-                  numberOfLines={expanded ? undefined : 1}
-                >
-                  {r.issue_type}
-                </Text>
-              </View>
-              <Text className="mt-0.5 text-[11.5px] text-gray-500" numberOfLines={expanded ? undefined : 1}>
-                {when(r)} · {money(r.quoted_price)}
-              </Text>
-            </Pressable>
-            <View className={cell} style={{ width: compact ? 190 : 220 }}>
-              <Text className="text-[13px] text-gray-900" numberOfLines={expanded ? undefined : 1}>
-                {r.customer_name ?? 'Customer'}
-              </Text>
-              {!!r.customer_phone && (
-                <Pressable onPress={() => Linking.openURL(`tel:${r.customer_phone}`)} className="flex-row items-center gap-1">
-                  <Ionicons name="call-outline" size={11} color={BLUE} />
-                  <Text className="text-[11.5px] font-medium" style={{ color: BLUE }}>
-                    {r.customer_phone}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-            <View className={cell} style={{ width: compact ? 130 : 150 }}>
-              <Text className="text-[12.5px] text-gray-700" numberOfLines={expanded ? undefined : 1}>
-                {r.technician_id ? technicianName(r.technician_id) : r.open_to_team ? 'Open to team' : 'Nobody yet'}
-              </Text>
-            </View>
-            <View className={cell} style={{ width: 170, gap: 4 }}>
-              <Chip {...statusChip(r)} />
-              {isOverdue(r) && <OverdueChip />}
-              {compact && <Chip {...pay} />}
-            </View>
-            {!compact && (
-              <View className={cell} style={{ width: 100 }}>
-                <Chip {...pay} />
-              </View>
-            )}
-            <View className="flex-row items-center px-3 py-2" style={{ width: 254, gap: 8 }}>
-              <Pressable
-                onPress={() => onAssign(r)}
-                className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg"
-                style={{ backgroundColor: BLUE }}
-              >
-                <Ionicons name="person-add-outline" size={15} color="#FFFFFF" />
-                <Text className="text-[12.5px] font-semibold text-white">{r.technician_id ? 'Reassign' : 'Assign'}</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => onRequest(r)}
-                className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white"
-                style={{ borderColor: '#DDD6FE' }}
-              >
-                <Ionicons name="paper-plane-outline" size={15} color="#6D28D9" />
-                <Text className="text-[12.5px] font-semibold" style={{ color: '#6D28D9' }}>
-                  Request
-                </Text>
-              </Pressable>
-              {canCancelWork(r) && (
-                <Pressable
-                  onPress={() => onCancelWork(r)}
-                  disabled={busyId === r.id}
-                  accessibilityLabel="Cancel work"
-                  className="h-9 w-9 items-center justify-center rounded-lg border bg-white disabled:opacity-50"
-                  style={{ borderColor: '#FECACA' }}
-                >
-                  <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
-                </Pressable>
-              )}
-            </View>
-          </View>
-          {/* The journey sits in its own tinted band under a faint line, so
-              a job reads as "the details, then where it has got to". */}
-          <View className="border-t border-gray-200 bg-gray-50 pt-3">
-            <JobTimeline request={r} times={times?.get(r.id)} now={now} layout="strip" />
-          </View>
-          </View>
-        );
-      })}
+    <View style={{ gap: 12 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
+      {jobs.map((r) => (
+        <JobRowCard
+          key={r.id}
+          request={r}
+          times={times?.get(r.id)}
+          now={now}
+          technicianName={technicianName}
+          onAssign={onAssign}
+          onRequest={onRequest}
+          onCancelWork={onCancelWork}
+          onOpenToTeam={onOpenToTeam}
+          busy={busyId === r.id}
+          roomy={roomy}
+          expanded={expanded}
+        />
+      ))}
     </View>
   );
 }
 
-/** The list, in the shape that fits the room it is given: the full table, the
- * table without its Payment column, or stacked cards. The page being "wide"
- * is not enough to say - beside a sidebar the column can still be narrow. */
-function JobSheet(props: Omit<React.ComponentProps<typeof JobSheetLayout>, 'asCards' | 'compact'> & { wide: boolean }) {
-  const { wide, ...rest } = props;
-  const [boxWidth, setBoxWidth] = useState(0);
-  const measured = boxWidth > 0;
-  return (
-    <View onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
-      <JobSheetLayout
-        {...rest}
-        asCards={!wide || (measured && boxWidth < 760)}
-        compact={measured && boxWidth < 1100}
-      />
-    </View>
-  );
-}
+/** What each stage that uses the panel calls itself. */
+const STAGE_COPY = {
+  my_jobs: {
+    title: (n: number) => `${n} job${n === 1 ? '' : 's'} to assign`,
+    empty: 'Every job has a technician.',
+    note: 'Jobs nobody has been given yet - one moves on to Job in progress once a technician accepts it.',
+  },
+  in_progress: {
+    title: (n: number) => `${n} job${n === 1 ? '' : 's'} in progress`,
+    empty: 'No jobs in progress right now.',
+    note: 'Jobs a technician has been given. Ones nobody has taken yet are under My Jobs, and on the board below.',
+  },
+} as const;
 
-/** The body of Requests' "Job in progress" stage: who is doing what, and what
- * nobody has picked up yet. The list is the jobs a technician has; the board
- * (one tap away) is everything live, and the one place to hand a job to the
- * whole team at once. Assigning still happens on the job's own page (it needs
- * the technician list and the price); this is the overview that page can't give.
- * It was the Work Hub tab before the two were merged. */
-export function WorkHubPanel({ wide }: { wide: boolean }) {
+/** The body of Requests' "My Jobs" and "Job in progress" stages: who is doing
+ * what, and what nobody has picked up yet. The list is the stage's own jobs
+ * (the page that owns the stages passes them in); the board (one tap away) is
+ * everything live, and the one place to see the whole team at once. Assigning
+ * still happens on the job's own page too (it needs the technician list and the
+ * price); this is the overview that page can't give. It was the Work Hub tab
+ * before the two were merged. */
+export function WorkHubPanel({
+  wide,
+  stage,
+  jobs,
+}: {
+  wide: boolean;
+  stage: keyof typeof STAGE_COPY;
+  /** This stage's jobs. */
+  jobs: ServiceRequest[];
+}) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const businessName = useAuthStore((state) => state.profile?.business_name);
   const queryClient = useQueryClient();
@@ -655,12 +693,10 @@ export function WorkHubPanel({ wide }: { wide: boolean }) {
 
   // The list is this stage's jobs: overdue ones first, then by when they were due.
   const shown = useMemo(
-    () =>
-      requests
-        .filter((r) => IN_PROGRESS_STATUSES.includes(r.status))
-        .sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a)) || dueAt(a) - dueAt(b)),
-    [requests]
+    () => [...jobs].sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a)) || dueAt(a) - dueAt(b)),
+    [jobs]
   );
+  const shownOverdue = shown.filter(isOverdue).length;
 
   // The board is about who is carrying work right now - all of it, not just
   // the jobs the list shows.
@@ -918,12 +954,17 @@ export function WorkHubPanel({ wide }: { wide: boolean }) {
       <View className={headerInRow ? 'flex-1' : ''}>
         <Text className="text-[15px] font-bold text-gray-900">
           {view === 'sheet'
-            ? `${shown.length} job${shown.length === 1 ? '' : 's'} in progress`
+            ? STAGE_COPY[stage].title(shown.length)
             : `${live.length} job${live.length === 1 ? '' : 's'} in play`}
         </Text>
         <Text className="mt-0.5 text-[12px] text-gray-500">
-          {unassigned.length} waiting for someone · {openToTeam.length} open to the team
-          {overdueCount > 0 ? ` · ${overdueCount} overdue` : ''}
+          {view === 'sheet'
+            ? [shownOverdue > 0 && `${shownOverdue} overdue`, openToTeam.length > 0 && `${openToTeam.length} open to the team`]
+                .filter(Boolean)
+                .join(' · ') || 'Nothing overdue'
+            : `${unassigned.length} waiting for someone · ${openToTeam.length} open to the team${
+                overdueCount > 0 ? ` · ${overdueCount} overdue` : ''
+              }`}
         </Text>
       </View>
       <View className="flex-row flex-wrap items-center" style={{ gap: 10 }}>
@@ -1002,7 +1043,7 @@ export function WorkHubPanel({ wide }: { wide: boolean }) {
 
   const sheet = (
     <>
-      <JobSheet
+      <JobList
         jobs={shown}
         times={jobTimes}
         now={now}
@@ -1010,12 +1051,14 @@ export function WorkHubPanel({ wide }: { wide: boolean }) {
         onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
         onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
         onCancelWork={confirmCancelWork}
+        onOpenToTeam={setOpenToTeam}
         busyId={cancellingId ?? busyId}
         wide={wide}
+        emptyText={STAGE_COPY[stage].empty}
       />
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-        Jobs a technician has been given. Ones nobody has taken yet are under My Jobs, and on the board below. PDF and
-        Excel save the last 30 days in full ({monthRows.length} job{monthRows.length === 1 ? '' : 's'}).
+        {STAGE_COPY[stage].note} PDF and Excel save the last 30 days in full ({monthRows.length} job
+        {monthRows.length === 1 ? '' : 's'}).
       </Text>
 
       {/* Full screen: the same list with nothing clipped, for long job
@@ -1038,7 +1081,7 @@ export function WorkHubPanel({ wide }: { wide: boolean }) {
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: wide ? 24 : 12, paddingBottom: 40, gap: 12 }}>
-            <JobSheet
+            <JobList
               jobs={shown}
               times={jobTimes}
               now={now}
@@ -1046,9 +1089,11 @@ export function WorkHubPanel({ wide }: { wide: boolean }) {
               onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
               onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
               onCancelWork={confirmCancelWork}
+              onOpenToTeam={setOpenToTeam}
               busyId={cancellingId ?? busyId}
               wide={wide}
               expanded
+              emptyText={STAGE_COPY[stage].empty}
             />
           </ScrollView>
         </View>

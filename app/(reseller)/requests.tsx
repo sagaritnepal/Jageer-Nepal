@@ -550,15 +550,22 @@ export default function ResellerRequestQueue() {
 
   const emptyText = isLoading ? 'Loading…' : 'Nothing here right now.';
 
-  // "Job in progress" is the Work Hub: its list, board and tools replace the
-  // plain rows. Product orders that are on their way still follow this stage,
-  // so they sit under it in the ordinary rows.
-  const inProgressView = (
+  // "My Jobs" and "Job in progress" are the Work Hub: its job cards, board and
+  // tools replace the plain rows. Product orders follow the same stages, so
+  // they sit under the cards in the ordinary rows.
+  const hubStage = activeStage === 'my_jobs' || activeStage === 'in_progress' ? activeStage : null;
+  const hubView = hubStage ? (
     <>
-      <WorkHubPanel wide={isWideWeb} />
+      <WorkHubPanel
+        wide={isWideWeb}
+        stage={hubStage}
+        jobs={stageJobs.flatMap((item) => (item.kind === 'request' ? [item.request] : []))}
+      />
       {stageJobs.some((item) => item.kind === 'order') && (
         <View style={{ gap: 8 }}>
-          <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Shop orders on the way</Text>
+          <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+            {hubStage === 'my_jobs' ? 'Shop orders to deliver' : 'Shop orders on the way'}
+          </Text>
           {isWideWeb ? (
             <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
               {stageJobs.filter((item) => item.kind === 'order').map(jobRow)}
@@ -569,7 +576,7 @@ export default function ResellerRequestQueue() {
         </View>
       )}
     </>
-  );
+  ) : null;
 
   if (isWideWeb) {
     const sidePill = (stage: Stage) => {
@@ -639,9 +646,7 @@ export default function ResellerRequestQueue() {
           </Pressable>
         </View>
 
-        {activeStage === 'in_progress' ? (
-          inProgressView
-        ) : (
+        {hubView ?? (
         <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <View className="flex-row items-center gap-2.5 px-[18px] py-3.5" style={{ backgroundColor: activeMeta.tint }}>
             <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeMeta.color }} />
@@ -721,9 +726,9 @@ export default function ResellerRequestQueue() {
         </Text>
       </View>
 
-      {activeStage === 'in_progress' ? (
+      {hubView ? (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90, gap: 14 }}>
-          {inProgressView}
+          {hubView}
         </ScrollView>
       ) : (
         <FlatList
