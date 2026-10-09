@@ -12,23 +12,25 @@ export function useWideDetail(): boolean {
   return Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
 }
 
-/** Each stage's band: the solid fill, and the darker ink the white status pill carries on it. */
-export const STAGE_BAND: Record<string, { band: string; ink: string }> = {
-  orange: { band: '#EA580C', ink: '#C2410C' },
-  amber: { band: '#D97706', ink: '#B45309' },
-  blue: { band: '#2563EB', ink: '#1D4ED8' },
-  red: { band: '#DC2626', ink: '#B91C1C' },
-  green: { band: '#16A34A', ink: '#15803D' },
-  emerald: { band: '#059669', ink: '#047857' },
-  gray: { band: '#6B7280', ink: '#4B5563' },
+/** A stage's label colours: the same soft tint + saturated text pair every status
+ * badge in the app uses. */
+export const STAGE_PILL: Record<string, { bg: string; ink: string }> = {
+  orange: { bg: '#FFF7ED', ink: '#C2410C' },
+  amber: { bg: '#FFFBEB', ink: '#B45309' },
+  blue: { bg: '#EFF6FF', ink: '#1D4ED8' },
+  red: { bg: '#FEF2F2', ink: '#B91C1C' },
+  green: { bg: '#F0FDF4', ink: '#15803D' },
+  emerald: { bg: '#ECFDF5', ink: '#047857' },
+  gray: { bg: '#F3F4F6', ink: '#4B5563' },
 };
 
-/** The top of a detail page, in two parts: a coloured band that says what this
- * is and what it's worth (title, stage, price), and a white panel under it with
- * who it's for, when and where, and the ways to reach them - so the whole job
- * reads at a glance. The panel's cells sit on a hairline, like a grouped list. */
+/** The top of a detail page, laid out like the technician's Job Card: a small
+ * caption, the icon and a bold title straight on the page, then one white card
+ * with who it's for, when and where, and the ways to reach them - so the whole
+ * job reads at a glance. The card's cells sit on a hairline, like a grouped list. */
 export function DetailHero({
   tone,
+  caption,
   icon,
   title,
   pill,
@@ -39,7 +41,9 @@ export function DetailHero({
   actions,
   wide,
 }: {
-  tone: keyof typeof STAGE_BAND;
+  tone: keyof typeof STAGE_PILL;
+  /** A small line above the title - the job's number, say. */
+  caption?: string | null;
   icon: ReactNode;
   title: string;
   pill: string;
@@ -52,53 +56,47 @@ export function DetailHero({
     value: string;
     /** Second line under the value - a phone number, say. */
     sub?: string | null;
-    /** Shown instead of the icon: a small photo of the person. */
+    /** Shown beside the text: a small photo of the person. */
     photoUrl?: string | null;
     onPress?: () => void;
   }[];
-  /** The customer's call / message buttons (see DetailHeroAction). They sit at the
-   * end of the first fact, which is the person to contact. */
+  /** The customer's call / message buttons (see DetailHeroAction). They sit under
+   * the first fact, which is the person to contact. */
   actions?: ReactNode;
   wide: boolean;
 }) {
-  // The page can be "wide" (a desktop window) while this card sits in a narrow
-  // column beside the next-step panel, so it lays out by its own measured width.
+  // The page can be "wide" (a desktop window) while this sits in a narrow column
+  // beside the next-step panel, so it lays out by its own measured width.
   const [boxWidth, setBoxWidth] = useState(0);
   const measured = boxWidth > 0;
   const roomy = wide && (!measured || boxWidth >= 520);
-  const tiny = measured && boxWidth < 300;
-  const { band, ink } = STAGE_BAND[tone];
+  const { bg, ink } = STAGE_PILL[tone];
 
   const price = (
-    <View className={roomy ? 'items-end' : 'flex-row items-baseline justify-between'}>
-      <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.9)' }}>
-        {amountLabel}
-      </Text>
-      <Text className={roomy ? 'text-2xl font-extrabold text-white' : 'text-xl font-extrabold text-white'}>{amount}</Text>
+    <View className={roomy ? 'items-end' : 'flex-row items-baseline'} style={roomy ? undefined : { gap: 8 }}>
+      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{amountLabel}</Text>
+      <Text className={roomy ? 'text-2xl font-extrabold text-gray-900' : 'text-xl font-extrabold text-gray-900'}>{amount}</Text>
     </View>
   );
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white" onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
-      <View style={{ backgroundColor: band, padding: roomy ? 20 : 16, gap: 12 }}>
+    <View style={{ gap: roomy ? 18 : 14 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
+      <View style={{ gap: 6 }}>
+        {!!caption && <Text className="text-xs text-gray-400">{caption}</Text>}
         <View className="flex-row items-center" style={{ gap: roomy ? 16 : 12 }}>
           {icon}
-          <View className="flex-1" style={{ gap: 6 }}>
-            <Text
-              className="font-extrabold text-white"
-              style={{ fontSize: roomy ? 22 : 18, lineHeight: roomy ? 27 : 23 }}
-              numberOfLines={2}
-            >
+          <View className="flex-1" style={{ gap: 6, minWidth: 0 }}>
+            <Text className="font-bold text-gray-900" style={{ fontSize: roomy ? 26 : 22, lineHeight: roomy ? 32 : 28 }} numberOfLines={2}>
               {title}
             </Text>
             <View className="flex-row flex-wrap items-center" style={{ columnGap: 8, rowGap: 4 }}>
-              <View className="rounded-full bg-white px-2.5 py-0.5">
+              <View className="rounded-full px-2.5 py-0.5" style={{ backgroundColor: bg }}>
                 <Text className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color: ink }}>
                   {pill}
                 </Text>
               </View>
               {!!subtitle && (
-                <Text className="text-[13px]" style={{ color: 'rgba(255,255,255,0.9)' }} numberOfLines={1}>
+                <Text className="text-[13px] text-gray-600" numberOfLines={1}>
                   {subtitle}
                 </Text>
               )}
@@ -106,81 +104,91 @@ export function DetailHero({
           </View>
           {roomy && price}
         </View>
-        {!roomy && (
-          <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.25)', paddingTop: 12 }}>{price}</View>
-        )}
+        {!roomy && <View style={{ marginTop: 2 }}>{price}</View>}
       </View>
 
-      {/* The cells are white on a hairline-coloured ground with a 1px gap, so
-          the dividers between them stay right however the cells wrap. */}
-      <View
-        style={{
-          backgroundColor: '#F3F4F6',
-          gap: 1,
-          flexDirection: roomy ? 'row' : 'column',
-          flexWrap: roomy ? 'wrap' : 'nowrap',
-        }}
-      >
-        {facts.map((fact, index) => {
-          const withActions = index === 0 && !!actions;
-          const Cell = fact.onPress ? Pressable : View;
-          return (
-            <Cell
-              key={fact.label + fact.value}
-              onPress={fact.onPress}
-              className={`flex-row items-start gap-3 bg-white py-3.5 ${roomy ? 'px-5' : 'px-4'}`}
-              style={roomy ? { flexGrow: 1, flexBasis: withActions ? 300 : 200, minWidth: withActions ? 300 : 200 } : undefined}
-            >
-              {fact.photoUrl ? (
-                <Image source={{ uri: fact.photoUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} resizeMode="cover" />
-              ) : (
-                <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: '#EFF6FF' }}>
-                  <Ionicons name={fact.icon} size={17} color="#2563EB" />
+      {/* One white card; its cells are white on a hairline ground with a 1px gap,
+          so the dividers stay right however the cells wrap. */}
+      <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <View
+          style={{
+            backgroundColor: '#F3F4F6',
+            gap: 1,
+            flexDirection: roomy ? 'row' : 'column',
+            flexWrap: roomy ? 'wrap' : 'nowrap',
+          }}
+        >
+          {facts.map((fact, index) => {
+            const withActions = index === 0 && !!actions;
+            const Cell = fact.onPress ? Pressable : View;
+            return (
+              <Cell
+                key={fact.label + fact.value}
+                onPress={fact.onPress}
+                className={`bg-white py-4 ${roomy ? 'px-5' : 'px-4'}`}
+                style={roomy ? { flexGrow: 1, flexBasis: withActions ? 280 : 200, minWidth: withActions ? 280 : 200 } : undefined}
+              >
+                <View className="flex-row items-center" style={{ gap: 12 }}>
+                  {!!fact.photoUrl && (
+                    <Image source={{ uri: fact.photoUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} resizeMode="cover" />
+                  )}
+                  <View className="flex-1" style={{ gap: 3, minWidth: 0 }}>
+                    <View className="flex-row items-center gap-1.5">
+                      <Ionicons name={fact.icon} size={13} color="#9CA3AF" />
+                      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{fact.label}</Text>
+                      {!!fact.onPress && <Ionicons name="open-outline" size={12} color="#9CA3AF" style={{ marginLeft: 'auto' }} />}
+                    </View>
+                    <Text className="text-[14.5px] font-semibold text-gray-900" numberOfLines={2}>
+                      {fact.value}
+                    </Text>
+                    {!!fact.sub && (
+                      <Text className="text-[13px] text-gray-500" numberOfLines={1}>
+                        {fact.sub}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-              )}
-              <View className="flex-1" style={{ gap: 1 }}>
-                <Text className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">{fact.label}</Text>
-                <Text className="text-[14px] font-semibold text-gray-900" numberOfLines={2}>
-                  {fact.value}
-                </Text>
-                {!!fact.sub && (
-                  <Text className="text-[12.5px] text-gray-500" numberOfLines={1}>
-                    {fact.sub}
-                  </Text>
-                )}
-                {withActions && tiny && <View className="mt-2 flex-row" style={{ gap: 8 }}>{actions}</View>}
-              </View>
-              {!!fact.onPress && <Ionicons name="open-outline" size={14} color="#9CA3AF" />}
-              {withActions && !tiny && <View className="flex-row self-center" style={{ gap: 8 }}>{actions}</View>}
-            </Cell>
-          );
-        })}
+                {withActions && <View className="mt-3 flex-row" style={{ gap: 8 }}>{actions}</View>}
+              </Cell>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
 }
 
-/** Call / message the customer: a compact round button that sits beside their
- * name in the hero. Bordered white, the app's secondary button, so it reads as
- * tappable on the white panel. */
+const HERO_ACTION_TONE = {
+  call: { bg: '#EFF6FF', fg: '#1D4ED8' },
+  message: { bg: '#F0FDFA', fg: '#0F766E' },
+} as const;
+
+/** Call / message the customer: the same tinted buttons the technician's page
+ * has for the reseller, sitting under the customer's name in the hero. */
 export function DetailHeroAction({
   icon,
   label,
+  tone,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  /** Spoken name, since the button itself is only an icon. */
   label: string;
+  tone: keyof typeof HERO_ACTION_TONE;
   onPress: () => void;
 }) {
+  const { bg, fg } = HERO_ACTION_TONE[tone];
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}
-      className="h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white"
+      accessibilityLabel={`${label} customer`}
+      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5"
+      style={{ backgroundColor: bg }}
     >
-      <Ionicons name={icon} size={18} color="#2563EB" />
+      <Ionicons name={icon} size={15} color={fg} />
+      <Text className="text-sm font-semibold" style={{ color: fg }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

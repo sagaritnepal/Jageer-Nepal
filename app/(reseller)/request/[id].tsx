@@ -32,6 +32,7 @@ import {
 import { showAlert, getErrorMessage } from '../../../lib/utils/alert';
 import { PaymentStatusSheet, PaymentChip, setJobPayment } from '../../../lib/components/PaymentStatusSheet';
 import { parseAmount } from '../../../lib/utils/number';
+import { ticketLabel } from '../../../lib/utils/ticket';
 import { assignTechnician, showJobSentAlert } from '../../../lib/utils/assignTechnician';
 import { reopenCompletedJob, withdrawJobOffer, claimServiceRequest } from '../../../lib/hooks/useJobOffers';
 import { respondToJobHold } from '../../../lib/hooks/useJobHold';
@@ -108,11 +109,8 @@ function JobHero({
     <DetailHero
       wide={wide}
       tone="blue"
-      icon={
-        <View className="rounded-2xl bg-white p-1">
-          <CategoryBadge category={request.issue_type} size={wide ? 54 : 46} />
-        </View>
-      }
+      caption={`Job ${ticketLabel(request.ticket_no) ?? `#${request.id.slice(0, 8).toUpperCase()}`}`}
+      icon={<CategoryBadge category={request.issue_type} size={wide ? 56 : 46} />}
       title={request.issue_type}
       pill={pill}
       subtitle={request.origin === 'app' ? 'App customer' : 'Your own customer'}
@@ -157,10 +155,11 @@ function JobHero({
       actions={
         customerPhone ? (
           <>
-            <DetailHeroAction icon="call-outline" label="Call customer" onPress={() => Linking.openURL(`tel:${customerPhone}`)} />
+            <DetailHeroAction icon="call-outline" label="Call" tone="call" onPress={() => Linking.openURL(`tel:${customerPhone}`)} />
             <DetailHeroAction
               icon="chatbubble-outline"
-              label="Message customer"
+              label="Message"
+              tone="message"
               onPress={() => {
                 scrollTo('messages');
                 onMessage?.();
