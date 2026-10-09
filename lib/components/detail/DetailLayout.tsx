@@ -1,7 +1,6 @@
 // lib/components/detail/DetailLayout.tsx
-import { createContext, useCallback, useContext, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 import { View, Text, Image, Pressable, Platform, ScrollView, useWindowDimensions } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../web/WebSidebarShell';
 
@@ -13,20 +12,21 @@ export function useWideDetail(): boolean {
   return Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
 }
 
-/** Every stage's band colour, as a gradient pair. */
-export const STAGE_GRADIENT: Record<string, readonly [string, string]> = {
-  orange: ['#EA580C', '#C2410C'],
-  amber: ['#D97706', '#B45309'],
-  blue: ['#2563EB', '#1D4ED8'],
-  red: ['#DC2626', '#B91C1C'],
-  green: ['#16A34A', '#15803D'],
-  emerald: ['#059669', '#047857'],
-  gray: ['#6B7280', '#4B5563'],
+/** Each stage's band: the solid fill, and the darker ink the white status pill carries on it. */
+export const STAGE_BAND: Record<string, { band: string; ink: string }> = {
+  orange: { band: '#EA580C', ink: '#C2410C' },
+  amber: { band: '#D97706', ink: '#B45309' },
+  blue: { band: '#2563EB', ink: '#1D4ED8' },
+  red: { band: '#DC2626', ink: '#B91C1C' },
+  green: { band: '#16A34A', ink: '#15803D' },
+  emerald: { band: '#059669', ink: '#047857' },
+  gray: { band: '#6B7280', ink: '#4B5563' },
 };
 
-/** The coloured band at the top of a detail page: what this is, who it's
- * for, when/where, and the money - so the whole job reads at a glance
- * instead of having to piece it together from separate rows. */
+/** The top of a detail page, in two parts: a coloured band that says what this
+ * is and what it's worth (title, stage, price), and a white panel under it with
+ * who it's for, when and where, and the ways to reach them - so the whole job
+ * reads at a glance. The panel's cells sit on a hairline, like a grouped list. */
 export function DetailHero({
   tone,
   icon,
@@ -39,7 +39,7 @@ export function DetailHero({
   actions,
   wide,
 }: {
-  tone: keyof typeof STAGE_GRADIENT;
+  tone: keyof typeof STAGE_BAND;
   icon: ReactNode;
   title: string;
   pill: string;
@@ -56,113 +56,132 @@ export function DetailHero({
     photoUrl?: string | null;
     onPress?: () => void;
   }[];
-  /** Rendered at the end of the facts row - the customer's call/message buttons. */
+  /** The customer's call / message buttons (see DetailHeroAction). They sit at the
+   * end of the first fact, which is the person to contact. */
   actions?: ReactNode;
   wide: boolean;
 }) {
+  // The page can be "wide" (a desktop window) while this card sits in a narrow
+  // column beside the next-step panel, so it lays out by its own measured width.
+  const [boxWidth, setBoxWidth] = useState(0);
+  const measured = boxWidth > 0;
+  const roomy = wide && (!measured || boxWidth >= 520);
+  const tiny = measured && boxWidth < 300;
+  const { band, ink } = STAGE_BAND[tone];
+
+  const price = (
+    <View className={roomy ? 'items-end' : 'flex-row items-baseline justify-between'}>
+      <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.9)' }}>
+        {amountLabel}
+      </Text>
+      <Text className={roomy ? 'text-2xl font-extrabold text-white' : 'text-xl font-extrabold text-white'}>{amount}</Text>
+    </View>
+  );
+
   return (
-    <LinearGradient
-      colors={STAGE_GRADIENT[tone]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{ borderRadius: wide ? 20 : 18, padding: wide ? 22 : 16, gap: wide ? 18 : 14 }}
-    >
-      <View className={wide ? 'flex-row items-center gap-4' : 'flex-row items-center gap-3'}>
-        {icon}
-        <View className="flex-1" style={{ gap: 5 }}>
-          <View className={wide ? 'flex-row items-center gap-2.5' : ''} style={wide ? undefined : { gap: 5 }}>
-            <Text className="font-extrabold text-white" style={{ fontSize: wide ? 22 : 18 }} numberOfLines={2}>
+    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white" onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
+      <View style={{ backgroundColor: band, padding: roomy ? 20 : 16, gap: 12 }}>
+        <View className="flex-row items-center" style={{ gap: roomy ? 16 : 12 }}>
+          {icon}
+          <View className="flex-1" style={{ gap: 6 }}>
+            <Text
+              className="font-extrabold text-white"
+              style={{ fontSize: roomy ? 22 : 18, lineHeight: roomy ? 27 : 23 }}
+              numberOfLines={2}
+            >
               {title}
             </Text>
-            <View className="self-start rounded-full px-2.5 py-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.22)' }}>
-              <Text className="text-[11px] font-bold uppercase tracking-wide text-white">{pill}</Text>
+            <View className="flex-row flex-wrap items-center" style={{ columnGap: 8, rowGap: 4 }}>
+              <View className="rounded-full bg-white px-2.5 py-0.5">
+                <Text className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color: ink }}>
+                  {pill}
+                </Text>
+              </View>
+              {!!subtitle && (
+                <Text className="text-[13px]" style={{ color: 'rgba(255,255,255,0.9)' }} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              )}
             </View>
           </View>
-          {!!subtitle && (
-            <Text style={{ fontSize: wide ? 13.5 : 12.5, color: 'rgba(255,255,255,0.85)' }} numberOfLines={2}>
-              {subtitle}
-            </Text>
-          )}
+          {roomy && price}
         </View>
-        {wide && (
-          <View className="items-end">
-            <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              {amountLabel}
-            </Text>
-            <Text className="text-2xl font-extrabold text-white">{amount}</Text>
-          </View>
+        {!roomy && (
+          <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.25)', paddingTop: 12 }}>{price}</View>
         )}
       </View>
 
+      {/* The cells are white on a hairline-coloured ground with a 1px gap, so
+          the dividers between them stay right however the cells wrap. */}
       <View
-        className={wide ? 'flex-row' : 'flex-row items-end justify-between'}
         style={{
-          gap: 10,
-          ...(wide ? null : { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 12 }),
+          backgroundColor: '#F3F4F6',
+          gap: 1,
+          flexDirection: roomy ? 'row' : 'column',
+          flexWrap: roomy ? 'wrap' : 'nowrap',
         }}
       >
-        {/* Wraps rather than shrinking: four chips plus the call/message
-            buttons squeezed "CUSTOMER" down to "CUSTO / MER" on a narrower
-            window. */}
-        <View
-          className={wide ? 'flex-1 flex-row flex-wrap items-center' : 'flex-1'}
-          style={{ gap: wide ? 10 : 6 }}
-        >
-          {facts.map((fact) => (
-            <Pressable
+        {facts.map((fact, index) => {
+          const withActions = index === 0 && !!actions;
+          const Cell = fact.onPress ? Pressable : View;
+          return (
+            <Cell
               key={fact.label + fact.value}
               onPress={fact.onPress}
-              disabled={!fact.onPress}
-              className={wide ? 'flex-row items-center gap-2.5 rounded-xl px-3 py-2.5' : 'flex-row items-center gap-2'}
-              style={
-                wide
-                  ? { backgroundColor: 'rgba(255,255,255,0.14)', flexGrow: 1, flexBasis: 190, minWidth: 190 }
-                  : undefined
-              }
+              className={`flex-row items-start gap-3 bg-white py-3.5 ${roomy ? 'px-5' : 'px-4'}`}
+              style={roomy ? { flexGrow: 1, flexBasis: withActions ? 300 : 200, minWidth: withActions ? 300 : 200 } : undefined}
             >
               {fact.photoUrl ? (
-                <Image
-                  source={{ uri: fact.photoUrl }}
-                  style={{ width: wide ? 34 : 26, height: wide ? 34 : 26, borderRadius: 999 }}
-                  resizeMode="cover"
-                />
+                <Image source={{ uri: fact.photoUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} resizeMode="cover" />
               ) : (
-                <Ionicons name={fact.icon} size={wide ? 16 : 14} color="rgba(255,255,255,0.9)" />
+                <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: '#EFF6FF' }}>
+                  <Ionicons name={fact.icon} size={17} color="#2563EB" />
+                </View>
               )}
-              <View className="flex-1">
-                {wide && (
-                  <Text className="text-[10.5px] uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                    {fact.label}
-                  </Text>
-                )}
-                <Text className="text-[13px] font-semibold text-white" numberOfLines={1}>
+              <View className="flex-1" style={{ gap: 1 }}>
+                <Text className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">{fact.label}</Text>
+                <Text className="text-[14px] font-semibold text-gray-900" numberOfLines={2}>
                   {fact.value}
                 </Text>
                 {!!fact.sub && (
-                  <Text className="text-[12px] text-white" style={{ opacity: 0.85 }} numberOfLines={1}>
+                  <Text className="text-[12.5px] text-gray-500" numberOfLines={1}>
                     {fact.sub}
                   </Text>
                 )}
+                {withActions && tiny && <View className="mt-2 flex-row" style={{ gap: 8 }}>{actions}</View>}
               </View>
-            </Pressable>
-          ))}
-          {wide && actions}
-        </View>
-        {!wide && (
-          <View className="items-end">
-            <Text className="text-[10px] uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              {amountLabel}
-            </Text>
-            <Text className="text-xl font-extrabold text-white">{amount}</Text>
-          </View>
-        )}
+              {!!fact.onPress && <Ionicons name="open-outline" size={14} color="#9CA3AF" />}
+              {withActions && !tiny && <View className="flex-row self-center" style={{ gap: 8 }}>{actions}</View>}
+            </Cell>
+          );
+        })}
       </View>
-      {!wide && !!actions && (
-        <View className="flex-row" style={{ gap: 8 }}>
-          {actions}
-        </View>
-      )}
-    </LinearGradient>
+    </View>
+  );
+}
+
+/** Call / message the customer: a compact round button that sits beside their
+ * name in the hero. Bordered white, the app's secondary button, so it reads as
+ * tappable on the white panel. */
+export function DetailHeroAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  /** Spoken name, since the button itself is only an icon. */
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className="h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white"
+    >
+      <Ionicons name={icon} size={18} color="#2563EB" />
+    </Pressable>
   );
 }
 

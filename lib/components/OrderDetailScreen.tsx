@@ -1,6 +1,6 @@
 // lib/components/OrderDetailScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, Image, Pressable, Linking } from 'react-native';
+import { View, Text, Image, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../hooks/useAuth';
@@ -13,6 +13,7 @@ import {
   ScrollTarget,
   useDetailScroll,
   DetailHero,
+  DetailHeroAction,
   DetailCard,
   DetailTimeline,
   NextStepCard,
@@ -47,37 +48,13 @@ function orderSteps(status: OrderStatus, isOwner: boolean): TimelineStep[] {
   }));
 }
 
-/** Small translucent action on the coloured band - call / message the
- * customer without a separate card taking up a row of the page. */
-function HeroIconButton({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      className="h-10 w-10 items-center justify-center rounded-full"
-      style={{ backgroundColor: 'rgba(255,255,255,0.22)' }}
-    >
-      <Ionicons name={icon} size={18} color="#fff" />
-    </Pressable>
-  );
-}
-
 /** "Message" means the thread on this page, not the phone's SMS app - that
  * is where the customer is actually writing from. Its own component so the
  * scroll hook runs inside the shell that provides it. */
 function ChatIconButton({ onFocus }: { onFocus: () => void }) {
   const { scrollTo } = useDetailScroll();
   return (
-    <HeroIconButton
+    <DetailHeroAction
       icon="chatbubble-outline"
       label="Message customer"
       onPress={() => {
@@ -254,10 +231,10 @@ export function OrderDetailScreen() {
         ]}
         actions={
           isAccepted && !!counterparty?.phone ? (
-            <View className="flex-row" style={{ gap: 8 }}>
-              <HeroIconButton icon="call-outline" label="Call customer" onPress={() => Linking.openURL(`tel:${counterparty.phone}`)} />
+            <>
+              <DetailHeroAction icon="call-outline" label="Call customer" onPress={() => Linking.openURL(`tel:${counterparty.phone}`)} />
               <ChatIconButton onFocus={() => setChatFocus((n) => n + 1)} />
-            </View>
+            </>
           ) : null
         }
       />

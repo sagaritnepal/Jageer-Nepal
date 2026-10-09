@@ -17,6 +17,7 @@ import { formatScheduledWhen } from '../../../lib/utils/scheduledTime';
 import {
   DetailShell,
   DetailHero,
+  DetailHeroAction,
   DetailCard,
   DetailTimeline,
   NextStepCard,
@@ -156,12 +157,8 @@ function JobHero({
       actions={
         customerPhone ? (
           <>
-            <HeroIconButton
-              icon="call-outline"
-              label="Call customer"
-              onPress={() => Linking.openURL(`tel:${customerPhone}`)}
-            />
-            <HeroIconButton
+            <DetailHeroAction icon="call-outline" label="Call customer" onPress={() => Linking.openURL(`tel:${customerPhone}`)} />
+            <DetailHeroAction
               icon="chatbubble-outline"
               label="Message customer"
               onPress={() => {
@@ -173,30 +170,6 @@ function JobHero({
         ) : null
       }
     />
-  );
-}
-
-/** Call / message on the coloured band, so the customer's details and the
- * ways to reach them live in one place instead of a card of their own. */
-function HeroIconButton({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      className="h-10 w-10 items-center justify-center rounded-full"
-      style={{ backgroundColor: 'rgba(255,255,255,0.22)' }}
-    >
-      <Ionicons name={icon} size={18} color="#fff" />
-    </Pressable>
   );
 }
 
