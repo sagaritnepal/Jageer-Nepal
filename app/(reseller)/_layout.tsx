@@ -13,8 +13,7 @@ import { useAuthStore } from '../../lib/hooks/useAuth';
 import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/components/finance/FinanceDashboardScreen';
 
 // The mobile bottom tabs below, as a persistent left rail on web instead - see
-// WebSidebarShell. The Work Hub is not in it: on web it is the "My Work Hub"
-// button at the top right of Requests (the phone keeps its Work tab). Finance's own shortcuts
+// WebSidebarShell. Finance's own shortcuts
 // (Payment In, Purchase, Report, ...) are nested under it too, reusing the
 // exact same list the Finance dashboard's tiles use, so switching between
 // them never means going back to that dashboard to pick another tile.
@@ -72,7 +71,6 @@ const MAIN_WIDE_ROUTES = [
   '/dashboard',
   '/shop',
   '/requests',
-  '/workhub',
   '/wholesale',
   '/quotation',
   '/profile',
@@ -129,14 +127,6 @@ export default function ResellerLayout() {
             title: 'My Requests',
             tabBarLabel: 'Requests',
             tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
-          }}
-        />
-        <Tabs.Screen
-          name="workhub"
-          options={{
-            title: 'Work Hub',
-            tabBarLabel: 'Work',
-            tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} />,
           }}
         />
         <Tabs.Screen

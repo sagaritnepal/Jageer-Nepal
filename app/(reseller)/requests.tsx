@@ -6,11 +6,11 @@ import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
-import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
 import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
 import { distanceKm } from '../../lib/utils/distance';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { WorkHubPanel } from '../../lib/components/requests/WorkHubPanel';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import type { Order, Product, ServiceRequest } from '../../types/database.types';
@@ -450,26 +450,6 @@ export default function ResellerRequestQueue() {
   const { width: screenWidth } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
 
-  // "My Work Hub" at the top right of this tab, in the bar beside the bell: a
-  // full button on a wide screen, just the icon on a phone where the bar has
-  // less room (the Work tab is also in the bottom bar there).
-  useScreenHeader(
-    {
-      headerRight: () => (
-        <Pressable
-          onPress={() => router.push('/(reseller)/workhub' as any)}
-          accessibilityRole="button"
-          accessibilityLabel="My Work Hub"
-          className={`h-9 flex-row items-center justify-center rounded-lg border border-gray-300 bg-white ${isWideWeb ? 'gap-1.5 px-3' : 'w-9'}`}
-        >
-          <Ionicons name="grid-outline" size={15} color="#2563EB" />
-          {isWideWeb && <Text className="text-[12.5px] font-semibold text-gray-700">My Work Hub</Text>}
-        </Pressable>
-      ),
-    },
-    [isWideWeb]
-  );
-
   const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
     filters: { status: 'pending', origin: 'app' },
     orderBy: { column: 'created_at', ascending: true },
@@ -570,6 +550,27 @@ export default function ResellerRequestQueue() {
 
   const emptyText = isLoading ? 'Loading…' : 'Nothing here right now.';
 
+  // "Job in progress" is the Work Hub: its list, board and tools replace the
+  // plain rows. Product orders that are on their way still follow this stage,
+  // so they sit under it in the ordinary rows.
+  const inProgressView = (
+    <>
+      <WorkHubPanel wide={isWideWeb} />
+      {stageJobs.some((item) => item.kind === 'order') && (
+        <View style={{ gap: 8 }}>
+          <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Shop orders on the way</Text>
+          {isWideWeb ? (
+            <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+              {stageJobs.filter((item) => item.kind === 'order').map(jobRow)}
+            </View>
+          ) : (
+            stageJobs.filter((item) => item.kind === 'order').map(jobRow)
+          )}
+        </View>
+      )}
+    </>
+  );
+
   if (isWideWeb) {
     const sidePill = (stage: Stage) => {
       const meta = STAGE_META[stage];
@@ -638,6 +639,9 @@ export default function ResellerRequestQueue() {
           </Pressable>
         </View>
 
+        {activeStage === 'in_progress' ? (
+          inProgressView
+        ) : (
         <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <View className="flex-row items-center gap-2.5 px-[18px] py-3.5" style={{ backgroundColor: activeMeta.tint }}>
             <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeMeta.color }} />
@@ -666,6 +670,7 @@ export default function ResellerRequestQueue() {
             stageJobs.map(jobRow)
           )}
         </View>
+        )}
       </ScrollView>
     );
   }
@@ -716,13 +721,19 @@ export default function ResellerRequestQueue() {
         </Text>
       </View>
 
-      <FlatList
-        data={stageJobs}
-        keyExtractor={(item) => `${item.kind}-${item.id}`}
-        renderItem={({ item }) => jobRow(item)}
-        ListEmptyComponent={<Text className="text-gray-500">{emptyText}</Text>}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90 }}
-      />
+      {activeStage === 'in_progress' ? (
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90, gap: 14 }}>
+          {inProgressView}
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={stageJobs}
+          keyExtractor={(item) => `${item.kind}-${item.id}`}
+          renderItem={({ item }) => jobRow(item)}
+          ListEmptyComponent={<Text className="text-gray-500">{emptyText}</Text>}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 90 }}
+        />
+      )}
 
       <Pressable
         onPress={() => router.push('/(reseller)/new-request?from=requests')}

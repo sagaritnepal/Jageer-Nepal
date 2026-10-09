@@ -1,27 +1,25 @@
-// app/(reseller)/workhub.tsx
+// lib/components/requests/WorkHubPanel.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../../lib/supabase';
-import { JobTimeline } from '../../lib/components/JobTimeline';
-import { TicketChip } from '../../lib/components/TicketChip';
-import { ticketLabel } from '../../lib/utils/ticket';
-import type { JobTimes } from '../../lib/utils/jobTimeline';
-import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
-import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
-import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
-import { useRankedTechnicians } from '../../lib/hooks/useTechnicianRanking';
-import { assignTechnician, showJobSentAlert } from '../../lib/utils/assignTechnician';
-import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
-import { PersonAvatar } from '../../lib/components/PersonAvatar';
-import { CategoryBadge } from '../../lib/components/CategoryBadge';
-import { showAlert, getErrorMessage } from '../../lib/utils/alert';
-import { exportWorkPdf, exportWorkXlsx, type WorkRecordRow } from '../../lib/utils/exportWorkRecord';
-import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
-import type { Profile, ServiceRequest } from '../../types/database.types';
+import { supabase } from '../../supabase';
+import { JobTimeline } from '../JobTimeline';
+import { TicketChip } from '../TicketChip';
+import { ticketLabel } from '../../utils/ticket';
+import type { JobTimes } from '../../utils/jobTimeline';
+import { useAuthStore } from '../../hooks/useAuth';
+import { useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
+import { useMyEmployees } from '../../hooks/useTechnicianEmployment';
+import { useRankedTechnicians } from '../../hooks/useTechnicianRanking';
+import { assignTechnician, showJobSentAlert } from '../../utils/assignTechnician';
+import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
+import { PersonAvatar } from '../PersonAvatar';
+import { CategoryBadge } from '../CategoryBadge';
+import { showAlert, getErrorMessage } from '../../utils/alert';
+import { exportWorkPdf, exportWorkXlsx, type WorkRecordRow } from '../../utils/exportWorkRecord';
+import type { Profile, ServiceRequest } from '../../../types/database.types';
 
 const BLUE = '#2563EB';
 
@@ -29,38 +27,12 @@ const BLUE = '#2563EB';
  * on a board about who is doing what today. */
 const LIVE_STATUSES: ServiceRequest['status'][] = ['pending', 'approved', 'assigned', 'in_progress'];
 
-/** The same buckets the Requests tab uses, so a job is in the state here
- * that it is in there - and "All" is every job either page knows about. */
-type Filter = 'active' | 'completed' | 'paid' | 'cancelled' | 'all';
-
-const FILTERS: { key: Filter; label: string; color: string }[] = [
-  { key: 'active', label: 'My Jobs', color: '#2563EB' },
-  { key: 'completed', label: 'Completed', color: '#16A34A' },
-  { key: 'paid', label: 'Paid', color: '#047857' },
-  { key: 'cancelled', label: 'Cancelled', color: '#6B7280' },
-  { key: 'all', label: 'All', color: '#374151' },
-];
-
-function matchesFilter(request: ServiceRequest, filter: Filter): boolean {
-  switch (filter) {
-    case 'active':
-      return LIVE_STATUSES.includes(request.status);
-    case 'completed':
-      return request.status === 'resolved' && request.payment_status !== 'paid';
-    case 'paid':
-      return request.status === 'resolved' && request.payment_status === 'paid';
-    case 'cancelled':
-      return request.status === 'cancelled';
-    case 'all':
-      return true;
-  }
-}
+/** The jobs the "Job in progress" stage of Requests lists: offered to a technician,
+ * or being worked. Anything not handed to someone yet is a "My Jobs" job - it
+ * still shows on the board view below, where it can be assigned or opened to the team. */
+const IN_PROGRESS_STATUSES: ServiceRequest['status'][] = ['assigned', 'in_progress'];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Still open, so it can still be handed to someone. A finished or
- * cancelled job only gets a View. */
-const isOpenJob = (request: ServiceRequest) => LIVE_STATUSES.includes(request.status);
 
 /** Plain words for the saved record - "in_progress" is the database's
  * word, not one a reader wants in a spreadsheet. */
@@ -370,7 +342,7 @@ function AssignSheet({
  * usually being checked - what it is, who it's for, who has it, and
  * whether it's been paid. The board (who's carrying what) is a tap away
  * rather than the first thing in the way. */
-function JobSheet({
+function JobSheetLayout({
   jobs,
   times,
   now,
@@ -379,7 +351,8 @@ function JobSheet({
   onRequest,
   onCancelWork,
   busyId,
-  wide,
+  asCards,
+  compact,
   expanded,
 }: {
   jobs: ServiceRequest[];
@@ -392,7 +365,10 @@ function JobSheet({
   /** Calls off a job that is not finished yet (asks "are you sure?" first). */
   onCancelWork: (request: ServiceRequest) => void;
   busyId: string | null;
-  wide: boolean;
+  /** Stacked cards (a phone, or a column too narrow for a table). */
+  asCards: boolean;
+  /** A table without its Payment column - the payment chip rides in Status instead. */
+  compact: boolean;
   /** Full screen: nothing is cut short, however long the job's name is. */
   expanded?: boolean;
 }) {
@@ -416,7 +392,7 @@ function JobSheet({
     );
   }
 
-  if (!wide) {
+  if (asCards) {
     return (
       <View style={{ gap: 10 }}>
         {jobs.map((r) => {
@@ -503,11 +479,11 @@ function JobSheet({
   return (
     <View className="overflow-hidden rounded-2xl border border-gray-400 bg-white">
       <View className="flex-row border-b border-gray-400 bg-gray-50">
-        {head('Job', { flex: 1 })}
-        {head('Customer', { width: 220 })}
-        {head('With', { width: 150 })}
+        {head('Job', { flex: 1, minWidth: 200 })}
+        {head('Customer', { width: compact ? 190 : 220 })}
+        {head('With', { width: compact ? 130 : 150 })}
         {head('Status', { width: 170 })}
-        {head('Payment', { width: 100 })}
+        {!compact && head('Payment', { width: 100 })}
         {head('Assign', { width: 254 }, true)}
       </View>
       {jobs.map((r, index) => {
@@ -521,7 +497,7 @@ function JobSheet({
             <Pressable
               onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}
               className={cell}
-              style={{ flex: 1 }}
+              style={{ flex: 1, minWidth: 200 }}
             >
               <View className="flex-row items-center" style={{ gap: 8 }}>
                 <TicketChip no={r.ticket_no} />
@@ -537,7 +513,7 @@ function JobSheet({
                 {when(r)} · {money(r.quoted_price)}
               </Text>
             </Pressable>
-            <View className={cell} style={{ width: 220 }}>
+            <View className={cell} style={{ width: compact ? 190 : 220 }}>
               <Text className="text-[13px] text-gray-900" numberOfLines={expanded ? undefined : 1}>
                 {r.customer_name ?? 'Customer'}
               </Text>
@@ -550,7 +526,7 @@ function JobSheet({
                 </Pressable>
               )}
             </View>
-            <View className={cell} style={{ width: 150 }}>
+            <View className={cell} style={{ width: compact ? 130 : 150 }}>
               <Text className="text-[12.5px] text-gray-700" numberOfLines={expanded ? undefined : 1}>
                 {r.technician_id ? technicianName(r.technician_id) : r.open_to_team ? 'Open to team' : 'Nobody yet'}
               </Text>
@@ -558,50 +534,41 @@ function JobSheet({
             <View className={cell} style={{ width: 170, gap: 4 }}>
               <Chip {...statusChip(r)} />
               {isOverdue(r) && <OverdueChip />}
+              {compact && <Chip {...pay} />}
             </View>
-            <View className={cell} style={{ width: 100 }}>
-              <Chip {...pay} />
-            </View>
+            {!compact && (
+              <View className={cell} style={{ width: 100 }}>
+                <Chip {...pay} />
+              </View>
+            )}
             <View className="flex-row items-center px-3 py-2" style={{ width: 254, gap: 8 }}>
-              {isOpenJob(r) ? (
-                <>
-                  <Pressable
-                    onPress={() => onAssign(r)}
-                    className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg"
-                    style={{ backgroundColor: BLUE }}
-                  >
-                    <Ionicons name="person-add-outline" size={15} color="#FFFFFF" />
-                    <Text className="text-[12.5px] font-semibold text-white">{r.technician_id ? 'Reassign' : 'Assign'}</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => onRequest(r)}
-                    className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white"
-                    style={{ borderColor: '#DDD6FE' }}
-                  >
-                    <Ionicons name="paper-plane-outline" size={15} color="#6D28D9" />
-                    <Text className="text-[12.5px] font-semibold" style={{ color: '#6D28D9' }}>
-                      Request
-                    </Text>
-                  </Pressable>
-                  {canCancelWork(r) && (
-                    <Pressable
-                      onPress={() => onCancelWork(r)}
-                      disabled={busyId === r.id}
-                      accessibilityLabel="Cancel work"
-                      className="h-9 w-9 items-center justify-center rounded-lg border bg-white disabled:opacity-50"
-                      style={{ borderColor: '#FECACA' }}
-                    >
-                      <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
-                    </Pressable>
-                  )}
-                </>
-              ) : (
+              <Pressable
+                onPress={() => onAssign(r)}
+                className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg"
+                style={{ backgroundColor: BLUE }}
+              >
+                <Ionicons name="person-add-outline" size={15} color="#FFFFFF" />
+                <Text className="text-[12.5px] font-semibold text-white">{r.technician_id ? 'Reassign' : 'Assign'}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => onRequest(r)}
+                className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white"
+                style={{ borderColor: '#DDD6FE' }}
+              >
+                <Ionicons name="paper-plane-outline" size={15} color="#6D28D9" />
+                <Text className="text-[12.5px] font-semibold" style={{ color: '#6D28D9' }}>
+                  Request
+                </Text>
+              </Pressable>
+              {canCancelWork(r) && (
                 <Pressable
-                  onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}
-                  className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white"
+                  onPress={() => onCancelWork(r)}
+                  disabled={busyId === r.id}
+                  accessibilityLabel="Cancel work"
+                  className="h-9 w-9 items-center justify-center rounded-lg border bg-white disabled:opacity-50"
+                  style={{ borderColor: '#FECACA' }}
                 >
-                  <Ionicons name="eye-outline" size={15} color="#374151" />
-                  <Text className="text-[12.5px] font-semibold text-gray-700">View</Text>
+                  <Ionicons name="close-circle-outline" size={17} color="#DC2626" />
                 </Pressable>
               )}
             </View>
@@ -618,15 +585,33 @@ function JobSheet({
   );
 }
 
-/** Who is doing what, and what nobody has picked up yet. Assigning still
- * happens on the job's own page (it needs the technician list and the
- * price); this board is the overview that page can't give - and the one
- * place to hand a job to the whole team at once. */
-export default function WorkHub() {
+/** The list, in the shape that fits the room it is given: the full table, the
+ * table without its Payment column, or stacked cards. The page being "wide"
+ * is not enough to say - beside a sidebar the column can still be narrow. */
+function JobSheet(props: Omit<React.ComponentProps<typeof JobSheetLayout>, 'asCards' | 'compact'> & { wide: boolean }) {
+  const { wide, ...rest } = props;
+  const [boxWidth, setBoxWidth] = useState(0);
+  const measured = boxWidth > 0;
+  return (
+    <View onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
+      <JobSheetLayout
+        {...rest}
+        asCards={!wide || (measured && boxWidth < 760)}
+        compact={measured && boxWidth < 1100}
+      />
+    </View>
+  );
+}
+
+/** The body of Requests' "Job in progress" stage: who is doing what, and what
+ * nobody has picked up yet. The list is the jobs a technician has; the board
+ * (one tap away) is everything live, and the one place to hand a job to the
+ * whole team at once. Assigning still happens on the job's own page (it needs
+ * the technician list and the price); this is the overview that page can't give.
+ * It was the Work Hub tab before the two were merged. */
+export function WorkHubPanel({ wide }: { wide: boolean }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const businessName = useAuthStore((state) => state.profile?.business_name);
-  const { width } = useWindowDimensions();
-  const wide = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const queryClient = useQueryClient();
   const updateRequest = useSupabaseUpdate('service_requests');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -635,30 +620,12 @@ export default function WorkHub() {
   const [assigning, setAssigning] = useState<{ request: ServiceRequest; mode: 'staff' | 'freelance' } | null>(null);
   const [sending, setSending] = useState(false);
   const [maximised, setMaximised] = useState(false);
-  const [filter, setFilter] = useState<Filter>('active');
   // The sheet answers "what is on today"; the board answers "who is
   // carrying it". Opening on the lighter of the two.
   const [view, setView] = useState<'sheet' | 'board'>('sheet');
-
-  // The way out, at the top right of the bar like "My Work Hub" on Requests: the
-  // Work Hub is no longer in the sidebar, so this takes you straight back to the
-  // Requests tab (whichever way you got here). The label shortens on a phone.
-  useScreenHeader(
-    {
-      headerRight: () => (
-        <Pressable
-          onPress={() => router.push('/(reseller)/requests' as any)}
-          accessibilityRole="button"
-          accessibilityLabel="Back to Requests"
-          className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
-        >
-          <Ionicons name="arrow-back" size={15} color={BLUE} />
-          <Text className="text-[12.5px] font-semibold text-gray-700">{wide ? 'Back to Requests' : 'Requests'}</Text>
-        </Pressable>
-      ),
-    },
-    [wide]
-  );
+  // Beside the sidebar a "wide" page can still leave this panel a narrow column.
+  const [boxWidth, setBoxWidth] = useState(0);
+  const headerInRow = wide && !(boxWidth > 0 && boxWidth < 760);
 
   const { data: mine, isLoading } = useSupabaseQuery('service_requests', {
     filters: userId ? { reseller_id: userId } : {},
@@ -686,26 +653,19 @@ export default function WorkHub() {
     userId
   );
 
-  // Work still to do is what the page opens on; the other filters are
-  // there for when the question is "where did that job get to?".
-  const shown = useMemo(() => {
-    const picked = requests.filter((r) => matchesFilter(r, filter));
-    return [...picked].sort((a, b) => {
-      if (filter === 'active' || filter === 'all') {
-        const overdue = Number(isOverdue(b) && LIVE_STATUSES.includes(b.status)) - Number(isOverdue(a) && LIVE_STATUSES.includes(a.status));
-        if (overdue !== 0) return overdue;
-        const unassigned = Number(!b.technician_id) - Number(!a.technician_id);
-        if (unassigned !== 0) return unassigned;
-      }
-      return dueAt(a) - dueAt(b);
-    });
-  }, [requests, filter]);
+  // The list is this stage's jobs: overdue ones first, then by when they were due.
+  const shown = useMemo(
+    () =>
+      requests
+        .filter((r) => IN_PROGRESS_STATUSES.includes(r.status))
+        .sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a)) || dueAt(a) - dueAt(b)),
+    [requests]
+  );
 
-  // The board is always about who is carrying work right now, whichever
-  // filter the list is on.
+  // The board is about who is carrying work right now - all of it, not just
+  // the jobs the list shows.
   const live = useMemo(() => requests.filter((r) => LIVE_STATUSES.includes(r.status)), [requests]);
   const overdueCount = useMemo(() => live.filter(isOverdue).length, [live]);
-  const countFor = (key: Filter) => requests.filter((r) => matchesFilter(r, key)).length;
 
   const byTechnician = useMemo(() => {
     const map = new Map<string, ServiceRequest[]>();
@@ -954,10 +914,12 @@ export default function WorkHub() {
   // On a phone the title and the buttons are stacked: in one row, the five
   // buttons took all the width and squeezed the title to a one-letter column.
   const header = (
-    <View className={wide ? 'flex-row items-center gap-2.5' : ''} style={wide ? undefined : { gap: 10 }}>
-      <View className={wide ? 'flex-1' : ''}>
+    <View className={headerInRow ? 'flex-row items-center gap-2.5' : ''} style={headerInRow ? undefined : { gap: 10 }}>
+      <View className={headerInRow ? 'flex-1' : ''}>
         <Text className="text-[15px] font-bold text-gray-900">
-          {live.length} job{live.length === 1 ? '' : 's'} in play
+          {view === 'sheet'
+            ? `${shown.length} job${shown.length === 1 ? '' : 's'} in progress`
+            : `${live.length} job${live.length === 1 ? '' : 's'} in play`}
         </Text>
         <Text className="mt-0.5 text-[12px] text-gray-500">
           {unassigned.length} waiting for someone · {openToTeam.length} open to the team
@@ -977,7 +939,7 @@ export default function WorkHub() {
         )}
 
         <Pressable
-          onPress={() => router.push('/(reseller)/new-request?from=workhub' as any)}
+          onPress={() => router.push('/(reseller)/new-request?from=requests' as any)}
           className="h-9 flex-row items-center gap-1.5 rounded-lg px-3"
           style={{ backgroundColor: BLUE }}
         >
@@ -1038,39 +1000,8 @@ export default function WorkHub() {
     );
   }
 
-  const filterChips = (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-      {FILTERS.map((f) => {
-        const active = filter === f.key;
-        return (
-          <Pressable
-            key={f.key}
-            onPress={() => setFilter(f.key)}
-            className="h-9 flex-row items-center gap-1.5 rounded-full px-3.5"
-            style={{
-              backgroundColor: active ? f.color : '#FFFFFF',
-              borderWidth: active ? 0 : 1,
-              borderColor: '#E5E7EB',
-            }}
-          >
-            <Text className={`text-[12.5px] font-semibold ${active ? 'text-white' : 'text-gray-700'}`}>{f.label}</Text>
-            <View
-              className="h-5 min-w-5 items-center justify-center rounded-full px-1.5"
-              style={{ backgroundColor: active ? 'rgba(255,255,255,0.25)' : '#F3F4F6' }}
-            >
-              <Text className={`text-[11px] font-extrabold ${active ? 'text-white' : 'text-gray-600'}`}>
-                {countFor(f.key)}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
-
   const sheet = (
     <>
-      {filterChips}
       <JobSheet
         jobs={shown}
         times={jobTimes}
@@ -1083,8 +1014,8 @@ export default function WorkHub() {
         wide={wide}
       />
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-        Every job from Requests is here - switch the row above to see completed, paid or cancelled ones. PDF and Excel
-        save the last 30 days in full ({monthRows.length} job{monthRows.length === 1 ? '' : 's'}).
+        Jobs a technician has been given. Ones nobody has taken yet are under My Jobs, and on the board below. PDF and
+        Excel save the last 30 days in full ({monthRows.length} job{monthRows.length === 1 ? '' : 's'}).
       </Text>
 
       {/* Full screen: the same list with nothing clipped, for long job
@@ -1107,7 +1038,6 @@ export default function WorkHub() {
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: wide ? 24 : 12, paddingBottom: 40, gap: 12 }}>
-            {filterChips}
             <JobSheet
               jobs={shown}
               times={jobTimes}
@@ -1147,31 +1077,24 @@ export default function WorkHub() {
     </>
   );
 
-  if (wide) {
-    return (
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 32, paddingTop: 20, gap: 16 }}>
-        {header}
-        {view === 'sheet' ? (
-          sheet
-        ) : (
-          // flexGrow/minWidth let the columns (each 320px at least) share any
-          // extra room instead of leaving an empty strip on the right.
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator
-            contentContainerStyle={{ gap: 14, paddingBottom: 8, flexGrow: 1, minWidth: '100%' }}
-          >
-            {columns}
-          </ScrollView>
-        )}
-      </ScrollView>
-    );
-  }
-
   return (
-    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16, paddingBottom: 48, gap: 14 }}>
+    <View style={{ gap: wide ? 16 : 14 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
       {header}
-      {view === 'sheet' ? sheet : columns}
-    </ScrollView>
+      {view === 'sheet' ? (
+        sheet
+      ) : wide ? (
+        // flexGrow/minWidth let the columns (each 320px at least) share any
+        // extra room instead of leaving an empty strip on the right.
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          contentContainerStyle={{ gap: 14, paddingBottom: 8, flexGrow: 1, minWidth: '100%' }}
+        >
+          {columns}
+        </ScrollView>
+      ) : (
+        columns
+      )}
+    </View>
   );
 }
