@@ -46,18 +46,8 @@ const REPORT_FAMILY: WebNavItem[] = [
   { href: '/(reseller)/sales-report', label: 'Sales Report', icon: 'trending-up' },
   { href: '/(reseller)/purchase-report', label: 'Purchase Report', icon: 'cart' },
   { href: '/(reseller)/expense-report', label: 'Expense Report', icon: 'receipt' },
-  {
-    href: '/(reseller)/to-receive',
-    label: 'Receivable',
-    icon: 'people',
-    children: [{ href: '/(reseller)/received', label: 'Total Received', icon: 'arrow-down-circle' }],
-  },
-  {
-    href: '/(reseller)/to-give',
-    label: 'Payable',
-    icon: 'storefront',
-    children: [{ href: '/(reseller)/paid', label: 'Total Paid', icon: 'arrow-up-circle' }],
-  },
+  { href: '/(reseller)/to-receive', label: 'Receivable Report', icon: 'people' },
+  { href: '/(reseller)/to-give', label: 'Payable Report', icon: 'storefront' },
 ];
 
 const NAV_ITEMS: WebNavItem[] = [
@@ -210,8 +200,8 @@ export default function ResellerLayout() {
         <Tabs.Screen name="sales-report" options={{ href: null, title: 'Sales Report' }} />
         <Tabs.Screen name="purchase-report" options={{ href: null, title: 'Purchase Report' }} />
         <Tabs.Screen name="expense-report" options={{ href: null, title: 'Expense Report' }} />
-        <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable' }} />
-        <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable' }} />
+        <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable Report' }} />
+        <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable Report' }} />
         <Tabs.Screen name="bank-accounts" options={{ href: null, title: 'Bank Accounts' }} />
         <Tabs.Screen name="bank-balances" options={{ href: null, title: 'Available Balance' }} />
         <Tabs.Screen name="import-statement" options={{ href: null, title: 'Import Statement' }} />

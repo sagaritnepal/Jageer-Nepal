@@ -6,6 +6,7 @@ import { Paths, File } from 'expo-file-system';
 import * as XLSX from 'xlsx';
 
 export interface WorkRecordRow {
+  Ticket: string;
   Date: string;
   Time: string;
   Job: string;
@@ -19,6 +20,7 @@ export interface WorkRecordRow {
 }
 
 export const WORK_COLUMNS: (keyof WorkRecordRow)[] = [
+  'Ticket',
   'Date',
   'Time',
   'Job',
@@ -131,7 +133,7 @@ export async function printHtml(html: string) {
 export async function exportWorkXlsx(filename: string, sheetName: string, rows: WorkRecordRow[]) {
   const sheet = XLSX.utils.json_to_sheet(rows, { header: WORK_COLUMNS as string[] });
   sheet['!cols'] = [
-    { wch: 12 }, { wch: 7 }, { wch: 30 }, { wch: 22 }, { wch: 13 },
+    { wch: 9 }, { wch: 12 }, { wch: 7 }, { wch: 30 }, { wch: 22 }, { wch: 13 },
     { wch: 28 }, { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 11 },
   ];
   const book = XLSX.utils.book_new();

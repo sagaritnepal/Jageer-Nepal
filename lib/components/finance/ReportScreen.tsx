@@ -18,7 +18,7 @@ type ReportLink = {
   children?: ReportLink[];
 };
 
-/** The five top-level report types. Cash movement reports are nested under their related balance. */
+/** The five report types. Total Received / Total Paid are the cards on top of the Receivable / Payable Report. */
 const REPORT_GROUPS: { heading: string; links: ReportLink[] }[] = [
   {
     heading: 'Reports',
@@ -27,20 +27,18 @@ const REPORT_GROUPS: { heading: string; links: ReportLink[] }[] = [
       { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', icon: 'cart', color: '#DC2626', path: '/purchase-report' },
       { title: 'Expense Report', subtitle: 'Every expense you recorded, newest first', icon: 'receipt', color: '#DC2626', path: '/expense-report' },
       {
-        title: 'Receivable',
+        title: 'Receivable Report',
         subtitle: 'Customers who owe you money',
         icon: 'people',
         color: '#059669',
         path: '/to-receive',
-        children: [{ title: 'Total Received', subtitle: 'Money actually collected, newest first', icon: 'arrow-down-circle', color: '#059669', path: '/received' }],
       },
       {
-        title: 'Payable',
+        title: 'Payable Report',
         subtitle: 'Vendors you owe money to',
         icon: 'storefront',
         color: '#DC2626',
         path: '/to-give',
-        children: [{ title: 'Total Paid', subtitle: 'Money that actually left the business, newest first', icon: 'arrow-up-circle', color: '#DC2626', path: '/paid' }],
       },
     ],
   },

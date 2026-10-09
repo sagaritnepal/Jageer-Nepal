@@ -87,8 +87,8 @@ export default function WholesalerLayout() {
       <Tabs.Screen name="sales-report" options={{ href: null, title: 'Sales Report' }} />
       <Tabs.Screen name="purchase-report" options={{ href: null, title: 'Purchase Report' }} />
       <Tabs.Screen name="expense-report" options={{ href: null, title: 'Expense Report' }} />
-      <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable' }} />
-      <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable' }} />
+      <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable Report' }} />
+      <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable Report' }} />
       <Tabs.Screen name="bank-accounts" options={{ href: null, title: 'Bank Accounts' }} />
       <Tabs.Screen name="bank-balances" options={{ href: null, title: 'Available Balance' }} />
       <Tabs.Screen name="import-statement" options={{ href: null, title: 'Import Statement' }} />

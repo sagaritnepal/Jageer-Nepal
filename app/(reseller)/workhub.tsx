@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { JobTimeline } from '../../lib/components/JobTimeline';
+import { TicketChip } from '../../lib/components/TicketChip';
+import { ticketLabel } from '../../lib/utils/ticket';
 import type { JobTimes } from '../../lib/utils/jobTimeline';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
@@ -32,7 +34,7 @@ const LIVE_STATUSES: ServiceRequest['status'][] = ['pending', 'approved', 'assig
 type Filter = 'active' | 'completed' | 'paid' | 'cancelled' | 'all';
 
 const FILTERS: { key: Filter; label: string; color: string }[] = [
-  { key: 'active', label: 'Still to do', color: '#2563EB' },
+  { key: 'active', label: 'My Jobs', color: '#2563EB' },
   { key: 'completed', label: 'Completed', color: '#16A34A' },
   { key: 'paid', label: 'Paid', color: '#047857' },
   { key: 'cancelled', label: 'Cancelled', color: '#6B7280' },
@@ -166,9 +168,12 @@ function JobCard({ request, footer }: { request: ServiceRequest; footer?: React.
       <Pressable onPress={() => router.push(`/(reseller)/request/${request.id}` as any)} className="flex-row items-start gap-2.5">
         <CategoryBadge category={request.issue_type} size={30} />
         <View className="flex-1">
-          <Text className="text-[13.5px] font-bold text-gray-900" numberOfLines={1}>
-            {request.issue_type}
-          </Text>
+          <View className="flex-row items-center" style={{ gap: 8 }}>
+            <TicketChip no={request.ticket_no} />
+            <Text className="text-[13.5px] font-bold text-gray-900" style={{ flex: 1, minWidth: 0 }} numberOfLines={1}>
+              {request.issue_type}
+            </Text>
+          </View>
           <Text className="mt-0.5 text-[11.5px] text-gray-500" numberOfLines={1}>
             {request.customer_name ?? 'Customer'} · {when(request)}
           </Text>
@@ -391,9 +396,13 @@ function JobSheet({
   /** Full screen: nothing is cut short, however long the job's name is. */
   expanded?: boolean;
 }) {
-  const cell = 'px-3 py-2.5 border-r border-gray-300';
-  const head = (label: string, style: object) => (
-    <Text className={`${cell} text-[11px] font-bold uppercase tracking-wide text-gray-400`} style={style}>
+  // Lines inside a row are faint; the line between two jobs is the strong one.
+  const cell = 'justify-center border-r border-gray-200 px-3 py-3.5';
+  const head = (label: string, style: object, last?: boolean) => (
+    <Text
+      className={`px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-gray-500 ${last ? '' : 'border-r border-gray-200'}`}
+      style={style}
+    >
       {label}
     </Text>
   );
@@ -416,9 +425,16 @@ function JobSheet({
           return (
             <View key={r.id} className="rounded-2xl border border-gray-200 bg-white p-3.5">
               <Pressable onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}>
-                <Text className="text-[14px] font-bold text-gray-900" numberOfLines={expanded ? undefined : 1}>
-                  {r.issue_type}
-                </Text>
+                <View className="flex-row items-center" style={{ gap: 8 }}>
+                  <TicketChip no={r.ticket_no} />
+                  <Text
+                    className="text-[14px] font-bold text-gray-900"
+                    style={{ flex: 1, minWidth: 0 }}
+                    numberOfLines={expanded ? undefined : 1}
+                  >
+                    {r.issue_type}
+                  </Text>
+                </View>
                 <Text className="mt-0.5 text-[12px] text-gray-600" numberOfLines={expanded ? undefined : 1}>
                   {r.customer_name ?? 'Customer'}
                   {r.customer_phone ? ` · ${r.customer_phone}` : ''}
@@ -485,30 +501,38 @@ function JobSheet({
   }
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-gray-300 bg-white">
-      <View className="flex-row border-b border-gray-300 bg-gray-50">
+    <View className="overflow-hidden rounded-2xl border border-gray-400 bg-white">
+      <View className="flex-row border-b border-gray-400 bg-gray-50">
         {head('Job', { flex: 1 })}
         {head('Customer', { width: 220 })}
         {head('With', { width: 150 })}
         {head('Status', { width: 170 })}
         {head('Payment', { width: 100 })}
-        <Text className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-gray-400" style={{ width: 254 }}>
-          Assign
-        </Text>
+        {head('Assign', { width: 254 }, true)}
       </View>
-      {jobs.map((r) => {
+      {jobs.map((r, index) => {
         const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
         return (
-          <View key={r.id} className="border-b border-gray-300">
-          <View className="flex-row items-center">
+          <View
+            key={r.id}
+            style={index === jobs.length - 1 ? undefined : { borderBottomWidth: 2, borderBottomColor: '#9CA3AF' }}
+          >
+          <View className="flex-row">
             <Pressable
               onPress={() => router.push(`/(reseller)/request/${r.id}` as any)}
               className={cell}
               style={{ flex: 1 }}
             >
-              <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={expanded ? undefined : 1}>
-                {r.issue_type}
-              </Text>
+              <View className="flex-row items-center" style={{ gap: 8 }}>
+                <TicketChip no={r.ticket_no} />
+                <Text
+                  className="text-[13.5px] font-semibold text-gray-900"
+                  style={{ flex: 1, minWidth: 0 }}
+                  numberOfLines={expanded ? undefined : 1}
+                >
+                  {r.issue_type}
+                </Text>
+              </View>
               <Text className="mt-0.5 text-[11.5px] text-gray-500" numberOfLines={expanded ? undefined : 1}>
                 {when(r)} · {money(r.quoted_price)}
               </Text>
@@ -526,13 +550,11 @@ function JobSheet({
                 </Pressable>
               )}
             </View>
-            <Text
-              className={`${cell} text-[12.5px] text-gray-700`}
-              style={{ width: 150 }}
-              numberOfLines={expanded ? undefined : 1}
-            >
-              {r.technician_id ? technicianName(r.technician_id) : r.open_to_team ? 'Open to team' : 'Nobody yet'}
-            </Text>
+            <View className={cell} style={{ width: 150 }}>
+              <Text className="text-[12.5px] text-gray-700" numberOfLines={expanded ? undefined : 1}>
+                {r.technician_id ? technicianName(r.technician_id) : r.open_to_team ? 'Open to team' : 'Nobody yet'}
+              </Text>
+            </View>
             <View className={cell} style={{ width: 170, gap: 4 }}>
               <Chip {...statusChip(r)} />
               {isOverdue(r) && <OverdueChip />}
@@ -540,7 +562,7 @@ function JobSheet({
             <View className={cell} style={{ width: 100 }}>
               <Chip {...pay} />
             </View>
-            <View className="flex-row px-3 py-2" style={{ width: 254, gap: 8 }}>
+            <View className="flex-row items-center px-3 py-2" style={{ width: 254, gap: 8 }}>
               {isOpenJob(r) ? (
                 <>
                   <Pressable
@@ -584,7 +606,11 @@ function JobSheet({
               )}
             </View>
           </View>
-          <JobTimeline request={r} times={times?.get(r.id)} now={now} layout="strip" />
+          {/* The journey sits in its own tinted band under a faint line, so
+              a job reads as "the details, then where it has got to". */}
+          <View className="border-t border-gray-200 bg-gray-50 pt-3">
+            <JobTimeline request={r} times={times?.get(r.id)} now={now} layout="strip" />
+          </View>
           </View>
         );
       })}
@@ -717,6 +743,7 @@ export default function WorkHub() {
       .filter((r) => new Date(r.created_at).getTime() >= since || dueAt(r) >= since)
       .sort((a, b) => dueAt(a) - dueAt(b))
       .map((r) => ({
+        Ticket: ticketLabel(r.ticket_no) ?? '',
         Date: r.scheduled_date ?? new Date(r.created_at).toISOString().slice(0, 10),
         Time: r.scheduled_time?.slice(0, 5) ?? '',
         Job: r.issue_type,
