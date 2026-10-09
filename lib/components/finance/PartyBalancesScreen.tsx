@@ -36,7 +36,7 @@ const META: Record<
   }
 > = {
   receive: {
-    subtitle: 'Customers who owe you money',
+    subtitle: 'Receivable',
     color: '#047857',
     bg: '#ECFDF5',
     border: '#A7F3D0',
@@ -47,7 +47,7 @@ const META: Record<
     cashPath: '/received',
   },
   give: {
-    subtitle: 'Vendors you owe money to',
+    subtitle: 'Payable',
     color: '#DC2626',
     bg: '#FEF2F2',
     border: '#FECACA',

@@ -122,18 +122,19 @@ export function TotalsReportScreen({ kind, basePath }: { kind: Kind; basePath: s
       return (transactions ?? [])
         .filter((t) => t.type === kind)
         .map((t): Entry => {
-          // Same as the Statement: an expense is named for its payee if it has one, else its category.
+          // The expense report shows the category (same one picked in the entry portal) in
+          // place of the generic "Expense" type - the title still falls back to it when there's no party.
           const category = t.expense_category_id ? categoryById.get(t.expense_category_id) : undefined;
           return {
             id: t.id,
             date: t.bill_date ?? t.created_at,
             amount: t.amount,
-            party: kind === 'expense' ? t.party_name || category || '' : t.party_name ?? '',
+            party: t.party_name ?? '',
             note:
               kind === 'expense'
-                ? [t.party_name ? category : null, t.note].filter(Boolean).join(' · ')
+                ? t.note ?? ''
                 : [t.bill_no ? `Bill #${t.bill_no}` : null, t.note].filter(Boolean).join(' · '),
-            type: PILL[kind],
+            type: kind === 'expense' ? { label: category ?? 'Uncategorized', color: MONEY.out.text, bg: MONEY.out.bg } : PILL[kind],
             nav: { kind: 'transactions', type: kind },
           };
         })
@@ -258,7 +259,7 @@ export function TotalsReportScreen({ kind, basePath }: { kind: Kind; basePath: s
     ? [
         { key: 'date', label: 'Date', width: 104, render: (e) => <Text className="text-[12.5px] text-gray-500">{bsShortDate(e.date)}</Text> },
         { key: 'details', label: 'Details', render: (e) => detailsCell(e, false) },
-        { key: 'type', label: 'Type', width: 150, render: (e) => <Pill text={e.type.label} color={e.type.color} bg={e.type.bg} /> },
+        { key: 'type', label: kind === 'expense' ? 'Category' : 'Type', width: 150, render: (e) => <Pill text={e.type.label} color={e.type.color} bg={e.type.bg} /> },
         { key: 'amount', label: 'Amount', width: 130, align: 'right', render: amountCell },
         { key: 'act', label: '', width: 34, align: 'right', render: chevron },
       ]
