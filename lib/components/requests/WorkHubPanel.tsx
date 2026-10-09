@@ -342,11 +342,22 @@ const HOLD_CHIP = {
 
 /** One fact about a job: a small label over its value. The cells of a card sit
  * on a hairline, like the detail page's hero. */
-function Fact({ label, children, roomy }: { label: string; children: React.ReactNode; roomy: boolean }) {
+function Fact({
+  label,
+  children,
+  roomy,
+  full,
+}: {
+  label: string;
+  children: React.ReactNode;
+  roomy: boolean;
+  /** Takes a whole row of its own - for a longer piece of text. */
+  full?: boolean;
+}) {
   return (
     <View
       className="bg-white px-4 py-3"
-      style={{ gap: 2, ...(roomy ? { flexGrow: 1, flexBasis: 170, minWidth: 170 } : null) }}
+      style={{ gap: 2, ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 170, minWidth: 170 }) : null) }}
     >
       <Text className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">{label}</Text>
       {children}
@@ -396,6 +407,8 @@ function JobRowCard({
   const hold = r.hold_status === 'requested' ? HOLD_CHIP.requested : r.hold_status === 'on_hold' ? HOLD_CHIP.on_hold : null;
   const lines = expanded ? undefined : 2;
   const scheduled = formatScheduledWhen(r.scheduled_date, r.scheduled_time);
+  // What the customer wrote when they asked for the job - the first thing to read.
+  const customerRequest = r.description?.trim();
 
   // What you can do, most useful first. A hold waiting on you comes before everything.
   const actions: CardAction[] = [];
@@ -457,6 +470,13 @@ function JobRowCard({
           flexWrap: roomy ? 'wrap' : 'nowrap',
         }}
       >
+        {!!customerRequest && (
+          <Fact label="Customer's request" roomy={roomy} full>
+            <Text className="text-[13.5px] leading-[20px] text-gray-800" numberOfLines={expanded ? undefined : 3}>
+              {customerRequest}
+            </Text>
+          </Fact>
+        )}
         <Fact label="Customer" roomy={roomy}>
           <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
             {r.customer_name ?? 'Customer'}
