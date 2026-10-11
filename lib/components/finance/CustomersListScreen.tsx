@@ -644,6 +644,8 @@ function LedgerList({ basePath }: { basePath: string }) {
   // A phone shows tick boxes only while selecting; the wide table always has them.
   const [selecting, setSelecting] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  /** The one party whose Ledger cell was tapped in the table - its type is being changed on its own. */
+  const [rowTypeTarget, setRowTypeTarget] = useState<{ id: string; name: string } | null>(null);
   const [exporting, setExporting] = useState(false);
 
   const { data: customers } = useSupabaseQuery('customers', {
@@ -796,9 +798,10 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
   }
 
-  async function applyLedgerType(key: string) {
+  async function applyLedgerType(key: string, only?: string) {
     setTypeMenuOpen(false);
-    const ids = [...selected];
+    setRowTypeTarget(null);
+    const ids = only ? [only] : [...selected];
     if (ids.length === 0) return;
     const { error } = await (supabase.from('customers') as any)
       .update({ party_type_id: key === NO_TYPE ? null : key })
@@ -809,7 +812,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
     queryClient.invalidateQueries({ queryKey: ['customers'] });
     showAlert('Ledger type updated', `${ids.length} ${ids.length === 1 ? 'party' : 'parties'} updated.`);
-    clearSelection();
+    if (!only) clearSelection();
   }
   const typeMenuOptions: MenuOption<string>[] = [
     ...partyTypes.map((t) => ({ key: t.id, label: t.name })),
@@ -936,6 +939,15 @@ function LedgerList({ basePath }: { basePath: string }) {
       onClose={() => setTypeMenuOpen(false)}
     />
   );
+  const rowTypeMenu = (
+    <OptionMenuModal
+      visible={!!rowTypeTarget}
+      title={`Ledger · ${rowTypeTarget?.name ?? ''}`}
+      options={typeMenuOptions}
+      onPick={(key) => rowTypeTarget && applyLedgerType(key, rowTypeTarget.id)}
+      onClose={() => setRowTypeTarget(null)}
+    />
+  );
 
   const emptyState = (
     <View className="items-center rounded-xl border border-dashed border-gray-300 bg-white py-10">
@@ -951,7 +963,7 @@ function LedgerList({ basePath }: { basePath: string }) {
   if (tableMode) {
     // Under the name: the ledger type, the phone number and the address, on one line.
     const partyCell = (d: PartyRowData) => {
-      const typeAndContact = [d.typeName, d.row.phone, d.row.kind === 'customer' ? d.row.customer.address : null].filter(Boolean).join(' · ');
+      const typeAndContact = [d.row.phone, d.row.kind === 'customer' ? d.row.customer.address : null].filter(Boolean).join(' · ');
       return (
         <View style={{ minWidth: 0 }}>
           {/* Wraps, so on a narrow screen the APP badge drops below the name instead of cutting it short. */}
@@ -990,6 +1002,32 @@ function LedgerList({ basePath }: { basePath: string }) {
         render: (_d, index) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>,
       },
       { key: 'party', label: 'Party', render: partyCell },
+      {
+        // The party's ledger type (Customer, Vendor, Employee ...) - tap it to change it right here.
+        key: 'ledger',
+        label: 'Ledger',
+        width: 150,
+        render: (d) =>
+          d.row.kind === 'customer' ? (
+            <Pressable
+              onPress={(e: any) => {
+                e?.stopPropagation?.();
+                setRowTypeTarget({ id: d.row.id, name: d.row.name });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Change ledger type of ${d.row.name}`}
+              className="flex-row items-center self-stretch justify-between rounded-md border border-gray-200 bg-white px-2 py-1"
+              style={{ gap: 4 }}
+            >
+              <Text className={`flex-1 text-[12.5px] ${d.typeName ? 'font-semibold text-gray-800' : 'text-gray-400'}`} numberOfLines={1}>
+                {d.typeName ?? 'Set ledger'}
+              </Text>
+              <Ionicons name="chevron-down" size={13} color="#9CA3AF" />
+            </Pressable>
+          ) : (
+            <Text className="text-[12.5px] text-gray-300">—</Text>
+          ),
+      },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
       {
         // The number on that last transaction, with what it is the number of underneath.
@@ -1084,6 +1122,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         )}
 
         {typeMenu}
+        {rowTypeMenu}
       </BookPage>
     );
   }
@@ -1145,6 +1184,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         )}
 
         {typeMenu}
+        {rowTypeMenu}
       </ScrollView>
     </View>
   );
