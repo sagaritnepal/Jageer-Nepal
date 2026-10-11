@@ -49,6 +49,7 @@ import { localTodayIso } from '../../utils/localDate';
 const todayIso = localTodayIso;
 
 interface ItemRowState {
+  hs_code?: string;
   description: string;
   qty: string;
   rate: string;
@@ -625,7 +626,7 @@ function TransactionForm({
   const [billNo, setBillNo] = useState(initial?.bill_no ?? '');
   const [billDate, setBillDate] = useState(initial?.bill_date ?? todayIso());
   const [items, setItems] = useState<ItemRowState[]>(
-    initial ? initial.items.map((i) => ({ description: i.description, qty: String(i.qty), rate: String(i.rate) })) : []
+    initial ? initial.items.map((i) => ({ hs_code: i.hs_code ?? '', description: i.description, qty: String(i.qty), rate: String(i.rate) })) : []
   );
   const [showItemPicker, setShowItemPicker] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
@@ -875,6 +876,7 @@ function TransactionForm({
           bill_no: billNo.trim() || null,
           bill_date: billDate || null,
           items: validItems.map((r) => ({
+            ...(r.hs_code?.trim() ? { hs_code: r.hs_code.trim() } : {}),
             description: r.description.trim(),
             qty: Number(r.qty),
             rate: Number(r.rate),

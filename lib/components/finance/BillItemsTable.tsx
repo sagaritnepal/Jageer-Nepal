@@ -7,16 +7,19 @@ import { readKey } from '../../utils/webKeys';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
 
 export interface BillItemRow {
+  /** Optional HS code of the item (customs / tariff classification). */
+  hs_code?: string;
   description: string;
   qty: string;
   rate: string;
 }
 
 export interface BillItemsTableHandle {
-  focusRow: (index: number, col?: 0 | 1 | 2) => void;
+  focusRow: (index: number, col?: 0 | 1 | 2 | 3) => void;
 }
 
-type Col = 0 | 1 | 2;
+/** 0 Item, 1 Qty, 2 Rate, 3 HS code (shown before Item, but optional so Enter skips it). */
+type Col = 0 | 1 | 2 | 3;
 const MAX_SUGGESTIONS = 6;
 
 interface ItemSuggestion {
@@ -119,7 +122,8 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
       onRequestSave();
     } else if (k.key === 'Enter') {
       k.prevent();
-      if (col < 2) focusCell(index, (col + 1) as Col);
+      if (col === 3) focusCell(index, 0);
+      else if (col < 2) focusCell(index, (col + 1) as Col);
       else if (index < items.length - 1) focusCell(index + 1, 0);
       else onExit();
     } else if (k.key === 'ArrowDown' && index < items.length - 1) {
@@ -169,6 +173,9 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
         <Text className="text-center text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ width: 36 }}>
           #
         </Text>
+        <Text className={headClass} style={{ width: 110 }}>
+          HS Code
+        </Text>
         <Text className={headClass} style={{ flex: 1 }}>
           Item
         </Text>
@@ -198,6 +205,25 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
               {index + 1}
             </Text>
 
+            <View style={{ width: 110 }}>
+              <TextInput
+                ref={(el) => {
+                  inputRefs.current[`${index}:3`] = el;
+                }}
+                value={row.hs_code ?? ''}
+                onChangeText={(v) => onUpdate(index, { ...row, hs_code: v.replace(/[^0-9.]/g, '') })}
+                onFocus={() => setFocusedCell({ index, col: 3 })}
+                onBlur={() => setFocusedCell((cur) => (cur?.index === index && cur.col === 3 ? null : cur))}
+                onKeyPress={(e) => handleKeyPress(e, index, 3)}
+                placeholder="HS code"
+                placeholderTextColor="#B2B8C1"
+                accessibilityLabel={`HS code, row ${index + 1}`}
+                selectTextOnFocus
+                className={cellClass}
+                style={cellStyle(index, 3)}
+              />
+            </View>
+
             <View style={{ flex: 1, minWidth: 0 }}>
               <SuggestInput
                 value={row.description}
@@ -207,6 +233,7 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
                   const s = suggestions.find((x) => x.key === opt.key);
                   if (!s) return;
                   onUpdate(index, {
+                    hs_code: row.hs_code,
                     description: s.name,
                     qty: row.qty.trim() ? row.qty : '1',
                     rate: s.rate != null ? String(s.rate) : row.rate,
