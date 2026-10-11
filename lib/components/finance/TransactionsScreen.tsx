@@ -2671,6 +2671,14 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const editLinkTx = editParam && editRow && editRow.id === editParam ? editRow : null;
   const editingTx = editLinkTx ?? editingTxState;
   const showForm = showFormState || !!editLinkTx;
+  // A bill entered as the wrong kind (a Sale that was really a Purchase) can be switched while it
+  // is being edited; the bill's own ledger entry follows when it is saved.
+  const [typeOverride, setTypeOverride] = useState<{ id: string; type: BusinessTransactionType } | null>(null);
+  const editType: BusinessTransactionType | undefined = editingTx
+    ? typeOverride && typeOverride.id === editingTx.id && editingTx.type !== 'expense'
+      ? typeOverride.type
+      : editingTx.type
+    : undefined;
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
   // The form renders inside the list's own header, so opening it while
   // scrolled down through history (which is exactly when someone taps Edit
@@ -2971,12 +2979,34 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
               <TrendChartCard key={filter} transactions={transactions ?? []} metrics={[filter]} />
             )}
 
+            {showForm && userId && editingTx && editingTx.type !== 'expense' && (
+              <View className="mb-3 flex-row items-center rounded-xl border border-gray-200 bg-white px-3 py-2" style={{ gap: 8 }}>
+                <Text className="text-xs font-semibold text-gray-500">Entered as</Text>
+                {(['sale', 'purchase'] as const).map((k) => {
+                  const on = editType === k;
+                  return (
+                    <Pressable
+                      key={k}
+                      onPress={() => setTypeOverride({ id: editingTx.id, type: k })}
+                      className="rounded-lg border px-3 py-1.5"
+                      style={{ borderColor: on ? TYPE_META[k].color : '#D1D5DB', backgroundColor: on ? TYPE_META[k].bg : '#FFFFFF' }}
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text className="text-[13px] font-semibold" style={{ color: on ? TYPE_META[k].color : '#6B7280' }}>
+                        {TYPE_META[k].label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
             {showForm && userId && (
               <TransactionForm
                 key={`${editingTx?.id ?? (filter === 'all' ? 'sale' : filter)}-${formKey}`}
                 userId={userId}
                 initial={editingTx ?? undefined}
-                type={editingTx?.type ?? (filter === 'all' ? 'sale' : filter)}
+                type={editType ?? (filter === 'all' ? 'sale' : filter)}
                 existingNames={existingExpenseNames}
                 customers={customers ?? []}
                 products={products ?? []}

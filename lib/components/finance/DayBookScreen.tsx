@@ -11,6 +11,7 @@ import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { DateField } from '../DateTimeFields';
 import { FormSection } from './FormSection';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
+import { ContactPickerModal } from '../ContactPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
 import { DateFilterButton } from './DateRangeFilter';
@@ -69,6 +70,10 @@ type EditValues = {
   note: string;
   /** null means cash, like the Payment In form's method picker. */
   bankAccountId: string | null;
+  /** The customer / vendor the entry sits on - changeable when it was put on the wrong one. */
+  partyId: string | null;
+  /** credit = Received, debit = Payment Out (customer entries only). */
+  entryType: 'credit' | 'debit';
 };
 
 type EditTarget = {
@@ -79,8 +84,9 @@ type EditTarget = {
    * it is then shown read-only, since a change here would just be
    * overwritten by whatever created it. */
   lockedReason?: string;
-  /** Which fields this kind of entry has. */
-  fields: { party?: boolean; billNo?: boolean; discount?: boolean; receiptNo?: boolean; method?: boolean };
+  /** Which fields this kind of entry has. `reassign` lets its customer / vendor be changed;
+   * `direction` lets a customer entry be switched between Received and Payment Out. */
+  fields: { party?: boolean; billNo?: boolean; discount?: boolean; receiptNo?: boolean; method?: boolean; reassign?: boolean; direction?: boolean };
   /** Heading for the name section - "Customer", "Vendor", "Paid to"... */
   partyLabel?: string;
   /** Name to show when it isn't typed here but on the customer's own record. */
@@ -372,6 +378,8 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
   const userId = useAuthStore((state) => state.session?.user.id);
   const bankAccounts = useBankAccounts(userId);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const [showPartyPicker, setShowPartyPicker] = useState(false);
+  const { data: allParties } = useSupabaseQuery('customers', { filters: userId ? { owner_id: userId } : {}, enabled: !!userId });
   const updates = {
     customer_ledger_entries: useSupabaseUpdate('customer_ledger_entries'),
     vendor_ledger_entries: useSupabaseUpdate('vendor_ledger_entries'),
@@ -421,6 +429,13 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
           receipt_no: values.receiptNo.trim() || null,
           bank_account_id: values.bankAccountId,
           note,
+          // Moved to another party / switched between Received and Payment Out.
+          ...(target!.fields.reassign && values.partyId
+            ? target!.table === 'customer_ledger_entries'
+              ? { customer_id: values.partyId }
+              : { vendor_id: values.partyId }
+            : null),
+          ...(target!.fields.direction ? { entry_type: values.entryType } : null),
         };
       case 'account_transfers':
         return { transfer_date: values.date, amount, note };
@@ -550,7 +565,47 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
 
               {!target.fields.party && !!target.subtitleParty && (
                 <FormSection icon="person-outline" title={target.partyLabel ?? 'Customer'}>
-                  <EditInput value={target.subtitleParty} editable={false} />
+                  {target.fields.reassign && !locked ? (
+                    <Pressable
+                      onPress={() => setShowPartyPicker(true)}
+                      className="flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+                      accessibilityRole="button"
+                      accessibilityLabel="Change the name on this entry"
+                    >
+                      <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
+                        {(allParties ?? []).find((c) => c.id === form.partyId)?.name ?? target.subtitleParty}
+                      </Text>
+                      <Text className="text-xs font-semibold text-blue-700">Change</Text>
+                    </Pressable>
+                  ) : (
+                    <EditInput value={target.subtitleParty} editable={false} />
+                  )}
+                </FormSection>
+              )}
+
+              {target.fields.direction && !locked && (
+                <FormSection icon="swap-horizontal-outline" title="Entry type">
+                  <View className="flex-row" style={{ gap: 8 }}>
+                    {([
+                      { key: 'credit', label: 'Received', color: '#047857' },
+                      { key: 'debit', label: 'Payment Out', color: '#B91C1C' },
+                    ] as const).map((o) => {
+                      const on = form.entryType === o.key;
+                      return (
+                        <Pressable
+                          key={o.key}
+                          onPress={() => setForm((f) => (f ? { ...f, entryType: o.key } : f))}
+                          className="flex-1 items-center rounded-lg border py-2.5"
+                          style={{ borderColor: on ? o.color : '#D1D5DB', backgroundColor: on ? `${o.color}14` : '#FFFFFF' }}
+                          accessibilityState={{ selected: on }}
+                        >
+                          <Text className="text-sm font-semibold" style={{ color: on ? o.color : '#6B7280' }}>
+                            {o.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </FormSection>
               )}
 
@@ -627,6 +682,22 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
           </Pressable>
         </Pressable>
       </KeyboardAvoidingView>
+
+      <ContactPickerModal
+        visible={showPartyPicker}
+        initialQuery=""
+        customers={allParties ?? []}
+        phoneContacts={[]}
+        title="Move this entry to"
+        placeholder="Search by name or phone"
+        matchPhone
+        onSelectCustomer={(c) => {
+          setForm((f) => (f ? { ...f, partyId: c.id } : f));
+          setShowPartyPicker(false);
+        }}
+        onSelectNew={() => setShowPartyPicker(false)}
+        onClose={() => setShowPartyPicker(false)}
+      />
 
       <BankAccountPickerModal
         visible={showAccountPicker}
@@ -877,7 +948,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             e.source === 'manual'
               ? undefined
               : 'This was recorded by a job when its payment was collected. Change it on the job, and this entry follows.',
-          fields: { receiptNo: true, method: true },
+          fields: { receiptNo: true, method: true, reassign: true, direction: true },
           partyLabel: 'Customer',
           numberLabel: isIn ? 'Receipt No.' : 'Payment No.',
           subtitleParty: contactName.get(e.customer_id) ?? 'Customer',
@@ -890,6 +961,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             receiptNo: e.receipt_no ?? '',
             note: e.note ?? '',
             bankAccountId: e.bank_account_id ?? null,
+            partyId: e.customer_id,
+            entryType: e.entry_type === 'credit' ? 'credit' : 'debit',
           },
         },
       });
@@ -924,7 +997,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             e.source === 'manual'
               ? undefined
               : 'This was recorded by a purchase bill. Edit the bill and this entry follows.',
-          fields: { receiptNo: true, method: true },
+          fields: { receiptNo: true, method: true, reassign: true },
           partyLabel: 'Vendor',
           numberLabel: 'Payment No.',
           subtitleParty: contactName.get(e.vendor_id) ?? 'Vendor',
@@ -937,6 +1010,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             receiptNo: e.receipt_no ?? '',
             note: e.note ?? '',
             bankAccountId: e.bank_account_id ?? null,
+            partyId: e.vendor_id,
+            entryType: 'credit',
           },
         },
       });
@@ -981,6 +1056,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             receiptNo: '',
             note: tr.note ?? '',
             bankAccountId: null,
+            partyId: null,
+            entryType: 'credit',
           },
         },
       });
