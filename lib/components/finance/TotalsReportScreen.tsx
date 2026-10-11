@@ -135,7 +135,8 @@ export function TotalsReportScreen({ kind, basePath }: { kind: Kind; basePath: s
                 ? t.note ?? ''
                 : [t.bill_no ? `Bill #${t.bill_no}` : null, t.note].filter(Boolean).join(' · '),
             type: kind === 'expense' ? { label: category ?? 'Uncategorized', color: MONEY.out.text, bg: MONEY.out.bg } : PILL[kind],
-            nav: { kind: 'transactions', type: kind },
+            // A bill to a saved customer / vendor opens that party's ledger; a walk-in or expense has none.
+            nav: t.customer_id && kind !== 'expense' ? { kind: 'party', partyId: t.customer_id } : { kind: 'transactions', type: kind },
           };
         })
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
