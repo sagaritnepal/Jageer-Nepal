@@ -111,9 +111,6 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
   const [address, setAddress] = useState('');
   const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // A ledger type is required - unless there are none to choose from (the types table
-  // is not set up yet), where the field is not shown at all.
-  const { available: typesAvailable } = usePartyTypes(customer?.owner_id);
 
   if (!customer) return null;
 
@@ -126,10 +123,9 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
   }
 
   async function handleSave() {
-    // The name and the ledger type are required; the phone number and address are not.
-    const missing = [!name.trim() && 'Name', typesAvailable && !partyTypeId && 'Ledger type'].filter(Boolean);
-    if (missing.length > 0) {
-      showAlert('Fill in the required details', `Still needed: ${missing.join(', ')}.`);
+    // Only the name is required here - a party with no ledger type yet can still be corrected.
+    if (!name.trim()) {
+      showAlert('Fill in the required details', 'Still needed: Name.');
       return;
     }
     const trimmedPhone = phone.trim();
@@ -215,7 +211,7 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
           />
         </Field>
       </FieldRow>
-      <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} required />
+      <PartyTypeField ownerId={customer.owner_id} value={partyTypeId} onChange={setPartyTypeId} />
       <Text className="text-[11px] text-gray-400">* Required</Text>
       <FormActions onCancel={() => setEditing(false)} onSave={handleSave} saving={saving} />
     </PopupCard>

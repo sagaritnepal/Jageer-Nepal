@@ -646,6 +646,10 @@ function LedgerList({ basePath }: { basePath: string }) {
   const [selecting, setSelecting] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   /** The one party whose Ledger cell was tapped in the table - its type is being changed on its own. */
+  /** The party being renamed from its row in the table. */
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renaming, setRenaming] = useState(false);
   const [rowTypeTarget, setRowTypeTarget] = useState<{ id: string; name: string; typeId: string | null } | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -927,6 +931,44 @@ function LedgerList({ basePath }: { basePath: string }) {
       />
     ) : null;
 
+  async function saveRename() {
+    const name = nameCaps(renameValue.trim());
+    if (!renameTarget || renaming) return;
+    if (!name) {
+      showAlert('Name needed', 'Enter the name of the ledger.');
+      return;
+    }
+    setRenaming(true);
+    try {
+      const { error } = await (supabase.from('customers') as any).update({ name }).eq('id', renameTarget.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setRenameTarget(null);
+    } catch (err) {
+      showAlert('Could not rename', getErrorMessage(err));
+    } finally {
+      setRenaming(false);
+    }
+  }
+  const renamePopup = renameTarget ? (
+    <PopupCard title="Rename ledger" onClose={() => setRenameTarget(null)}>
+      <Field label="Name *">
+        <TextInput
+          value={renameValue}
+          onChangeText={(v) => setRenameValue(nameCaps(v))}
+          onSubmitEditing={saveRename}
+          autoCapitalize="words"
+          autoFocus
+          selectTextOnFocus
+          placeholder="Name"
+          placeholderTextColor="#9CA3AF"
+          className={INPUT}
+        />
+      </Field>
+      <FormActions onCancel={() => setRenameTarget(null)} onSave={saveRename} saving={renaming} />
+    </PopupCard>
+  ) : null;
+
   const typeMenu = (
     <LedgerTypeMenuModal
       visible={typeMenuOpen}
@@ -968,6 +1010,20 @@ function LedgerList({ basePath }: { basePath: string }) {
           <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
             <Text className="text-[13px] font-semibold text-gray-900">{nameCaps(d.row.name)}</Text>
             {(d.row.kind === 'app' || (d.row.kind === 'customer' && d.row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
+            {d.row.kind === 'customer' && (
+              <Pressable
+                onPress={(e: any) => {
+                  e?.stopPropagation?.();
+                  setRenameTarget({ id: d.row.id, name: d.row.name });
+                  setRenameValue(nameCaps(d.row.name));
+                }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Rename ${d.row.name}`}
+              >
+                <Ionicons name="pencil" size={12} color="#9CA3AF" />
+              </Pressable>
+            )}
           </View>
           {!!typeAndContact && (
             <Text className="text-[11px] text-gray-400" numberOfLines={1}>
@@ -1121,6 +1177,7 @@ function LedgerList({ basePath }: { basePath: string }) {
 
         {typeMenu}
         {rowTypeMenu}
+        {renamePopup}
       </BookPage>
     );
   }
@@ -1183,6 +1240,7 @@ function LedgerList({ basePath }: { basePath: string }) {
 
         {typeMenu}
         {rowTypeMenu}
+        {renamePopup}
       </ScrollView>
     </View>
   );
