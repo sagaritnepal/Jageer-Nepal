@@ -983,6 +983,12 @@ function LedgerList({ basePath }: { basePath: string }) {
     };
 
     const columns: BookColumn<PartyRowData>[] = [
+      {
+        key: 'sn',
+        label: 'SN',
+        width: 52,
+        render: (_d, index) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>,
+      },
       { key: 'party', label: 'Party', render: partyCell },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
       {
@@ -1057,6 +1063,7 @@ function LedgerList({ basePath }: { basePath: string }) {
             rows={filtered}
             rowKey={(d) => `${d.row.kind}-${d.row.id}`}
             onRowPress={open}
+            stickyHeader
             footer={{
               label: `${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`,
               cells: {
