@@ -978,18 +978,10 @@ function LedgerList({ basePath }: { basePath: string }) {
         <Text className="text-[12.5px] text-gray-300">—</Text>
       );
 
-    const figure = (n: number) => <Text className="text-[12.5px] text-gray-700">{dash(n)}</Text>;
     const open = (d: PartyRowData) => {
       if (d.row.kind === 'customer') router.push(`${basePath}/customer/${d.row.id}` as any);
     };
 
-    const moneyColumn = (key: 'sales' | 'purchases', label: string): BookColumn<PartyRowData> => ({
-      key,
-      label,
-      width: 95,
-      align: 'right',
-      render: (d) => figure(d[key]),
-    });
     const columns: BookColumn<PartyRowData>[] = [
       { key: 'party', label: 'Party', render: partyCell },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
@@ -1012,8 +1004,6 @@ function LedgerList({ basePath }: { basePath: string }) {
             <Text className="text-[12.5px] text-gray-300">—</Text>
           ),
       },
-      moneyColumn('sales', 'Sales'),
-      moneyColumn('purchases', 'Purchases'),
       {
         // The part of the balance that is money coming in (green), blank when it runs the other way.
         key: 'receivable',
@@ -1070,8 +1060,6 @@ function LedgerList({ basePath }: { basePath: string }) {
             footer={{
               label: `${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`,
               cells: {
-                sales: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.sales, 0))}</Text>,
-                purchases: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.purchases, 0))}</Text>,
                 receivable: (
                   <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.receivable.text }}>
                     {bookMoney(filtered.reduce((sum, d) => (d.status === 'receivable' ? sum + d.balance : sum), 0))}
