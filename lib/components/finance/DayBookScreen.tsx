@@ -14,7 +14,6 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
 import { DateFilterButton } from './DateRangeFilter';
-import { DropdownPanel, useDropdown } from './DropdownMenu';
 import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -642,7 +641,7 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
   );
 }
 
-/** The five things a day can gain, behind one button - the same forms the
+/** The five things a day can gain, one button each - the same forms the
  * Finance menu opens, without leaving the Day Book to find them. */
 const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
   key: kind.key,
@@ -652,47 +651,23 @@ const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
   path: kind.path,
 }));
 
-function NewEntryMenu({ basePath }: { basePath: string }) {
-  const dropdown = useDropdown(230);
-
+function NewEntryButtons({ basePath }: { basePath: string }) {
   return (
-    <>
-      <Pressable
-        ref={dropdown.buttonRef}
-        onPress={dropdown.show}
-        accessibilityRole="button"
-        accessibilityLabel="New entry, choose what to record"
-        accessibilityState={{ expanded: dropdown.open }}
-        className="flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
-        style={{ minHeight: 36, backgroundColor: '#1D4ED8' }}
-      >
-        <Ionicons name="add" size={16} color="#FFFFFF" />
-        <Text className="text-[13px] font-semibold text-white">New entry</Text>
-        <Ionicons name="chevron-down" size={14} color="#FFFFFF" />
-      </Pressable>
-
-      <DropdownPanel dropdown={dropdown}>
-        <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-          What are you recording?
-        </Text>
-        {NEW_ENTRY_KINDS.map((kind) => (
-          <Pressable
-            key={kind.key}
-            accessibilityRole="button"
-            accessibilityLabel={kind.label}
-            onPress={() => {
-              dropdown.hide();
-              router.push(`${basePath}${kind.path}` as any);
-            }}
-            className="flex-row items-center px-4 py-3"
-            style={{ gap: 10 }}
-          >
-            <Ionicons name={kind.icon} size={18} color={kind.color} />
-            <Text className="flex-1 text-[14px] font-medium text-gray-900">{kind.label}</Text>
-          </Pressable>
-        ))}
-      </DropdownPanel>
-    </>
+    <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
+      {NEW_ENTRY_KINDS.map((kind) => (
+        <Pressable
+          key={kind.key}
+          accessibilityRole="button"
+          accessibilityLabel={`New ${kind.label}`}
+          onPress={() => router.push(`${basePath}${kind.path}` as any)}
+          className="flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3"
+          style={{ minHeight: 36 }}
+        >
+          <Ionicons name={kind.icon} size={16} color={kind.color} />
+          <Text className="text-[13px] font-semibold text-gray-800">{kind.label}</Text>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -1106,8 +1081,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const toolbar = useBookToolbar(
     {
       wide,
+      inBarMinWidth: 1240,
       right: () => (
         <>
+          <NewEntryButtons basePath={basePath} />
           <DateFilterButton
             dropdown
             from={isToday ? '' : range.from}
@@ -1116,7 +1093,6 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             onApply={applyRange}
             shortcuts={[{ label: 'Today', on: isToday, onSelect: () => setRange({ from: today, to: today }) }]}
           />
-          <NewEntryMenu basePath={basePath} />
         </>
       ),
     },
