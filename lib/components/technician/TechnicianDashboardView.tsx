@@ -106,7 +106,7 @@ function Tile({
             <Ionicons name={label === 'Earnings' ? 'cash-outline' : 'checkmark-circle-outline'} size={18} color="#2563eb" />
           </View>
         )}
-        <Text className="flex-1 text-[11px] font-bold uppercase text-gray-500" style={{ letterSpacing: 0.6 }} numberOfLines={1}>
+        <Text className="flex-1 text-[11px] font-bold capitalize text-gray-500" style={{ letterSpacing: 0.6 }} numberOfLines={1}>
           {label}
         </Text>
         <Ionicons name="chevron-forward" size={16} color="#6b7280" />
@@ -303,13 +303,13 @@ export function TechnicianDashboardView({
       <View className="flex-row items-center px-1 pb-2" style={{ columnGap: 10 }}>
         <View style={{ width: 12 }} />
         <View style={{ width: 40 }} />
-        <Text className="flex-1 text-[11px] font-bold uppercase text-gray-500" style={{ letterSpacing: 0.6 }}>
+        <Text className="flex-1 text-[11px] font-bold capitalize text-gray-500" style={{ letterSpacing: 0.6 }}>
           Category
         </Text>
-        <Text className="w-8 text-right text-[11px] font-bold uppercase text-gray-500" style={{ letterSpacing: 0.6 }}>
+        <Text className="w-8 text-right text-[11px] font-bold capitalize text-gray-500" style={{ letterSpacing: 0.6 }}>
           Jobs
         </Text>
-        <Text className="text-right text-[11px] font-bold uppercase text-gray-500" style={{ width: 72, letterSpacing: 0.6 }}>
+        <Text className="text-right text-[11px] font-bold capitalize text-gray-500" style={{ width: 72, letterSpacing: 0.6 }}>
           NPR
         </Text>
       </View>

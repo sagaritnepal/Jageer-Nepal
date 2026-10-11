@@ -42,7 +42,7 @@ export function ServiceActionSheet({
               size={48}
             />
             <View className="flex-1">
-              <Text className="text-[10.5px] font-bold uppercase tracking-wider text-gray-400">Selected service</Text>
+              <Text className="text-[10.5px] font-bold capitalize tracking-wider text-gray-400">Selected service</Text>
               <Text className="text-base font-extrabold text-gray-900">{category?.label}</Text>
             </View>
           </View>

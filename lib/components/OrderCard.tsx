@@ -60,7 +60,7 @@ export function OrderCard({
             </View>
             <View className="flex-1">
               {roleLabel && (
-                <Text className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{roleLabel}</Text>
+                <Text className="text-[10px] font-bold capitalize tracking-wide text-gray-400">{roleLabel}</Text>
               )}
               <Text className="text-xs text-gray-400">Order #{order.id.slice(0, 8)}</Text>
               <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>

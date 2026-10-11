@@ -75,7 +75,7 @@ async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerI
 function BalanceFigure({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <View>
-      <Text className="text-[10.5px] font-bold uppercase tracking-wide text-gray-400" numberOfLines={1}>
+      <Text className="text-[10.5px] font-bold capitalize tracking-wide text-gray-400" numberOfLines={1}>
         {label}
       </Text>
       <Text className="text-[17px] font-extrabold" style={{ color }}>
@@ -187,7 +187,7 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
           <TextInput
             value={name}
             onChangeText={(v) => setName(nameCaps(v))}
-            autoCapitalize="characters"
+            autoCapitalize="words"
             autoFocus
             placeholder="Name"
             placeholderTextColor="#9CA3AF"

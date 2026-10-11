@@ -35,7 +35,7 @@ export function CartBar({
       }}
     >
       <View className="items-start">
-        <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">In cart</Text>
+        <Text className="text-[10px] font-semibold capitalize tracking-wide text-gray-400">In cart</Text>
         <Text className="text-base font-extrabold text-gray-900">{itemCount}</Text>
       </View>
 
@@ -44,7 +44,7 @@ export function CartBar({
       </Pressable>
 
       <View className="items-end">
-        <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Total</Text>
+        <Text className="text-[10px] font-semibold capitalize tracking-wide text-gray-400">Total</Text>
         <Text className="text-base font-extrabold text-blue-700">NPR {total.toLocaleString()}</Text>
       </View>
     </View>

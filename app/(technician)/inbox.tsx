@@ -31,7 +31,7 @@ function StatusPill({ status }: { status: ServiceRequest['status'] }) {
   const style = STATUS_STYLES[status];
   return (
     <View className={`rounded-full px-2 py-0.5 ${style.bg}`}>
-      <Text className={`text-[10px] font-semibold uppercase ${style.text}`}>{style.label}</Text>
+      <Text className={`text-[10px] font-semibold capitalize ${style.text}`}>{style.label}</Text>
     </View>
   );
 }
@@ -149,7 +149,7 @@ function ContactRow({
     <View className="flex-row items-center gap-2">
       <PersonAvatar name={name} size={28} bg={bg} />
       <View>
-        <Text className="text-[9.5px] font-semibold uppercase tracking-wide text-gray-400">{label}</Text>
+        <Text className="text-[9.5px] font-semibold capitalize tracking-wide text-gray-400">{label}</Text>
         <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
           {name ?? 'Unnamed'}
           {phone ? ` · ${phone}` : ''}

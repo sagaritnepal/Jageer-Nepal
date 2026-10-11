@@ -236,9 +236,9 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
             <TextInput
               value={name}
               onChangeText={(v) => setName(nameCaps(v))}
-              autoCapitalize="characters"
+              autoCapitalize="words"
               autoFocus
-              placeholder="NAME"
+              placeholder="Name"
               placeholderTextColor="#9CA3AF"
               className="flex-1 px-3 py-2.5 text-sm text-gray-900"
             />
@@ -264,11 +264,11 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
           <TextInput
             value={address}
             onChangeText={setAddress}
-            autoCapitalize="characters"
-            placeholder="ADDRESS"
+            autoCapitalize="words"
+            placeholder="Address"
             placeholderTextColor="#9CA3AF"
             className={INPUT}
-            style={{ textTransform: 'uppercase' }}
+            style={{ textTransform: 'capitalize' }}
           />
         </Field>
       </FieldRow>
@@ -898,7 +898,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         initialQuery=""
         customers={customers ?? []}
         phoneContacts={[]}
-        placeholder="SEARCH BY NAME OR PHONE"
+        placeholder="Search by name or phone"
         matchPhone
         onSelectCustomer={(c) => {
           setPickerOpen(false);

@@ -628,7 +628,7 @@ function QuickPaymentForm() {
               >
                 <View className="mb-3 flex-row items-center gap-2">
                   <Ionicons name="document-text-outline" size={14} color="#6B7280" />
-                  <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Details</Text>
+                  <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Details</Text>
                 </View>
                 <View className="flex-row" style={{ gap: 14 }}>
                   <View style={{ flex: 1.3, minWidth: 0 }}>
@@ -728,7 +728,7 @@ function QuickPaymentForm() {
 
             <View style={{ width: 320 }}>
               <View className="rounded-2xl border border-gray-200 bg-white p-4">
-                <Text className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                <Text className="mb-2 text-[11px] font-bold capitalize tracking-wide text-gray-400">
                   Recent {isOut ? 'Payment Out' : 'Received'}
                 </Text>
                 {recentEntries.length === 0 ? (

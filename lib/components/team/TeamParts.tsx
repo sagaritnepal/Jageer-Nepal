@@ -17,7 +17,7 @@ export function StateChip({ state }: { state: MemberState }) {
   return (
     <View className="flex-row items-center self-start rounded-full px-2 py-0.5" style={{ backgroundColor: s.bg, gap: 5 }}>
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: s.fg }} />
-      <Text className="text-[10px] font-bold uppercase" style={{ color: s.fg, letterSpacing: 0.5 }}>
+      <Text className="text-[10px] font-bold capitalize" style={{ color: s.fg, letterSpacing: 0.5 }}>
         {STATE_LABEL[state]}
       </Text>
     </View>

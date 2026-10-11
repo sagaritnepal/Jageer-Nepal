@@ -172,7 +172,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   const dayBand = (r: BookRow, index: number) =>
     dayLabel && r.kind !== 'opening' && rows[index - 1]?.date !== r.date ? (
       <View className="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5">
-        <Text className="text-xs font-bold uppercase tracking-wide text-gray-500">{dayLabel(r.date)}</Text>
+        <Text className="text-xs font-bold capitalize tracking-wide text-gray-500">{dayLabel(r.date)}</Text>
       </View>
     ) : null;
   const headCell = (label: string, style: object, right = false) => (
@@ -703,7 +703,7 @@ function AccountPicker({ options, selected, onSelect }: {
             className="overflow-hidden rounded-xl border border-gray-200 bg-white"
             style={{ minWidth: 210, maxHeight: 340, boxShadow: '0 12px 32px rgba(16,24,40,0.22)' }}
           >
-            <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold capitalize tracking-wide text-gray-500">
               Show money through
             </Text>
             <ScrollView>

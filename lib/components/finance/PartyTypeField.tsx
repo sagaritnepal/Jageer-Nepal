@@ -115,7 +115,7 @@ export function PartyTypeField({
 
   // The browser's black outline on a text box is switched off where the box has a
   // border of its own to show focus with.
-  const typing = { outlineStyle: 'none', ...(caps ? { textTransform: 'uppercase' } : null) } as object;
+  const typing = { outlineStyle: 'none', ...(caps ? { textTransform: 'capitalize' } : null) } as object;
 
   const addRow = (
     <Pressable
@@ -152,7 +152,7 @@ export function PartyTypeField({
             setFocused(false);
             closeSoon();
           }}
-          placeholder={caps ? 'TYPE A LEDGER TYPE' : 'Type a ledger type'}
+          placeholder="Type a ledger type"
           placeholderTextColor="#9CA3AF"
           // Editing a party opens with its type already in the box: select it on tap so typing
           // replaces it (the way the empty New party box starts) instead of adding on to it.

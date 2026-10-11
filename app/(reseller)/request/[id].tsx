@@ -279,7 +279,7 @@ function MobileBar({ hint, children }: { hint: string; children: ReactNode }) {
   return (
     <>
       <View className="flex-1">
-        <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Next step</Text>
+        <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-400">Next step</Text>
         <Text className="text-[13.5px] font-bold text-gray-900" numberOfLines={1}>
           {hint}
         </Text>

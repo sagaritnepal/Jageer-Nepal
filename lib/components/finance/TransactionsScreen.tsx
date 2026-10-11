@@ -394,7 +394,7 @@ function RecentEntriesCard({
 
   return (
     <View className="mt-4">
-      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Recent {TYPE_META[type].label}s</Text>
+      <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-400">Recent {TYPE_META[type].label}s</Text>
       {!!onOpen && recent.length > 0 && (
         <Text className="mb-2 mt-0.5 text-[10.5px] text-gray-400">Tap an entry to view, edit or delete it</Text>
       )}
@@ -1335,7 +1335,7 @@ function TransactionForm({
             >
               <View className="mb-3 flex-row items-center gap-2">
                 <Ionicons name="document-text-outline" size={14} color="#6B7280" />
-                <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Details</Text>
+                <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Details</Text>
               </View>
               <View className="flex-row" style={{ gap: 14 }}>
                 <View style={{ flex: 1.3, minWidth: 0 }}>
@@ -1532,7 +1532,7 @@ function TransactionForm({
                       customerId ? (
                         <Ionicons name="checkmark-circle" size={16} color={accent} />
                       ) : partyName.trim() ? (
-                        <Text className="text-[10px] font-bold uppercase text-gray-400">New</Text>
+                        <Text className="text-[10px] font-bold capitalize text-gray-400">New</Text>
                       ) : null
                     }
                   />
@@ -2299,7 +2299,7 @@ export function TransactionDetailModal({
               <View className={`flex-row items-center justify-between px-3 py-2.5 ${meta.bg}`}>
                 <View className="flex-row items-center gap-2">
                   <Ionicons name={meta.icon} size={16} color={meta.color} />
-                  <Text className="text-sm font-extrabold uppercase tracking-wide" style={{ color: meta.color }}>
+                  <Text className="text-sm font-extrabold capitalize tracking-wide" style={{ color: meta.color }}>
                     {isBill ? `${meta.label} bill` : meta.label}
                   </Text>
                 </View>
@@ -3025,7 +3025,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           </>
         }
         renderSectionHeader={({ section }) => (
-          <Text className="mb-2 mt-3 text-xs font-bold uppercase tracking-wide text-gray-400">{section.title}</Text>
+          <Text className="mb-2 mt-3 text-xs font-bold capitalize tracking-wide text-gray-400">{section.title}</Text>
         )}
         renderItem={({ item }) =>
           item.kind === 'business' ? (

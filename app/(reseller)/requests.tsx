@@ -563,7 +563,7 @@ export default function ResellerRequestQueue() {
       />
       {stageJobs.some((item) => item.kind === 'order') && (
         <View style={{ gap: 8 }}>
-          <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+          <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-500">
             {hubStage === 'my_jobs' ? 'Shop orders to deliver' : 'Shop orders on the way'}
           </Text>
           {isWideWeb ? (
@@ -664,7 +664,7 @@ export default function ResellerRequestQueue() {
                 ['', { width: COLS.manage }],
               ] as const
             ).map(([label, style]) => (
-              <Text key={label || 'manage'} className="text-[11px] font-bold uppercase tracking-wide text-gray-400" style={style}>
+              <Text key={label || 'manage'} className="text-[11px] font-bold capitalize tracking-wide text-gray-400" style={style}>
                 {label}
               </Text>
             ))}

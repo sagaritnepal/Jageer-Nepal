@@ -149,7 +149,7 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
   }
 
   const cellClass = 'rounded-lg px-2.5 py-2.5 text-sm text-gray-900';
-  const headClass = 'px-2.5 text-[11px] font-bold uppercase tracking-wider text-gray-500';
+  const headClass = 'px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500';
   const filled = items.filter((r) => !isBlank(r)).length;
 
   return (
@@ -162,7 +162,7 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
       <View className="flex-row items-center justify-between px-5 pb-3 pt-4">
         <View className="flex-row items-center gap-2">
           <Ionicons name="cube-outline" size={14} color="#6B7280" />
-          <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Items</Text>
+          <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Items</Text>
         </View>
         <Text className="text-xs text-gray-400">
           {filled} {filled === 1 ? 'item' : 'items'}
@@ -170,7 +170,7 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
       </View>
 
       <View className="flex-row items-center border-y border-gray-200 bg-gray-50 px-2 py-2">
-        <Text className="text-center text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ width: 36 }}>
+        <Text className="text-center text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ width: 36 }}>
           #
         </Text>
         <Text className={headClass} style={{ width: 110 }}>

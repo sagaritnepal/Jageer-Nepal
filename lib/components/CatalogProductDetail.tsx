@@ -111,7 +111,7 @@ export function CatalogProductDetail({
   const info = (
     <>
         {item.category && (
-          <Text className="text-xs font-bold uppercase tracking-wide text-orange-600">{item.category}</Text>
+          <Text className="text-xs font-bold capitalize tracking-wide text-orange-600">{item.category}</Text>
         )}
         <Text className="mt-1 text-xl font-extrabold text-gray-900">{item.name}</Text>
         {isStocked && <Text className="mt-1 text-xs text-gray-400">Currently in your listings</Text>}

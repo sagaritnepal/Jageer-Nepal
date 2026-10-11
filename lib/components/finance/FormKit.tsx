@@ -40,7 +40,7 @@ export function FormCard({ icon, title, children }: { icon: keyof typeof Ionicon
     >
       <View className="flex-row items-center gap-2">
         <Ionicons name={icon} size={14} color="#6B7280" />
-        <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">{title}</Text>
+        <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">{title}</Text>
       </View>
       {children}
     </View>

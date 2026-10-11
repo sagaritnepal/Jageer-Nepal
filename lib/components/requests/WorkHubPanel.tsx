@@ -359,7 +359,7 @@ function Fact({
       className="bg-white px-4 py-3"
       style={{ gap: 2, ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 170, minWidth: 170 }) : null) }}
     >
-      <Text className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500">{label}</Text>
+      <Text className="text-[10.5px] font-bold capitalize tracking-wide text-gray-500">{label}</Text>
       {children}
     </View>
   );

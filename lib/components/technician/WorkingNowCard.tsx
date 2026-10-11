@@ -31,7 +31,7 @@ function CardHeader({ count }: { count: number }) {
   return (
     <View className="flex-row items-center gap-2">
       <View className={`h-2 w-2 rounded-full ${count > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
-      <Text className="flex-1 text-[11px] font-bold uppercase text-gray-500" style={{ letterSpacing: 0.6 }}>
+      <Text className="flex-1 text-[11px] font-bold capitalize text-gray-500" style={{ letterSpacing: 0.6 }}>
         Working on now
       </Text>
       {count > 1 && <Text className="text-[11px] font-bold text-blue-700">{count} jobs</Text>}

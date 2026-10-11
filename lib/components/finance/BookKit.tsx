@@ -207,7 +207,7 @@ export function BookStat({
       className="rounded-xl border border-gray-200 bg-white px-3.5 py-2.5"
       style={{ flexGrow: 1, flexBasis: 140 }}
     >
-      <Text className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{label}</Text>
+      <Text className="text-[11px] font-semibold capitalize tracking-wide text-gray-400">{label}</Text>
       <Text className="mt-0.5 text-[16px] font-extrabold" style={{ color }}>
         {value}
       </Text>
@@ -293,7 +293,7 @@ export function BookTable<T>({
           <View key={rowKey(row)}>
             {showGroup && (
               <View className="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5">
-                <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500">{group}</Text>
+                <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-500">{group}</Text>
               </View>
             )}
             <Pressable

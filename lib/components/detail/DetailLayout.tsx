@@ -74,7 +74,7 @@ export function DetailHero({
 
   const price = (
     <View className={roomy ? 'items-end' : 'flex-row items-baseline'} style={roomy ? undefined : { gap: 8 }}>
-      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{amountLabel}</Text>
+      <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-400">{amountLabel}</Text>
       <Text className={roomy ? 'text-2xl font-extrabold text-gray-900' : 'text-xl font-extrabold text-gray-900'}>{amount}</Text>
     </View>
   );
@@ -91,7 +91,7 @@ export function DetailHero({
             </Text>
             <View className="flex-row flex-wrap items-center" style={{ columnGap: 8, rowGap: 4 }}>
               <View className="rounded-full px-2.5 py-0.5" style={{ backgroundColor: bg }}>
-                <Text className="text-[10.5px] font-bold uppercase tracking-wide" style={{ color: ink }}>
+                <Text className="text-[10.5px] font-bold capitalize tracking-wide" style={{ color: ink }}>
                   {pill}
                 </Text>
               </View>
@@ -135,7 +135,7 @@ export function DetailHero({
                   <View className="flex-1" style={{ gap: 3, minWidth: 0 }}>
                     <View className="flex-row items-center gap-1.5">
                       <Ionicons name={fact.icon} size={13} color="#9CA3AF" />
-                      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{fact.label}</Text>
+                      <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-400">{fact.label}</Text>
                       {!!fact.onPress && <Ionicons name="open-outline" size={12} color="#9CA3AF" style={{ marginLeft: 'auto' }} />}
                     </View>
                     <Text className="text-[14.5px] font-semibold text-gray-900" numberOfLines={2}>
@@ -193,7 +193,7 @@ export function DetailHeroAction({
   );
 }
 
-/** A white card with the small uppercase header used across the detail pages. */
+/** A white card with the small capitalize header used across the detail pages. */
 export function DetailCard({
   icon,
   title,
@@ -212,7 +212,7 @@ export function DetailCard({
       {!!title && (
         <View className="mb-3.5 flex-row items-center gap-1.5">
           {!!icon && <Ionicons name={icon} size={13} color="#9CA3AF" />}
-          <Text className="flex-1 text-[11px] font-bold uppercase tracking-wide text-gray-400">{title}</Text>
+          <Text className="flex-1 text-[11px] font-bold capitalize tracking-wide text-gray-400">{title}</Text>
           {right}
         </View>
       )}
@@ -238,7 +238,7 @@ export function NextStepCard({
   return (
     <DetailCard wide={wide}>
       <View style={{ gap: 3 }}>
-        <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Your next step</Text>
+        <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-400">Your next step</Text>
         <Text className="text-base font-bold text-gray-900">{title}</Text>
         {!!hint && <Text className="text-[12.5px] leading-[18px] text-gray-500">{hint}</Text>}
       </View>

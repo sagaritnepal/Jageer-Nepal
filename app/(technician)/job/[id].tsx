@@ -59,7 +59,7 @@ function StageStrip({ status, paid }: { status: RequestStatus; paid: boolean }) 
   const current = currentStageIndex(status, paid);
   return (
     <View className="mb-6 rounded-xl bg-white p-4">
-      <Text className="mb-3 text-sm uppercase tracking-wide text-gray-400">Progress</Text>
+      <Text className="mb-3 text-sm capitalize tracking-wide text-gray-400">Progress</Text>
       <View className="flex-row" style={{ gap: 6 }}>
         {STAGES.map((label, i) => {
           const done = i < current;
@@ -326,7 +326,7 @@ function JobCard({ id }: { id: string }) {
   const statusCard = (
     <>
       <View className="mb-6 rounded-xl bg-white p-5">
-        <Text className="text-sm uppercase tracking-wide text-gray-400">Current status</Text>
+        <Text className="text-sm capitalize tracking-wide text-gray-400">Current status</Text>
         <Text className="mt-1 text-lg font-semibold text-gray-900">
           {request.status === 'assigned'
             ? 'Offered to you - accept or reject'
@@ -424,7 +424,7 @@ function JobCard({ id }: { id: string }) {
     <>
       {hasResellerContact && (
         <View className="mb-6 rounded-xl bg-white p-5">
-          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Reseller</Text>
+          <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Reseller</Text>
           <View className="flex-row items-center gap-3">
             <PersonAvatar name={resellerName} photoUrl={reseller?.avatar_url} size={40} bg="bg-orange-500" />
             <View className="flex-1">
@@ -487,7 +487,7 @@ function JobCard({ id }: { id: string }) {
     <>
       {request.remark && (
         <View className="mb-6 mt-4 rounded-xl bg-white p-5">
-          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Remark</Text>
+          <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Remark</Text>
           <Text className="text-sm text-gray-700">{request.remark}</Text>
         </View>
       )}

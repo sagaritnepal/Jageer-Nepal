@@ -95,7 +95,7 @@ function DashedRule() {
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row items-start justify-between py-1" style={{ gap: 10 }}>
-      <Text style={{ fontFamily: MONO }} className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+      <Text style={{ fontFamily: MONO }} className="text-[10px] font-bold capitalize tracking-wide text-gray-400">
         {label}
       </Text>
       <Text style={{ fontFamily: MONO }} className="flex-1 text-right text-[12px] text-gray-800" numberOfLines={2}>

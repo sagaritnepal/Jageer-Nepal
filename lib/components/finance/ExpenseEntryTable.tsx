@@ -184,7 +184,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
   }
 
   const cellClass = 'rounded-lg px-2.5 py-2.5 text-sm text-gray-900';
-  const headClass = 'px-2.5 text-[11px] font-bold uppercase tracking-wider text-gray-500';
+  const headClass = 'px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500';
 
   return (
     <View
@@ -196,7 +196,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
       <View className="flex-row items-center justify-between px-5 pb-3 pt-4">
         <View className="flex-row items-center gap-2">
           <Ionicons name="receipt-outline" size={14} color="#6B7280" />
-          <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Expenses</Text>
+          <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Expenses</Text>
         </View>
         <Text className="text-xs text-gray-400">
           {filled} {filled === 1 ? 'entry' : 'entries'}
@@ -204,7 +204,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
       </View>
 
       <View className="flex-row items-center border-y border-gray-200 bg-gray-50 px-2 py-2">
-        <Text className="text-center text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ width: 36 }}>
+        <Text className="text-center text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ width: 36 }}>
           #
         </Text>
         <Text className={headClass} style={{ flex: 1.35 }}>

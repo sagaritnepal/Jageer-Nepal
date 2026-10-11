@@ -31,7 +31,7 @@ export function RequestPhotos({ photoUrls }: { photoUrls: string[] }) {
 
   return (
     <View className="mt-4">
-      <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Photos</Text>
+      <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Photos</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View className="flex-row gap-2">
           {signedUrls.map((url, i) => (
@@ -77,7 +77,7 @@ export function RequestDetailsExtras({
     <View className="mt-4 rounded-xl bg-white p-5">
       {hasCustomerContact && (
         <View className="mb-4">
-          <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Customer</Text>
+          <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Customer</Text>
           <View className="flex-row items-center gap-2.5">
             <PersonAvatar name={customerName} photoUrl={customerPhotoUrl} size={36} bg="bg-orange-500" />
             {customerName && <Text className="text-sm font-semibold text-gray-900">{customerName}</Text>}
@@ -125,7 +125,7 @@ export function RequestDetailsExtras({
         </View>
       )}
 
-      <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Appointment</Text>
+      <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Appointment</Text>
 
       {hasSchedule && (
         <Text className="text-sm text-gray-700">{formatScheduledWhen(scheduledDate, scheduledTime)}</Text>

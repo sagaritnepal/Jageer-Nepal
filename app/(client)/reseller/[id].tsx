@@ -25,7 +25,7 @@ function StatusPill({ status }: { status: RequestStatus }) {
   const style = STATUS_STYLES[status];
   return (
     <View className={`rounded-full px-2 py-0.5 ${style.bg}`}>
-      <Text className={`text-[10px] font-semibold uppercase ${style.text}`}>{style.label}</Text>
+      <Text className={`text-[10px] font-semibold capitalize ${style.text}`}>{style.label}</Text>
     </View>
   );
 }

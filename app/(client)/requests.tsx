@@ -27,7 +27,7 @@ function StatusPill({ status }: { status: RequestStatus }) {
   const style = STATUS_STYLES[status];
   return (
     <View className={`rounded-full px-2 py-0.5 ${style.bg}`}>
-      <Text className={`text-[10px] font-semibold uppercase ${style.text}`}>{style.label}</Text>
+      <Text className={`text-[10px] font-semibold capitalize ${style.text}`}>{style.label}</Text>
     </View>
   );
 }
@@ -77,7 +77,7 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
             <View className="flex-row items-center gap-2">
               <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={28} bg="bg-orange-500" />
               <View>
-                <Text className="text-[9.5px] font-semibold uppercase tracking-wide text-gray-400">Reseller</Text>
+                <Text className="text-[9.5px] font-semibold capitalize tracking-wide text-gray-400">Reseller</Text>
                 <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
                   {reseller.full_name ?? 'Unnamed'}
                 </Text>
@@ -88,7 +88,7 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
             <View className="flex-row items-center gap-2">
               <PersonAvatar name={technician.full_name} photoUrl={technician.avatar_url} size={28} bg="bg-blue-600" />
               <View>
-                <Text className="text-[9.5px] font-semibold uppercase tracking-wide text-gray-400">Technician</Text>
+                <Text className="text-[9.5px] font-semibold capitalize tracking-wide text-gray-400">Technician</Text>
                 <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
                   {technician.full_name ?? 'Unnamed'}
                 </Text>

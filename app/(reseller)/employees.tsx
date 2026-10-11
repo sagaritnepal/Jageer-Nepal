@@ -160,7 +160,7 @@ function HoursRow({ start, end, setStart, setEnd }: { start: string; end: string
 function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
     <View>
-      <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">
+      <Text className="mb-2 px-1 text-xs font-bold capitalize tracking-wide text-gray-400">
         {title}
         {count != null ? ` (${count})` : ''}
       </Text>
