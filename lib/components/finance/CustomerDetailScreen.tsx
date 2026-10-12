@@ -14,6 +14,9 @@ import {
 } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
+import { usePhoneContacts } from '../../hooks/usePhoneContacts';
+import { ContactPickerModal } from '../ContactPickerModal';
+import { DateField, TimeField } from '../DateTimeFields';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
@@ -266,6 +269,184 @@ function EditableDetails({ customerId, basePath, summary }: { customerId: string
   );
 }
 
+/** An entry form: a card in the page when adding, a popup over the page when
+ * editing (`onClose` is only passed for the popup). */
+function EntryShell({
+  icon,
+  title,
+  onClose,
+  children,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  onClose?: () => void;
+  children: ReactNode;
+}) {
+  if (onClose) {
+    return (
+      <PopupCard title={title} onClose={onClose}>
+        {children}
+      </PopupCard>
+    );
+  }
+  return (
+    <FormCard icon={icon} title={title}>
+      {children}
+    </FormCard>
+  );
+}
+
+/** Who an entry being edited is on: the person whose page it is, until another is
+ * picked. Picking only changes the choice - nothing moves until the form is saved. */
+function useEntryParty(pageId: string) {
+  const [moved, setMoved] = useState<{ id: string; name: string } | null>(null);
+  return {
+    partyId: moved?.id ?? pageId,
+    /** Set only when the entry is going to a different person than this page's. */
+    movedTo: moved && moved.id !== pageId ? moved : null,
+    setParty: setMoved,
+  };
+}
+
+/** 'HH:MM' of an ISO timestamp, in the device's own time zone (the zone entryDay uses). */
+function timeOf(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** The ISO timestamp of a local 'YYYY-MM-DD' day at 'HH:MM'. */
+function stampOf(day: string, time: string) {
+  const [y, mo, d] = day.split('-').map(Number);
+  const [h, mi] = time.split(':').map(Number);
+  return new Date(y, mo - 1, d, h, mi).toISOString();
+}
+
+/** The date and time of an entry being edited, starting from what it has now.
+ * `changed` is false until one of them is touched, so a plain edit leaves the
+ * entry's stored date and timestamp exactly as they were.
+ *
+ * The date is the entry's `entry_date`; the time is the time of day of its
+ * `created_at` - the only time an entry carries, and what orders the entries of
+ * one day (and so the running balance). */
+function useEntryWhen(initial?: { entry_date: string | null; created_at: string } | null) {
+  const startDate = initial ? entryDay(initial.entry_date, initial.created_at) : '';
+  const startTime = initial ? timeOf(initial.created_at) : '';
+  const [date, setDate] = useState(startDate);
+  const [time, setTime] = useState(startTime);
+  return { date, time, setDate, setTime, changed: !!initial && (date !== startDate || time !== startTime) };
+}
+
+/** The "Date" and "Time" fields of the edit popup. */
+function EntryWhenFields({
+  date,
+  time,
+  onDate,
+  onTime,
+}: {
+  date: string;
+  time: string;
+  onDate: (v: string) => void;
+  onTime: (v: string) => void;
+}) {
+  return (
+    <FieldRow>
+      <Field label="Date" basis={220}>
+        <DateField value={date} onChange={onDate} />
+      </Field>
+      <Field label="Time" basis={140}>
+        <TimeField value={time} onChange={onTime} />
+      </Field>
+    </FieldRow>
+  );
+}
+
+/** The "Person" field of the edit popup: shows who the entry is on and lets you
+ * pick someone else (or add a new person) - for an entry logged on the wrong
+ * person. The entry moves to them when the form is saved. */
+function PartyMoveField({
+  ownerId,
+  partyId,
+  pickedName,
+  onPick,
+}: {
+  ownerId: string;
+  partyId: string;
+  /** The name of a person just picked, so it shows before their row has loaded. */
+  pickedName?: string;
+  onPick: (party: { id: string; name: string }) => void;
+}) {
+  const { data: party } = useSupabaseRow('customers', partyId);
+  const { data: customers } = useSupabaseQuery('customers', { filters: { owner_id: ownerId } });
+  const createCustomer = useSupabaseInsert('customers');
+  const phoneContacts = usePhoneContacts();
+  const [picking, setPicking] = useState(false);
+
+  function pick(id: string, name: string) {
+    setPicking(false);
+    onPick({ id, name });
+  }
+
+  // A phone contact or typed name that is not saved yet is saved as a real person now,
+  // the way the Sale / Payment forms do - unless someone with that phone already exists.
+  async function handleSelectNew(name: string, phone: string | null) {
+    const existing = phone ? (customers ?? []).find((c) => c.phone === phone) : undefined;
+    if (existing) {
+      pick(existing.id, existing.name);
+      return;
+    }
+    try {
+      const created = await createCustomer.mutateAsync({ owner_id: ownerId, name: nameCaps(name.trim()), phone });
+      pick(created.id, created.name);
+    } catch (err) {
+      setPicking(false);
+      showAlert('Could not add this person', getErrorMessage(err));
+    }
+  }
+
+  const shownName = nameCaps(pickedName ?? party?.name ?? '');
+
+  return (
+    <View style={{ gap: 6 }}>
+      {/* Field's flexBasis is a width inside a row - in this column it would be a 300px-tall box. */}
+      <FieldRow>
+        <Field label="Person" basis={300}>
+          <Pressable
+            onPress={() => {
+              phoneContacts.request();
+              setPicking(true);
+            }}
+            accessibilityLabel="Change person"
+            className="flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+          >
+            <View className="flex-1 flex-row items-center gap-2">
+              <Ionicons name="person-outline" size={16} color="#6B7280" />
+              <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
+                {shownName || '...'}
+              </Text>
+            </View>
+            <Text className="mr-1.5 text-xs font-semibold text-blue-700">Change</Text>
+            <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+          </Pressable>
+        </Field>
+      </FieldRow>
+      <Text className="text-[11px] text-gray-400">
+        Entered on the wrong person? Pick the right one and save - this entry moves to their ledger.
+      </Text>
+      <ContactPickerModal
+        visible={picking}
+        initialQuery=""
+        customers={customers ?? []}
+        phoneContacts={phoneContacts.contacts}
+        title="Move this entry to"
+        matchPhone
+        onSelectCustomer={(c) => pick(c.id, c.name)}
+        onSelectNew={handleSelectNew}
+        onClose={() => setPicking(false)}
+      />
+    </View>
+  );
+}
+
 /** The payment-method button the entry forms share: Cash or a bank account. */
 function PaymentMethodButton({ name, isBank, onPress }: { name: string; isBank: boolean; onPress: () => void }) {
   return (
@@ -302,6 +483,8 @@ function AddEntryForm({
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { partyId, movedTo, setParty } = useEntryParty(customerId);
+  const when = useEntryWhen(initial);
   // A new entry opens with the next receipt number already in the box (see useEntryNo).
   const entryNo = useEntryNo({ table: 'customer_ledger_entries', ownerId, entryType, auto: !initial, existing: initial?.receipt_no });
 
@@ -315,6 +498,10 @@ function AddEntryForm({
       showAlert('Enter an amount', 'Add a valid amount in NPR.');
       return;
     }
+    if (initial && !when.date) {
+      showAlert('Pick a date', 'Choose the date of this entry.');
+      return;
+    }
     setSaving(true);
     try {
       if (initial) {
@@ -326,8 +513,13 @@ function AddEntryForm({
             note: note.trim() || null,
             bank_account_id: bankAccountId,
             receipt_no: entryNo.receiptNo.trim() || null,
+            // Only when another person was picked, so a plain edit never touches the link.
+            ...(movedTo ? { customer_id: movedTo.id } : {}),
+            // Likewise the date and time: only written once one of them was changed.
+            ...(when.changed ? { entry_date: when.date, created_at: stampOf(when.date, when.time) } : {}),
           },
         });
+        if (movedTo) showAlert('Entry moved', `This entry is now on ${nameCaps(movedTo.name)}'s ledger.`);
       } else {
         await insertEntry.mutateAsync({
           customer_id: customerId,
@@ -366,8 +558,14 @@ function AddEntryForm({
   const typeOptions = [{ key: 'credit' as const, label: 'Received', ...IN_TONE }];
 
   return (
-    <FormCard icon="document-text-outline" title={initial ? 'Edit ledger entry' : 'Add ledger entry'}>
+    <EntryShell
+      icon="document-text-outline"
+      title={initial ? 'Edit entry' : 'Add ledger entry'}
+      onClose={initial ? onDone : undefined}
+    >
       <Segmented value={entryType} onChange={setEntryType} options={typeOptions} />
+      {initial && <PartyMoveField ownerId={ownerId} partyId={partyId} pickedName={movedTo?.name} onPick={setParty} />}
+      {initial && <EntryWhenFields date={when.date} time={when.time} onDate={when.setDate} onTime={when.setTime} />}
       <FieldRow>
         <Field label={entryType === 'credit' ? 'Receipt no.' : 'Payment no.'} basis={110}>
           <TextInput
@@ -405,7 +603,7 @@ function AddEntryForm({
       </FieldRow>
       <FormActions onCancel={onDone} onSave={handleSave} saving={saving} saveLabel={initial ? 'Save' : 'Add entry'} />
       {accountPicker}
-    </FormCard>
+    </EntryShell>
   );
 }
 
@@ -442,6 +640,8 @@ function AddVendorEntryForm({
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { partyId, movedTo, setParty } = useEntryParty(vendorId);
+  const when = useEntryWhen(initial);
   // The payment / receipt number: a new entry, or one being moved to Received, opens with the next
   // number of its own ledger already in the box; an existing Payment Out keeps its number.
   const entryNo = useEntryNo({
@@ -462,14 +662,20 @@ function AddVendorEntryForm({
    * counted on both ledgers at once. */
   async function recordReceived(entry: VendorLedgerEntry | null, value: number) {
     const created = await insertCustomerEntry.mutateAsync({
-      customer_id: vendorId,
+      customer_id: partyId,
       owner_id: ownerId,
       entry_type: 'credit',
       amount: value,
       note: note.trim() || null,
       source: 'manual',
       bank_account_id: bankAccountId,
-      ...(entry ? { entry_date: entry.entry_date ?? entry.created_at.slice(0, 10) } : {}),
+      // The new row keeps the old one's date; a date or time changed in the form wins (the
+      // timestamp too, so it takes its place in that day's order).
+      ...(entry
+        ? when.changed
+          ? { entry_date: when.date, created_at: stampOf(when.date, when.time) }
+          : { entry_date: entry.entry_date ?? entry.created_at.slice(0, 10) }
+        : {}),
       receipt_no: entryNo.receiptNo.trim() || (await nextEntryNo('customer_ledger_entries', ownerId, 'credit')),
     });
     if (!entry) return;
@@ -487,12 +693,21 @@ function AddVendorEntryForm({
       showAlert('Enter an amount', 'Add a valid amount in NPR.');
       return;
     }
+    if (initial && !when.date) {
+      showAlert('Pick a date', 'Choose the date of this entry.');
+      return;
+    }
     setSaving(true);
     try {
       if (kind === 'received') {
         await recordReceived(initial ?? null, value);
         if (initial) {
-          showAlert('Moved to Received', `NPR ${value.toLocaleString()} is now a Received entry on the customer ledger.`);
+          showAlert(
+            'Moved to Received',
+            movedTo
+              ? `NPR ${value.toLocaleString()} is now a Received entry on ${nameCaps(movedTo.name)}'s ledger.`
+              : `NPR ${value.toLocaleString()} is now a Received entry on the customer ledger.`
+          );
         }
       } else if (initial) {
         await updateEntry.mutateAsync({
@@ -503,8 +718,13 @@ function AddVendorEntryForm({
             note: note.trim() || null,
             bank_account_id: bankAccountId,
             ...(kind === 'paid' ? { receipt_no: entryNo.receiptNo.trim() || null } : {}),
+            // Only when another person was picked, so a plain edit never touches the link.
+            ...(movedTo ? { vendor_id: movedTo.id } : {}),
+            // Likewise the date and time: only written once one of them was changed.
+            ...(when.changed ? { entry_date: when.date, created_at: stampOf(when.date, when.time) } : {}),
           },
         });
+        if (movedTo) showAlert('Entry moved', `This entry is now on ${nameCaps(movedTo.name)}'s ledger.`);
       } else {
         await insertEntry.mutateAsync({
           vendor_id: vendorId,
@@ -543,8 +763,10 @@ function AddVendorEntryForm({
   ];
 
   return (
-    <FormCard icon="cart-outline" title={initial ? 'Edit vendor entry' : 'Add vendor entry'}>
+    <EntryShell icon="cart-outline" title={initial ? 'Edit entry' : 'Add vendor entry'} onClose={initial ? onDone : undefined}>
       <Segmented value={kind} onChange={setKind} options={kindOptions} />
+      {initial && <PartyMoveField ownerId={ownerId} partyId={partyId} pickedName={movedTo?.name} onPick={setParty} />}
+      {initial && <EntryWhenFields date={when.date} time={when.time} onDate={when.setDate} onTime={when.setTime} />}
       <FieldRow>
         {kind !== 'onCredit' && (
           <Field label={kind === 'received' ? 'Receipt no.' : 'Payment no.'} basis={110}>
@@ -584,7 +806,7 @@ function AddVendorEntryForm({
       </FieldRow>
       <FormActions onCancel={onDone} onSave={handleSave} saving={saving} saveLabel={initial ? 'Save' : 'Add entry'} />
       {accountPicker}
-    </FormCard>
+    </EntryShell>
   );
 }
 
@@ -615,7 +837,7 @@ type HistoryRow = {
   icon: keyof typeof Ionicons.glyphMap;
   iconColor: string;
   iconBg: string;
-  /** A manual entry can be removed here (not edited); the rest are read-only. */
+  /** A manual entry can be edited (or moved to another person) and removed here; the rest are read-only. */
   manual: boolean;
   ledger?: CustomerLedgerEntry;
   vendor?: VendorLedgerEntry;
@@ -665,6 +887,12 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const deleteVendorEntry = useSupabaseDelete('vendor_ledger_entries');
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [showAddVendorEntry, setShowAddVendorEntry] = useState(false);
+  // Tapping a manual entry in History opens it in a popup to fix it (amount, note...)
+  // or move it to the right person - a wrong amount or person previously meant
+  // delete-and-redo. The popup is the form itself (see EntryShell), so these are
+  // separate from the Add forms above.
+  const [editingEntry, setEditingEntry] = useState<CustomerLedgerEntry | null>(null);
+  const [editingVendorEntry, setEditingVendorEntry] = useState<VendorLedgerEntry | null>(null);
   // Tapping a linked bill in History opens the same organized detail view
   // Transactions uses, instead of duplicating that layout here.
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
@@ -855,9 +1083,15 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     setShowAddVendorEntry(false);
   }
 
-  // Only a linked bill opens (its detail view); manual entries are not editable here.
+  // A linked bill opens its detail view; a manual entry opens in an edit popup.
   function openRow(row: HistoryRow) {
-    if (row.tx) setViewingTx(row.tx);
+    if (row.tx) {
+      setViewingTx(row.tx);
+    } else if (row.vendor && row.manual) {
+      setEditingVendorEntry(row.vendor);
+    } else if (row.ledger && row.manual) {
+      setEditingEntry(row.ledger);
+    }
   }
 
   function removeRow(row: HistoryRow) {
@@ -1060,14 +1294,14 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         rows={rows}
         rowKey={(row) => row.key}
         onRowPress={openRow}
-        rowPressable={(row) => !!row.tx}
+        rowPressable={(row) => !!row.tx || row.manual}
       />
     ) : (
       <View>
         {rows.map((row) => (
           <Pressable
             key={row.key}
-            disabled={!row.tx}
+            disabled={!row.tx && !row.manual}
             onPress={() => openRow(row)}
             className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
           >
@@ -1137,6 +1371,26 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
           onClose={() => setExportMenu(false)}
         />
       </KeyboardAwareScrollView>
+      {/* Editing an entry: the form shows itself as a popup (see EntryShell). Keyed on the
+          entry so reopening another one starts from its own values. */}
+      {editingEntry && (
+        <AddEntryForm
+          key={editingEntry.id}
+          customerId={id}
+          ownerId={userId}
+          initial={editingEntry}
+          onDone={() => setEditingEntry(null)}
+        />
+      )}
+      {editingVendorEntry && (
+        <AddVendorEntryForm
+          key={editingVendorEntry.id}
+          vendorId={id}
+          ownerId={userId}
+          initial={editingVendorEntry}
+          onDone={() => setEditingVendorEntry(null)}
+        />
+      )}
       <TransactionDetailModal
         tx={viewingTx}
         categoryName={null}
