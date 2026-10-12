@@ -619,7 +619,7 @@ type HistoryRow = {
   icon: keyof typeof Ionicons.glyphMap;
   iconColor: string;
   iconBg: string;
-  /** A manual entry can be edited and removed here; the rest are read-only. */
+  /** A manual entry can be removed here (not edited); the rest are read-only. */
   manual: boolean;
   ledger?: CustomerLedgerEntry;
   vendor?: VendorLedgerEntry;
@@ -669,11 +669,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const deleteVendorEntry = useSupabaseDelete('vendor_ledger_entries');
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [showAddVendorEntry, setShowAddVendorEntry] = useState(false);
-  // Tapping a manual entry in History reopens the same form pre-filled,
-  // instead of only ever letting one be added and never fixed - a wrong
-  // amount or note previously meant delete-and-redo.
-  const [editingEntry, setEditingEntry] = useState<CustomerLedgerEntry | null>(null);
-  const [editingVendorEntry, setEditingVendorEntry] = useState<VendorLedgerEntry | null>(null);
   // Tapping a linked bill in History opens the same organized detail view
   // Transactions uses, instead of duplicating that layout here.
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
@@ -683,9 +678,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // 1000px it is a card list, like on a phone.
   const { width: windowWidth } = useWindowDimensions();
   const tableMode = layout.wide && windowWidth >= 1000;
-  // On the web table an entry being edited opens right under its own row; on a
-  // phone (a card list) its form stays at the top of the page.
-  const inline = tableMode;
 
   const balance = useMemo(() => {
     return (entries ?? []).reduce((sum, e) => sum + (e.entry_type === 'debit' ? e.amount : -e.amount), 0);
@@ -862,25 +854,14 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // closes the other rather than stacking two forms.
   function closeCustomerForm() {
     setShowAddEntry(false);
-    setEditingEntry(null);
   }
   function closeVendorForm() {
     setShowAddVendorEntry(false);
-    setEditingVendorEntry(null);
   }
 
+  // Only a linked bill opens (its detail view); manual entries are not editable here.
   function openRow(row: HistoryRow) {
-    if (row.tx) {
-      setViewingTx(row.tx);
-    } else if (row.vendor && row.manual) {
-      closeCustomerForm();
-      setEditingVendorEntry(row.vendor);
-      setShowAddVendorEntry(true);
-    } else if (row.ledger && row.manual) {
-      closeVendorForm();
-      setEditingEntry(row.ledger);
-      setShowAddEntry(true);
-    }
+    if (row.tx) setViewingTx(row.tx);
   }
 
   function removeRow(row: HistoryRow) {
@@ -912,12 +893,10 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
 
   function openCustomerForm() {
     closeVendorForm();
-    setEditingEntry(null);
     setShowAddEntry(true);
   }
   function openVendorForm() {
     closeCustomerForm();
-    setEditingVendorEntry(null);
     setShowAddVendorEntry(true);
   }
 
@@ -992,9 +971,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   }
 
   if (!id || !userId) return null;
-
-  const editingHere = (row: HistoryRow) =>
-    (!!row.ledger && row.ledger.id === editingEntry?.id) || (!!row.vendor && row.vendor.id === editingVendorEntry?.id);
 
   const removeButton = (row: HistoryRow) => (
     <Pressable onPress={() => removeRow(row)} hitSlop={8} accessibilityLabel="Remove entry">
@@ -1088,49 +1064,14 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         rows={rows}
         rowKey={(row) => row.key}
         onRowPress={openRow}
-        highlight={editingHere}
-        expanded={(row) => {
-          if (row.ledger && row.ledger.id === editingEntry?.id && showAddEntry) {
-            return (
-              <View className="border-b border-gray-200 bg-gray-50 p-3">
-                <AddEntryForm
-                  key={row.ledger.id}
-                  customerId={id}
-                  ownerId={userId}
-                  initial={editingEntry}
-                  onDone={() => {
-                    setShowAddEntry(false);
-                    setEditingEntry(null);
-                  }}
-                />
-              </View>
-            );
-          }
-          if (row.vendor && row.vendor.id === editingVendorEntry?.id && showAddVendorEntry) {
-            return (
-              <View className="border-b border-gray-200 bg-gray-50 p-3">
-                <AddVendorEntryForm
-                  key={row.vendor.id}
-                  vendorId={id}
-                  ownerId={userId}
-                  initial={editingVendorEntry}
-                  onDone={() => {
-                    setShowAddVendorEntry(false);
-                    setEditingVendorEntry(null);
-                  }}
-                />
-              </View>
-            );
-          }
-          return null;
-        }}
+        rowPressable={(row) => !!row.tx}
       />
     ) : (
       <View>
         {rows.map((row) => (
           <Pressable
             key={row.key}
-            disabled={!row.tx && !row.manual}
+            disabled={!row.tx}
             onPress={() => openRow(row)}
             className="mb-2.5 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
           >
@@ -1168,11 +1109,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         : { label: 'Balance', color: '#374151' };
   const summary = <BalanceFigure label={words.label} value={`NPR ${Math.abs(netBalance).toLocaleString()}`} color={words.color} />;
 
-  // A form for a brand-new entry opens at the top; one for an existing entry
-  // opens under its row on the web (see `expanded` above), at the top on a phone.
-  const addFormOpen = showAddEntry && !(inline && editingEntry);
-  const addVendorFormOpen = showAddVendorEntry && !(inline && editingVendorEntry);
-
   return (
     <>
       <KeyboardAwareScrollView
@@ -1186,28 +1122,11 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
 
         <EditableDetails customerId={id} basePath={basePath} summary={summary} />
 
-        {!isPureVendor && addFormOpen && (
-          <AddEntryForm
-            key={editingEntry?.id ?? 'new'}
-            customerId={id}
-            ownerId={userId}
-            initial={editingEntry}
-            onDone={() => {
-              setShowAddEntry(false);
-              setEditingEntry(null);
-            }}
-          />
+        {!isPureVendor && showAddEntry && (
+          <AddEntryForm customerId={id} ownerId={userId} onDone={() => setShowAddEntry(false)} />
         )}
-        {!isPureCustomer && addVendorFormOpen && (
-          <AddVendorEntryForm
-            vendorId={id}
-            ownerId={userId}
-            initial={editingVendorEntry}
-            onDone={() => {
-              setShowAddVendorEntry(false);
-              setEditingVendorEntry(null);
-            }}
-          />
+        {!isPureCustomer && showAddVendorEntry && (
+          <AddVendorEntryForm vendorId={id} ownerId={userId} onDone={() => setShowAddVendorEntry(false)} />
         )}
 
         {historyView}

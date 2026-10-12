@@ -245,6 +245,7 @@ export function BookTable<T>({
   rows,
   rowKey,
   onRowPress,
+  rowPressable,
   groupOf,
   highlight,
   expanded,
@@ -254,6 +255,8 @@ export function BookTable<T>({
   rows: T[];
   rowKey: (row: T) => string;
   onRowPress?: (row: T) => void;
+  /** Return false for a row that should not respond to `onRowPress` (it then has no tap/hover affordance). */
+  rowPressable?: (row: T) => boolean;
   groupOf?: (row: T) => string;
   /** Rows to tint, e.g. the one currently open for editing. */
   highlight?: (row: T) => boolean;
@@ -291,7 +294,7 @@ export function BookTable<T>({
             )}
             <Pressable
               onPress={onRowPress ? () => onRowPress(row) : undefined}
-              disabled={!onRowPress}
+              disabled={!onRowPress || rowPressable?.(row) === false}
               className="flex-row border-b border-gray-200"
               style={highlight?.(row) ? { backgroundColor: '#EFF6FF' } : undefined}
             >
