@@ -49,6 +49,7 @@ export const FINANCE_WIDE_ROUTES = [
   '/sales-report',
   '/purchase-report',
   '/expense-report',
+  '/party-report',
   '/to-receive',
   '/to-give',
   '/bank-accounts',

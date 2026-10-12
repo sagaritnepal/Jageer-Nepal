@@ -75,7 +75,7 @@ async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerI
 }
 
 /** The balance in the name card: "To receive" or "To pay" over the coloured amount. */
-function BalanceFigure({ label, value, color }: { label: string; value: string; color: string }) {
+export function BalanceFigure({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <View>
       <Text className="text-[10.5px] font-bold capitalize tracking-wide text-gray-400" numberOfLines={1}>
@@ -104,7 +104,9 @@ function HeaderButton({ icon, label, danger, onPress }: { icon: keyof typeof Ion
   );
 }
 
-function EditableDetails({ customerId, basePath, summary }: { customerId: string; basePath: string; summary?: ReactNode }) {
+/** The person's name card: name, phone, address, a summary figure, and Edit / Delete.
+ * Also shown on top of a person's own Sales / Purchase / Expense report. */
+export function EditableDetails({ customerId, basePath, summary }: { customerId: string; basePath: string; summary?: ReactNode }) {
   const { data: customer } = useSupabaseRow('customers', customerId);
   const updateCustomer = useSupabaseUpdate('customers');
   const deleteCustomer = useSupabaseDelete('customers', { requireRow: true });

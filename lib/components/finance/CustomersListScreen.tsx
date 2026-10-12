@@ -8,6 +8,7 @@ import * as Location from 'expo-location';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
+import { usePartyDestination } from '../../hooks/usePartyDestination';
 import { supabase } from '../../supabase';
 import { ContactPickerModal } from '../ContactPickerModal';
 import { BookPage, BookStats, BookTable, Pill, ToolbarButton, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
@@ -146,6 +147,7 @@ async function findExistingCustomerByPhone(ownerId: string, phone: string, exclu
 
 function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: string; basePath: string; initialName?: string; onDone: () => void }) {
   const createCustomer = useSupabaseInsert('customers');
+  const hrefFor = usePartyDestination(userId, basePath);
   // A ledger type is required - unless there are none to choose from (the types table
   // is not set up yet), where the field is not shown at all.
   const { available: typesAvailable } = usePartyTypes(userId);
@@ -205,7 +207,7 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
         // straight to the record that's already there instead.
         showAlert('Already saved', 'Someone with this phone number is already in your list.', [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'View them', onPress: () => router.push(`${basePath}/customer/${existingId}` as any) },
+          { text: 'View them', onPress: () => router.push(hrefFor(existingId) as any) },
         ]);
         onDone();
         return;
@@ -327,14 +329,15 @@ const dash = (n: number) => (Math.round(n) === 0 ? '—' : bookMoney(n));
  * Purchases / Payments / Balance, and where they stand. */
 function PartyCard({
   data,
-  basePath,
+  hrefFor,
   today,
   selecting,
   selected,
   onToggle,
 }: {
   data: PartyRowData;
-  basePath: string;
+  /** Where this person opens - see usePartyDestination. */
+  hrefFor: (partyId: string) => string;
   today: string;
   selecting: boolean;
   selected: boolean;
@@ -347,7 +350,7 @@ function PartyCard({
   const typeAndContact = [data.typeName, customer.phone, customer.address].filter(Boolean).join(' · ');
   return (
     <Pressable
-      onPress={() => (selecting ? onToggle() : router.push(`${basePath}/customer/${customer.id}` as any))}
+      onPress={() => (selecting ? onToggle() : router.push(hrefFor(customer.id) as any))}
       className="mb-2.5 rounded-2xl border bg-white p-3.5"
       style={{ borderColor: selected ? '#2563EB' : '#E5E7EB' }}
     >
@@ -655,6 +658,8 @@ function LedgerList({ basePath }: { basePath: string }) {
   const appCustomers = useAppCustomers(userId);
   const { byParty: itemsByParty, referenceById } = useLedgerItems(userId);
   const { nameById: partyTypeName } = usePartyTypes(userId);
+  // A person typed Expense / Sales / Purchase opens on that report (see usePartyDestination).
+  const hrefFor = usePartyDestination(userId, basePath);
 
   const layout = useBookLayout();
   // The table has eight columns and needs the room (the sidebar takes 240px): below
@@ -899,7 +904,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         matchPhone
         onSelectCustomer={(c) => {
           setPickerOpen(false);
-          router.push(`${basePath}/customer/${c.id}` as any);
+          router.push(hrefFor(c.id) as any);
         }}
         onAddNewTyped={(name) => {
           setPickerOpen(false);
@@ -976,7 +981,7 @@ function LedgerList({ basePath }: { basePath: string }) {
       );
 
     const open = (d: PartyRowData) => {
-      if (d.row.kind === 'customer') router.push(`${basePath}/customer/${d.row.id}` as any);
+      if (d.row.kind === 'customer') router.push(hrefFor(d.row.id) as any);
     };
 
     const columns: BookColumn<PartyRowData>[] = [
@@ -1146,7 +1151,7 @@ function LedgerList({ basePath }: { basePath: string }) {
               <PartyCard
                 key={`${d.row.kind}-${d.row.id}`}
                 data={d}
-                basePath={basePath}
+                hrefFor={hrefFor}
                 today={today}
                 selecting={selecting}
                 selected={selected.has(d.row.id)}
