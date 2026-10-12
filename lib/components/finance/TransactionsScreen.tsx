@@ -12,6 +12,9 @@ import { useIsWideWeb } from '../../hooks/useWideGrid';
 import { usePhoneContacts } from '../../hooks/usePhoneContacts';
 import { useScanBill } from '../../hooks/useScanBill';
 import { DateField } from '../DateTimeFields';
+import { Field, FieldRow, FormActions, INPUT, PopupCard, Segmented } from './FormKit';
+import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, useEntryParty, useEntryWhen } from './EntryEditParts';
+import { MONEY } from './moneyColors';
 import { TrendChartCard } from './TrendChartCard';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { ContactPickerModal } from '../ContactPickerModal';
@@ -2257,12 +2260,164 @@ function BillTotal({ label, value, tint, color, strong }: { label: string; value
   );
 }
 
-// A read-only receipt view - tapping a past transaction should let you see
-// what's in it without immediately dropping into an editable form. Edit is
-// an explicit action from here, not the default, and so is Delete (beside it,
-// only where the caller passes `onDelete`). Exported so a customer/vendor's
-// own page (CustomerDetailScreen) can reuse the same organized detail view
-// for a linked bill instead of building a second one.
+/** A Sale / Purchase's quick edit, laid out like a ledger entry's popup: Sale or Purchase, who it is
+ * with, its date and time, bill number, amount and remarks. A bill with items keeps its amount
+ * worked out from them - those are changed in the full form (`onEditItems`).
+ *
+ * Whatever is changed is saved on the bill; its ledger entry follows (a Sale is what the party owes
+ * you, a Purchase what you owe them), so switching Sale / Purchase or the person moves it there. */
+function BillEditPopup({
+  tx,
+  onClose,
+  onEditItems,
+  onDelete,
+}: {
+  tx: BusinessTransaction;
+  onClose: () => void;
+  onEditItems: () => void;
+  /** Shown as Remove, left of Cancel / Save, only where the caller can remove the bill. */
+  onDelete?: () => void;
+}) {
+  const updateTx = useSupabaseUpdate('business_transactions');
+  const bankAccounts = useBankAccounts(tx.owner_id);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(tx.bank_account_id);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const accountName = bankAccountId ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash' : 'Cash';
+  const [type, setType] = useState<'sale' | 'purchase'>(tx.type === 'purchase' ? 'purchase' : 'sale');
+  const { partyId, movedTo, setParty } = useEntryParty(tx.customer_id ?? '');
+  const when = useEntryWhen({ entry_date: tx.bill_date, created_at: tx.created_at });
+  const [billNo, setBillNo] = useState(tx.bill_no ?? '');
+  const [amount, setAmount] = useState(String(tx.amount));
+  const [note, setNote] = useState(tx.note ?? '');
+  const [saving, setSaving] = useState(false);
+  const hasItems = tx.items.length > 0;
+
+  async function handleSave() {
+    const value = Number(amount);
+    if (!hasItems && (!amount.trim() || Number.isNaN(value) || value <= 0)) {
+      showAlert('Enter an amount', 'Add a valid amount in NPR.');
+      return;
+    }
+    if (!when.date) {
+      showAlert('Pick a date', 'Choose the date of this bill.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateTx.mutateAsync({
+        id: tx.id,
+        values: {
+          ...(type !== tx.type ? { type } : {}),
+          // Another person: the bill is theirs now, so what was written for the old one (address,
+          // VAT / PAN) goes rather than staying on the wrong person.
+          ...(movedTo ? { customer_id: movedTo.id, party_name: movedTo.name, party_address: null, vat_pan_no: null } : {}),
+          bill_no: billNo.trim() || null,
+          note: note.trim() || null,
+          // A bill with items has its amount from them; only one without can be typed.
+          ...(hasItems ? {} : { amount: value }),
+          // Only once the date or time was touched, so a plain edit leaves both as they were.
+          ...(when.changed ? { bill_date: when.date, created_at: stampOf(when.date, when.time) } : {}),
+          // Likewise the payment method: only when another was picked.
+          ...(bankAccountId !== tx.bank_account_id
+            ? { bank_account_id: bankAccountId, payment_mode: bankAccountId ? ('bank' as const) : ('cash' as const) }
+            : {}),
+        },
+      });
+      if (type !== tx.type) {
+        showAlert(
+          `Changed to a ${TYPE_META[type].label.toLowerCase()}`,
+          'Payments already recorded for them are not changed - check that they are Paid / Received the right way round.'
+        );
+      }
+      onClose();
+    } catch (err) {
+      showAlert('Could not save', getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <PopupCard title="Edit Entry" onClose={onClose}>
+      <Segmented
+        value={type}
+        onChange={setType}
+        options={[
+          { key: 'sale' as const, label: 'Sale', color: MONEY.in.text, bg: MONEY.in.bg, border: MONEY.in.base },
+          { key: 'purchase' as const, label: 'Purchase', color: MONEY.out.text, bg: MONEY.out.bg, border: MONEY.out.base },
+        ]}
+      />
+      <PartyMoveField
+        ownerId={tx.owner_id}
+        partyId={partyId}
+        pickedName={movedTo?.name ?? tx.party_name ?? undefined}
+        onPick={setParty}
+        hint="Entered on the wrong person? Pick the right one and save - this bill moves to their ledger."
+        pickerTitle="Move this bill to"
+      />
+      <EntryWhenFields date={when.date} time={when.time} onDate={when.setDate} onTime={when.setTime} />
+      <FieldRow>
+        <Field label="Bill No." basis={110}>
+          <TextInput
+            value={billNo}
+            onChangeText={setBillNo}
+            placeholder="e.g. 0234"
+            placeholderTextColor="#9CA3AF"
+            className={INPUT}
+          />
+        </Field>
+        <Field label="Amount (NPR)" basis={160}>
+          {hasItems ? (
+            <View className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <Text className="text-sm font-semibold text-gray-700">{tx.amount.toLocaleString()}</Text>
+            </View>
+          ) : (
+            <TextInput
+              value={amount}
+              onChangeText={setAmount}
+              placeholder="e.g. 1000"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="numeric"
+              className={INPUT}
+            />
+          )}
+        </Field>
+        <Field label="Payment Method" basis={200}>
+          <PaymentMethodButton name={accountName} isBank={!!bankAccountId} onPress={() => setShowAccountPicker(true)} />
+        </Field>
+        <Field label="Remarks" basis={260}>
+          <TextInput value={note} onChangeText={setNote} placeholder="Optional" placeholderTextColor="#9CA3AF" className={INPUT} />
+        </Field>
+      </FieldRow>
+      {hasItems && (
+        <Pressable onPress={onEditItems} accessibilityRole="button" className="flex-row items-center" style={{ gap: 6 }}>
+          <Ionicons name="list-outline" size={14} color="#1D4ED8" />
+          <Text className="flex-1 text-[12px] text-gray-500">
+            {`${tx.items.length} ${tx.items.length === 1 ? 'item' : 'items'} make up this amount. `}
+            <Text className="font-semibold text-blue-700">Edit the items</Text>
+          </Text>
+        </Pressable>
+      )}
+      <FormActions onCancel={onClose} onSave={handleSave} saving={saving} onRemove={onDelete} />
+      <BankAccountPickerModal
+        visible={showAccountPicker}
+        accounts={bankAccounts.accounts}
+        selectedId={bankAccountId}
+        onSelect={setBankAccountId}
+        onClose={() => setShowAccountPicker(false)}
+        onRename={bankAccounts.rename}
+        onDelete={bankAccounts.remove}
+      />
+    </PopupCard>
+  );
+}
+
+// What opens when a past transaction is tapped. A Sale / Purchase opens straight into its edit popup
+// (BillEditPopup, laid out like a ledger entry's); an Expense is a read-only receipt - you can see
+// what's in it without immediately dropping into an editable form. Edit is an explicit action from
+// there, not the default, and so is Delete (beside it, only where the caller passes `onDelete`).
+// Exported so a customer/vendor's own page (CustomerDetailScreen) can reuse the same one for a
+// linked bill instead of building a second.
 export function TransactionDetailModal({
   tx,
   categoryName,
@@ -2279,6 +2434,12 @@ export function TransactionDetailModal({
   onDelete?: () => void;
 }) {
   if (!tx) return null;
+  // A Sale / Purchase opens straight into its edit popup (see BillEditPopup), laid out like a ledger
+  // entry's - there is no read-only sheet in front of it. The full form, with the items, is one step
+  // on from there. An Expense keeps the sheet.
+  if (tx.type !== 'expense') {
+    return <BillEditPopup key={tx.id} tx={tx} onClose={onClose} onEditItems={onEdit} onDelete={onDelete} />;
+  }
   const meta = TYPE_META[tx.type];
   const accountLabel = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
   const isBill = tx.type !== 'expense';
@@ -2327,7 +2488,7 @@ export function TransactionDetailModal({
               )}
 
               {!!tx.party_name && (
-                <BillLine label={tx.type === 'purchase' ? 'Vendor' : tx.type === 'expense' ? 'Paid to' : 'Party'}>
+                <BillLine label="Paid to">
                   <Text className="text-sm font-bold text-gray-900">{tx.party_name}</Text>
                 </BillLine>
               )}
