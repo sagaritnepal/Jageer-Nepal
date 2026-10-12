@@ -1171,6 +1171,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}&add=1&edit=${viewingTx.id}` as never);
         setViewingTx(null);
       }}
+      editOnPage
     />
     </>
   );

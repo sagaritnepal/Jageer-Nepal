@@ -1283,6 +1283,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
           if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}&add=1&edit=${viewingTx.id}` as any);
           setViewingTx(null);
         }}
+        editOnPage
       />
     </>
   );

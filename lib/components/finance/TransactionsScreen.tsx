@@ -2552,8 +2552,9 @@ function BillViewPopup({
 // there, not the default, and so is Delete (beside it, only where the caller passes `onDelete`).
 // Exported so a customer/vendor's own page (CustomerDetailScreen) can reuse the same one for a
 // linked bill instead of building a second.
-// With `editOnPage` (the Day Book) a Sale / Purchase opens as a card to read instead (BillViewPopup),
-// whose Edit button goes to the bill's edit page rather than saving in place.
+// With `editOnPage` (the Statement, the Day Book, the reports and a person's ledger) a Sale / Purchase
+// opens as a card to read (BillViewPopup) whose Edit button goes to the bill's edit page, rather than
+// as BillEditPopup, which saves in place.
 export function TransactionDetailModal({
   tx,
   categoryName,
@@ -3210,6 +3211,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
             setViewingTx(null);
             editBill(viewingTx);
           }}
+          editOnPage
           onDelete={viewingTx ? () => handleDeleteFromReceipt(viewingTx) : undefined}
         />
       </>
@@ -3409,6 +3411,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           setViewingTx(null);
           editBill(viewingTx);
         }}
+        editOnPage
         onDelete={viewingTx ? () => handleDeleteFromReceipt(viewingTx) : undefined}
       />
     </View>
