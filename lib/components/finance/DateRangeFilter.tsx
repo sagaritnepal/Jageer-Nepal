@@ -229,7 +229,7 @@ const BUTTON_WIDTH = 140;
  * (Today, All time ...), then "the last 7 / 14 / 30 days" (counting today as the last day), each
  * applying with one tap, and Custom range, which opens From and To dates on the calendar right
  * there in the menu and applies when you press Apply. Tapping anywhere else closes it. */
-function DateFilterDropdown({ from, to, onApply, idleLabel = 'Filter', shortcuts = [] }: {
+function DateFilterDropdown({ from, to, onApply, idleLabel = 'Filter', shortcuts = [], presets = true }: {
   from: string;
   to: string;
   onApply: (from: string, to: string) => void;
@@ -237,6 +237,8 @@ function DateFilterDropdown({ from, to, onApply, idleLabel = 'Filter', shortcuts
   idleLabel?: string;
   /** Ranges only the page knows how to set (its resting day, "all time"), listed first. */
   shortcuts?: { label: string; on: boolean; onSelect: () => void }[];
+  /** The last 7 / 14 / 30 days, between the shortcuts and Custom range. */
+  presets?: boolean;
 }) {
   const [mode] = useCalendarMode();
   const dropdown = useDropdown(PANEL_WIDTH);
@@ -264,7 +266,7 @@ function DateFilterDropdown({ from, to, onApply, idleLabel = 'Filter', shortcuts
   };
 
   const presetStart = (days: number) => shiftDay(today, -(days - 1));
-  const matchesPreset = PRESETS.some((p) => from === presetStart(p.days) && to === today);
+  const matchesPreset = presets && PRESETS.some((p) => from === presetStart(p.days) && to === today);
   const matchesShortcut = shortcuts.some((x) => x.on);
   // Custom range is the one in use when the range on is none of the ready-made ones.
   const customOn = active && !matchesPreset && !matchesShortcut;
@@ -314,10 +316,11 @@ function DateFilterDropdown({ from, to, onApply, idleLabel = 'Filter', shortcuts
             x.onSelect();
           })
         )}
-        {PRESETS.map((p) => {
-          const start = presetStart(p.days);
-          return option(String(p.days), p.label, from === start && to === today, () => applyRange(start, today));
-        })}
+        {presets &&
+          PRESETS.map((p) => {
+            const start = presetStart(p.days);
+            return option(String(p.days), p.label, from === start && to === today, () => applyRange(start, today));
+          })}
         <View className="border-t border-gray-100" />
         {option('custom', 'Custom range', customOn, () => setCustom((c) => !c), custom ? 'chevron-up' : 'chevron-down')}
 
@@ -353,7 +356,7 @@ function DateFilterDropdown({ from, to, onApply, idleLabel = 'Filter', shortcuts
 /** The date Filter button. By default it opens a popup (the Statement's); with `dropdown` the
  * choices hang from the button as a menu instead (the Day Book's), where the page can add its
  * own `shortcuts` (Today ...) at the top of it. */
-export function DateFilterButton({ dropdown, shortcuts, ...rest }: {
+export function DateFilterButton({ dropdown, shortcuts, presets, ...rest }: {
   from: string;
   to: string;
   onApply: (from: string, to: string) => void;
@@ -363,8 +366,10 @@ export function DateFilterButton({ dropdown, shortcuts, ...rest }: {
   dropdown?: boolean;
   /** Ranges only the page knows how to set (its resting day ...), listed first in the menu. */
   shortcuts?: { label: string; on: boolean; onSelect: () => void }[];
+  /** In the menu: whether the last 7 / 14 / 30 days are listed (they are by default). */
+  presets?: boolean;
 }) {
-  return dropdown ? <DateFilterDropdown {...rest} shortcuts={shortcuts} /> : <DateFilterPopup {...rest} />;
+  return dropdown ? <DateFilterDropdown {...rest} shortcuts={shortcuts} presets={presets} /> : <DateFilterPopup {...rest} />;
 }
 
 /** The arrow beside the date button: one day back, or one day forward. */
@@ -395,8 +400,7 @@ export function DayStepButton({
 }
 
 /** The date control for a report page: an arrow back, the date button with its menu (the page's own
- * shortcuts, This month, Today, Yesterday, the last 7 / 14 / 30 days and a custom range), and an arrow
- * forward.
+ * shortcuts, This month and a custom range), and an arrow forward.
  *
  * `from` / `to` are 'YYYY-MM-DD'; both '' is the page's resting view (named by `idleLabel` - "This
  * year", "All dates"). The arrows page by calendar month - a Bikram Sambat month when the app is read
@@ -419,7 +423,6 @@ export function DateStepFilter({
 }) {
   const [mode] = useCalendarMode();
   const today = localTodayIso();
-  const yesterday = shiftDay(today, -1);
   const resting = !from && !to;
   const thisMonth = monthRange(today, 0, mode);
 
@@ -442,6 +445,7 @@ export function DateStepFilter({
       <DayStepButton direction="back" unit="month" disabled={!back} onPress={() => back && onChange(back.start, back.end)} />
       <DateFilterButton
         dropdown
+        presets={false}
         from={from}
         to={to}
         idleLabel={idleLabel}
@@ -449,8 +453,6 @@ export function DateStepFilter({
         shortcuts={[
           ...shortcuts,
           { label: 'This month', on: from === thisMonth.start && to === thisMonth.end, onSelect: () => onChange(thisMonth.start, thisMonth.end) },
-          { label: 'Today', on: from === today && to === today, onSelect: () => onChange(today, today) },
-          { label: 'Yesterday', on: from === yesterday && to === yesterday, onSelect: () => onChange(yesterday, yesterday) },
         ]}
       />
       <DayStepButton direction="forward" unit="month" disabled={!forward} onPress={() => forward && onChange(forward.start, forward.end)} />
