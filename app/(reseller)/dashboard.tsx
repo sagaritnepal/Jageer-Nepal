@@ -244,10 +244,15 @@ export default function ResellerDashboard() {
     enabled: !!userId,
   });
 
+  // People already on the team show under My team, so they don't also
+  // appear here as outsource technicians.
+  const { data: teamEmployees } = useMyEmployees(userId);
+  const teamIds = useMemo(() => new Set(teamEmployees.map((e) => e.profile.id)), [teamEmployees]);
+
   const recentlyHiredTechnicians = useMemo(() => {
     const statsByTech = new Map<string, { lastHired: string; count: number }>();
     (myRequests ?? []).forEach((r) => {
-      if (!r.technician_id) return;
+      if (!r.technician_id || teamIds.has(r.technician_id)) return;
       const existing = statsByTech.get(r.technician_id);
       statsByTech.set(r.technician_id, {
         lastHired: existing && existing.lastHired > r.created_at ? existing.lastHired : r.created_at,
@@ -260,7 +265,7 @@ export default function ResellerDashboard() {
       .filter((entry): entry is { tech: Profile; lastHired: string; count: number } => !!entry.tech)
       .sort((a, b) => new Date(b.lastHired).getTime() - new Date(a.lastHired).getTime())
       .slice(0, 3);
-  }, [myRequests, technicians]);
+  }, [myRequests, technicians, teamIds]);
 
   const appCustomerCount = useMemo(
     () => (myRequests ?? []).filter((r) => r.origin === 'app').length,
