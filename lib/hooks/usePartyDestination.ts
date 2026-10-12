@@ -15,6 +15,14 @@ export function reportKindOfType(typeName: string | undefined): BusinessTransact
   return null;
 }
 
+/** Whether a ledger of this type is a person on the payroll - Employee / Staff. What is paid to
+ * them (a salary, an advance, fuel) is an expense with no bill behind it, so the Expense Report
+ * lists it; a Vendor's or Customer's payments settle purchases and sales, which have their own
+ * reports. Where a person opens from the Ledger list is reportKindOfType above. */
+export function isStaffLedgerType(typeName: string | undefined): boolean {
+  return /\b(employees?|staff)\b/i.test(typeName ?? '');
+}
+
 /** Where a person opens from the Ledger list, by the Ledger type they carry.
  *
  * A person typed Expense opens the Expense Report, Sales the Sales Report, Purchase the

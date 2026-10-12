@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
-import { reportKindOfType, usePartyDestination } from '../../hooks/usePartyDestination';
+import { isStaffLedgerType, reportKindOfType, usePartyDestination } from '../../hooks/usePartyDestination';
 import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
 import { BS_MONTHS, adStringToBs } from '../../utils/nepaliDate';
 import { groupExpenseNames, nameKey } from '../../utils/expenseGroups';
@@ -138,14 +138,21 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   const { nameById: partyTypeName } = usePartyTypes(userId);
   // Where a person opens from a report (the report for their Ledger type, else their ledger).
   const hrefFor = usePartyDestination(userId, basePath);
-  // Ledgers typed Expense (Bike Repair, Fuel ...): what is paid to them is an expense even
+  // What is paid to a ledger typed Expense (Bike Repair, Fuel ...) or Employee is an expense even
   // though it is recorded as a payment on their ledger, not through the Expense form.
-  const expensePartyIds = useMemo(() => {
-    const ids = new Set<string>();
+  //  - An Expense ledger is itself a category: its payments are filed under its name.
+  //  - An Employee ledger is a person, not a category: its payments are filed under the existing
+  //    category its remark names ("FUEL" -> Fuel), else Uncategorized. The category list is
+  //    never added to by a person.
+  const { expenseLedgerIds, staffLedgerIds } = useMemo(() => {
+    const expense = new Set<string>();
+    const staff = new Set<string>();
     for (const c of customers ?? []) {
-      if (c.party_type_id && reportKindOfType(partyTypeName.get(c.party_type_id)) === 'expense') ids.add(c.id);
+      const typeName = c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined;
+      if (reportKindOfType(typeName) === 'expense') expense.add(c.id);
+      else if (isStaffLedgerType(typeName)) staff.add(c.id);
     }
-    return ids;
+    return { expenseLedgerIds: expense, staffLedgerIds: staff };
   }, [customers, partyTypeName]);
   const { data: categories } = useSupabaseQuery('expense_categories', {
     filters: userId ? { owner_id: userId } : {},
@@ -229,34 +236,57 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             category: kind === 'expense' ? category ?? 'Uncategorized' : undefined,
           };
         });
-      // The Expense Report also lists what was paid to a ledger typed Expense (Bike Repair, Fuel ...):
-      // it is recorded as a payment on that ledger rather than through the Expense form, so it was
-      // never in a list of expense bills. Money paid out only - same rule as Total Paid - and filed
-      // under the ledger's own name, which is its category here.
-      if (kind === 'expense' && !partyId) {
-        const paidTo = (id: string, date: string, amount: number, ledgerId: string, receiptNo: string | null, note: string | null): Entry => {
-          const name = nameById.get(ledgerId) ?? 'Expense ledger';
+      // An expense is often not a bill at all: money paid to a ledger typed Expense (Bike Repair, Fuel
+      // ...) is recorded as a payment on that ledger. So the Expense Report - and an Expense ledger's
+      // own page - lists what is on those ledgers too, filed under the ledger's name (its category):
+      //   Paid (money out)                    -> an expense, added;
+      //   Received (money back from them)     -> a refund, taken off: a negative row.
+      // Whatever is entered from the ledger's own page is in here, so it is in the report. (The
+      // copy a Sale / Purchase posts is the bill itself, listed above, so it is left out.)
+      if (kind === 'expense') {
+        // The categories that exist: the expense categories and the Expense ledgers' names - a
+        // payment to an employee is filed under one of these when its remark names it.
+        const knownCategory = new Map<string, string>();
+        for (const c of categories ?? []) knownCategory.set(nameKey(c.name), c.name.trim());
+        for (const id of expenseLedgerIds) {
+          const name = nameById.get(id);
+          if (name) knownCategory.set(nameKey(name), name.trim());
+        }
+        const ledgerRow = (
+          e: { id: string; entry_date: string | null; created_at: string; amount: number; receipt_no: string | null; note: string | null },
+          ledgerId: string,
+          refund: boolean
+        ): Entry => {
+          const name = nameById.get(ledgerId) ?? partyRow?.name ?? 'Expense ledger';
+          const tone = refund ? MONEY.in : MONEY.out;
+          // An Expense ledger is its own category; a person's payment goes under the category its
+          // remark names, else Uncategorized - so the list of categories is not theirs to grow.
+          const isStaff = staffLedgerIds.has(ledgerId);
+          const category = isStaff ? knownCategory.get(nameKey(e.note ?? '')) ?? 'Uncategorized' : name;
           return {
-            id,
-            date,
-            amount: Number(amount),
-            party: `Paid to ${name}`,
-            note: [receiptNo ? `Payment no. ${receiptNo}` : null, note].filter(Boolean).join(' · '),
-            type: { label: name, color: MONEY.out.text, bg: MONEY.out.bg },
+            id: e.id,
+            date: e.entry_date ?? e.created_at,
+            amount: refund ? -Number(e.amount) : Number(e.amount),
+            party: `${refund ? 'Received from' : 'Paid to'} ${name}`,
+            note: [e.receipt_no ? `${refund ? 'Receipt' : 'Payment'} no. ${e.receipt_no}` : null, refund ? 'Refund' : null, e.note]
+              .filter(Boolean)
+              .join(' · '),
+            type: { label: category, color: tone.text, bg: tone.bg },
             nav: { kind: 'party', partyId: ledgerId },
-            category: name,
-            href: hrefFor(ledgerId),
+            category,
+            // On the ledger's own page a row goes to its ledger, where it can be edited.
+            href: partyId ? `${basePath}/customer/${ledgerId}` : hrefFor(ledgerId),
           };
         };
-        for (const e of ledgerEntries ?? []) {
-          if (expensePartyIds.has(e.customer_id) && e.entry_type === 'debit' && e.source === 'manual') {
-            rows.push(paidTo(e.id, e.entry_date ?? e.created_at, e.amount, e.customer_id, e.receipt_no, e.note));
-          }
+        const customerSide = partyId ? partyCustomerEntries ?? [] : ledgerEntries ?? [];
+        const vendorSide = partyId ? partyVendorEntries ?? [] : vendorEntries ?? [];
+        const counts = (ledgerId: string) =>
+          partyId ? ledgerId === partyId : expenseLedgerIds.has(ledgerId) || staffLedgerIds.has(ledgerId);
+        for (const e of customerSide) {
+          if (counts(e.customer_id) && e.source === 'manual') rows.push(ledgerRow(e, e.customer_id, e.entry_type === 'credit'));
         }
-        for (const e of vendorEntries ?? []) {
-          if (expensePartyIds.has(e.vendor_id) && e.entry_type === 'credit') {
-            rows.push(paidTo(e.id, e.entry_date ?? e.created_at, e.amount, e.vendor_id, e.receipt_no, e.note));
-          }
+        for (const e of vendorSide) {
+          if (counts(e.vendor_id) && e.entry_type === 'credit') rows.push(ledgerRow(e, e.vendor_id, false));
         }
       }
       return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -332,7 +362,24 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       }
     }
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions, kindBills, partyRow, ledgerEntries, vendorEntries, nameById, categoryById, expensePartyIds, hrefFor, kind, partyId]);
+  }, [
+    transactions,
+    kindBills,
+    partyRow,
+    ledgerEntries,
+    vendorEntries,
+    partyCustomerEntries,
+    partyVendorEntries,
+    nameById,
+    categoryById,
+    categories,
+    expenseLedgerIds,
+    staffLedgerIds,
+    hrefFor,
+    basePath,
+    kind,
+    partyId,
+  ]);
 
   // The rest of what is on a person's ledger - money received from or paid to them, and what they
   // owe or are owed outside a bill - listed under their bills so the page shows all of it. The
@@ -341,9 +388,13 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     if (!partyId) return [];
     const rows: Entry[] = [];
     const nav: NavTarget = { kind: 'party', partyId };
+    // On an Expense ledger what was paid out, and what came back, are the report's own rows above
+    // (see `entries`) - not repeated here.
+    const inReport = kind === 'expense';
     for (const e of partyCustomerEntries ?? []) {
       if (e.source_type === 'business_transaction') continue;
       const manual = e.source === 'manual';
+      if (inReport && manual) continue;
       rows.push({
         id: e.id,
         date: e.entry_date ?? e.created_at,
@@ -356,6 +407,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     }
     for (const e of partyVendorEntries ?? []) {
       if (e.source_type === 'business_transaction') continue;
+      if (inReport && e.entry_type === 'credit') continue;
       rows.push({
         id: e.id,
         date: e.entry_date ?? e.created_at,
@@ -367,7 +419,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       });
     }
     return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [partyId, partyCustomerEntries, partyVendorEntries]);
+  }, [partyId, kind, partyCustomerEntries, partyVendorEntries]);
 
   // The plain reports are this year's; a person's own report is all of their bills - one
   // person has few, and an old one should not look like there is nothing.
@@ -396,7 +448,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     };
     for (const e of yearEntries) addName(e.category ?? UNFILED);
     for (const c of categories ?? []) addName(c.name);
-    for (const c of customers ?? []) if (expensePartyIds.has(c.id)) addName(c.name);
+    // Only Expense ledgers are categories; an employee is a person and never is one.
+    for (const c of customers ?? []) if (expenseLedgerIds.has(c.id)) addName(c.name);
 
     const labelOf = groupExpenseNames(names);
     const groups = new Map<string, { key: string; label: string; total: number; rows: Entry[] }>();
@@ -424,7 +477,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       for (const e of g.rows) headingOf.set(e.id, heading);
     }
     return { groups: ordered, rows: ordered.flatMap((g) => g.rows), headingOf };
-  }, [kind, partyId, yearEntries, categories, customers, expensePartyIds]);
+  }, [kind, partyId, yearEntries, categories, customers, expenseLedgerIds]);
 
   // The one category picked from the dropdown ('' = every category), so a long report can be
   // narrowed to Fuel or Bike Repair without scrolling to it. Picking narrows the table and the
@@ -599,13 +652,15 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
 
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
         {partyId
-          ? 'Tap a bill to open it; tap a payment to open their ledger, where it can be edited. The balance above counts every entry of both ledgers, including these.'
+          ? kind === 'expense'
+            ? 'Tap a bill to open it; tap a payment to open this ledger, where it can be edited. Money paid to this ledger counts as an expense, and money received back is taken off. The balance above counts every entry of both ledgers.'
+            : 'Tap a bill to open it; tap a payment to open their ledger, where it can be edited. The balance above counts every entry of both ledgers, including these.'
           : kind === 'received'
             ? 'Tap an entry to open it. Only money actually collected counts here - a sale bill on credit shows up once the customer pays.'
             : kind === 'paid'
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
               : kind === 'expense'
-                ? "Tap an entry to open it. Grouped by category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one heading; use Category above to look at just one. Counts every expense bill, and money paid to a ledger typed Expense (listed under that ledger's name). This year only."
+                ? "Tap an entry to open it. Grouped by category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one heading; use Category above to look at just one. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
                 : `Tap an entry to open it. Every ${kind} bill counts here, whether or not the money has moved yet - see Total ${kind === 'sale' ? 'Received' : 'Paid'} for what actually has.`}
       </Text>
     </BookPage>
