@@ -70,7 +70,7 @@ function Stat({ icon, label, value, tone }: { icon: keyof typeof Ionicons.glyphM
     <View className="min-w-[96px] flex-1">
       <View className="flex-row items-center gap-1">
         <Ionicons name={icon} size={12} color="#6B7280" />
-        <Text className="text-[10.5px] font-semibold uppercase text-gray-500">{label}</Text>
+        <Text className="text-[10.5px] font-semibold capitalize text-gray-500">{label}</Text>
       </View>
       <Text className="mt-0.5 text-[12.5px] font-semibold" style={{ color: tone ?? '#111827' }}>
         {value}
@@ -182,14 +182,14 @@ export function TeamJobRow({
           </Text>
         </View>
         <View className={`rounded-full px-2 py-0.5 ${status.bg}`}>
-          <Text className={`text-[10px] font-semibold uppercase ${status.text}`}>{status.label}</Text>
+          <Text className={`text-[10px] font-semibold capitalize ${status.text}`}>{status.label}</Text>
         </View>
       </View>
 
       <View className="mt-2.5 flex-row items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
         <Ionicons name="paper-plane" size={15} color="#1D4ED8" />
         <View className="flex-1">
-          <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Assigned</Text>
+          <Text className="text-[10px] font-bold capitalize tracking-wide text-blue-700">Assigned</Text>
           <Text className="text-[14px] font-bold text-blue-950" style={{ color: '#1E3A8A' }}>
             {formatTimestamp(assignedIso)}
           </Text>

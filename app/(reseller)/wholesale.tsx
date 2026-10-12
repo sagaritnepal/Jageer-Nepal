@@ -50,7 +50,7 @@ function ProductCard({
         </View>
 
         {item.category && (
-          <Text className="mb-0.5 text-[11px] uppercase tracking-wide text-orange-600">{item.category}</Text>
+          <Text className="mb-0.5 text-[11px] capitalize tracking-wide text-orange-600">{item.category}</Text>
         )}
         <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
           {item.name}

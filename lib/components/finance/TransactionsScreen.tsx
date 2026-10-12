@@ -49,6 +49,7 @@ import { localTodayIso } from '../../utils/localDate';
 const todayIso = localTodayIso;
 
 interface ItemRowState {
+  hs_code?: string;
   description: string;
   qty: string;
   rate: string;
@@ -393,7 +394,7 @@ function RecentEntriesCard({
 
   return (
     <View className="mt-4">
-      <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Recent {TYPE_META[type].label}s</Text>
+      <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-400">Recent {TYPE_META[type].label}s</Text>
       {!!onOpen && recent.length > 0 && (
         <Text className="mb-2 mt-0.5 text-[10.5px] text-gray-400">Tap an entry to view, edit or delete it</Text>
       )}
@@ -625,7 +626,7 @@ function TransactionForm({
   const [billNo, setBillNo] = useState(initial?.bill_no ?? '');
   const [billDate, setBillDate] = useState(initial?.bill_date ?? todayIso());
   const [items, setItems] = useState<ItemRowState[]>(
-    initial ? initial.items.map((i) => ({ description: i.description, qty: String(i.qty), rate: String(i.rate) })) : []
+    initial ? initial.items.map((i) => ({ hs_code: i.hs_code ?? '', description: i.description, qty: String(i.qty), rate: String(i.rate) })) : []
   );
   const [showItemPicker, setShowItemPicker] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
@@ -875,6 +876,7 @@ function TransactionForm({
           bill_no: billNo.trim() || null,
           bill_date: billDate || null,
           items: validItems.map((r) => ({
+            ...(r.hs_code?.trim() ? { hs_code: r.hs_code.trim() } : {}),
             description: r.description.trim(),
             qty: Number(r.qty),
             rate: Number(r.rate),
@@ -1333,7 +1335,7 @@ function TransactionForm({
             >
               <View className="mb-3 flex-row items-center gap-2">
                 <Ionicons name="document-text-outline" size={14} color="#6B7280" />
-                <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Details</Text>
+                <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Details</Text>
               </View>
               <View className="flex-row" style={{ gap: 14 }}>
                 <View style={{ flex: 1.3, minWidth: 0 }}>
@@ -1530,7 +1532,7 @@ function TransactionForm({
                       customerId ? (
                         <Ionicons name="checkmark-circle" size={16} color={accent} />
                       ) : partyName.trim() ? (
-                        <Text className="text-[10px] font-bold uppercase text-gray-400">New</Text>
+                        <Text className="text-[10px] font-bold capitalize text-gray-400">New</Text>
                       ) : null
                     }
                   />
@@ -2297,7 +2299,7 @@ export function TransactionDetailModal({
               <View className={`flex-row items-center justify-between px-3 py-2.5 ${meta.bg}`}>
                 <View className="flex-row items-center gap-2">
                   <Ionicons name={meta.icon} size={16} color={meta.color} />
-                  <Text className="text-sm font-extrabold uppercase tracking-wide" style={{ color: meta.color }}>
+                  <Text className="text-sm font-extrabold capitalize tracking-wide" style={{ color: meta.color }}>
                     {isBill ? `${meta.label} bill` : meta.label}
                   </Text>
                 </View>
@@ -2669,6 +2671,14 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
   const editLinkTx = editParam && editRow && editRow.id === editParam ? editRow : null;
   const editingTx = editLinkTx ?? editingTxState;
   const showForm = showFormState || !!editLinkTx;
+  // A bill entered as the wrong kind (a Sale that was really a Purchase) can be switched while it
+  // is being edited; the bill's own ledger entry follows when it is saved.
+  const [typeOverride, setTypeOverride] = useState<{ id: string; type: BusinessTransactionType } | null>(null);
+  const editType: BusinessTransactionType | undefined = editingTx
+    ? typeOverride && typeOverride.id === editingTx.id && editingTx.type !== 'expense'
+      ? typeOverride.type
+      : editingTx.type
+    : undefined;
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
   // The form renders inside the list's own header, so opening it while
   // scrolled down through history (which is exactly when someone taps Edit
@@ -2969,12 +2979,34 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
               <TrendChartCard key={filter} transactions={transactions ?? []} metrics={[filter]} />
             )}
 
+            {showForm && userId && editingTx && editingTx.type !== 'expense' && (
+              <View className="mb-3 flex-row items-center rounded-xl border border-gray-200 bg-white px-3 py-2" style={{ gap: 8 }}>
+                <Text className="text-xs font-semibold text-gray-500">Entered as</Text>
+                {(['sale', 'purchase'] as const).map((k) => {
+                  const on = editType === k;
+                  return (
+                    <Pressable
+                      key={k}
+                      onPress={() => setTypeOverride({ id: editingTx.id, type: k })}
+                      className="rounded-lg border px-3 py-1.5"
+                      style={{ borderColor: on ? TYPE_META[k].color : '#D1D5DB', backgroundColor: on ? TYPE_META[k].bg : '#FFFFFF' }}
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text className="text-[13px] font-semibold" style={{ color: on ? TYPE_META[k].color : '#6B7280' }}>
+                        {TYPE_META[k].label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
             {showForm && userId && (
               <TransactionForm
                 key={`${editingTx?.id ?? (filter === 'all' ? 'sale' : filter)}-${formKey}`}
                 userId={userId}
                 initial={editingTx ?? undefined}
-                type={editingTx?.type ?? (filter === 'all' ? 'sale' : filter)}
+                type={editType ?? (filter === 'all' ? 'sale' : filter)}
                 existingNames={existingExpenseNames}
                 customers={customers ?? []}
                 products={products ?? []}
@@ -3023,7 +3055,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
           </>
         }
         renderSectionHeader={({ section }) => (
-          <Text className="mb-2 mt-3 text-xs font-bold uppercase tracking-wide text-gray-400">{section.title}</Text>
+          <Text className="mb-2 mt-3 text-xs font-bold capitalize tracking-wide text-gray-400">{section.title}</Text>
         )}
         renderItem={({ item }) =>
           item.kind === 'business' ? (

@@ -110,7 +110,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
       </View>
 
       <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-        <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Profit &amp; Loss</Text>
+        <Text className="mb-1 text-xs font-semibold capitalize tracking-wide text-gray-400">Profit &amp; Loss</Text>
         <Row label="Sales" value={totals.sale} color="#059669" />
         <View className="border-t border-gray-100" />
         <Row label="Purchase" value={totals.purchase} color="#DC2626" />
@@ -124,7 +124,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
 
       {REPORT_GROUPS.map((group, g) => (
         <View key={group.heading} className={`rounded-2xl border border-gray-200 bg-white p-4 ${g > 0 ? 'mt-4' : ''}`}>
-          <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">{group.heading}</Text>
+          <Text className="mb-1 text-xs font-semibold capitalize tracking-wide text-gray-400">{group.heading}</Text>
           {group.links.map((r, i) => (
             <View key={r.title} className={i > 0 ? 'border-t border-gray-100' : ''}>
               <ReportMenuLink report={r} basePath={basePath} />

@@ -56,7 +56,8 @@ function ChatIconButton({ onFocus }: { onFocus: () => void }) {
   return (
     <DetailHeroAction
       icon="chatbubble-outline"
-      label="Message customer"
+      label="Message"
+      tone="message"
       onPress={() => {
         scrollTo('messages');
         onFocus();
@@ -194,7 +195,7 @@ export function OrderDetailScreen() {
         canAdvance ? (
           <>
             <View className="flex-1">
-              <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Next step</Text>
+              <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-400">Next step</Text>
               <Text className="text-[13.5px] font-bold text-gray-900">{nextLabel}</Text>
             </View>
             <View style={{ minWidth: 168 }}>{advanceButton}</View>
@@ -208,9 +209,9 @@ export function OrderDetailScreen() {
         icon={
           <View
             className="items-center justify-center rounded-2xl"
-            style={{ width: wide ? 62 : 52, height: wide ? 62 : 52, backgroundColor: 'rgba(255,255,255,0.18)' }}
+            style={{ width: wide ? 56 : 46, height: wide ? 56 : 46, backgroundColor: '#EFF6FF' }}
           >
-            <Ionicons name="gift" size={wide ? 30 : 26} color="#fff" />
+            <Ionicons name="gift" size={wide ? 28 : 24} color="#2563EB" />
           </View>
         }
         title={`Order #${order.id.slice(0, 8)}`}
@@ -232,7 +233,7 @@ export function OrderDetailScreen() {
         actions={
           isAccepted && !!counterparty?.phone ? (
             <>
-              <DetailHeroAction icon="call-outline" label="Call customer" onPress={() => Linking.openURL(`tel:${counterparty.phone}`)} />
+              <DetailHeroAction icon="call-outline" label="Call" tone="call" onPress={() => Linking.openURL(`tel:${counterparty.phone}`)} />
               <ChatIconButton onFocus={() => setChatFocus((n) => n + 1)} />
             </>
           ) : null
@@ -243,18 +244,18 @@ export function OrderDetailScreen() {
         {/* Invoice-style columns: SN · Items · Qty · Rate · Amount. */}
         {wide && (
           <View className="flex-row items-center gap-3 px-3 pb-2.5">
-            <Text className="text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 28 }}>
+            <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-500" style={{ width: 28 }}>
               SN
             </Text>
             <View style={{ width: 48 }} />
-            <Text className="flex-1 text-[11px] font-bold uppercase tracking-wide text-gray-500">Items</Text>
-            <Text className="text-right text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 60 }}>
+            <Text className="flex-1 text-[11px] font-bold capitalize tracking-wide text-gray-500">Items</Text>
+            <Text className="text-right text-[11px] font-bold capitalize tracking-wide text-gray-500" style={{ width: 60 }}>
               Qty
             </Text>
-            <Text className="text-right text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 120 }}>
+            <Text className="text-right text-[11px] font-bold capitalize tracking-wide text-gray-500" style={{ width: 120 }}>
               Rate
             </Text>
-            <Text className="text-right text-[11px] font-bold uppercase tracking-wide text-gray-500" style={{ width: 130 }}>
+            <Text className="text-right text-[11px] font-bold capitalize tracking-wide text-gray-500" style={{ width: 130 }}>
               Amount
             </Text>
           </View>

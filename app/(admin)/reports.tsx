@@ -81,7 +81,7 @@ export default function AdminReports() {
 
   return (
     <ScrollView className={wide ? 'flex-1 bg-gray-50 px-8 pt-5' : 'flex-1 bg-gray-50 px-6 pt-4'}>
-      <Text className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Revenue</Text>
+      <Text className="mb-2 text-sm font-semibold capitalize tracking-wide text-gray-500">Revenue</Text>
       {statGrid(
         [
           <StatCard key="revenue" fill={wide} label="Total order revenue (NPR)" value={totalRevenue.toLocaleString()} />,
@@ -90,7 +90,7 @@ export default function AdminReports() {
         'mb-2'
       )}
 
-      <Text className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+      <Text className="mb-2 mt-4 text-sm font-semibold capitalize tracking-wide text-gray-500">
         Orders by status
       </Text>
       {statGrid(
@@ -103,7 +103,7 @@ export default function AdminReports() {
         'mb-2'
       )}
 
-      <Text className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+      <Text className="mb-2 mt-4 text-sm font-semibold capitalize tracking-wide text-gray-500">
         Service requests by status
       </Text>
       {statGrid(
@@ -116,7 +116,7 @@ export default function AdminReports() {
         'mb-2'
       )}
 
-      <Text className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Users</Text>
+      <Text className="mb-2 mt-4 text-sm font-semibold capitalize tracking-wide text-gray-500">Users</Text>
       {statGrid(
         Object.entries(usersByRole).map(([role, count]) => (
           <StatCard key={role} fill={wide} label={role} value={count} />
@@ -124,7 +124,7 @@ export default function AdminReports() {
         'mb-2'
       )}
 
-      <Text className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Inventory</Text>
+      <Text className="mb-2 mt-4 text-sm font-semibold capitalize tracking-wide text-gray-500">Inventory</Text>
       {statGrid(
         [
           <StatCard key="listed" fill={wide} label="Total listed products" value={products?.length ?? 0} />,

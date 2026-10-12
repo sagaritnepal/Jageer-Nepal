@@ -181,7 +181,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
       <View className="flex-row items-center justify-between px-5 pb-3 pt-4">
         <View className="flex-row items-center gap-2">
           <Ionicons name="people-outline" size={14} color="#6B7280" />
-          <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">{partyLabel}s</Text>
+          <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">{partyLabel}s</Text>
         </View>
         <Text className="text-xs text-gray-400">
           {filled} {filled === 1 ? 'entry' : 'entries'}
@@ -189,19 +189,19 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
       </View>
 
       <View className="flex-row items-center border-y border-gray-200 bg-gray-50 px-2 py-2">
-        <Text className="text-center text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ width: 36 }}>
+        <Text className="text-center text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ width: 36 }}>
           #
         </Text>
-        <Text className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ flex: 1.35 }}>
+        <Text className="px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ flex: 1.35 }}>
           {partyLabel}
         </Text>
         <Text
-          className="px-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-gray-500"
+          className="px-2.5 text-right text-[11px] font-bold capitalize tracking-wider text-gray-500"
           style={{ width: 160 }}
         >
           Amount (NPR)
         </Text>
-        <Text className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-gray-500" style={{ flex: 1.1 }}>
+        <Text className="px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ flex: 1.1 }}>
           Remarks
         </Text>
         <View style={{ width: 36 }} />
@@ -263,7 +263,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                   linked ? (
                     <Ionicons name="checkmark-circle" size={15} color={accent} />
                   ) : row.customerName.trim() ? (
-                    <Text className="text-[10px] font-bold uppercase text-gray-400">New</Text>
+                    <Text className="text-[10px] font-bold capitalize text-gray-400">New</Text>
                   ) : null
                 }
               />

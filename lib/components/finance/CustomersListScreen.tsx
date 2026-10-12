@@ -13,9 +13,10 @@ import { ContactPickerModal } from '../ContactPickerModal';
 import { BookPage, BookStats, BookTable, Pill, ToolbarButton, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { PartyBalance } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
+import { LedgerTypeMenuModal } from './LedgerTypeMenuModal';
 import { Field, FieldRow, FormActions, INPUT, PopupCard } from './FormKit';
 import { CapsProvider, Text } from './CapsText';
-import { Checkbox, LEDGER_TONE, OptionMenuModal, StatusBadges, SummaryCard, type MenuOption } from './ledger/LedgerUi';
+import { Checkbox, LEDGER_TONE, StatusBadges, SummaryCard } from './ledger/LedgerUi';
 import { partyPosition, type PartyPosition } from '../../utils/partyBalance';
 import {
   compareItems,
@@ -235,9 +236,9 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
             <TextInput
               value={name}
               onChangeText={(v) => setName(nameCaps(v))}
-              autoCapitalize="characters"
+              autoCapitalize="words"
               autoFocus
-              placeholder="NAME"
+              placeholder="Name"
               placeholderTextColor="#9CA3AF"
               className="flex-1 px-3 py-2.5 text-sm text-gray-900"
             />
@@ -263,11 +264,11 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
           <TextInput
             value={address}
             onChangeText={setAddress}
-            autoCapitalize="characters"
-            placeholder="ADDRESS"
+            autoCapitalize="words"
+            placeholder="Address"
             placeholderTextColor="#9CA3AF"
             className={INPUT}
-            style={{ textTransform: 'uppercase' }}
+            style={{ textTransform: 'capitalize' }}
           />
         </Field>
       </FieldRow>
@@ -644,6 +645,12 @@ function LedgerList({ basePath }: { basePath: string }) {
   // A phone shows tick boxes only while selecting; the wide table always has them.
   const [selecting, setSelecting] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  /** The one party whose Ledger cell was tapped in the table - its type is being changed on its own. */
+  /** The party being renamed from its row in the table. */
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [rowTypeTarget, setRowTypeTarget] = useState<{ id: string; name: string; typeId: string | null } | null>(null);
   const [exporting, setExporting] = useState(false);
 
   const { data: customers } = useSupabaseQuery('customers', {
@@ -653,7 +660,7 @@ function LedgerList({ basePath }: { basePath: string }) {
   });
   const appCustomers = useAppCustomers(userId);
   const { byParty: itemsByParty, referenceById } = useLedgerItems(userId);
-  const { types: partyTypes, nameById: partyTypeName } = usePartyTypes(userId);
+  const { nameById: partyTypeName } = usePartyTypes(userId);
 
   const layout = useBookLayout();
   // The table has eight columns and needs the room (the sidebar takes 240px): below
@@ -796,9 +803,10 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
   }
 
-  async function applyLedgerType(key: string) {
+  async function applyLedgerType(key: string, only?: string) {
     setTypeMenuOpen(false);
-    const ids = [...selected];
+    setRowTypeTarget(null);
+    const ids = only ? [only] : [...selected];
     if (ids.length === 0) return;
     const { error } = await (supabase.from('customers') as any)
       .update({ party_type_id: key === NO_TYPE ? null : key })
@@ -809,12 +817,8 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
     queryClient.invalidateQueries({ queryKey: ['customers'] });
     showAlert('Ledger type updated', `${ids.length} ${ids.length === 1 ? 'party' : 'parties'} updated.`);
-    clearSelection();
+    if (!only) clearSelection();
   }
-  const typeMenuOptions: MenuOption<string>[] = [
-    ...partyTypes.map((t) => ({ key: t.id, label: t.name })),
-    { key: NO_TYPE, label: 'No ledger type' },
-  ];
 
   // Search, Export and New party live in the top bar on a wide screen (a plain row
   // above the tiles on a narrow one) - web only; the phone app keeps its own list
@@ -898,7 +902,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         initialQuery=""
         customers={customers ?? []}
         phoneContacts={[]}
-        placeholder="SEARCH BY NAME OR PHONE"
+        placeholder="Search by name or phone"
         matchPhone
         onSelectCustomer={(c) => {
           setPickerOpen(false);
@@ -927,13 +931,61 @@ function LedgerList({ basePath }: { basePath: string }) {
       />
     ) : null;
 
+  async function saveRename() {
+    const name = nameCaps(renameValue.trim());
+    if (!renameTarget || renaming) return;
+    if (!name) {
+      showAlert('Name needed', 'Enter the name of the ledger.');
+      return;
+    }
+    setRenaming(true);
+    try {
+      const { error } = await (supabase.from('customers') as any).update({ name }).eq('id', renameTarget.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setRenameTarget(null);
+    } catch (err) {
+      showAlert('Could not rename', getErrorMessage(err));
+    } finally {
+      setRenaming(false);
+    }
+  }
+  const renamePopup = renameTarget ? (
+    <PopupCard title="Rename ledger" onClose={() => setRenameTarget(null)}>
+      <Field label="Name *">
+        <TextInput
+          value={renameValue}
+          onChangeText={(v) => setRenameValue(nameCaps(v))}
+          onSubmitEditing={saveRename}
+          autoCapitalize="words"
+          autoFocus
+          selectTextOnFocus
+          placeholder="Name"
+          placeholderTextColor="#9CA3AF"
+          className={INPUT}
+        />
+      </Field>
+      <FormActions onCancel={() => setRenameTarget(null)} onSave={saveRename} saving={renaming} />
+    </PopupCard>
+  ) : null;
+
   const typeMenu = (
-    <OptionMenuModal
+    <LedgerTypeMenuModal
       visible={typeMenuOpen}
       title={`Set ledger type · ${selectedCount} selected`}
-      options={typeMenuOptions}
-      onPick={applyLedgerType}
+      ownerId={userId}
+      onPick={(id) => applyLedgerType(id ?? NO_TYPE)}
       onClose={() => setTypeMenuOpen(false)}
+    />
+  );
+  const rowTypeMenu = (
+    <LedgerTypeMenuModal
+      visible={!!rowTypeTarget}
+      title={`Ledger · ${rowTypeTarget?.name ?? ''}`}
+      ownerId={userId}
+      selectedId={rowTypeTarget?.typeId ?? null}
+      onPick={(id) => rowTypeTarget && applyLedgerType(id ?? NO_TYPE, rowTypeTarget.id)}
+      onClose={() => setRowTypeTarget(null)}
     />
   );
 
@@ -951,13 +1003,27 @@ function LedgerList({ basePath }: { basePath: string }) {
   if (tableMode) {
     // Under the name: the ledger type, the phone number and the address, on one line.
     const partyCell = (d: PartyRowData) => {
-      const typeAndContact = [d.typeName, d.row.phone, d.row.kind === 'customer' ? d.row.customer.address : null].filter(Boolean).join(' · ');
+      const typeAndContact = [d.row.phone, d.row.kind === 'customer' ? d.row.customer.address : null].filter(Boolean).join(' · ');
       return (
         <View style={{ minWidth: 0 }}>
           {/* Wraps, so on a narrow screen the APP badge drops below the name instead of cutting it short. */}
           <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
             <Text className="text-[13px] font-semibold text-gray-900">{nameCaps(d.row.name)}</Text>
             {(d.row.kind === 'app' || (d.row.kind === 'customer' && d.row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
+            {d.row.kind === 'customer' && (
+              <Pressable
+                onPress={(e: any) => {
+                  e?.stopPropagation?.();
+                  setRenameTarget({ id: d.row.id, name: d.row.name });
+                  setRenameValue(nameCaps(d.row.name));
+                }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Rename ${d.row.name}`}
+              >
+                <Ionicons name="pencil" size={12} color="#9CA3AF" />
+              </Pressable>
+            )}
           </View>
           {!!typeAndContact && (
             <Text className="text-[11px] text-gray-400" numberOfLines={1}>
@@ -978,20 +1044,44 @@ function LedgerList({ basePath }: { basePath: string }) {
         <Text className="text-[12.5px] text-gray-300">—</Text>
       );
 
-    const figure = (n: number) => <Text className="text-[12.5px] text-gray-700">{dash(n)}</Text>;
     const open = (d: PartyRowData) => {
       if (d.row.kind === 'customer') router.push(`${basePath}/customer/${d.row.id}` as any);
     };
 
-    const moneyColumn = (key: 'sales' | 'purchases', label: string): BookColumn<PartyRowData> => ({
-      key,
-      label,
-      width: 95,
-      align: 'right',
-      render: (d) => figure(d[key]),
-    });
     const columns: BookColumn<PartyRowData>[] = [
+      {
+        key: 'sn',
+        label: 'SN',
+        width: 52,
+        render: (_d, index) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>,
+      },
       { key: 'party', label: 'Party', render: partyCell },
+      {
+        // The party's ledger type (Customer, Vendor, Employee ...) - tap it to change it right here.
+        key: 'ledger',
+        label: 'Ledger',
+        width: 150,
+        render: (d) =>
+          d.row.kind === 'customer' ? (
+            <Pressable
+              onPress={(e: any) => {
+                e?.stopPropagation?.();
+                setRowTypeTarget({ id: d.row.id, name: d.row.name, typeId: d.row.customer.party_type_id ?? null });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Change ledger type of ${d.row.name}`}
+              className="flex-row items-center self-stretch justify-between rounded-md border border-gray-200 bg-white px-2 py-1"
+              style={{ gap: 4 }}
+            >
+              <Text className={`flex-1 text-[12.5px] ${d.typeName ? 'font-semibold text-gray-800' : 'text-gray-400'}`} numberOfLines={1}>
+                {d.typeName ?? 'Set ledger'}
+              </Text>
+              <Ionicons name="chevron-down" size={13} color="#9CA3AF" />
+            </Pressable>
+          ) : (
+            <Text className="text-[12.5px] text-gray-300">—</Text>
+          ),
+      },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
       {
         // The number on that last transaction, with what it is the number of underneath.
@@ -1012,8 +1102,6 @@ function LedgerList({ basePath }: { basePath: string }) {
             <Text className="text-[12.5px] text-gray-300">—</Text>
           ),
       },
-      moneyColumn('sales', 'Sales'),
-      moneyColumn('purchases', 'Purchases'),
       {
         // The part of the balance that is money coming in (green), blank when it runs the other way.
         key: 'receivable',
@@ -1067,11 +1155,10 @@ function LedgerList({ basePath }: { basePath: string }) {
             rows={filtered}
             rowKey={(d) => `${d.row.kind}-${d.row.id}`}
             onRowPress={open}
+            stickyHeader
             footer={{
               label: `${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`,
               cells: {
-                sales: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.sales, 0))}</Text>,
-                purchases: <Text className="text-[12.5px] font-bold text-gray-800">{bookMoney(filtered.reduce((sum, d) => sum + d.purchases, 0))}</Text>,
                 receivable: (
                   <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.receivable.text }}>
                     {bookMoney(filtered.reduce((sum, d) => (d.status === 'receivable' ? sum + d.balance : sum), 0))}
@@ -1089,6 +1176,8 @@ function LedgerList({ basePath }: { basePath: string }) {
         )}
 
         {typeMenu}
+        {rowTypeMenu}
+        {renamePopup}
       </BookPage>
     );
   }
@@ -1150,6 +1239,8 @@ function LedgerList({ basePath }: { basePath: string }) {
         )}
 
         {typeMenu}
+        {rowTypeMenu}
+        {renamePopup}
       </ScrollView>
     </View>
   );

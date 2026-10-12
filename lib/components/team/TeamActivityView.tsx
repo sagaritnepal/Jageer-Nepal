@@ -21,7 +21,7 @@ const HISTORY_PAGE = 30;
 
 function GroupLabel({ children, count }: { children: ReactNode; count?: number }) {
   return (
-    <Text className="mb-2 px-1 text-[11px] font-bold uppercase text-gray-500" style={{ letterSpacing: 0.6 }}>
+    <Text className="mb-2 px-1 text-[11px] font-bold capitalize text-gray-500" style={{ letterSpacing: 0.6 }}>
       {children}
       {count != null ? `  ${count}` : ''}
     </Text>

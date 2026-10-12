@@ -344,6 +344,7 @@ export interface VendorLedgerEntry {
 }
 
 export interface BillItem {
+  hs_code?: string;
   description: string;
   qty: number;
   rate: number;

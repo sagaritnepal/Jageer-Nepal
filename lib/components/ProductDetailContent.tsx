@@ -25,7 +25,7 @@ export function ProductDetailContent({ product, onAddToCart }: { product: Produc
   const details = (
     <>
       {product.category && (
-        <Text className="text-xs font-bold uppercase tracking-wide text-blue-600">{product.category}</Text>
+        <Text className="text-xs font-bold capitalize tracking-wide text-blue-600">{product.category}</Text>
       )}
       <Text className="mt-1 text-xl font-extrabold text-gray-900">{product.name}</Text>
       <Text className="mt-2 text-2xl font-extrabold text-blue-700">NPR {Number(product.price).toLocaleString()}</Text>

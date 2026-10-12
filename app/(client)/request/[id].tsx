@@ -45,7 +45,7 @@ function QuoteApproval({ request }: { request: ServiceRequest }) {
 
   return (
     <View className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
-      <Text className="text-sm uppercase tracking-wide text-amber-600">Price quote</Text>
+      <Text className="text-sm capitalize tracking-wide text-amber-600">Price quote</Text>
       <Text className="mt-1 text-2xl font-bold text-amber-800">
         NPR {Number(request.quoted_price).toLocaleString()}
       </Text>
@@ -114,7 +114,7 @@ function JobCardBreakdown({ jobCard, quotedPrice }: { jobCard: JobCard; quotedPr
 
   return (
     <View className="mt-4 rounded-xl bg-white p-5">
-      <Text className="mb-3 text-sm uppercase tracking-wide text-gray-400">Job summary</Text>
+      <Text className="mb-3 text-sm capitalize tracking-wide text-gray-400">Job summary</Text>
 
       {jobCard.parts_used && jobCard.parts_used.length > 0 && (
         <View className="mb-3">
@@ -187,7 +187,7 @@ function PayNow({ request, amountDue, onPaid }: { request: ServiceRequest; amoun
 
   return (
     <View className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-5">
-      <Text className="mb-1 text-sm uppercase tracking-wide text-orange-600">Payment due</Text>
+      <Text className="mb-1 text-sm capitalize tracking-wide text-orange-600">Payment due</Text>
       {amountDue != null && (
         <Text className="mb-1 text-2xl font-bold text-orange-800">NPR {amountDue.toLocaleString()}</Text>
       )}
@@ -253,7 +253,7 @@ function RatingForm({
 
   return (
     <View className="mt-4 rounded-xl bg-white p-5">
-      <Text className="mb-3 text-sm uppercase tracking-wide text-gray-400">Rate this technician</Text>
+      <Text className="mb-3 text-sm capitalize tracking-wide text-gray-400">Rate this technician</Text>
       <View className="mb-3 flex-row gap-2">
         {[1, 2, 3, 4, 5].map((star) => (
           <Pressable key={star} onPress={() => setRating(star)}>
@@ -349,7 +349,7 @@ function RequestDetail({ id }: { id: string }) {
           <View className="flex-row items-center gap-3">
             <PersonAvatar name={reseller.full_name} photoUrl={reseller.avatar_url} size={40} bg="bg-orange-500" />
             <View>
-              <Text className="text-[11px] uppercase tracking-wide text-gray-400">Reseller</Text>
+              <Text className="text-[11px] capitalize tracking-wide text-gray-400">Reseller</Text>
               <Text className="text-sm font-semibold text-gray-800">{reseller.full_name ?? 'Unnamed'}</Text>
               {reseller.phone && <Text className="text-xs text-gray-500">{reseller.phone}</Text>}
             </View>
@@ -360,7 +360,7 @@ function RequestDetail({ id }: { id: string }) {
           <View className="flex-row items-center gap-3">
             <PersonAvatar name={technician.full_name} photoUrl={technician.avatar_url} size={40} bg="bg-blue-600" />
             <View>
-              <Text className="text-[11px] uppercase tracking-wide text-gray-400">Technician</Text>
+              <Text className="text-[11px] capitalize tracking-wide text-gray-400">Technician</Text>
               <Text className="text-sm font-semibold text-gray-800">{technician.full_name ?? 'Unnamed'}</Text>
               {technician.phone && <Text className="text-xs text-gray-500">{technician.phone}</Text>}
             </View>
@@ -372,7 +372,7 @@ function RequestDetail({ id }: { id: string }) {
 
   const statusCard = (
     <View className="rounded-xl bg-white p-5">
-      <Text className="text-sm uppercase tracking-wide text-gray-400">Status</Text>
+      <Text className="text-sm capitalize tracking-wide text-gray-400">Status</Text>
       <Text className="mt-1 text-lg font-semibold text-blue-700">
         {STATUS_LABELS[request.status] ?? request.status}
       </Text>
@@ -409,7 +409,7 @@ function RequestDetail({ id }: { id: string }) {
   const remark =
     request.remark && (
       <View className="mt-4 rounded-xl bg-white p-5">
-        <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Reseller's remark</Text>
+        <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Reseller's remark</Text>
         <Text className="text-sm text-gray-700">{request.remark}</Text>
       </View>
     );

@@ -60,7 +60,7 @@ function buildHtml(title: string, subtitle: string, rows: WorkRecordRow[]): stri
     p.sub { margin: 4px 0 16px; color: #6B7280; font-size: 12px; }
     table { width: 100%; border-collapse: collapse; font-size: 11px; }
     th, td { border: 1px solid #D1D5DB; padding: 6px 8px; text-align: left; vertical-align: top; }
-    th { background: #F3F4F6; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
+    th { background: #F3F4F6; text-transform: capitalize; font-size: 10px; letter-spacing: 0.04em; }
     td.num, th.num { text-align: right; white-space: nowrap; }
     tfoot td { font-weight: 700; background: #F9FAFB; }
     @page { size: A4 landscape; margin: 12mm; }

@@ -236,7 +236,7 @@ export function CategoryLineChart({
                   elevation: 4,
                 }}
               >
-                <Text className="mb-2 text-[10.5px] font-bold uppercase text-gray-500" style={{ letterSpacing: 0.5 }}>
+                <Text className="mb-2 text-[10.5px] font-bold capitalize text-gray-500" style={{ letterSpacing: 0.5 }}>
                   {buckets[hi].title}
                 </Text>
                 {tipRows.map((r) => (

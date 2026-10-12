@@ -177,7 +177,7 @@ function IdentityBand({ profile, card }: { profile: Profile | null; card?: boole
         </Text>
         <View className="mt-1 flex-row items-center gap-2">
           <View className="rounded-full bg-white/20 px-2.5 py-0.5">
-            <Text className="text-[10px] font-bold uppercase tracking-wide text-white">
+            <Text className="text-[10px] font-bold capitalize tracking-wide text-white">
               {profile ? ROLE_LABEL[profile.role] : ''}
             </Text>
           </View>
@@ -744,7 +744,7 @@ export function ProfileScreen() {
   const workSection =
     workRows.length > 0 ? (
       <View>
-        <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Work</Text>
+        <Text className="mb-2 px-1 text-xs font-bold capitalize tracking-wide text-gray-400">Work</Text>
         <GroupedList rows={workRows} />
       </View>
     ) : null;
@@ -752,7 +752,7 @@ export function ProfileScreen() {
   const accountSection =
     accountRows.length > 0 ? (
       <View>
-        <Text className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">Account</Text>
+        <Text className="mb-2 px-1 text-xs font-bold capitalize tracking-wide text-gray-400">Account</Text>
         <GroupedList rows={accountRows} />
       </View>
     ) : null;

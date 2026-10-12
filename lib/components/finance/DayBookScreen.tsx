@@ -11,10 +11,10 @@ import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { DateField } from '../DateTimeFields';
 import { FormSection } from './FormSection';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
+import { ContactPickerModal } from '../ContactPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
 import { DateFilterButton } from './DateRangeFilter';
-import { DropdownPanel, useDropdown } from './DropdownMenu';
 import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -70,6 +70,10 @@ type EditValues = {
   note: string;
   /** null means cash, like the Payment In form's method picker. */
   bankAccountId: string | null;
+  /** The customer / vendor the entry sits on - changeable when it was put on the wrong one. */
+  partyId: string | null;
+  /** credit = Received, debit = Payment Out (customer entries only). */
+  entryType: 'credit' | 'debit';
 };
 
 type EditTarget = {
@@ -80,8 +84,9 @@ type EditTarget = {
    * it is then shown read-only, since a change here would just be
    * overwritten by whatever created it. */
   lockedReason?: string;
-  /** Which fields this kind of entry has. */
-  fields: { party?: boolean; billNo?: boolean; discount?: boolean; receiptNo?: boolean; method?: boolean };
+  /** Which fields this kind of entry has. `reassign` lets its customer / vendor be changed;
+   * `direction` lets a customer entry be switched between Received and Payment Out. */
+  fields: { party?: boolean; billNo?: boolean; discount?: boolean; receiptNo?: boolean; method?: boolean; reassign?: boolean; direction?: boolean };
   /** Heading for the name section - "Customer", "Vendor", "Paid to"... */
   partyLabel?: string;
   /** Name to show when it isn't typed here but on the customer's own record. */
@@ -173,7 +178,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   const dayBand = (r: BookRow, index: number) =>
     dayLabel && r.kind !== 'opening' && rows[index - 1]?.date !== r.date ? (
       <View className="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5">
-        <Text className="text-xs font-bold uppercase tracking-wide text-gray-500">{dayLabel(r.date)}</Text>
+        <Text className="text-xs font-bold capitalize tracking-wide text-gray-500">{dayLabel(r.date)}</Text>
       </View>
     ) : null;
   const headCell = (label: string, style: object, right = false) => (
@@ -373,6 +378,8 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
   const userId = useAuthStore((state) => state.session?.user.id);
   const bankAccounts = useBankAccounts(userId);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const [showPartyPicker, setShowPartyPicker] = useState(false);
+  const { data: allParties } = useSupabaseQuery('customers', { filters: userId ? { owner_id: userId } : {}, enabled: !!userId });
   const updates = {
     customer_ledger_entries: useSupabaseUpdate('customer_ledger_entries'),
     vendor_ledger_entries: useSupabaseUpdate('vendor_ledger_entries'),
@@ -422,6 +429,13 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
           receipt_no: values.receiptNo.trim() || null,
           bank_account_id: values.bankAccountId,
           note,
+          // Moved to another party / switched between Received and Payment Out.
+          ...(target!.fields.reassign && values.partyId
+            ? target!.table === 'customer_ledger_entries'
+              ? { customer_id: values.partyId }
+              : { vendor_id: values.partyId }
+            : null),
+          ...(target!.fields.direction ? { entry_type: values.entryType } : null),
         };
       case 'account_transfers':
         return { transfer_date: values.date, amount, note };
@@ -551,7 +565,47 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
 
               {!target.fields.party && !!target.subtitleParty && (
                 <FormSection icon="person-outline" title={target.partyLabel ?? 'Customer'}>
-                  <EditInput value={target.subtitleParty} editable={false} />
+                  {target.fields.reassign && !locked ? (
+                    <Pressable
+                      onPress={() => setShowPartyPicker(true)}
+                      className="flex-row items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5"
+                      accessibilityRole="button"
+                      accessibilityLabel="Change the name on this entry"
+                    >
+                      <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
+                        {(allParties ?? []).find((c) => c.id === form.partyId)?.name ?? target.subtitleParty}
+                      </Text>
+                      <Text className="text-xs font-semibold text-blue-700">Change</Text>
+                    </Pressable>
+                  ) : (
+                    <EditInput value={target.subtitleParty} editable={false} />
+                  )}
+                </FormSection>
+              )}
+
+              {target.fields.direction && !locked && (
+                <FormSection icon="swap-horizontal-outline" title="Entry type">
+                  <View className="flex-row" style={{ gap: 8 }}>
+                    {([
+                      { key: 'credit', label: 'Received', color: '#047857' },
+                      { key: 'debit', label: 'Payment Out', color: '#B91C1C' },
+                    ] as const).map((o) => {
+                      const on = form.entryType === o.key;
+                      return (
+                        <Pressable
+                          key={o.key}
+                          onPress={() => setForm((f) => (f ? { ...f, entryType: o.key } : f))}
+                          className="flex-1 items-center rounded-lg border py-2.5"
+                          style={{ borderColor: on ? o.color : '#D1D5DB', backgroundColor: on ? `${o.color}14` : '#FFFFFF' }}
+                          accessibilityState={{ selected: on }}
+                        >
+                          <Text className="text-sm font-semibold" style={{ color: on ? o.color : '#6B7280' }}>
+                            {o.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </FormSection>
               )}
 
@@ -629,6 +683,22 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
         </Pressable>
       </KeyboardAvoidingView>
 
+      <ContactPickerModal
+        visible={showPartyPicker}
+        initialQuery=""
+        customers={allParties ?? []}
+        phoneContacts={[]}
+        title="Move this entry to"
+        placeholder="Search by name or phone"
+        matchPhone
+        onSelectCustomer={(c) => {
+          setForm((f) => (f ? { ...f, partyId: c.id } : f));
+          setShowPartyPicker(false);
+        }}
+        onSelectNew={() => setShowPartyPicker(false)}
+        onClose={() => setShowPartyPicker(false)}
+      />
+
       <BankAccountPickerModal
         visible={showAccountPicker}
         accounts={bankAccounts.accounts}
@@ -642,7 +712,7 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
   );
 }
 
-/** The five things a day can gain, behind one button - the same forms the
+/** The five things a day can gain, one button each - the same forms the
  * Finance menu opens, without leaving the Day Book to find them. */
 const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
   key: kind.key,
@@ -652,47 +722,23 @@ const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
   path: kind.path,
 }));
 
-function NewEntryMenu({ basePath }: { basePath: string }) {
-  const dropdown = useDropdown(230);
-
+function NewEntryButtons({ basePath }: { basePath: string }) {
   return (
-    <>
-      <Pressable
-        ref={dropdown.buttonRef}
-        onPress={dropdown.show}
-        accessibilityRole="button"
-        accessibilityLabel="New entry, choose what to record"
-        accessibilityState={{ expanded: dropdown.open }}
-        className="flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
-        style={{ minHeight: 36, backgroundColor: '#1D4ED8' }}
-      >
-        <Ionicons name="add" size={16} color="#FFFFFF" />
-        <Text className="text-[13px] font-semibold text-white">New entry</Text>
-        <Ionicons name="chevron-down" size={14} color="#FFFFFF" />
-      </Pressable>
-
-      <DropdownPanel dropdown={dropdown}>
-        <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-          What are you recording?
-        </Text>
-        {NEW_ENTRY_KINDS.map((kind) => (
-          <Pressable
-            key={kind.key}
-            accessibilityRole="button"
-            accessibilityLabel={kind.label}
-            onPress={() => {
-              dropdown.hide();
-              router.push(`${basePath}${kind.path}` as any);
-            }}
-            className="flex-row items-center px-4 py-3"
-            style={{ gap: 10 }}
-          >
-            <Ionicons name={kind.icon} size={18} color={kind.color} />
-            <Text className="flex-1 text-[14px] font-medium text-gray-900">{kind.label}</Text>
-          </Pressable>
-        ))}
-      </DropdownPanel>
-    </>
+    <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
+      {NEW_ENTRY_KINDS.map((kind) => (
+        <Pressable
+          key={kind.key}
+          accessibilityRole="button"
+          accessibilityLabel={`New ${kind.label}`}
+          onPress={() => router.push(`${basePath}${kind.path}` as any)}
+          className="flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3"
+          style={{ minHeight: 36 }}
+        >
+          <Ionicons name={kind.icon} size={16} color={kind.color} />
+          <Text className="text-[13px] font-semibold text-gray-800">{kind.label}</Text>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -728,7 +774,7 @@ function AccountPicker({ options, selected, onSelect }: {
             className="overflow-hidden rounded-xl border border-gray-200 bg-white"
             style={{ minWidth: 210, maxHeight: 340, boxShadow: '0 12px 32px rgba(16,24,40,0.22)' }}
           >
-            <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <Text className="border-b border-gray-100 px-4 py-2 text-xs font-semibold capitalize tracking-wide text-gray-500">
               Show money through
             </Text>
             <ScrollView>
@@ -902,7 +948,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             e.source === 'manual'
               ? undefined
               : 'This was recorded by a job when its payment was collected. Change it on the job, and this entry follows.',
-          fields: { receiptNo: true, method: true },
+          fields: { receiptNo: true, method: true, reassign: true, direction: true },
           partyLabel: 'Customer',
           numberLabel: isIn ? 'Receipt No.' : 'Payment No.',
           subtitleParty: contactName.get(e.customer_id) ?? 'Customer',
@@ -915,6 +961,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             receiptNo: e.receipt_no ?? '',
             note: e.note ?? '',
             bankAccountId: e.bank_account_id ?? null,
+            partyId: e.customer_id,
+            entryType: e.entry_type === 'credit' ? 'credit' : 'debit',
           },
         },
       });
@@ -949,7 +997,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             e.source === 'manual'
               ? undefined
               : 'This was recorded by a purchase bill. Edit the bill and this entry follows.',
-          fields: { receiptNo: true, method: true },
+          fields: { receiptNo: true, method: true, reassign: true },
           partyLabel: 'Vendor',
           numberLabel: 'Payment No.',
           subtitleParty: contactName.get(e.vendor_id) ?? 'Vendor',
@@ -962,6 +1010,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             receiptNo: e.receipt_no ?? '',
             note: e.note ?? '',
             bankAccountId: e.bank_account_id ?? null,
+            partyId: e.vendor_id,
+            entryType: 'credit',
           },
         },
       });
@@ -1006,6 +1056,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             receiptNo: '',
             note: tr.note ?? '',
             bankAccountId: null,
+            partyId: null,
+            entryType: 'credit',
           },
         },
       });
@@ -1106,8 +1158,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const toolbar = useBookToolbar(
     {
       wide,
+      inBarMinWidth: 1240,
       right: () => (
         <>
+          <NewEntryButtons basePath={basePath} />
           <DateFilterButton
             dropdown
             from={isToday ? '' : range.from}
@@ -1116,7 +1170,6 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             onApply={applyRange}
             shortcuts={[{ label: 'Today', on: isToday, onSelect: () => setRange({ from: today, to: today }) }]}
           />
-          <NewEntryMenu basePath={basePath} />
         </>
       ),
     },

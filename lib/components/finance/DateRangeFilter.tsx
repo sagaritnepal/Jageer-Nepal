@@ -122,7 +122,7 @@ function DateFilterPopup({ from, to, onApply, idleLabel = 'Filter' }: {
 
             <View className="my-5 flex-row items-center" style={{ gap: 10 }}>
               <View className="h-px flex-1 bg-gray-200" />
-              <Text className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">or pick dates</Text>
+              <Text className="text-[11px] font-semibold capitalize tracking-wide text-gray-400">or pick dates</Text>
               <View className="h-px flex-1 bg-gray-200" />
             </View>
 

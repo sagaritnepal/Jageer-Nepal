@@ -150,13 +150,13 @@ function StorefrontCard({ item, basePath, fill }: { item: Product; basePath: str
       >
         <ProductThumbnail item={item} />
         <View className={`absolute left-1 top-1 rounded-full px-2 py-0.5 ${badge.bg}`}>
-          <Text className="text-[9px] font-bold uppercase tracking-wide text-white">{badge.label}</Text>
+          <Text className="text-[9px] font-bold capitalize tracking-wide text-white">{badge.label}</Text>
         </View>
       </Pressable>
 
       <Pressable onPress={() => detailHref && router.push(detailHref)}>
         {item.category && (
-          <Text className="text-[10px] uppercase tracking-wide text-orange-600" numberOfLines={1}>
+          <Text className="text-[10px] capitalize tracking-wide text-orange-600" numberOfLines={1}>
             {item.category}
           </Text>
         )}

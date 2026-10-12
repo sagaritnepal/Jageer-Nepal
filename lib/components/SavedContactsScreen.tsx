@@ -93,7 +93,7 @@ function ContactRow({ entry, basePath }: { entry: SavedEntry; basePath: string }
               {profile.full_name ?? 'Unnamed'}
             </Text>
             <View className="rounded-full bg-gray-100 px-2 py-0.5">
-              <Text className="text-[10px] font-bold uppercase text-gray-500">
+              <Text className="text-[10px] font-bold capitalize text-gray-500">
                 {ROLE_LABEL[profile.role] ?? profile.role}
               </Text>
             </View>

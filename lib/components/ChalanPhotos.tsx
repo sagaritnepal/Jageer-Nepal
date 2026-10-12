@@ -106,7 +106,7 @@ export function ChalanPhotos({
 
   return (
     <View className="mt-4">
-      <Text className="mb-2 text-sm uppercase tracking-wide text-gray-400">Chalan</Text>
+      <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Chalan</Text>
       {signedUrls.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
           <View className="flex-row gap-2">

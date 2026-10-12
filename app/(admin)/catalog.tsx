@@ -75,7 +75,7 @@ function CatalogRow({ item }: { item: CatalogProduct }) {
             <Text className="font-semibold text-gray-900">{item.name}</Text>
             {isPendingSubmission && (
               <View className="rounded-full bg-amber-100 px-2 py-0.5">
-                <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Pending review</Text>
+                <Text className="text-[10px] font-bold capitalize tracking-wide text-amber-700">Pending review</Text>
               </View>
             )}
           </View>

@@ -131,7 +131,7 @@ function ProductRow({ product, sellerName }: { product: Product; sellerName: str
           className={`rounded-full px-2 py-0.5 ${product.seller_role === 'wholesaler' ? 'bg-purple-50' : 'bg-orange-50'}`}
         >
           <Text
-            className={`text-[10px] font-bold uppercase ${
+            className={`text-[10px] font-bold capitalize ${
               product.seller_role === 'wholesaler' ? 'text-purple-600' : 'text-orange-600'
             }`}
           >

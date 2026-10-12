@@ -78,7 +78,7 @@ export function TechnicianPicker({
 
       {employees.length > 0 && (
         <>
-          <Text className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+          <Text className="mb-2 text-xs font-semibold capitalize tracking-wide text-emerald-700">
             Your employees · assigns instantly
           </Text>
           {employees.map((item) => (
@@ -97,7 +97,7 @@ export function TechnicianPicker({
       {outsourcePool.length > 0 && (
         <>
           {employees.length > 0 && (
-            <Text className="mb-2 mt-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <Text className="mb-2 mt-1 text-xs font-semibold capitalize tracking-wide text-gray-500">
               Outsource pool · must accept
             </Text>
           )}
