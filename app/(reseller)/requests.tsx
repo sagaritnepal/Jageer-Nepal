@@ -34,8 +34,8 @@ type Stage =
   | 'paid'
   | 'cancelled';
 
-/** The page behind the cards - a warm paper tone, so the cream job cards stand out from it. */
-const PAGE_BG = '#EFE9DF';
+/** The page behind the cards - plain white, with the job cards in warm cream on it. */
+const PAGE_BG = '#FFFFFF';
 
 const STAGE_ORDER: Stage[] = [
   'requests',
