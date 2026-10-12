@@ -475,7 +475,7 @@ function JobRowCard({
     actions.push({ label: 'Assign', icon: 'person-add-outline', tone: mainTone, onPress: () => onAssign(r) });
     actions.push({ label: 'Open to team', icon: 'megaphone-outline', tone: 'ghost', onPress: () => onOpenToTeam(r, true) });
   }
-  actions.push({ label: 'Request', icon: 'paper-plane-outline', tone: 'violet', onPress: () => onRequest(r) });
+  actions.push({ label: 'Request Outsource', icon: 'paper-plane-outline', tone: 'violet', onPress: () => onRequest(r) });
 
   return (
     <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
