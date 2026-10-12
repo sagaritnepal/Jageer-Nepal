@@ -1,10 +1,10 @@
 // lib/components/finance/PartyBalancesScreen.tsx
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, FlatList } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
-import { useBarActions, useBookLayout } from './BookKit';
+import { ToolbarSearch, useBarActions, useBookLayout } from './BookKit';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useYearCashTotals } from '../../hooks/useYearCashTotals';
 import { nameCaps } from '../../utils/nameCaps';
@@ -111,6 +111,15 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
   }, [direction, customerEntries, vendorEntries, nameById]);
 
   const total = rows.reduce((sum, r) => sum + r.balance, 0);
+  // The name typed in the search bar narrows the list (and what prints); the card above keeps the
+  // whole total.
+  const [search, setSearch] = useState('');
+  const needle = search.trim().toLowerCase();
+  const shownRows = useMemo(
+    () => (needle ? rows.filter((r) => r.name.toLowerCase().includes(needle)) : rows),
+    [rows, needle]
+  );
+  const shownTotal = shownRows.reduce((sum, r) => sum + r.balance, 0);
   const cash = useYearCashTotals(userId);
   const cashTotal = direction === 'receive' ? cash.received : cash.paid;
 
@@ -125,15 +134,15 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
     subtitle: direction === 'receive' ? 'Customers who owe you money' : 'Vendors you owe money to',
     printedOn: toBsHistoryLabel(localTodayIso()),
     summary: [
-      { label: meta.subtitle, value: `NPR ${total.toLocaleString()}` },
+      { label: meta.subtitle, value: `NPR ${shownTotal.toLocaleString()}` },
       { label: `${meta.cashLabel} (this year)`, value: `NPR ${cashTotal.toLocaleString()}` },
-      { label: direction === 'receive' ? 'Customers' : 'Vendors', value: String(rows.length) },
+      { label: direction === 'receive' ? 'Customers' : 'Vendors', value: String(shownRows.length) },
     ],
     sections: [
       {
         columns: [{ label: 'SN' }, { label: 'Party' }, { label: 'Balance (NPR)', align: 'right' }],
-        rows: rows.map((r, i) => [String(i + 1), nameCaps(r.name), r.balance.toLocaleString()]),
-        footer: ['', 'Total', total.toLocaleString()],
+        rows: shownRows.map((r, i) => [String(i + 1), nameCaps(r.name), r.balance.toLocaleString()]),
+        footer: ['', 'Total', shownTotal.toLocaleString()],
         emptyText: meta.empty,
       },
     ],
@@ -183,8 +192,12 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
         </Pressable>
       </View>
 
+      <View className="mb-3 flex-row">
+        <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name" wide={false} />
+      </View>
+
       <FlatList
-        data={rows}
+        data={shownRows}
         keyExtractor={(r) => r.partyId}
         contentContainerStyle={{ paddingBottom: 40 }}
         renderItem={({ item }) => (
@@ -204,7 +217,7 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
         ListEmptyComponent={
           <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
             <Ionicons name={meta.icon} size={28} color="#D1D5DB" />
-            <Text className="mt-2 text-gray-500">{meta.empty}</Text>
+            <Text className="mt-2 text-gray-500">{needle ? `No name matches "${search.trim()}".` : meta.empty}</Text>
           </View>
         }
       />

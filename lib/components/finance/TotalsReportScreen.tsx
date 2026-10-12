@@ -15,7 +15,7 @@ import { SALARY_HEADER, expenseHeading, groupExpenseNames, isSalaryName, nameKey
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 import { DateStepFilter } from './DateRangeFilter';
 import { MONEY } from './moneyColors';
-import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
 import { TransactionDetailModal } from './TransactionsScreen';
 import type { BusinessTransaction } from '../../../types/database.types';
@@ -225,22 +225,25 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     return map;
   }, [customers, partyTypeName]);
 
-  const year = new Date().getFullYear();
-  // The period the report covers, set with the date control beside Print. Both '' is the page's
-  // resting view: this year's entries, or every date on a person's own page.
-  const [range, setRange] = useState({ from: '', to: '' });
+  const today = localTodayIso();
+  // The period the report covers, set with the date control beside Print. A report opens on Today,
+  // as the Day Book does; a person's own page opens on every date (their bills would mostly be
+  // out of a single day). Clearing the control comes back to that.
+  const restView = partyId ? { from: '', to: '' } : { from: today, to: today };
+  const [range, setRange] = useState(restView);
   const rangeActive = !!range.from || !!range.to;
-  const restingLabel = partyId ? 'All dates' : 'This year';
-  const totalLabel = partyId || rangeActive ? 'Total' : `${year} total`;
-  const periodNote = rangeActive ? 'For the period picked above.' : partyId ? '' : 'This year only.';
+  // The name typed in the search bar: the page narrows to the entries whose name has it.
+  const [search, setSearch] = useState('');
+  const needle = search.trim().toLowerCase();
+  const restingLabel = partyId ? 'All dates' : 'Today';
+  const totalLabel = 'Total';
+  const periodNote = rangeActive ? 'For the period picked above.' : '';
   // The period in words, for the printed page.
   const periodText = rangeActive
     ? range.from && range.from === range.to
       ? toBsHistoryLabel(range.from)
       : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`
-    : partyId
-      ? 'All dates'
-      : `Year ${year}`;
+    : 'All dates';
   const inPeriod = (date: string) => {
     const day = dayOf(date);
     return (!range.from || day >= range.from) && (!range.to || day <= range.to);
@@ -263,9 +266,17 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       left: layout.wide && !partyId ? undefined : () => <BackButton onPress={goBack} />,
       // The date control, Print and Excel (and Open ledger) are more than a narrow bar holds.
       inBarMinWidth: 1240,
-      right: () => (
+      right: (inBar) => (
         <>
-          <DateStepFilter from={range.from} to={range.to} onChange={(f, t) => setRange({ from: f, to: t })} idleLabel={restingLabel} shortcuts={[{ label: restingLabel, on: !range.from && !range.to, onSelect: () => setRange({ from: '', to: '' }) }]} />
+          {/* One person's own page has nobody to search for. */}
+          {!partyId && <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name" wide={inBar} />}
+          <DateStepFilter
+            from={range.from}
+            to={range.to}
+            onChange={(f, t) => setRange(f || t ? { from: f, to: t } : restView)}
+            idleLabel={restingLabel}
+            shortcuts={partyId ? [{ label: 'All dates', on: !range.from && !range.to, onSelect: () => setRange(restView) }] : []}
+          />
           <PrintButton onPress={() => printNow.current()} />
           <ExcelButton onPress={() => excelNow.current()} />
           {partyId && (
@@ -274,7 +285,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         </>
       ),
     },
-    [partyId, basePath, range.from, range.to, restingLabel]
+    [partyId, basePath, range.from, range.to, restingLabel, search, today]
   );
 
   // "Received" = every payment actually collected from a customer, whether
@@ -566,18 +577,20 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyId, kind, partyCustomerEntries, partyVendorEntries, range.from, range.to]);
 
-  // What the page shows: the period picked with the date control; with none, the plain reports are
-  // this year's, and a person's own report is all of their bills - one person has few, and an old one
-  // should not look like there is nothing.
+  // What the page shows: the period picked with the date control (a person's own page, with none
+  // picked, is all of their bills - one person has few, and an old one should not look like there is
+  // nothing).
   const yearEntries = useMemo(
-    () =>
-      rangeActive
-        ? entries.filter((e) => inPeriod(e.date))
-        : partyId
-          ? entries
-          : entries.filter((e) => new Date(e.date).getFullYear() === year),
+    () => {
+      const inPeriodEntries = rangeActive ? entries.filter((e) => inPeriod(e.date)) : entries;
+      // Searched by name: who it was with, the category it is filed under, the bike / person paid.
+      if (!needle || partyId) return inPeriodEntries;
+      return inPeriodEntries.filter((e) =>
+        [e.party, e.category, e.subject].some((v) => !!v && v.toLowerCase().includes(needle))
+      );
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [entries, year, partyId, range.from, range.to]
+    [entries, partyId, range.from, range.to, needle]
   );
 
   // The Expense Report is laid out by category - Fuel, Bike Repair, Salary Expenses ... - each with
@@ -587,12 +600,17 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   // ledger typed Expense has its place, spent on this year or not, so each is there to pick from the
   // dropdown.
   //
+  // Total Received and Total Paid have one heading for each name: the same name is never listed twice,
+  // and everything recorded for it - every receipt or payment - is inside that one heading.
+  //
   // The Sales and Purchase reports are one table of bills with no headings - the customer / vendor is
-  // a column - and the same dropdown to pick one (it is built from these groups, exactly as named,
-  // for people with something recorded this year). The other reports stay by month.
+  // a column. (The groups here still total each customer / vendor, for those pages' figures.)
   const grouped = useMemo(() => {
-    if (partyId || (kind !== 'expense' && kind !== 'sale' && kind !== 'purchase')) return null;
-    const UNFILED = kind === 'expense' ? 'Uncategorized' : 'No party';
+    if (partyId) return null;
+    const UNFILED = kind === 'expense' ? 'Uncategorized' : kind === 'received' || kind === 'paid' ? 'No name' : 'No party';
+    // What an entry is grouped under: its category (Expense); who it was with (everything else).
+    const groupName = (e: Entry) =>
+      kind === 'received' || kind === 'paid' ? e.party.trim() || UNFILED : e.category ?? UNFILED;
     const names: string[] = [];
     const known = new Set<string>();
     const addName = (name: string | null | undefined) => {
@@ -602,8 +620,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         names.push(clean);
       }
     };
-    for (const e of yearEntries) addName(e.category ?? UNFILED);
-    if (kind === 'expense') {
+    for (const e of yearEntries) addName(groupName(e));
+    // A search lists only what matches, so the unused categories are left out then.
+    if (kind === 'expense' && !needle) {
       for (const c of categories ?? []) addName(c.name);
       // Only Expense ledgers are categories; an employee is a person and never is one.
       for (const c of customers ?? []) if (expenseLedgerIds.has(c.id)) addName(c.name);
@@ -630,7 +649,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     };
     for (const name of names) groupOf(name);
     for (const e of yearEntries) {
-      const group = groupOf(e.category ?? UNFILED);
+      const group = groupOf(groupName(e));
       // A payment that settles a bill is listed under its heading but is not added to its figure.
       if (!e.payment) group.total += e.amount;
       group.rows.push(e);
@@ -639,7 +658,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     // Biggest first; the rows inside one stay newest first.
     const ordered = [...groups.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
     return { groups: ordered };
-  }, [kind, partyId, yearEntries, categories, customers, expenseLedgerIds]);
+  }, [kind, partyId, yearEntries, categories, customers, expenseLedgerIds, needle]);
 
   // Which headings are open to show their transactions. They all start closed: the headings are the
   // overview, and the log of one is a tap away instead of a scroll.
@@ -665,7 +684,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     });
   const shownEntries = yearEntries;
   // What the column that names who it was with is called.
-  const pickWord = { one: kind === 'expense' ? 'Category' : kind === 'sale' ? 'Customer' : 'Vendor' };
+  const pickWord = {
+    one: kind === 'expense' ? 'Category' : kind === 'sale' ? 'Customer' : kind === 'purchase' ? 'Vendor' : 'Name',
+  };
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -976,7 +997,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         )}
       </BookStats>
 
-      {kind === 'expense' && grouped !== null && openableKeys.length > 1 && (
+      {grouped !== null && kind !== 'sale' && kind !== 'purchase' && openableKeys.length > 1 && (
         <View className="flex-row items-center justify-end px-1">
           <Pressable
             onPress={() => setOpenKeys(allOpen ? new Set() : new Set(openableKeys))}
@@ -988,21 +1009,25 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         </View>
       )}
 
-      {shownEntries.length === 0 && !(grouped !== null && kind === 'expense' && grouped.groups.length > 0) ? (
+      {shownEntries.length === 0 && !(grouped !== null && kind !== 'sale' && kind !== 'purchase' && grouped.groups.length > 0) ? (
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
           <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">
-            {rangeActive
-              ? 'Nothing recorded in this period.'
+            {needle
+              ? `No name matches "${search.trim()}".`
+              : rangeActive
+              ? range.from === today && range.to === today
+                ? 'Nothing recorded today.'
+                : 'Nothing recorded in this period.'
               : partyId
                 ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.`
                 : 'Nothing here yet.'}
           </Text>
         </View>
-      ) : grouped !== null && kind === 'expense' ? (
-        // The Expense Report: every heading, each a card - its name, how many entries and what they add
-        // up to. Tap one to open the log of transactions inside it. A heading with nothing recorded is
-        // there too, shut.
+      ) : grouped !== null && kind !== 'sale' && kind !== 'purchase' ? (
+        // Expenses / Total Received / Total Paid: every heading, each a card - its name, how many entries
+        // and what they add up to. Tap one to open the log of transactions inside it. A name appears once
+        // however many entries it has.
         <View style={{ gap: 10 }}>
           {grouped.groups.map((g) => {
             const empty = g.rows.length === 0;
@@ -1121,9 +1146,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             ? 'Tap a bill to open it; tap a payment to open this ledger, where it can be edited. Money paid to this ledger counts as an expense, and money received back is taken off. The balance above counts every entry of both ledgers.'
             : `Tap a bill to open it; tap a ${kind === 'sale' ? 'receipt' : 'payment'} to open their ledger, where it can be edited. What was ${kind === 'sale' ? 'received' : 'paid'} is listed with the bills. With bills recorded it settles them and is not added again (a bill and its payment would count twice); with none, it is the ${kind === 'sale' ? 'sale' : 'purchase'} and counts. The balance above counts every entry of both ledgers.`
           : kind === 'received'
-            ? 'Tap an entry to open it. Only money actually collected counts here - a sale bill on credit shows up once the customer pays.'
+            ? `Each name is listed once - tap it to open everything recorded for it. Only money actually collected counts here - a sale bill on credit shows up once the customer pays. ${periodNote}`
             : kind === 'paid'
-              ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
+              ? `Each name is listed once - tap it to open everything recorded for it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor. ${periodNote}`
               : kind === 'expense'
                 ? `Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). ${periodNote}`
                 : `Tap a bill to open it with its items. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. ${periodNote}`}

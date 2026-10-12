@@ -12,7 +12,7 @@ import { reportHtml, type PrintReport } from '../../utils/printReport';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 import { DateStepFilter } from './DateRangeFilter';
 
-type Period = 'month' | 'year' | 'all';
+type Period = 'month' | 'all';
 
 type ReportLink = {
   title: string;
@@ -49,7 +49,7 @@ const REPORT_GROUPS: { heading: string; links: ReportLink[] }[] = [
   },
 ];
 
-const PERIOD_LABEL: Record<Period, string> = { month: 'This Month', year: 'This Year', all: 'All Time' };
+const PERIOD_LABEL: Record<Period, string> = { month: 'This Month', all: 'All Time' };
 
 function Row({ label, value, color = '#111827', bold = false }: { label: string; value: number; color?: string; bold?: boolean }) {
   return (
@@ -73,8 +73,10 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     enabled: !!userId,
   });
   // The period: one of the ready-made ones, or the dates picked with the date control.
-  const [period, setPeriod] = useState<Period | 'range'>('month');
-  const [range, setRange] = useState({ from: '', to: '' });
+  // It opens on Today, as the Day Book does.
+  const today = localTodayIso();
+  const [period, setPeriod] = useState<Period | 'range'>('range');
+  const [range, setRange] = useState({ from: today, to: today });
 
   const inRange = useMemo(() => {
     const now = new Date();
@@ -90,7 +92,6 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         return (!range.from || day >= range.from) && (!range.to || day <= range.to);
       }
       const d = new Date(t.bill_date ?? t.created_at);
-      if (period === 'year') return d.getFullYear() === now.getFullYear();
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     });
   }, [transactions, period, range.from, range.to]);
@@ -148,22 +149,23 @@ export function ReportScreen({ basePath }: { basePath: string }) {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* The same date control as the Day Book: arrows, and a menu of This Month / This Year / All Time,
-          Today, Yesterday, the last 7 / 14 / 30 days and a custom range. */}
+      {/* The same date control as the Day Book: arrows, and a menu of This Month / All Time, Today,
+          Yesterday, the last 7 / 14 / 30 days and a custom range. */}
       <View className="mb-4 flex-row items-center">
         <DateStepFilter
           from={period === 'range' ? range.from : ''}
           to={period === 'range' ? range.to : ''}
-          idleLabel={PERIOD_LABEL[period === 'range' ? 'month' : period]}
+          idleLabel={period === 'range' ? 'Today' : PERIOD_LABEL[period]}
           onChange={(f, t) => {
             if (f || t) {
               setRange({ from: f, to: t });
               setPeriod('range');
             } else {
-              setPeriod('month');
+              setRange({ from: today, to: today });
+              setPeriod('range');
             }
           }}
-          shortcuts={(['month', 'year', 'all'] as Period[]).map((p) => ({
+          shortcuts={(['month', 'all'] as Period[]).map((p) => ({
             label: PERIOD_LABEL[p],
             on: period === p,
             onSelect: () => setPeriod(p),
