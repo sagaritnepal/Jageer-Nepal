@@ -388,23 +388,23 @@ function Fact({
   const badge = icon || initials ? (
     <View
       className="items-center justify-center rounded-full"
-      style={{ width: 36, height: 36, backgroundColor: initials ? '#1E293B' : '#EFF6FF' }}
+      style={{ width: 36, height: 36, backgroundColor: initials ? '#44403C' : '#FDE8CC' }}
     >
       {initials ? (
         <Text className="text-[13px] font-bold text-white">{initials}</Text>
       ) : (
-        <Ionicons name={icon!} size={18} color="#1D4ED8" />
+        <Ionicons name={icon!} size={18} color="#B45309" />
       )}
     </View>
   ) : null;
   return (
     <View
-      className="flex-row bg-white px-4 py-3.5"
-      style={{ gap: 12, ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 200, minWidth: 200 }) : null) }}
+      className="flex-row px-4 py-3.5"
+      style={{ gap: 12, backgroundColor: '#FFFDF9', ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 200, minWidth: 200 }) : null) }}
     >
       {badge}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text className="text-[12px] font-semibold capitalize" style={{ color: '#64748B' }}>
+        <Text className="text-[12px] font-semibold capitalize" style={{ color: '#78716C' }}>
           {label}
         </Text>
         {children}
@@ -416,7 +416,7 @@ function Fact({
 type CardAction = { label: string; icon: keyof typeof Ionicons.glyphMap; tone: 'primary' | 'ghost' | 'violet'; onPress: () => void };
 
 const ACTION_TONE = {
-  primary: { bg: BLUE, border: BLUE, fg: '#FFFFFF' },
+  primary: { bg: '#0F766E', border: '#0F766E', fg: '#FFFFFF' },
   ghost: { bg: '#FFFFFF', border: '#D1D5DB', fg: '#374151' },
   violet: { bg: '#FFFFFF', border: '#DDD6FE', fg: '#6D28D9' },
 } as const;
@@ -450,7 +450,7 @@ function JobRowCard({
   expanded?: boolean;
 }) {
   const open = () => router.push(`/(reseller)/request/${r.id}` as any);
-  const chip = statusChip(r);
+  const chip = r.status === 'in_progress' ? { label: 'Working on it', color: '#166534', bg: '#DCFCE7' } : statusChip(r);
   const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
   const hold = r.hold_status === 'requested' ? HOLD_CHIP.requested : r.hold_status === 'on_hold' ? HOLD_CHIP.on_hold : null;
   const lines = expanded ? undefined : 2;
@@ -479,16 +479,16 @@ function JobRowCard({
 
   return (
     <View
-      className="overflow-hidden rounded-2xl bg-white"
-      style={{ borderWidth: 1, borderColor: '#D5DBE4', boxShadow: '0 1px 2px rgba(16,24,40,0.05), 0 4px 12px rgba(16,24,40,0.04)' }}
+      className="overflow-hidden rounded-2xl"
+      style={{ backgroundColor: '#FFFDF9', borderWidth: 1, borderColor: '#DDD2C0', boxShadow: '0 4px 16px rgba(120,90,40,0.10)' }}
     >
       {overdue && (
-        <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderBottomColor: '#FECACA' }}>
-          <Ionicons name="time-outline" size={17} color="#B91C1C" />
-          <Text className="text-[13.5px] font-bold" style={{ color: '#991B1B' }}>
+        <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#FFF1E0', borderBottomWidth: 1, borderBottomColor: '#F3CFA0' }}>
+          <Ionicons name="time-outline" size={17} color="#9A3412" />
+          <Text className="text-[13.5px] font-bold" style={{ color: '#9A3412' }}>
             Overdue by {overdueBy(r)}
           </Text>
-          <Text className="text-[13px]" style={{ color: '#7F1D1D', flexShrink: 1 }}>
+          <Text className="text-[13px]" style={{ color: '#7C2D12', flexShrink: 1 }}>
             {scheduled ? `Scheduled for ${scheduled}. ` : ''}The job is still {r.status === 'in_progress' ? 'in progress' : 'open'}.
           </Text>
         </View>
@@ -523,7 +523,7 @@ function JobRowCard({
           )}
         </View>
         {roomy && (
-          <View className="flex-row items-center rounded-xl border border-gray-200 px-4 py-2.5" style={{ gap: 14, backgroundColor: '#F8FAFC' }}>
+          <View className="flex-row items-center rounded-xl border border-gray-200 px-4 py-2.5" style={{ gap: 14, backgroundColor: '#F8F1E4', borderColor: '#DDD2C0' }}>
             <View className="items-end" style={{ gap: 2 }}>
               <Text className="text-[12px] font-semibold" style={{ color: '#64748B' }}>
                 Job amount
@@ -542,10 +542,10 @@ function JobRowCard({
       {/* White cells on a hairline ground with a 1px gap: the dividers stay right however the cells wrap. */}
       <View
         style={{
-          backgroundColor: '#F3F4F6',
+          backgroundColor: '#EDE5D6',
           gap: 1,
           borderTopWidth: 1,
-          borderTopColor: '#F3F4F6',
+          borderTopColor: '#EDE5D6',
           flexDirection: roomy ? 'row' : 'column',
           flexWrap: roomy ? 'wrap' : 'nowrap',
         }}
@@ -563,8 +563,8 @@ function JobRowCard({
           </Text>
           {!!r.customer_phone && (
             <Pressable onPress={() => Linking.openURL(`tel:${r.customer_phone}`)} className="flex-row items-center gap-1 self-start">
-              <Ionicons name="call-outline" size={12} color={BLUE} />
-              <Text className="text-[12.5px] font-medium" style={{ color: BLUE }}>
+              <Ionicons name="call-outline" size={12} color="#0F766E" />
+              <Text className="text-[12.5px] font-medium" style={{ color: '#0F766E' }}>
                 {r.customer_phone}
               </Text>
             </Pressable>
@@ -600,7 +600,7 @@ function JobRowCard({
 
       {/* Where the job has got to. */}
       {roomy ? (
-        <View className="border-t border-gray-100 bg-gray-50 pt-3">
+        <View className="pt-3.5" style={{ backgroundColor: '#F8F1E4', borderTopWidth: 1, borderTopColor: '#DDD2C0' }}>
           <JobTimeline request={r} times={times} now={now} layout="strip" />
         </View>
       ) : (
@@ -610,7 +610,7 @@ function JobRowCard({
       )}
 
       <View
-        className="flex-row flex-wrap items-center border-t border-gray-100 px-5 py-3.5"
+        className="flex-row flex-wrap items-center px-5 py-3.5"
         style={{ gap: 10, justifyContent: roomy ? 'space-between' : 'flex-start' }}
       >
         {canCancelWork(r) ? (

@@ -4,19 +4,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { jobJourney, type JobTimes, type JourneyLeg, type JourneyNode } from '../utils/jobTimeline';
 import type { ServiceRequest } from '../../types/database.types';
 
-const BLUE = '#2563EB';
+// Warm paper palette: finished steps are amber-brown, the live step is green.
+const BLUE = '#B45309';
 
 type Tone = 'done' | 'now' | 'warn' | 'todo';
 const toneOf = (leg: JourneyLeg): Tone => (leg.warn ? 'warn' : leg.state);
 
 /** The line between two moments: solid blue once it is over, light blue while
  * the job is in it, amber when an offer has sat unanswered, grey if not reached. */
-const LINE: Record<Tone, string> = { done: BLUE, now: '#93C5FD', warn: '#FCD34D', todo: '#D1D5DB' };
+const LINE: Record<Tone, string> = { done: BLUE, now: '#86EFAC', warn: '#FCD34D', todo: '#D6CDBD' };
 
 /** How long it took, as a soft badge - the same pairs the status chips use. */
 const PILL = {
-  done: { bg: '#FFFFFF', border: '#E5E7EB', label: '#6B7280', value: '#111827' },
-  now: { bg: '#EFF6FF', border: '#BFDBFE', label: '#1D4ED8', value: '#1D4ED8' },
+  done: { bg: '#FFFDF9', border: '#DDD2C0', label: '#78716C', value: '#1C1917' },
+  now: { bg: '#DCFCE7', border: '#86EFAC', label: '#166534', value: '#166534' },
   warn: { bg: '#FFFBEB', border: '#FDE68A', label: '#B45309', value: '#92400E' },
 };
 
@@ -53,19 +54,19 @@ function StepDot({ node, current }: { node: JourneyNode; current: boolean }) {
   if (node.reached && node.kind !== 'plain') return <Dot node={node} />;
   if (current) {
     return (
-      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DBEAFE' }}>
-        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#1D4ED8' }} />
+      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCFCE7' }}>
+        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#16A34A' }} />
       </View>
     );
   }
   if (node.reached) {
     return (
-      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1D4ED8' }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#B45309' }}>
         <Ionicons name="checkmark" size={15} color="#FFFFFF" />
       </View>
     );
   }
-  return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: '#94A3B8', backgroundColor: '#FFFFFF' }} />;
+  return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: '#A8A29E', backgroundColor: '#FFFDF9' }} />;
 }
 
 function LegPill({ leg }: { leg: JourneyLeg }) {
@@ -199,7 +200,7 @@ export function JobTimeline({
           {liveLeg?.value && liveLeg.state === 'now' ? (
             <>
               {' · '}
-              {liveLeg.label} <Text style={{ fontWeight: '700', color: '#1E40AF' }}>{liveLeg.value}</Text>
+              {liveLeg.label} <Text style={{ fontWeight: '700', color: '#166534' }}>{liveLeg.value}</Text>
             </>
           ) : null}
         </Text>
@@ -213,7 +214,7 @@ export function JobTimeline({
                 <StepDot node={n} current={current} />
                 {i < last && <Leg leg={legs[i]} thick />}
               </View>
-              <Text className="mt-1.5 text-[14px] font-bold" style={{ color: current ? '#1E40AF' : labelColor(n) }}>
+              <Text className="mt-1.5 text-[14px] font-bold" style={{ color: current ? '#166534' : labelColor(n) }}>
                 {n.label}
                 {current ? ' · Current step' : ''}
               </Text>
