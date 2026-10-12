@@ -400,7 +400,7 @@ function Fact({
   return (
     <View
       className="flex-row px-4 py-3.5"
-      style={{ gap: 12, backgroundColor: '#FFFDF9', ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 200, minWidth: 200 }) : null) }}
+      style={{ gap: 12, backgroundColor: '#FFFFFF', ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 200, minWidth: 200 }) : null) }}
     >
       {badge}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
@@ -480,7 +480,7 @@ function JobRowCard({
   return (
     <View
       className="overflow-hidden rounded-2xl"
-      style={{ backgroundColor: '#FFFDF9', borderWidth: 1, borderColor: '#DDD2C0', boxShadow: '0 4px 16px rgba(120,90,40,0.10)' }}
+      style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', boxShadow: '0 1px 3px rgba(16,24,40,0.06)' }}
     >
       {overdue && (
         <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#FFF1E0', borderBottomWidth: 1, borderBottomColor: '#F3CFA0' }}>
@@ -523,7 +523,7 @@ function JobRowCard({
           )}
         </View>
         {roomy && (
-          <View className="flex-row items-center rounded-xl border border-gray-200 px-4 py-2.5" style={{ gap: 14, backgroundColor: '#F8F1E4', borderColor: '#DDD2C0' }}>
+          <View className="flex-row items-center rounded-xl border border-gray-200 px-4 py-2.5" style={{ gap: 14, backgroundColor: '#FFFFFF' }}>
             <View className="items-end" style={{ gap: 2 }}>
               <Text className="text-[12px] font-semibold" style={{ color: '#64748B' }}>
                 Job amount
@@ -542,10 +542,10 @@ function JobRowCard({
       {/* White cells on a hairline ground with a 1px gap: the dividers stay right however the cells wrap. */}
       <View
         style={{
-          backgroundColor: '#EDE5D6',
+          backgroundColor: '#F3F4F6',
           gap: 1,
           borderTopWidth: 1,
-          borderTopColor: '#EDE5D6',
+          borderTopColor: '#F3F4F6',
           flexDirection: roomy ? 'row' : 'column',
           flexWrap: roomy ? 'wrap' : 'nowrap',
         }}
@@ -600,7 +600,7 @@ function JobRowCard({
 
       {/* Where the job has got to. */}
       {roomy ? (
-        <View className="pt-3.5" style={{ backgroundColor: '#F8F1E4', borderTopWidth: 1, borderTopColor: '#DDD2C0' }}>
+        <View className="pt-3.5" style={{ backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
           <JobTimeline request={r} times={times} now={now} layout="strip" />
         </View>
       ) : (
@@ -610,7 +610,7 @@ function JobRowCard({
       )}
 
       <View
-        className="flex-row flex-wrap items-center px-5 py-3.5"
+        className="flex-row flex-wrap items-center border-t border-gray-100 px-5 py-3.5"
         style={{ gap: 10, justifyContent: roomy ? 'space-between' : 'flex-start' }}
       >
         {canCancelWork(r) ? (

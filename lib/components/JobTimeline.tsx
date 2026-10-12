@@ -16,7 +16,7 @@ const LINE: Record<Tone, string> = { done: BLUE, now: '#86EFAC', warn: '#FCD34D'
 
 /** How long it took, as a soft badge - the same pairs the status chips use. */
 const PILL = {
-  done: { bg: '#FFFDF9', border: '#DDD2C0', label: '#78716C', value: '#1C1917' },
+  done: { bg: '#FFFFFF', border: '#D1D5DB', label: '#78716C', value: '#1C1917' },
   now: { bg: '#DCFCE7', border: '#86EFAC', label: '#166534', value: '#166534' },
   warn: { bg: '#FFFBEB', border: '#FDE68A', label: '#B45309', value: '#92400E' },
 };
@@ -66,7 +66,7 @@ function StepDot({ node, current }: { node: JourneyNode; current: boolean }) {
       </View>
     );
   }
-  return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: '#A8A29E', backgroundColor: '#FFFDF9' }} />;
+  return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: '#A8A29E', backgroundColor: '#FFFFFF' }} />;
 }
 
 function LegPill({ leg }: { leg: JourneyLeg }) {
