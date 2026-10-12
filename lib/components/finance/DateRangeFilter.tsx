@@ -326,3 +326,76 @@ export function DateFilterButton({ dropdown, shortcuts, ...rest }: {
 }) {
   return dropdown ? <DateFilterDropdown {...rest} shortcuts={shortcuts} /> : <DateFilterPopup {...rest} />;
 }
+
+/** The arrow beside the date button: one day back, or one day forward. */
+export function DayStepButton({ direction, disabled, onPress }: { direction: 'back' | 'forward'; disabled?: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={direction === 'back' ? 'Previous day' : 'Next day'}
+      className="h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white"
+      style={{ opacity: disabled ? 0.4 : 1 }}
+    >
+      <Ionicons name={direction === 'back' ? 'chevron-back' : 'chevron-forward'} size={17} color="#374151" />
+    </Pressable>
+  );
+}
+
+/** The Day Book's date control for a report page: an arrow back, the date button with its menu
+ * (the page's own shortcuts, Today, Yesterday, the last 7 / 14 / 30 days and a custom range), and an
+ * arrow forward.
+ *
+ * `from` / `to` are 'YYYY-MM-DD'; both '' is the page's resting view (named by `idleLabel` - "This
+ * year", "All dates"). The arrows move by exactly one day: back from the resting view lands on
+ * yesterday, then each press is one day earlier; a longer period slides by a day. Nothing past today. */
+export function DateStepFilter({
+  from,
+  to,
+  onChange,
+  idleLabel,
+  shortcuts = [],
+}: {
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+  /** What the button says while neither date is set. */
+  idleLabel: string;
+  /** The page's own ready-made ranges, listed first in the menu. */
+  shortcuts?: { label: string; on: boolean; onSelect: () => void }[];
+}) {
+  const today = localTodayIso();
+  const yesterday = shiftDay(today, -1);
+  const resting = !from && !to;
+  const canStepForward = !resting && (to || today) < today;
+
+  function step(delta: number) {
+    if (resting) {
+      if (delta < 0) onChange(yesterday, yesterday);
+      return;
+    }
+    const nextTo = shiftDay(to || today, delta);
+    if (nextTo > today) return;
+    onChange(from ? shiftDay(from, delta) : '', nextTo);
+  }
+
+  return (
+    <View className="flex-row items-center" style={{ gap: 6 }}>
+      <DayStepButton direction="back" onPress={() => step(-1)} />
+      <DateFilterButton
+        dropdown
+        from={from}
+        to={to}
+        idleLabel={idleLabel}
+        onApply={onChange}
+        shortcuts={[
+          ...shortcuts,
+          { label: 'Today', on: from === today && to === today, onSelect: () => onChange(today, today) },
+          { label: 'Yesterday', on: from === yesterday && to === yesterday, onSelect: () => onChange(yesterday, yesterday) },
+        ]}
+      />
+      <DayStepButton direction="forward" disabled={!canStepForward} onPress={() => step(1)} />
+    </View>
+  );
+}

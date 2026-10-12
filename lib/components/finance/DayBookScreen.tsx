@@ -14,7 +14,7 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { ContactPickerModal } from '../ContactPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
-import { DateFilterButton } from './DateRangeFilter';
+import { DateFilterButton, DayStepButton } from './DateRangeFilter';
 import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -123,22 +123,6 @@ function addDays(ymd: string, delta: number): string {
   const [y, m, d] = ymd.split('-').map(Number);
   const moved = new Date(y, m - 1, d + delta);
   return `${moved.getFullYear()}-${String(moved.getMonth() + 1).padStart(2, '0')}-${String(moved.getDate()).padStart(2, '0')}`;
-}
-
-/** The arrow beside the date button: one day back, or one day forward. */
-function DayStepButton({ direction, disabled, onPress }: { direction: 'back' | 'forward'; disabled?: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={direction === 'back' ? 'Previous day' : 'Next day'}
-      className="h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white"
-      style={{ opacity: disabled ? 0.4 : 1 }}
-    >
-      <Ionicons name={direction === 'back' ? 'chevron-back' : 'chevron-forward'} size={17} color="#374151" />
-    </Pressable>
-  );
 }
 
 function money(n: number | null | undefined): string {

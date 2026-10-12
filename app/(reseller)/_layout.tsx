@@ -47,6 +47,8 @@ const REPORT_FAMILY: WebNavItem[] = [
   { href: '/(reseller)/expense-report', label: 'Expenses Report', icon: 'receipt' },
   { href: '/(reseller)/to-receive', label: 'Receivable Report', icon: 'people' },
   { href: '/(reseller)/to-give', label: 'Payable Report', icon: 'storefront' },
+  { href: '/(reseller)/received', label: 'Total Received', icon: 'arrow-down-circle' },
+  { href: '/(reseller)/paid', label: 'Total Paid', icon: 'arrow-up-circle' },
 ];
 
 const NAV_ITEMS: WebNavItem[] = [

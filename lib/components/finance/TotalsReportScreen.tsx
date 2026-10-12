@@ -13,6 +13,7 @@ import { localTodayIso } from '../../utils/localDate';
 import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
 import { SALARY_HEADER, expenseHeading, groupExpenseNames, isSalaryName, nameKey, reportCategoryName } from '../../utils/expenseGroups';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
+import { DateStepFilter } from './DateRangeFilter';
 import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
@@ -108,6 +109,14 @@ function bsMonthGroup(date: string): string {
 function bsShortDate(date: string): string {
   const bs = adStringToBs(date.slice(0, 10));
   return bs ? `${BS_MONTHS[bs.month]} ${bs.date}` : '';
+}
+
+/** The day ('YYYY-MM-DD') an entry's date falls on: a bill's own date as it is, a timestamp as the
+ * device's own day. */
+function dayOf(date: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** `partyId` scopes a Sales / Purchase / Expense report to one person, under their name card - what
@@ -217,6 +226,25 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   }, [customers, partyTypeName]);
 
   const year = new Date().getFullYear();
+  // The period the report covers, set with the date control beside Print. Both '' is the page's
+  // resting view: this year's entries, or every date on a person's own page.
+  const [range, setRange] = useState({ from: '', to: '' });
+  const rangeActive = !!range.from || !!range.to;
+  const restingLabel = partyId ? 'All dates' : 'This year';
+  const totalLabel = partyId || rangeActive ? 'Total' : `${year} total`;
+  const periodNote = rangeActive ? 'For the period picked above.' : partyId ? '' : 'This year only.';
+  // The period in words, for the printed page.
+  const periodText = rangeActive
+    ? range.from && range.from === range.to
+      ? toBsHistoryLabel(range.from)
+      : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`
+    : partyId
+      ? 'All dates'
+      : `Year ${year}`;
+  const inPeriod = (date: string) => {
+    const day = dayOf(date);
+    return (!range.from || day >= range.from) && (!range.to || day <= range.to);
+  };
 
   // A person's report is a page of its own, titled for its kind, with a way back to the list they
   // came from and to their full ledger (statement, payments, Print / Download).
@@ -233,8 +261,11 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       title: partyId ? personTitle : undefined,
       wide: layout.wide,
       left: layout.wide && !partyId ? undefined : () => <BackButton onPress={goBack} />,
+      // The date control, Print and Excel (and Open ledger) are more than a narrow bar holds.
+      inBarMinWidth: 1240,
       right: () => (
         <>
+          <DateStepFilter from={range.from} to={range.to} onChange={(f, t) => setRange({ from: f, to: t })} idleLabel={restingLabel} shortcuts={[{ label: restingLabel, on: !range.from && !range.to, onSelect: () => setRange({ from: '', to: '' }) }]} />
           <PrintButton onPress={() => printNow.current()} />
           <ExcelButton onPress={() => excelNow.current()} />
           {partyId && (
@@ -243,7 +274,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         </>
       ),
     },
-    [partyId, basePath]
+    [partyId, basePath, range.from, range.to, restingLabel]
   );
 
   // "Received" = every payment actually collected from a customer, whether
@@ -531,14 +562,22 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         nav,
       });
     }
-    return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [partyId, kind, partyCustomerEntries, partyVendorEntries]);
+    return rows.filter((e) => inPeriod(e.date)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyId, kind, partyCustomerEntries, partyVendorEntries, range.from, range.to]);
 
-  // The plain reports are this year's; a person's own report is all of their bills - one
-  // person has few, and an old one should not look like there is nothing.
+  // What the page shows: the period picked with the date control; with none, the plain reports are
+  // this year's, and a person's own report is all of their bills - one person has few, and an old one
+  // should not look like there is nothing.
   const yearEntries = useMemo(
-    () => (partyId ? entries : entries.filter((e) => new Date(e.date).getFullYear() === year)),
-    [entries, year, partyId]
+    () =>
+      rangeActive
+        ? entries.filter((e) => inPeriod(e.date))
+        : partyId
+          ? entries
+          : entries.filter((e) => new Date(e.date).getFullYear() === year),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, year, partyId, range.from, range.to]
   );
 
   // The Expense Report is laid out by category - Fuel, Bike Repair, Salary Expenses ... - each with
@@ -789,7 +828,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     const summary = narrowed
       ? undefined
       : [
-          { label: partyId ? 'Total' : `${year} total`, value: `NPR ${money(stats.total)}` },
+          { label: totalLabel, value: `NPR ${money(stats.total)}` },
           { label: 'This month', value: `NPR ${money(stats.thisMonth)}` },
           { label: 'Entries', value: String(shownEntries.length) },
           { label: 'Largest', value: `NPR ${money(stats.largest)}` },
@@ -801,9 +840,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     return {
       title,
       businessName: profile?.business_name ?? profile?.full_name ?? '',
-      subtitle: partyId
-        ? 'All dates'
-        : `Year ${year}`,
+      subtitle: periodText,
       printedOn: toBsHistoryLabel(localTodayIso()),
       summary,
       sections,
@@ -930,7 +967,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       )}
 
       <BookStats>
-        <BookStat label={partyId ? 'Total' : `${year} total`} value={`NPR ${money(stats.total)}`} color={meta.color} />
+        <BookStat label={totalLabel} value={`NPR ${money(stats.total)}`} color={meta.color} />
         <BookStat label="This month" value={`NPR ${money(stats.thisMonth)}`} color="#374151" />
         <BookStat label="Entries" value={String(shownEntries.length)} color="#374151" />
         <BookStat label="Largest" value={`NPR ${money(stats.largest)}`} color="#374151" />
@@ -955,7 +992,11 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
           <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">
-            {partyId ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.` : 'Nothing here yet.'}
+            {rangeActive
+              ? 'Nothing recorded in this period.'
+              : partyId
+                ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.`
+                : 'Nothing here yet.'}
           </Text>
         </View>
       ) : grouped !== null && kind === 'expense' ? (
@@ -1084,8 +1125,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             : kind === 'paid'
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
               : kind === 'expense'
-                ? "Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
-                : `Tap a bill to open it with its items. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. This year only.`}
+                ? `Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). ${periodNote}`
+                : `Tap a bill to open it with its items. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. ${periodNote}`}
       </Text>
     </BookPage>
     <TransactionDetailModal

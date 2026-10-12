@@ -10,6 +10,7 @@ import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import { localTodayIso } from '../../utils/localDate';
 import { reportHtml, type PrintReport } from '../../utils/printReport';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
+import { DateStepFilter } from './DateRangeFilter';
 
 type Period = 'month' | 'year' | 'all';
 
@@ -71,17 +72,28 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
-  const [period, setPeriod] = useState<Period>('month');
+  // The period: one of the ready-made ones, or the dates picked with the date control.
+  const [period, setPeriod] = useState<Period | 'range'>('month');
+  const [range, setRange] = useState({ from: '', to: '' });
 
   const inRange = useMemo(() => {
     const now = new Date();
     return (transactions ?? []).filter((t) => {
       if (period === 'all') return true;
+      if (period === 'range') {
+        // A bill's own date as it is; a timestamp as the device's own day.
+        let day = t.bill_date ? t.bill_date.slice(0, 10) : '';
+        if (!day) {
+          const c = new Date(t.created_at);
+          day = `${c.getFullYear()}-${String(c.getMonth() + 1).padStart(2, '0')}-${String(c.getDate()).padStart(2, '0')}`;
+        }
+        return (!range.from || day >= range.from) && (!range.to || day <= range.to);
+      }
       const d = new Date(t.bill_date ?? t.created_at);
       if (period === 'year') return d.getFullYear() === now.getFullYear();
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     });
-  }, [transactions, period]);
+  }, [transactions, period, range.from, range.to]);
 
   const totals = useMemo(() => {
     const result = { sale: 0, purchase: 0, expense: 0 };
@@ -101,7 +113,12 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     return {
       title: 'Profit & Loss',
       businessName: profile?.business_name ?? profile?.full_name ?? '',
-      subtitle: PERIOD_LABEL[period],
+      subtitle:
+        period !== 'range'
+          ? PERIOD_LABEL[period]
+          : range.from && range.from === range.to
+            ? toBsHistoryLabel(range.from)
+            : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`,
       printedOn: toBsHistoryLabel(localTodayIso()),
       sections: [
         {
@@ -131,19 +148,27 @@ export function ReportScreen({ basePath }: { basePath: string }) {
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      <View className="mb-4 flex-row gap-2">
-        {(['month', 'year', 'all'] as Period[]).map((p) => {
-          const selected = period === p;
-          return (
-            <Pressable
-              key={p}
-              onPress={() => setPeriod(p)}
-              className={`flex-1 items-center rounded-full py-2 ${selected ? 'bg-blue-600' : 'border border-gray-200 bg-white'}`}
-            >
-              <Text className={`text-xs font-semibold ${selected ? 'text-white' : 'text-gray-600'}`}>{PERIOD_LABEL[p]}</Text>
-            </Pressable>
-          );
-        })}
+      {/* The same date control as the Day Book: arrows, and a menu of This Month / This Year / All Time,
+          Today, Yesterday, the last 7 / 14 / 30 days and a custom range. */}
+      <View className="mb-4 flex-row items-center">
+        <DateStepFilter
+          from={period === 'range' ? range.from : ''}
+          to={period === 'range' ? range.to : ''}
+          idleLabel={PERIOD_LABEL[period === 'range' ? 'month' : period]}
+          onChange={(f, t) => {
+            if (f || t) {
+              setRange({ from: f, to: t });
+              setPeriod('range');
+            } else {
+              setPeriod('month');
+            }
+          }}
+          shortcuts={(['month', 'year', 'all'] as Period[]).map((p) => ({
+            label: PERIOD_LABEL[p],
+            on: period === p,
+            onSelect: () => setPeriod(p),
+          }))}
+        />
       </View>
 
       <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
