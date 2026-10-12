@@ -1,11 +1,15 @@
 // lib/components/finance/ReportScreen.tsx
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useBarActions, useBookLayout } from './BookKit';
+import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { localTodayIso } from '../../utils/localDate';
+import { reportHtml, type PrintReport } from '../../utils/printReport';
+import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 
 type Period = 'month' | 'year' | 'all';
 
@@ -88,9 +92,42 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   const grossProfit = totals.sale - totals.purchase;
   const netProfit = grossProfit - totals.expense;
 
-  // The name (and the back button on a phone) are in the top bar.
+  // The name (and the back button on a phone) are in the top bar, with Print: it opens the system's
+  // print preview of the profit & loss for the period shown.
   const layout = useBookLayout();
-  useBarActions({ wide: layout.wide }, []);
+  const profile = useAuthStore((state) => state.profile);
+  const buildReport = (): PrintReport => {
+    const n = (v: number) => v.toLocaleString();
+    return {
+      title: 'Profit & Loss',
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      subtitle: PERIOD_LABEL[period],
+      printedOn: toBsHistoryLabel(localTodayIso()),
+      sections: [
+        {
+          columns: [{ label: 'Account' }, { label: 'Amount (NPR)', align: 'right' }],
+          rows: [
+            ['Sales', n(totals.sale)],
+            ['Purchase', n(totals.purchase)],
+            ['Gross Profit', n(grossProfit)],
+            ['Expense', n(totals.expense)],
+            ['Net Profit', n(netProfit)],
+          ],
+        },
+      ],
+      note: 'Sales, Purchase and Expense are the bills dated in the period, paid or not.',
+    };
+  };
+  const printNow = useRef<() => void>(() => {});
+  printNow.current = () => void printReportDocument(reportHtml(buildReport()));
+  const excelNow = useRef<() => void>(() => {});
+  excelNow.current = () => void exportReportDocument(buildReport());
+  useBarActions({ wide: layout.wide, right: () => (
+        <>
+          <PrintButton onPress={() => printNow.current()} />
+          <ExcelButton onPress={() => excelNow.current()} />
+        </>
+      ) }, []);
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>

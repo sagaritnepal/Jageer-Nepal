@@ -40,7 +40,8 @@ import {
   withRunningBalance,
   type LedgerItem,
 } from '../../utils/ledgerStatement';
-import { drCrText, exportStatementXlsx, printStatement, type StatementData } from '../../utils/exportLedger';
+import { drCrText, exportStatementXlsx, statementHtml, type StatementData } from '../../utils/exportLedger';
+import { printReportDocument } from './PrintButton';
 import type {
   BusinessTransaction,
   BusinessTransactionType,
@@ -1034,7 +1035,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         })),
     };
     try {
-      if (kind === 'print') await printStatement(data);
+      // Only this person's statement, in the system's print preview - Print is pressed there.
+      if (kind === 'print') await printReportDocument(statementHtml(data));
       else await exportStatementXlsx(data);
     } catch (err) {
       showAlert('Could not export the statement', getErrorMessage(err));

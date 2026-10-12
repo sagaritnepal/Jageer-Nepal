@@ -251,6 +251,7 @@ export function BookTable<T>({
   expanded,
   footer,
   stickyHeader,
+  bare,
 }: {
   columns: BookColumn<T>[];
   rows: T[];
@@ -266,6 +267,8 @@ export function BookTable<T>({
   footer?: { label: string; cells: Record<string, ReactNode> };
   /** Keep the header row pinned to the top of the page's scroll area (web only). */
   stickyHeader?: boolean;
+  /** No border or rounded corners of its own - for a table that sits inside a card that has them. */
+  bare?: boolean;
 }) {
   const sticky = stickyHeader && Platform.OS === 'web';
   const cellStyle = (c: BookColumn<T>) => (c.width ? { width: c.width } : { flex: 1, minWidth: 0 });
@@ -273,7 +276,7 @@ export function BookTable<T>({
   const footerStart = footer ? columns.findIndex((c) => c.key in footer.cells) : -1;
 
   return (
-    <View className={`rounded-xl border border-gray-300 bg-white ${sticky ? '' : 'overflow-hidden'}`}>
+    <View className={`bg-white ${bare ? '' : 'rounded-xl border border-gray-300'} ${sticky ? '' : 'overflow-hidden'}`}>
       <View
         className={`flex-row border-b border-gray-300 bg-gray-50 ${sticky ? 'rounded-t-xl' : ''}`}
         style={sticky ? ({ position: 'sticky', top: 0, zIndex: 10 } as any) : undefined}

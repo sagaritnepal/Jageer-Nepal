@@ -5,6 +5,20 @@ export const nameKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowe
 
 const wordsOf = (name: string) => name.trim().split(/\s+/).filter(Boolean);
 
+/** Whether an expense name is an advance paid to staff - "Salary Advance", "Employee Advance",
+ * "Staff Advance". They are one thing under three names, so the Expense Report keeps them under
+ * one header (see advanceHeader). */
+export function isAdvanceName(name: string): boolean {
+  return /\b(employees?|staff|salary)\b/i.test(name) && /\badvance\b/i.test(name);
+}
+
+/** The header the advances go under: the "Salary Advance" you already have, else whichever advance
+ * name there is, else "Salary Advance". */
+export function advanceHeader(names: readonly string[]): string {
+  const advances = names.filter(isAdvanceName);
+  return advances.find((n) => /\bsalary\b/i.test(n)) ?? advances[0] ?? 'Salary Advance';
+}
+
 /** The category each expense name belongs to, from the words it starts with: "Fuel Aviator",
  * "Fuel Manish" and "Fuel" are all Fuel; "Bike Repair 220 Blue" and "Bike Repair Aviator" are
  * Bike Repair - the words every name in the group starts with. A name that no other shares a

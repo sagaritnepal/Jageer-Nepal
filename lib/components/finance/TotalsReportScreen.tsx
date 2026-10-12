@@ -1,5 +1,5 @@
 // lib/components/finance/TotalsReportScreen.tsx
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,11 @@ import { useSupabaseQuery, useSupabaseRow } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { isStaffLedgerType, reportKindOfType, usePartyDestination } from '../../hooks/usePartyDestination';
 import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
-import { BS_MONTHS, adStringToBs } from '../../utils/nepaliDate';
-import { groupExpenseNames, nameKey } from '../../utils/expenseGroups';
+import { BS_MONTHS, adStringToBs, toBsHistoryLabel } from '../../utils/nepaliDate';
+import { localTodayIso } from '../../utils/localDate';
+import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
+import { advanceHeader, groupExpenseNames, isAdvanceName, nameKey } from '../../utils/expenseGroups';
+import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
@@ -55,6 +58,9 @@ interface Entry {
   /** What an expense is filed under - its category, or the ledger a payment went to. The Expense
    * Report is grouped by it (see groupExpenseNames). */
   category?: string;
+  /** Who or what an expense was for - the bike or person paid, the payee on a bill. Inside a
+   * heading the Expense Report shows one line for each (the payments to it are one tap away). */
+  subject?: string;
   /** Money received or paid on a ledger, listed beside a Sales / Purchase report's bills. It settles
    * bills, so it is not part of what was billed (that would count a sale and its receipt twice). */
   payment?: boolean;
@@ -69,6 +75,25 @@ const KIND_META: Record<Kind, { title: string; subtitle: string; color: string }
   purchase: { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', color: '#DC2626' },
   expense: { title: 'Expense Report', subtitle: 'Every expense you recorded, newest first', color: '#DC2626' },
 };
+
+/** An Expense heading's entries as one line for each subject (a bike, a person, a payee): what was
+ * paid to it added up, how many payments, and the latest of them - biggest first. */
+function subjectsOf(rows: Entry[]) {
+  const bySubject = new Map<string, { key: string; name: string; total: number; latest: string; rows: Entry[] }>();
+  for (const e of rows) {
+    const name = (e.subject ?? e.category ?? '').trim() || 'Other';
+    const key = nameKey(name);
+    let subject = bySubject.get(key);
+    if (!subject) {
+      subject = { key, name, total: 0, latest: e.date, rows: [] };
+      bySubject.set(key, subject);
+    }
+    subject.total += e.amount;
+    subject.rows.push(e);
+    if (e.date > subject.latest) subject.latest = e.date;
+  }
+  return [...bySubject.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
 
 /** "Aswin 2083 BS" - the table's month rows. Dates are stored as AD strings
  * ('YYYY-MM-DD' or a full timestamp); Nepal reads them in Bikram Sambat. */
@@ -90,7 +115,13 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   const meta = KIND_META[kind];
   const layout = useBookLayout();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const profile = useAuthStore((state) => state.profile);
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
+  // Print opens the system's print preview of what is open on the page - nothing goes to the printer
+  // until Print is pressed there. The top bar keeps the Print button it was last given, so it reaches
+  // the current page through a ref.
+  const printNow = useRef<() => void>(() => {});
+  const excelNow = useRef<() => void>(() => {});
   // The person's own two ledgers, every entry (a balance is a sum over all of them) - for the
   // balance on their name card. Not read for the plain reports.
   const { data: partyCustomerEntries } = useSupabaseQuery('customer_ledger_entries', {
@@ -141,27 +172,22 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   const { nameById: partyTypeName } = usePartyTypes(userId);
   // Where a person opens from a report (the report for their Ledger type, else their ledger).
   const hrefFor = usePartyDestination(userId, basePath);
-  // What is recorded on a person's own ledger page belongs in the report their Ledger type stands for:
-  //  - Expense: what is paid to the ledger is an expense even though it is a payment on their
-  //    ledger, not through the Expense form. An Expense ledger is itself a category: its payments are
-  //    filed under its name.
-  //  - Employee: a person, not a category: their payments are filed under the existing category the
-  //    remark names ("FUEL" -> Fuel), else Uncategorized. The category list is never added to by a person.
-  //  - Sales / Purchase: the money received from / paid to the ledger, listed beside its bills.
-  const { expenseLedgerIds, staffLedgerIds, saleLedgerIds, purchaseLedgerIds } = useMemo(() => {
+  // What is paid to a ledger typed Expense or Employee is an expense even though it is a payment on
+  // their ledger, not through the Expense form, so the Expense Report lists it:
+  //  - An Expense ledger is itself a category: its payments are filed under its name.
+  //  - An Employee ledger is a person, not a category: their payments are filed under the existing
+  //    category the remark names ("FUEL" -> Fuel), else Salary Advance. The category list is never
+  //    added to by a person.
+  // Sales and Purchase are their bills only; what was received or paid is Total Received / Total Paid's.
+  const { expenseLedgerIds, staffLedgerIds } = useMemo(() => {
     const expense = new Set<string>();
     const staff = new Set<string>();
-    const sale = new Set<string>();
-    const purchase = new Set<string>();
     for (const c of customers ?? []) {
       const typeName = c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined;
-      const typed = reportKindOfType(typeName);
-      if (typed === 'expense') expense.add(c.id);
-      else if (typed === 'sale') sale.add(c.id);
-      else if (typed === 'purchase') purchase.add(c.id);
+      if (reportKindOfType(typeName) === 'expense') expense.add(c.id);
       else if (isStaffLedgerType(typeName)) staff.add(c.id);
     }
-    return { expenseLedgerIds: expense, staffLedgerIds: staff, saleLedgerIds: sale, purchaseLedgerIds: purchase };
+    return { expenseLedgerIds: expense, staffLedgerIds: staff };
   }, [customers, partyTypeName]);
   const { data: categories } = useSupabaseQuery('expense_categories', {
     filters: userId ? { owner_id: userId } : {},
@@ -195,9 +221,15 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       title: partyId ? personTitle : undefined,
       wide: layout.wide,
       left: layout.wide && !partyId ? undefined : () => <BackButton onPress={goBack} />,
-      right: partyId
-        ? () => <ToolbarButton icon="book-outline" label="Open ledger" onPress={() => router.push(`${basePath}/customer/${partyId}` as never)} />
-        : undefined,
+      right: () => (
+        <>
+          <PrintButton onPress={() => printNow.current()} />
+          <ExcelButton onPress={() => excelNow.current()} />
+          {partyId && (
+            <ToolbarButton icon="book-outline" label="Open ledger" onPress={() => router.push(`${basePath}/customer/${partyId}` as never)} />
+          )}
+        </>
+      ),
     },
     [partyId, basePath]
   );
@@ -248,6 +280,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
               kind === 'expense'
                 ? category ?? 'Uncategorized'
                 : (t.customer_id ? nameById.get(t.customer_id) : undefined) || t.party_name?.trim() || 'No party',
+            subject: kind === 'expense' ? t.party_name?.trim() || category || 'Uncategorized' : undefined,
           };
         });
       // An expense is often not a bill at all: money paid to a ledger typed Expense (Bike Repair, Fuel
@@ -266,6 +299,10 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           const name = nameById.get(id);
           if (name) knownCategory.set(nameKey(name), name.trim());
         }
+        // Where an employee's payment goes when its remark names no category: the advance header -
+        // the "Salary Advance" there already (Employee / Staff Advance are the same thing and sit
+        // under it too, see `grouped`).
+        const staffHeader = advanceHeader([...knownCategory.values()]);
         const ledgerRow = (
           e: { id: string; entry_date: string | null; created_at: string; amount: number; receipt_no: string | null; note: string | null },
           ledgerId: string,
@@ -273,10 +310,11 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         ): Entry => {
           const name = nameById.get(ledgerId) ?? partyRow?.name ?? 'Expense ledger';
           const tone = refund ? MONEY.in : MONEY.out;
-          // An Expense ledger is its own category; a person's payment goes under the category its
-          // remark names, else Uncategorized - so the list of categories is not theirs to grow.
+          // An Expense ledger is its own category; an employee's payment goes under the category its
+          // remark names, else Employee Advance - so a person is never a header of their own, and
+          // never lands in Uncategorized.
           const isStaff = staffLedgerIds.has(ledgerId);
-          const category = isStaff ? knownCategory.get(nameKey(e.note ?? '')) ?? 'Uncategorized' : name;
+          const category = isStaff ? knownCategory.get(nameKey(e.note ?? '')) ?? staffHeader : name;
           return {
             id: e.id,
             date: e.entry_date ?? e.created_at,
@@ -288,6 +326,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             type: { label: category, color: tone.text, bg: tone.bg },
             nav: { kind: 'party', partyId: ledgerId },
             category,
+            subject: name,
             // On the ledger's own page a row goes to its ledger, where it can be edited.
             href: partyId ? `${basePath}/customer/${ledgerId}` : hrefFor(ledgerId),
           };
@@ -303,52 +342,45 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           if (counts(e.vendor_id) && e.entry_type === 'credit') rows.push(ledgerRow(e, e.vendor_id, false));
         }
       } else {
-        // Sales / Purchase: every ledger feeds them, whatever its type, by which way the money went -
-        // what was received on a ledger is a sale, what was paid on one is a purchase (an Expense or
-        // Employee ledger is the Expense Report's, not these). The copy a bill posts to the ledger is
-        // the bill itself, listed above, so it is left out.
+        // The Sales and Purchase reports are their bills and nothing else: what was received or paid on
+        // a ledger belongs to Total Received / Total Paid, and is not listed here.
         //
-        // Counting: a person with bills of this kind has their payments listed but not added (they
-        // settle those bills - a sale and its receipt would count twice); a person with NO bills of this
-        // kind has had nothing else recorded, so what was received / paid is the sale / purchase.
-        const salesSide = kind === 'sale';
-        const billed = new Set<string>();
-        for (const row of rows) if (row.tx?.customer_id) billed.add(row.tx.customer_id);
-        const hasBills = (ledgerId: string) => (partyId ? rows.length > 0 : billed.has(ledgerId));
-        const ledgerRow = (
-          e: { id: string; entry_date: string | null; created_at: string; amount: number; receipt_no: string | null; note: string | null },
-          ledgerId: string,
-          moneyIn: boolean
-        ): Entry => {
-          const name = nameById.get(ledgerId) ?? partyRow?.name ?? 'Ledger';
-          return {
-            id: e.id,
-            date: e.entry_date ?? e.created_at,
-            amount: Number(e.amount),
-            party: `${moneyIn ? 'Received from' : 'Paid to'} ${name}`,
-            note: [e.receipt_no ? `${moneyIn ? 'Receipt' : 'Payment'} no. ${e.receipt_no}` : null, e.note].filter(Boolean).join(' · '),
-            type: moneyIn ? PILL.paymentReceived : PILL.paymentOut,
-            nav: { kind: 'party', partyId: ledgerId },
-            category: name,
-            // Listed but not added up when it settles a bill of theirs.
-            payment: hasBills(ledgerId),
-            href: partyId ? `${basePath}/customer/${ledgerId}` : hrefFor(ledgerId),
+        // The one exception is a person's own page, which shows everything recorded for that person:
+        // their payments sit beside their bills. A person with bills of this kind has theirs listed but
+        // not added (they settle those bills - a sale and its receipt would count twice); a person with
+        // NO bills of this kind has had nothing else recorded, so what was received / paid is the
+        // sale / purchase. The copy a bill posts to the ledger is the bill itself, so it is left out.
+        if (partyId) {
+          const salesSide = kind === 'sale';
+          const hasBills = rows.length > 0;
+          const ledgerRow = (
+            e: { id: string; entry_date: string | null; created_at: string; amount: number; receipt_no: string | null; note: string | null },
+            moneyIn: boolean
+          ): Entry => {
+            const name = partyRow?.name ?? nameById.get(partyId) ?? 'Ledger';
+            return {
+              id: e.id,
+              date: e.entry_date ?? e.created_at,
+              amount: Number(e.amount),
+              party: `${moneyIn ? 'Received from' : 'Paid to'} ${name}`,
+              note: [e.receipt_no ? `${moneyIn ? 'Receipt' : 'Payment'} no. ${e.receipt_no}` : null, e.note].filter(Boolean).join(' · '),
+              type: moneyIn ? PILL.paymentReceived : PILL.paymentOut,
+              nav: { kind: 'party', partyId },
+              category: name,
+              // Listed but not added up when it settles a bill of theirs.
+              payment: hasBills,
+              href: `${basePath}/customer/${partyId}`,
+            };
           };
-        };
-        const customerSide = partyId ? partyCustomerEntries ?? [] : ledgerEntries ?? [];
-        const vendorSide = partyId ? partyVendorEntries ?? [] : vendorEntries ?? [];
-        const counts = (ledgerId: string) =>
-          partyId ? ledgerId === partyId : !expenseLedgerIds.has(ledgerId) && !staffLedgerIds.has(ledgerId);
-        for (const e of customerSide) {
-          if (!counts(e.customer_id) || e.source_type === 'business_transaction') continue;
-          if (salesSide && e.entry_type === 'credit') rows.push(ledgerRow(e, e.customer_id, true));
-          // Money paid out on the customer ledger (the older way of recording a payment) is a purchase's.
-          else if (!salesSide && e.entry_type === 'debit' && e.source === 'manual') rows.push(ledgerRow(e, e.customer_id, false));
-        }
-        if (!salesSide) {
-          for (const e of vendorSide) {
-            if (counts(e.vendor_id) && e.entry_type === 'credit' && e.source_type !== 'business_transaction') {
-              rows.push(ledgerRow(e, e.vendor_id, false));
+          for (const e of partyCustomerEntries ?? []) {
+            if (e.source_type === 'business_transaction') continue;
+            if (salesSide && e.entry_type === 'credit') rows.push(ledgerRow(e, true));
+            // Money paid out on the customer ledger (the older way of recording a payment) is a purchase's.
+            else if (!salesSide && e.entry_type === 'debit' && e.source === 'manual') rows.push(ledgerRow(e, false));
+          }
+          if (!salesSide) {
+            for (const e of partyVendorEntries ?? []) {
+              if (e.entry_type === 'credit' && e.source_type !== 'business_transaction') rows.push(ledgerRow(e, false));
             }
           }
         }
@@ -439,8 +471,6 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     categories,
     expenseLedgerIds,
     staffLedgerIds,
-    saleLedgerIds,
-    purchaseLedgerIds,
     hrefFor,
     basePath,
     kind,
@@ -530,6 +560,11 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     // Expense names are merged by the words they start with; a customer or vendor is its own heading.
     const labelOf =
       kind === 'expense' ? groupExpenseNames(names) : new Map(names.map((n) => [nameKey(n), n.trim()] as const));
+    // Salary, Employee and Staff advances are one header, whatever the words they start with.
+    if (kind === 'expense') {
+      const advance = advanceHeader(names);
+      for (const n of names) if (isAdvanceName(n)) labelOf.set(nameKey(n), advance);
+    }
     const groups = new Map<string, { key: string; label: string; total: number; rows: Entry[] }>();
     const groupOf = (name: string) => {
       const label = labelOf.get(nameKey(name)) ?? name.trim();
@@ -548,14 +583,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       group.rows.push(e);
     }
 
+    // Biggest first; the rows inside one stay newest first.
     const ordered = [...groups.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
-    // Each row's section heading, by the row's id; rows within a section stay newest first.
-    const headingOf = new Map<string, string>();
-    for (const g of ordered) {
-      const heading = `${g.label}  ·  NPR ${money(g.total)}  ·  ${g.rows.length} ${g.rows.length === 1 ? 'entry' : 'entries'}`;
-      for (const e of g.rows) headingOf.set(e.id, heading);
-    }
-    return { groups: ordered, rows: ordered.flatMap((g) => g.rows), headingOf };
+    return { groups: ordered };
   }, [kind, partyId, yearEntries, categories, customers, expenseLedgerIds]);
 
   // The one category (Expense) or customer / vendor (Sales / Purchase) picked from the dropdown
@@ -563,6 +593,28 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   // scrolling to it. Picking narrows the table and the figures above it together.
   const [categoryPick, setCategoryPick] = useState('');
   const picked = grouped?.groups.find((g) => g.key === categoryPick) ?? null;
+  // Which headings are open to show their transactions. They all start closed: the headings are the
+  // overview, and the log of one is a tap away instead of a scroll.
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const openableKeys = (grouped?.groups ?? []).filter((g) => g.rows.length > 0).map((g) => g.key);
+  const allOpen = openableKeys.length > 0 && openableKeys.every((k) => openKeys.has(k));
+  // Inside an open heading each bike / person is one line (its payments added up); this is which of
+  // those lines are open to show the payments themselves. Keyed heading + subject.
+  const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
+  const toggleSubject = (key: string) =>
+    setOpenSubjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const shownEntries = picked ? picked.rows : yearEntries;
   const pickWord = kind === 'expense' ? { one: 'Category', all: 'All categories' } : kind === 'sale' ? { one: 'Customer', all: 'All customers' } : { one: 'Vendor', all: 'All vendors' };
   const categoryOptions = useMemo(
@@ -621,6 +673,121 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         (e.nav.kind === 'transactions' ? `${basePath}/transactions?type=${e.nav.type}` : `${basePath}/customer/${e.nav.partyId}`)) as never
     );
   };
+
+  // --- Print and Excel: what is open on the page, as a document - Print shows it in the system's print
+  // preview, Excel saves it as a spreadsheet. ---
+  // Only what has been opened prints, not the whole report. With a category picked, that one; else the
+  // headings that are open - and inside one, just the bikes / people opened under it; with nothing
+  // open, the page as it stands (the headings and what each adds up to). A person's own report is
+  // that person alone.
+  const buildReport = (): PrintReport => {
+    const dateOf = (e: Entry) => toBsHistoryLabel(e.date.slice(0, 10));
+    const printRow = (e: Entry) => [
+      dateOf(e),
+      [e.party || e.type.label, e.note].filter(Boolean).join(' · '),
+      e.type.label,
+      money(e.amount),
+    ];
+    const printColumns = [
+      { label: 'Date' },
+      { label: 'Details' },
+      { label: kind === 'expense' ? 'Category' : 'Type' },
+      { label: 'Amount (NPR)', align: 'right' as const },
+    ];
+    const entryWord = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
+    const logSection = (heading: string, rows: Entry[], total: number): PrintSection => ({
+      heading,
+      columns: printColumns,
+      rows: rows.map(printRow),
+      footer: ['', '', 'Total', money(total)],
+    });
+
+    const sections: PrintSection[] = [];
+    // True once something specific was opened: the page-wide figures would then not be about what
+    // prints, so each table carries its own total instead.
+    let narrowed = false;
+    if (grouped) {
+      const withRows = grouped.groups.filter((g) => g.rows.length > 0);
+      const opened = picked ? [picked] : withRows.filter((g) => openKeys.has(g.key));
+      if (opened.length === 0) {
+        sections.push({
+          columns: [{ label: pickWord.one }, { label: 'Entries', align: 'right' }, { label: 'Amount (NPR)', align: 'right' }],
+          rows: withRows.map((g) => [g.label, String(g.rows.length), money(g.total)]),
+          footer: ['Total', String(shownEntries.length), money(stats.total)],
+          emptyText: 'Nothing here yet.',
+        });
+      } else {
+        narrowed = true;
+        for (const g of opened) {
+          const subjects = kind === 'expense' ? subjectsOf(g.rows) : [];
+          const openSubs = subjects.filter((x) => x.rows.length > 1 && openSubjects.has(`${g.key}::${x.key}`));
+          if (openSubs.length > 0) {
+            // A bike / person was opened: that one's payments, and only that.
+            for (const x of openSubs) sections.push(logSection(`${g.label} › ${x.name} - ${entryWord(x.rows.length)}`, x.rows, x.total));
+          } else if (subjects.length > 1) {
+            // A heading opened as it shows on screen: one line for each bike / person.
+            sections.push({
+              heading: `${g.label} - NPR ${money(g.total)} - ${entryWord(g.rows.length)}`,
+              columns: [
+                { label: 'Name' },
+                { label: 'Payments', align: 'right' },
+                { label: 'Last payment' },
+                { label: 'Amount (NPR)', align: 'right' },
+              ],
+              rows: subjects.map((x) => [x.name, String(x.rows.length), toBsHistoryLabel(x.latest.slice(0, 10)), money(x.total)]),
+              footer: ['Total', String(g.rows.length), '', money(g.total)],
+            });
+          } else {
+            sections.push(logSection(`${g.label} - NPR ${money(g.total)} - ${entryWord(g.rows.length)}`, g.rows, g.total));
+          }
+        }
+      }
+    } else {
+      sections.push({
+        columns: printColumns,
+        rows: yearEntries.map(printRow),
+        footer: ['', '', `Total (${entryWord(yearEntries.length)})`, money(stats.total)],
+        emptyText: partyId ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.` : 'Nothing here yet.',
+      });
+      if (partyId && partyLedgerRows.length > 0) {
+        sections.push({
+          heading: 'Payments and other ledger entries',
+          columns: [{ label: 'Date' }, { label: 'Details' }, { label: 'Type' }, { label: 'Amount (NPR)', align: 'right' as const }],
+          rows: partyLedgerRows.map(printRow),
+        });
+      }
+    }
+
+    const summary = narrowed
+      ? undefined
+      : [
+          { label: partyId ? 'Total' : `${year} total`, value: `NPR ${money(stats.total)}` },
+          { label: 'This month', value: `NPR ${money(stats.thisMonth)}` },
+          { label: 'Entries', value: String(shownEntries.length) },
+          { label: 'Largest', value: `NPR ${money(stats.largest)}` },
+          ...(stats.paymentCount > 0
+            ? [{ label: kind === 'sale' ? 'Received on bills' : 'Paid on bills', value: `NPR ${money(stats.payments)}` }]
+            : []),
+        ];
+    const title = partyId ? `${meta.title} - ${partyRow?.name ?? ''}`.trim() : meta.title;
+    return {
+      title,
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      subtitle: partyId
+        ? 'All dates'
+        : [`Year ${year}`, picked ? `${pickWord.one}: ${picked.label}` : null].filter(Boolean).join(' · '),
+      printedOn: toBsHistoryLabel(localTodayIso()),
+      summary,
+      sections,
+      note:
+        kind === 'sale' || kind === 'purchase'
+          ? `What was ${kind === 'sale' ? 'received' : 'paid'} on a ledger that has ${kind} bills settles them and is not added again; on one with none it counts as the ${kind}.`
+          : undefined,
+    };
+  };
+  // Print and Excel carry the same document: what is open on the page.
+  printNow.current = () => void printReportDocument(reportHtml(buildReport()));
+  excelNow.current = () => void exportReportDocument(buildReport());
 
   const amountCell = (e: Entry) => (
     <Text className="text-[12.5px] font-bold" style={{ color: meta.color }} numberOfLines={1}>
@@ -698,10 +865,19 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
               <Text className="text-[12.5px] font-semibold text-blue-700">Show all</Text>
             </Pressable>
           )}
+          {!picked && openableKeys.length > 1 && (
+            <Pressable
+              onPress={() => setOpenKeys(allOpen ? new Set() : new Set(openableKeys))}
+              accessibilityRole="button"
+              hitSlop={6}
+            >
+              <Text className="text-[12.5px] font-semibold text-blue-700">{allOpen ? 'Close all' : 'Open all'}</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
-      {shownEntries.length === 0 ? (
+      {shownEntries.length === 0 && !(grouped && grouped.groups.length > 0) ? (
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
           <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">
@@ -712,13 +888,97 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                 : 'Nothing here yet.'}
           </Text>
         </View>
+      ) : grouped ? (
+        // Every heading, each a card: its name, how many entries and what they add up to. Tap one to
+        // open the log of transactions inside it. A heading with nothing recorded is there too, shut.
+        <View style={{ gap: 10 }}>
+          {(picked ? [picked] : grouped.groups).map((g) => {
+            const empty = g.rows.length === 0;
+            const isOpen = !empty && (!!picked || openKeys.has(g.key));
+            // Expenses: inside a heading each bike / person is one line, the payments to it added up.
+            // A heading with just one subject has nothing to fold, so it lists its payments as they are.
+            const subjects = isOpen && kind === 'expense' ? subjectsOf(g.rows) : [];
+            return (
+              <View key={g.key} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
+                <Pressable
+                  onPress={() => toggleGroup(g.key)}
+                  disabled={empty || !!picked}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: isOpen }}
+                  className="flex-row items-center px-3.5 py-3"
+                  style={{ gap: 10, backgroundColor: isOpen ? '#F9FAFB' : '#FFFFFF' }}
+                >
+                  <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={16} color={empty ? '#D1D5DB' : '#6B7280'} />
+                  <Text className={`flex-1 text-[14px] font-bold ${empty ? 'text-gray-400' : 'text-gray-900'}`} numberOfLines={1}>
+                    {g.label}
+                  </Text>
+                  <Text className="text-[12px] text-gray-400">
+                    {empty ? 'No entries' : `${g.rows.length} ${g.rows.length === 1 ? 'entry' : 'entries'}`}
+                  </Text>
+                  <Text className="text-right text-[14px] font-extrabold" style={{ minWidth: 84, color: empty ? '#D1D5DB' : meta.color }}>
+                    {money(g.total)}
+                  </Text>
+                </Pressable>
+                {isOpen && subjects.length > 1 && (
+                  <View className="border-t border-gray-200">
+                    {subjects.map((s, i) => {
+                      const subjectKey = `${g.key}::${s.key}`;
+                      const single = s.rows.length === 1;
+                      const subjectOpen = !single && openSubjects.has(subjectKey);
+                      return (
+                        <View key={s.key} className={i > 0 ? 'border-t border-gray-100' : ''}>
+                          <Pressable
+                            onPress={() => (single ? open(s.rows[0]) : toggleSubject(subjectKey))}
+                            accessibilityRole="button"
+                            accessibilityState={{ expanded: subjectOpen }}
+                            className="flex-row items-center py-2.5 pl-9 pr-3.5"
+                            style={{ gap: 10, backgroundColor: subjectOpen ? '#F9FAFB' : '#FFFFFF' }}
+                          >
+                            <Ionicons name={subjectOpen ? 'chevron-down' : 'chevron-forward'} size={14} color="#9CA3AF" />
+                            <Text className="flex-1 text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+                              {s.name}
+                            </Text>
+                            <Text className="text-[11.5px] text-gray-400">
+                              {single ? bsShortDate(s.latest) : `${s.rows.length} payments · last ${bsShortDate(s.latest)}`}
+                            </Text>
+                            <Text className="text-right text-[13px] font-bold" style={{ minWidth: 84, color: meta.color }}>
+                              {money(s.total)}
+                            </Text>
+                          </Pressable>
+                          {subjectOpen && (
+                            <View className="border-t border-gray-100 pl-6">
+                              <BookTable bare columns={columns} rows={s.rows} rowKey={(e) => e.id} onRowPress={open} />
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+                {isOpen && subjects.length <= 1 && (
+                  <View className="border-t border-gray-200">
+                    <BookTable bare columns={columns} rows={g.rows} rowKey={(e) => e.id} onRowPress={open} />
+                  </View>
+                )}
+              </View>
+            );
+          })}
+          <View className="flex-row items-center justify-end px-1" style={{ gap: 10 }}>
+            <Text className="text-[12.5px] font-bold text-gray-600">
+              {`${shownEntries.length} ${shownEntries.length === 1 ? 'entry' : 'entries'} · Total`}
+            </Text>
+            <Text className="text-[14px] font-extrabold" style={{ color: meta.color }}>
+              {money(stats.total)}
+            </Text>
+          </View>
+        </View>
       ) : (
         <BookTable
           columns={columns}
-          rows={grouped ? (picked ? picked.rows : grouped.rows) : yearEntries}
+          rows={yearEntries}
           rowKey={(e) => e.id}
           onRowPress={open}
-          groupOf={(e) => (grouped ? grouped.headingOf.get(e.id) ?? '' : bsMonthGroup(e.date))}
+          groupOf={(e) => bsMonthGroup(e.date)}
           footer={{
             label: `${shownEntries.length} ${shownEntries.length === 1 ? 'entry' : 'entries'} · Total`,
             cells: { amount: <Text className="text-[13px] font-extrabold" style={{ color: meta.color }}>{money(stats.total)}</Text> },
@@ -751,8 +1011,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             : kind === 'paid'
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
               : kind === 'expense'
-                ? "Tap an entry to open it. Grouped by category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one heading; use Category above to look at just one. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
-                : `Tap an entry to open it. Grouped by ${kind === 'sale' ? 'customer' : 'vendor'}; use ${pickWord.one} above to look at one. Every ${kind} bill counts here, whether or not the money has moved yet. What was ${kind === 'sale' ? 'received' : 'paid'} on any ledger is listed too: for someone with ${kind} bills it settles them and is not added again; for someone with none it is the ${kind} and counts. This year only.`}
+                ? "Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it, or pick one in Category above. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
+                : `Each heading is a ${kind === 'sale' ? 'customer' : 'vendor'} - tap it to open their transactions, or pick one in ${pickWord.one} above. Tap a transaction to open it. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. This year only.`}
       </Text>
     </BookPage>
     <TransactionDetailModal

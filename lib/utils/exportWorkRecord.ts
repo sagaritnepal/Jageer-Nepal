@@ -128,6 +128,52 @@ export async function printHtml(html: string) {
   }
 }
 
+/** Opens a finished HTML document in the system's own print preview - the pages on one side, the
+ * printer / pages / colour settings and Print / Cancel on the other - and prints from there.
+ *
+ * On web the document is loaded into a hidden frame and that frame is printed, so the browser's
+ * preview opens right over the page the person is on (no new tab, nothing to pop-up-block); its
+ * title is the page title in the preview's header. On a phone it is expo-print's print screen,
+ * which previews the same way. Nothing is printed until Print is pressed there. */
+export async function printWithPreview(html: string) {
+  if (Platform.OS !== 'web') {
+    await Print.printAsync({ html });
+    return;
+  }
+
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+  document.body.appendChild(frame);
+  const win = frame.contentWindow;
+  if (!win) {
+    frame.remove();
+    throw new Error('Could not open the print preview in this browser.');
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+
+  let removed = false;
+  const cleanup = () => {
+    if (removed) return;
+    removed = true;
+    frame.remove();
+  };
+  // Gone once the preview is closed; the timer is for a browser that never says so.
+  win.addEventListener('afterprint', cleanup);
+  setTimeout(cleanup, 5 * 60 * 1000);
+  // A beat for the document to lay out, then the preview.
+  setTimeout(() => {
+    try {
+      win.focus();
+      win.print();
+    } catch {
+      cleanup();
+    }
+  }, 250);
+}
+
 /** The same rows as a spreadsheet, for anyone who wants to total or filter
  * them afterwards. */
 export async function exportWorkXlsx(filename: string, sheetName: string, rows: WorkRecordRow[]) {

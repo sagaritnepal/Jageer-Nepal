@@ -1,5 +1,5 @@
 // lib/components/finance/PartyBalancesScreen.tsx
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { View, Text, Pressable, FlatList } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,10 @@ import { useBarActions, useBookLayout } from './BookKit';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useYearCashTotals } from '../../hooks/useYearCashTotals';
 import { nameCaps } from '../../utils/nameCaps';
+import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { localTodayIso } from '../../utils/localDate';
+import { reportHtml, type PrintReport } from '../../utils/printReport';
+import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 
 type Direction = 'receive' | 'give';
 
@@ -110,9 +114,40 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
   const cash = useYearCashTotals(userId);
   const cashTotal = direction === 'receive' ? cash.received : cash.paid;
 
-  // The name (and the back button on a phone) are in the top bar.
+  // The name (and the back button on a phone) are in the top bar, with Print: it opens the system's
+  // print preview of the page. The bar keeps the button it was given, so it reaches the current
+  // page through a ref.
   const layout = useBookLayout();
-  useBarActions({ wide: layout.wide }, []);
+  const profile = useAuthStore((state) => state.profile);
+  const buildReport = (): PrintReport => ({
+    title: `${meta.subtitle} Report`,
+    businessName: profile?.business_name ?? profile?.full_name ?? '',
+    subtitle: direction === 'receive' ? 'Customers who owe you money' : 'Vendors you owe money to',
+    printedOn: toBsHistoryLabel(localTodayIso()),
+    summary: [
+      { label: meta.subtitle, value: `NPR ${total.toLocaleString()}` },
+      { label: `${meta.cashLabel} (this year)`, value: `NPR ${cashTotal.toLocaleString()}` },
+      { label: direction === 'receive' ? 'Customers' : 'Vendors', value: String(rows.length) },
+    ],
+    sections: [
+      {
+        columns: [{ label: 'SN' }, { label: 'Party' }, { label: 'Balance (NPR)', align: 'right' }],
+        rows: rows.map((r, i) => [String(i + 1), nameCaps(r.name), r.balance.toLocaleString()]),
+        footer: ['', 'Total', total.toLocaleString()],
+        emptyText: meta.empty,
+      },
+    ],
+  });
+  const printNow = useRef<() => void>(() => {});
+  printNow.current = () => void printReportDocument(reportHtml(buildReport()));
+  const excelNow = useRef<() => void>(() => {});
+  excelNow.current = () => void exportReportDocument(buildReport());
+  useBarActions({ wide: layout.wide, right: () => (
+        <>
+          <PrintButton onPress={() => printNow.current()} />
+          <ExcelButton onPress={() => excelNow.current()} />
+        </>
+      ) }, []);
 
   return (
     <View className="flex-1 bg-gray-50 px-6 pt-4">

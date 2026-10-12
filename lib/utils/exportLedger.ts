@@ -49,7 +49,8 @@ export interface StatementData {
   lines: StatementLine[];
 }
 
-function statementHtml(s: StatementData): string {
+/** The statement as a finished HTML page - what the print preview shows and Print prints. */
+export function statementHtml(s: StatementData): string {
   const rows = s.lines
     .map(
       (l) => `<tr>
