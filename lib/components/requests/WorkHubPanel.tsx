@@ -114,7 +114,7 @@ function statusChip(request: ServiceRequest): { label: string; color: string; bg
       : { label: 'Completed', color: '#16A34A', bg: '#F0FDF4' };
   }
   if (request.status === 'in_progress') return { label: 'Working on it', color: '#1D4ED8', bg: '#EFF6FF' };
-  if (request.status === 'assigned') return { label: 'Waiting for them to accept', color: '#B45309', bg: '#FFFBEB' };
+  if (request.status === 'assigned') return { label: 'Waiting for them to accept', color: '#4B5563', bg: '#F3F4F6' };
   if (request.open_to_team) return { label: 'Waiting to be picked up', color: '#047857', bg: '#ECFDF5' };
   return { label: 'Not started', color: '#6B7280', bg: '#F3F4F6' };
 }
@@ -253,7 +253,7 @@ function Column({
 
 const PAY_CHIP: Record<string, { label: string; color: string; bg: string }> = {
   paid: { label: 'Paid', color: '#047857', bg: '#ECFDF5' },
-  partial: { label: 'Part paid', color: '#B45309', bg: '#FFFBEB' },
+  partial: { label: 'Part paid', color: '#4B5563', bg: '#F3F4F6' },
   unpaid: { label: 'Unpaid', color: '#B91C1C', bg: '#FEF2F2' },
 };
 
@@ -362,8 +362,8 @@ function AssignSheet({
 
 /** What a hold on a job looks like, beside its status. */
 const HOLD_CHIP = {
-  requested: { label: 'Hold requested', color: '#92400E', bg: '#FFFBEB' },
-  on_hold: { label: 'On hold', color: '#92400E', bg: '#FFFBEB' },
+  requested: { label: 'Hold requested', color: '#4B5563', bg: '#F3F4F6' },
+  on_hold: { label: 'On hold', color: '#4B5563', bg: '#F3F4F6' },
 } as const;
 
 /** One fact about a job: a small label over its value. The cells of a card sit
@@ -388,23 +388,23 @@ function Fact({
   const badge = icon || initials ? (
     <View
       className="items-center justify-center rounded-full"
-      style={{ width: 36, height: 36, backgroundColor: initials ? '#1E293B' : '#EFF6FF' }}
+      style={{ width: 36, height: 36, backgroundColor: initials ? '#374151' : '#F3F4F6' }}
     >
       {initials ? (
         <Text className="text-[13px] font-bold text-white">{initials}</Text>
       ) : (
-        <Ionicons name={icon!} size={18} color="#1D4ED8" />
+        <Ionicons name={icon!} size={18} color="#4B5563" />
       )}
     </View>
   ) : null;
   return (
     <View
-      className="flex-row bg-white px-4 py-3.5"
-      style={{ gap: 12, ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 200, minWidth: 200 }) : null) }}
+      className="flex-row px-4 py-3.5"
+      style={{ gap: 12, backgroundColor: '#FFFFFF', ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 200, minWidth: 200 }) : null) }}
     >
       {badge}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text className="text-[12px] font-semibold capitalize" style={{ color: '#64748B' }}>
+        <Text className="text-[12px] font-semibold capitalize" style={{ color: '#6B7280' }}>
           {label}
         </Text>
         {children}
@@ -416,7 +416,7 @@ function Fact({
 type CardAction = { label: string; icon: keyof typeof Ionicons.glyphMap; tone: 'primary' | 'ghost' | 'violet'; onPress: () => void };
 
 const ACTION_TONE = {
-  primary: { bg: BLUE, border: BLUE, fg: '#FFFFFF' },
+  primary: { bg: '#0F766E', border: '#0F766E', fg: '#FFFFFF' },
   ghost: { bg: '#FFFFFF', border: '#D1D5DB', fg: '#374151' },
   violet: { bg: '#FFFFFF', border: '#DDD6FE', fg: '#6D28D9' },
 } as const;
@@ -450,7 +450,7 @@ function JobRowCard({
   expanded?: boolean;
 }) {
   const open = () => router.push(`/(reseller)/request/${r.id}` as any);
-  const chip = statusChip(r);
+  const chip = r.status === 'in_progress' ? { label: 'Working on it', color: '#166534', bg: '#DCFCE7' } : statusChip(r);
   const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
   const hold = r.hold_status === 'requested' ? HOLD_CHIP.requested : r.hold_status === 'on_hold' ? HOLD_CHIP.on_hold : null;
   const lines = expanded ? undefined : 2;
@@ -478,14 +478,17 @@ function JobRowCard({
   actions.push({ label: 'Request Outsource', icon: 'paper-plane-outline', tone: 'violet', onPress: () => onRequest(r) });
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+    <View
+      className="overflow-hidden rounded-2xl"
+      style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', boxShadow: '0 1px 3px rgba(16,24,40,0.06)' }}
+    >
       {overdue && (
-        <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderBottomColor: '#FECACA' }}>
-          <Ionicons name="time-outline" size={17} color="#B91C1C" />
-          <Text className="text-[13.5px] font-bold" style={{ color: '#991B1B' }}>
+        <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#F3F4F6', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
+          <Ionicons name="time-outline" size={17} color="#4B5563" />
+          <Text className="text-[13.5px] font-bold" style={{ color: '#1F2937' }}>
             Overdue by {overdueBy(r)}
           </Text>
-          <Text className="text-[13px]" style={{ color: '#7F1D1D', flexShrink: 1 }}>
+          <Text className="text-[13px]" style={{ color: '#4B5563', flexShrink: 1 }}>
             {scheduled ? `Scheduled for ${scheduled}. ` : ''}The job is still {r.status === 'in_progress' ? 'in progress' : 'open'}.
           </Text>
         </View>
@@ -520,7 +523,7 @@ function JobRowCard({
           )}
         </View>
         {roomy && (
-          <View className="flex-row items-center rounded-xl border border-gray-200 px-4 py-2.5" style={{ gap: 14, backgroundColor: '#F8FAFC' }}>
+          <View className="flex-row items-center rounded-xl border border-gray-200 px-4 py-2.5" style={{ gap: 14, backgroundColor: '#FFFFFF' }}>
             <View className="items-end" style={{ gap: 2 }}>
               <Text className="text-[12px] font-semibold" style={{ color: '#64748B' }}>
                 Job amount
@@ -560,8 +563,8 @@ function JobRowCard({
           </Text>
           {!!r.customer_phone && (
             <Pressable onPress={() => Linking.openURL(`tel:${r.customer_phone}`)} className="flex-row items-center gap-1 self-start">
-              <Ionicons name="call-outline" size={12} color={BLUE} />
-              <Text className="text-[12.5px] font-medium" style={{ color: BLUE }}>
+              <Ionicons name="call-outline" size={12} color="#0F766E" />
+              <Text className="text-[12.5px] font-medium" style={{ color: '#0F766E' }}>
                 {r.customer_phone}
               </Text>
             </Pressable>
@@ -588,7 +591,7 @@ function JobRowCard({
               {technicianName(r.technician_id)}
             </Text>
           ) : (
-            <Text className="text-[13.5px] font-semibold" style={{ color: r.open_to_team ? '#047857' : '#B45309' }}>
+            <Text className="text-[13.5px] font-semibold" style={{ color: r.open_to_team ? '#047857' : '#4B5563' }}>
               {r.open_to_team ? 'Open to the team' : 'Nobody yet'}
             </Text>
           )}
@@ -597,7 +600,7 @@ function JobRowCard({
 
       {/* Where the job has got to. */}
       {roomy ? (
-        <View className="border-t border-gray-100 bg-gray-50 pt-3">
+        <View className="pt-3.5" style={{ backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
           <JobTimeline request={r} times={times} now={now} layout="strip" />
         </View>
       ) : (
@@ -965,8 +968,8 @@ export function WorkHubPanel({
         title="Nobody yet"
         subtitle="Assign someone, or open it to the team"
         count={unassigned.length}
-        color="#B45309"
-        tint="#FFFBEB"
+        color="#4B5563"
+        tint="#F3F4F6"
         wide={wide}
       >
         {unassigned.length === 0

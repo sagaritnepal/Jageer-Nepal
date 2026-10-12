@@ -34,6 +34,9 @@ type Stage =
   | 'paid'
   | 'cancelled';
 
+/** The page behind the cards - plain white, with the job cards in warm cream on it. */
+const PAGE_BG = '#FFFFFF';
+
 const STAGE_ORDER: Stage[] = [
   'requests',
   'waiting_customer',
@@ -598,7 +601,7 @@ export default function ResellerRequestQueue() {
     };
 
     return (
-      <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 32, paddingTop: 20, gap: 16 }}>
+      <ScrollView className="flex-1" style={{ backgroundColor: PAGE_BG }} contentContainerStyle={{ padding: 32, paddingTop: 20, gap: 16 }}>
         <View className="flex-row items-stretch" style={{ gap: 6 }}>
           {WORKING_STAGES.map((stage, index) => {
             const meta = STAGE_META[stage];
@@ -681,7 +684,7 @@ export default function ResellerRequestQueue() {
   }
 
   return (
-    <View className="flex-1 bg-gray-50 pt-3.5">
+    <View className="flex-1 pt-3.5" style={{ backgroundColor: PAGE_BG }}>
       <ScrollView
         ref={chipScrollRef}
         horizontal
