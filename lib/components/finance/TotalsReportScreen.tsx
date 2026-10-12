@@ -64,6 +64,10 @@ interface Entry {
   /** Money received or paid on a ledger, listed beside a Sales / Purchase report's bills. It settles
    * bills, so it is not part of what was billed (that would count a sale and its receipt twice). */
   payment?: boolean;
+  /** The bill's own number, for a Sales / Purchase bill. */
+  billNo?: string;
+  /** The Ledger type (Vendor, Customer, Employee ...) of who it was with; '' when they have none. */
+  ledgerType?: string;
   /** Where tapping it goes, when that is not the person's ledger page (see usePartyDestination). */
   href?: string;
 }
@@ -203,6 +207,15 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     (categories ?? []).forEach((c) => map.set(c.id, c.name));
     return map;
   }, [categories]);
+  // Each saved customer / vendor's Ledger type (Vendor, Customer, Employee ...), by id.
+  const ledgerTypeById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of customers ?? []) {
+      const type = c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined;
+      if (type) map.set(c.id, type);
+    }
+    return map;
+  }, [customers, partyTypeName]);
 
   const year = new Date().getFullYear();
 
@@ -281,6 +294,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                 ? category ?? 'Uncategorized'
                 : (t.customer_id ? nameById.get(t.customer_id) : undefined) || t.party_name?.trim() || 'No party',
             subject: kind === 'expense' ? t.party_name?.trim() || category || 'Uncategorized' : undefined,
+            billNo: t.bill_no?.trim() || '',
+            ledgerType: (t.customer_id ? ledgerTypeById.get(t.customer_id) : undefined) ?? '',
           };
         });
       // An expense is often not a bill at all: money paid to a ledger typed Expense (Bike Repair, Fuel
@@ -467,6 +482,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     partyCustomerEntries,
     partyVendorEntries,
     nameById,
+    ledgerTypeById,
     categoryById,
     categories,
     expenseLedgerIds,
@@ -535,9 +551,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   // ledger typed Expense has its place, spent on this year or not, so each is there to pick from the
   // dropdown.
   //
-  // The Sales and Purchase reports are laid out the same way, by who it was with: a heading per
-  // customer / vendor (exactly as named) with what it adds up to, and a dropdown to pick one. Only
-  // people with something recorded this year are listed. The other reports stay by month.
+  // The Sales and Purchase reports are one table of bills with no headings - the customer / vendor is
+  // a column - and the same dropdown to pick one (it is built from these groups, exactly as named,
+  // for people with something recorded this year). The other reports stay by month.
   const grouped = useMemo(() => {
     if (partyId || (kind !== 'expense' && kind !== 'sale' && kind !== 'purchase')) return null;
     const UNFILED = kind === 'expense' ? 'Uncategorized' : 'No party';
@@ -663,8 +679,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   }, [partyCustomerEntries, partyVendorEntries]);
 
   const open = (e: Entry) => {
-    // On a person's own report a bill opens in place, rather than leaving for a list of every bill.
-    if (partyId && e.tx) {
+    // A bill opens in place - its items and what it is made of - rather than leaving for the ledger or
+    // for a list of every bill.
+    if (e.tx) {
       setViewingTx(e.tx);
       return;
     }
@@ -695,18 +712,46 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       { label: 'Amount (NPR)', align: 'right' as const },
     ];
     const entryWord = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
-    const logSection = (heading: string, rows: Entry[], total: number): PrintSection => ({
-      heading,
-      columns: printColumns,
-      rows: rows.map(printRow),
-      footer: ['', '', 'Total', money(total)],
-    });
+    // A Sales / Purchase report's bills read as they do on screen: SN, date, bill no., who, their
+    // ledger type, amount.
+    const billLog = kind === 'sale' || kind === 'purchase';
+    const billColumnsPrint = [
+      { label: 'SN' },
+      { label: 'Date' },
+      { label: 'Bill No.' },
+      { label: pickWord.one },
+      { label: 'Ledger type' },
+      { label: 'Amount (NPR)', align: 'right' as const },
+    ];
+    const billRowPrint = (e: Entry, i: number) => [
+      String(i + 1),
+      dateOf(e),
+      e.billNo || '-',
+      e.category || e.party || '-',
+      e.ledgerType || '-',
+      money(e.amount),
+    ];
+    const logSection = (heading: string, rows: Entry[], total: number): PrintSection =>
+      billLog
+        ? { heading, columns: billColumnsPrint, rows: rows.map(billRowPrint), footer: ['', '', '', '', 'Total', money(total)] }
+        : { heading, columns: printColumns, rows: rows.map(printRow), footer: ['', '', 'Total', money(total)] };
 
     const sections: PrintSection[] = [];
     // True once something specific was opened: the page-wide figures would then not be about what
     // prints, so each table carries its own total instead.
     let narrowed = false;
-    if (grouped) {
+    if (grouped && billLog) {
+      // Sales / Purchase: one table of bills, as on screen - all of them, or just the one customer /
+      // vendor picked.
+      narrowed = !!picked;
+      sections.push({
+        heading: picked ? `${picked.label} - NPR ${money(picked.total)} - ${entryWord(picked.rows.length)}` : undefined,
+        columns: billColumnsPrint,
+        rows: shownEntries.map(billRowPrint),
+        footer: ['', '', '', '', 'Total', money(stats.total)],
+        emptyText: 'Nothing here yet.',
+      });
+    } else if (grouped) {
       const withRows = grouped.groups.filter((g) => g.rows.length > 0);
       const opened = picked ? [picked] : withRows.filter((g) => openKeys.has(g.key));
       if (opened.length === 0) {
@@ -825,6 +870,62 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           { key: 'act', label: '', width: 30, align: 'right', render: chevron },
         ];
   const columns = columnsFor(kind === 'expense' ? 'Category' : 'Type', amountCell);
+  // The Sales / Purchase bills are laid out SN, date, bill no., who it was with, their Ledger type
+  // and the amount.
+  const ledgerTypePill = (e: Entry) =>
+    e.ledgerType ? (
+      <Pill text={e.ledgerType} color="#374151" bg="#F3F4F6" />
+    ) : (
+      <Text className="text-[12.5px] text-gray-300">—</Text>
+    );
+  const billColumns: BookColumn<Entry>[] = layout.full
+    ? [
+        { key: 'sn', label: 'SN', width: 56, render: (_e, i) => <Text className="text-[12.5px] text-gray-500">{i + 1}</Text> },
+        { key: 'date', label: 'Date', width: 140, render: (e) => <Text className="text-[12.5px] text-gray-600">{toBsHistoryLabel(e.date.slice(0, 10))}</Text> },
+        {
+          key: 'bill',
+          label: 'Bill No.',
+          width: 200,
+          render: (e) => (
+            <Text className="text-[12.5px] font-semibold text-gray-800" numberOfLines={1}>
+              {e.billNo || '—'}
+            </Text>
+          ),
+        },
+        {
+          key: 'who',
+          label: pickWord.one,
+          render: (e) => (
+            <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
+              {e.category || e.party || '—'}
+            </Text>
+          ),
+        },
+        { key: 'ledger', label: 'Ledger type', width: 150, render: ledgerTypePill },
+        { key: 'amount', label: 'Amount', width: 130, align: 'right', render: amountCell },
+        { key: 'act', label: '', width: 34, align: 'right', render: chevron },
+      ]
+    : [
+        { key: 'sn', label: 'SN', width: 38, render: (_e, i) => <Text className="text-[12.5px] text-gray-500">{i + 1}</Text> },
+        {
+          key: 'who',
+          label: pickWord.one,
+          render: (e) => (
+            <View style={{ minWidth: 0, gap: 2 }}>
+              <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
+                {e.category || e.party || '—'}
+              </Text>
+              <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+                {[toBsHistoryLabel(e.date.slice(0, 10)), e.billNo ? `Bill ${e.billNo}` : null, e.ledgerType || null].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          ),
+        },
+        { key: 'amount', label: 'Amount', width: 96, align: 'right', render: amountCell },
+        { key: 'act', label: '', width: 30, align: 'right', render: chevron },
+      ];
+  // What a heading's table uses: the bill layout for Sales / Purchase, the usual one for Expense.
+  const headingColumns = kind === 'sale' || kind === 'purchase' ? billColumns : columns;
   // A payment's colour is its own direction (green in, red out), not the report's.
   const ledgerColumns = columnsFor('Type', (e) => (
     <Text className="text-[12.5px] font-bold" style={{ color: e.type.color }} numberOfLines={1}>
@@ -865,7 +966,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
               <Text className="text-[12.5px] font-semibold text-blue-700">Show all</Text>
             </Pressable>
           )}
-          {!picked && openableKeys.length > 1 && (
+          {kind === 'expense' && !picked && openableKeys.length > 1 && (
             <Pressable
               onPress={() => setOpenKeys(allOpen ? new Set() : new Set(openableKeys))}
               accessibilityRole="button"
@@ -877,7 +978,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         </View>
       )}
 
-      {shownEntries.length === 0 && !(grouped && grouped.groups.length > 0) ? (
+      {shownEntries.length === 0 && !(grouped !== null && kind === 'expense' && grouped.groups.length > 0) ? (
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
           <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">
@@ -888,9 +989,10 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                 : 'Nothing here yet.'}
           </Text>
         </View>
-      ) : grouped ? (
-        // Every heading, each a card: its name, how many entries and what they add up to. Tap one to
-        // open the log of transactions inside it. A heading with nothing recorded is there too, shut.
+      ) : grouped !== null && kind === 'expense' ? (
+        // The Expense Report: every heading, each a card - its name, how many entries and what they add
+        // up to. Tap one to open the log of transactions inside it. A heading with nothing recorded is
+        // there too, shut.
         <View style={{ gap: 10 }}>
           {(picked ? [picked] : grouped.groups).map((g) => {
             const empty = g.rows.length === 0;
@@ -957,7 +1059,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                 )}
                 {isOpen && subjects.length <= 1 && (
                   <View className="border-t border-gray-200">
-                    <BookTable bare columns={columns} rows={g.rows} rowKey={(e) => e.id} onRowPress={open} />
+                    <BookTable bare columns={headingColumns} rows={g.rows} rowKey={(e) => e.id} onRowPress={open} />
                   </View>
                 )}
               </View>
@@ -973,12 +1075,14 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           </View>
         </View>
       ) : (
+        // Everything else is one table. Sales / Purchase: the bills, with no headings in between -
+        // the customer / vendor is a column - newest first. The other pages keep their month rows.
         <BookTable
-          columns={columns}
-          rows={yearEntries}
+          columns={grouped !== null ? billColumns : columns}
+          rows={shownEntries}
           rowKey={(e) => e.id}
           onRowPress={open}
-          groupOf={(e) => bsMonthGroup(e.date)}
+          groupOf={grouped !== null ? undefined : (e) => bsMonthGroup(e.date)}
           footer={{
             label: `${shownEntries.length} ${shownEntries.length === 1 ? 'entry' : 'entries'} · Total`,
             cells: { amount: <Text className="text-[13px] font-extrabold" style={{ color: meta.color }}>{money(stats.total)}</Text> },
@@ -1012,7 +1116,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
               : kind === 'expense'
                 ? "Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it, or pick one in Category above. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
-                : `Each heading is a ${kind === 'sale' ? 'customer' : 'vendor'} - tap it to open their transactions, or pick one in ${pickWord.one} above. Tap a transaction to open it. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. This year only.`}
+                : `Tap a bill to open it with its items, or pick a ${pickWord.one.toLowerCase()} above to look at just one. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. This year only.`}
       </Text>
     </BookPage>
     <TransactionDetailModal

@@ -2261,8 +2261,9 @@ function BillTotal({ label, value, tint, color, strong }: { label: string; value
 }
 
 /** A Sale / Purchase's quick edit, laid out like a ledger entry's popup: Sale or Purchase, who it is
- * with, its date and time, bill number, amount and remarks. A bill with items keeps its amount
- * worked out from them - those are changed in the full form (`onEditItems`).
+ * with, its date and time, bill number, amount and remarks - and, under them, the bill's items. A
+ * bill with items keeps its amount worked out from them - those are changed in the full form
+ * (`onEditItems`).
  *
  * Whatever is changed is saved on the bill; its ledger entry follows (a Sale is what the party owes
  * you, a Purchase what you owe them), so switching Sale / Purchase or the person moves it there. */
@@ -2390,13 +2391,59 @@ function BillEditPopup({
         </Field>
       </FieldRow>
       {hasItems && (
-        <Pressable onPress={onEditItems} accessibilityRole="button" className="flex-row items-center" style={{ gap: 6 }}>
-          <Ionicons name="list-outline" size={14} color="#1D4ED8" />
-          <Text className="flex-1 text-[12px] text-gray-500">
-            {`${tx.items.length} ${tx.items.length === 1 ? 'item' : 'items'} make up this amount. `}
-            <Text className="font-semibold text-blue-700">Edit the items</Text>
-          </Text>
-        </Pressable>
+        <View style={{ gap: 8 }}>
+          {/* The bill's items, ruled like the printed bill: what the amount above is made of. */}
+          <View className="overflow-hidden rounded-lg border border-gray-300 bg-white">
+            <View className="flex-row bg-gray-50">
+              <BillCell head align="center" width={BILL_COL.sn}>
+                S.N.
+              </BillCell>
+              <BillCell head>Item</BillCell>
+              <BillCell head align="right" width={BILL_COL.qty}>
+                Qty
+              </BillCell>
+              <BillCell head align="right" width={BILL_COL.rate}>
+                Rate
+              </BillCell>
+              <BillCell head ruled={false} align="right" width={BILL_COL.amount}>
+                Amount
+              </BillCell>
+            </View>
+            {tx.items.map((item, idx) => (
+              <View key={idx} className="flex-row border-t border-gray-200">
+                <BillCell align="center" width={BILL_COL.sn} textClass="text-gray-500">
+                  {idx + 1}
+                </BillCell>
+                <BillCell textClass="text-gray-900">{item.description}</BillCell>
+                <BillCell align="right" width={BILL_COL.qty}>
+                  {item.qty}
+                </BillCell>
+                <BillCell align="right" width={BILL_COL.rate}>
+                  {item.rate.toLocaleString()}
+                </BillCell>
+                <BillCell ruled={false} align="right" width={BILL_COL.amount} textClass="font-semibold text-gray-900">
+                  {item.amount.toLocaleString()}
+                </BillCell>
+              </View>
+            ))}
+            {(tx.discount_amount > 0 || tx.vat_amount > 0) && (
+              <BillTotal label="Sub-total" value={tx.items.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} />
+            )}
+            {tx.discount_amount > 0 && <BillTotal label="Discount" value={`− ${tx.discount_amount.toLocaleString()}`} />}
+            {tx.vat_amount > 0 && <BillTotal label="VAT" value={`+ ${tx.vat_amount.toLocaleString()}`} />}
+            <BillTotal
+              label="Total (NPR)"
+              value={tx.amount.toLocaleString()}
+              tint={TYPE_META[tx.type].bg}
+              color={TYPE_META[tx.type].color}
+              strong
+            />
+          </View>
+          <Pressable onPress={onEditItems} accessibilityRole="button" className="flex-row items-center self-start" style={{ gap: 6 }}>
+            <Ionicons name="create-outline" size={14} color="#1D4ED8" />
+            <Text className="text-[12px] font-semibold text-blue-700">Edit the items</Text>
+          </Pressable>
+        </View>
       )}
       <FormActions onCancel={onClose} onSave={handleSave} saving={saving} onRemove={onDelete} />
       <BankAccountPickerModal
