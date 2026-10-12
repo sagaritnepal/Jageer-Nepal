@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { toAdLabel, toBsLabel } from '../utils/nepaliDate';
+import { setLabelCalendarMode, toAdLabel, toBsLabel } from '../utils/nepaliDate';
 
 export type CalendarMode = 'bs' | 'ad';
 
@@ -24,6 +24,11 @@ export const useCalendarModeStore = create<CalendarModeState>()(
     { name: 'calendar-mode', storage: createJSONStorage(() => AsyncStorage) }
   )
 );
+
+// The date labels that are plain functions (not hooks) read the choice from nepaliDate: keep it in
+// step with the store - now, when it has been loaded from storage, and whenever it is changed.
+setLabelCalendarMode(useCalendarModeStore.getState().mode);
+useCalendarModeStore.subscribe((state) => setLabelCalendarMode(state.mode));
 
 export function useCalendarMode(): [CalendarMode, (mode: CalendarMode) => void] {
   const mode = useCalendarModeStore((state) => state.mode);

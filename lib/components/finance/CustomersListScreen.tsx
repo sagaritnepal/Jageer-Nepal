@@ -38,6 +38,7 @@ import { nameCaps } from '../../utils/nameCaps';
 import { isValidPhone10 } from '../../utils/phone';
 import { localTodayIso } from '../../utils/localDate';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { BusinessTransactionType, Customer, CustomerLedgerEntry, Profile } from '../../../types/database.types';
@@ -655,6 +656,7 @@ export function CustomersListScreen(props: { basePath: string }) {
 }
 
 function LedgerList({ basePath }: { basePath: string }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const queryClient = useQueryClient();

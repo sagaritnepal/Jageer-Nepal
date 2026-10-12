@@ -25,6 +25,7 @@ import { MONEY } from './moneyColors';
 import { readKey } from '../../utils/webKeys';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { toBsLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import type { Customer } from '../../../types/database.types';
 import { localTodayIso } from '../../utils/localDate';
 
@@ -50,6 +51,7 @@ export function QuickPaymentScreen() {
 }
 
 function QuickPaymentForm() {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   // The keyboard-driven desk layout is for a wide web screen; a phone (or a
   // phone browser) gets the same touch form the native app does.
   const desktopWeb = useIsWideWeb();

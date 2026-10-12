@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../../hooks/useAuth';
 import { useSupabaseQuery } from '../../../hooks/useSupabase';
 import { toBsHistoryLabel } from '../../../utils/nepaliDate';
+import { useCalendarMode } from '../../../hooks/useCalendarMode';
 import { LineChart } from './LineChart';
 import { MONEY } from '../moneyColors';
 import { PERIODS, buildRange, npr, seriesByBucket, sumType, txTime, type PeriodKey } from './dashboardData';
@@ -81,7 +82,8 @@ export function SalesTrendCard({ fill }: { fill?: boolean }) {
   const [period, setPeriod] = useState<PeriodKey>('1m');
   const [bodyHeight, setBodyHeight] = useState(0);
 
-  const range = useMemo(() => buildRange(period), [period]);
+  const [calendarMode] = useCalendarMode();
+  const range = useMemo(() => buildRange(period), [period, calendarMode]);
   const labels = useMemo(() => range.buckets.map((b) => b.label), [range]);
   const periodMeta = PERIODS.find((p) => p.key === period)!;
   // Today by the hour stops at the current hour rather than running down to zero.
@@ -142,6 +144,7 @@ const MIN_ACTIVITY_ROWS = 2;
 /** The latest sales, purchases and expenses, newest first. With `fill` it shows as
  * many as fit the height the card has (2 to 10); otherwise the latest 6. */
 export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?: boolean }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const txs = useTransactions();
   const [bodyHeight, setBodyHeight] = useState(0);
   const limit = fill && bodyHeight > 0 ? Math.min(10, Math.max(MIN_ACTIVITY_ROWS, Math.floor(bodyHeight / ACTIVITY_ROW_HEIGHT))) : 6;

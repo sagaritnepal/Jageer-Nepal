@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { DateFilterButton } from './DateRangeFilter';
 import { MONEY } from './moneyColors';
@@ -113,6 +114,7 @@ export function TransactionsBook({
   onDeleteTx: (tx: BusinessTransaction) => void;
   onDeleteTransfer: (transfer: AccountTransfer) => void;
 }) {
+  const [calendarMode] = useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const layout = useBookLayout();
 
   // The date range filters everything on the page - the table, its totals and
@@ -242,7 +244,7 @@ export function TransactionsBook({
         onDelete: () => onDeleteTransfer(tr),
       };
     });
-  }, [shownFeed, basePath, categoryNameById, bankAccountNameById, accountName, onOpenTx, onDeleteTx, onDeleteTransfer]);
+  }, [shownFeed, basePath, categoryNameById, bankAccountNameById, accountName, onOpenTx, onDeleteTx, onDeleteTransfer, calendarMode]);
 
   const stats = useMemo(() => {
     const sums = { sale: 0, purchase: 0, expense: 0 };

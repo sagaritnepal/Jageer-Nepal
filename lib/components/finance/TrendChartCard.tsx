@@ -4,6 +4,7 @@ import { View, Text, Pressable } from 'react-native';
 import { BarChart } from '../BarChart';
 import { NetTrendChart } from '../NetTrendChart';
 import { toBsDayChartLabel, toBsMonthChartLabel } from '../../utils/nepaliDate';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import type { BusinessTransaction, BusinessTransactionType } from '../../../types/database.types';
 
 export type TrendMetric = 'all' | BusinessTransactionType;
@@ -75,7 +76,8 @@ export function TrendChartCard({
 }) {
   const [metric, setMetric] = useState<TrendMetric>(initialMetric ?? metrics[0]);
   const [granularity, setGranularity] = useState<Granularity>('month');
-  const buckets = useMemo(() => periodBuckets(granularity), [granularity]);
+  const [calendarMode] = useCalendarMode();
+  const buckets = useMemo(() => periodBuckets(granularity), [granularity, calendarMode]);
 
   const typeChartData = useMemo(() => {
     if (metric === 'all') return [];

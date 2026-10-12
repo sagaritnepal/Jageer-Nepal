@@ -8,7 +8,7 @@ import { useSupabaseQuery, useSupabaseRow } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { isStaffLedgerType, reportKindOfType, usePartyDestination } from '../../hooks/usePartyDestination';
 import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
-import { BS_MONTHS, adStringToBs, toBsHistoryLabel } from '../../utils/nepaliDate';
+import { monthGroupLabel, shortDateLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
 import { localTodayIso } from '../../utils/localDate';
 import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
 import { SALARY_HEADER, expenseHeading, groupExpenseNames, isSalaryName, nameKey, reportCategoryName } from '../../utils/expenseGroups';
@@ -101,16 +101,14 @@ function subjectsOf(rows: Entry[]) {
   return [...bySubject.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 }
 
-/** "Aswin 2083 BS" - the table's month rows. Dates are stored as AD strings
- * ('YYYY-MM-DD' or a full timestamp); Nepal reads them in Bikram Sambat. */
+/** The table's month rows - "Aswin 2083 BS", or "Oct 2026" when dates are read in AD. Dates are stored
+ * as AD strings ('YYYY-MM-DD' or a full timestamp). */
 function bsMonthGroup(date: string): string {
-  const bs = adStringToBs(date.slice(0, 10));
-  return bs ? `${BS_MONTHS[bs.month]} ${bs.year} BS` : 'Other';
+  return monthGroupLabel(date.slice(0, 10));
 }
-/** "Aswin 15" - the Date column. */
+/** The Date column - "Aswin 15", or "Oct 12" in AD. */
 function bsShortDate(date: string): string {
-  const bs = adStringToBs(date.slice(0, 10));
-  return bs ? `${BS_MONTHS[bs.month]} ${bs.date}` : '';
+  return shortDateLabel(date.slice(0, 10));
 }
 
 /** The day ('YYYY-MM-DD') an entry's date falls on: a bill's own date as it is, a timestamp as the

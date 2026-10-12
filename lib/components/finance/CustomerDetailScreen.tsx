@@ -31,6 +31,7 @@ import { nextEntryNo } from '../../utils/nextEntryNo';
 import { useEntryNo } from '../../hooks/useEntryNo';
 import { isValidPhone10 } from '../../utils/phone';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { localTodayIso } from '../../utils/localDate';
 import {
   compareItems,
@@ -691,6 +692,7 @@ export function CustomerDetailScreen({ basePath }: { basePath: string }) {
 }
 
 function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
+  const [calendarMode] = useCalendarMode(); // the history's dates are drawn again when AD / BS changes
   const userId = useAuthStore((state) => state.session?.user.id);
   // `all` on both ledger reads: the balance is a sum over every entry.
   const { data: entries } = useSupabaseQuery('customer_ledger_entries', {
@@ -904,7 +906,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       lines.push(billLine(t, t.amount, 0, 0, entryDay(t.bill_date, t.created_at), t.created_at, true));
     }
     return lines.sort(compareItems);
-  }, [entries, vendorEntries, linkedTransactions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, vendorEntries, linkedTransactions, calendarMode]);
 
   // Every line with the running balance after it, oldest first - and shown newest first.
   const statementAsc = useMemo<HistoryRow[]>(() => withRunningBalance(allLines, 0), [allLines]);

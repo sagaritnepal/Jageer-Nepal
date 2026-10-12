@@ -10,6 +10,7 @@ import { useAccountBalances, type AccountActivityItem } from '../../hooks/useAcc
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { DateField } from '../DateTimeFields';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { ToolbarButton, useBarActions, useBookLayout } from './BookKit';
 import { localTodayIso } from '../../utils/localDate';
@@ -31,6 +32,7 @@ function ActivityRow({
   basePath: string;
   onDeleteTransfer: (id: string) => void;
 }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   return (
     <Pressable
       onPress={() => {

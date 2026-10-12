@@ -35,6 +35,7 @@ import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/c
 import { readKey } from '../../utils/webKeys';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { toBsLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import type {
   AccountTransfer,
   BusinessTransaction,
@@ -359,6 +360,7 @@ function RecentEntriesCard({
   activeId?: string;
   onOpen?: (tx: BusinessTransaction) => void;
 }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const { data } = useSupabaseQuery('business_transactions', {
     filters: { owner_id: userId, type },
     orderBy: { column: 'created_at', ascending: false },
@@ -2149,6 +2151,7 @@ function TransactionRow({
   onPress: () => void;
   onDelete: () => void;
 }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const meta = TYPE_META[tx.type];
   const accountLabel = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
   return (
@@ -2661,6 +2664,7 @@ function dayLabel(dateStr: string): string {
 }
 
 function LedgerRow({ item, customerName, basePath }: { item: CustomerLedgerEntry; customerName: string | null; basePath?: string }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const isDebit = item.entry_type === 'debit';
   // Money we gave the customer (Payment Out) is red; money they paid, or that is still receivable, is green.
   const isOut = isDebit && item.source === 'manual';
@@ -2689,6 +2693,7 @@ function LedgerRow({ item, customerName, basePath }: { item: CustomerLedgerEntry
 }
 
 function VendorFeedRow({ item, vendorName, basePath }: { item: VendorLedgerEntry; vendorName: string | null; basePath?: string }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const isDebit = item.entry_type === 'debit';
   return (
     <Pressable
@@ -2727,6 +2732,7 @@ function TransferFeedRow({
   accountName: (id: string | null) => string;
   onDelete: () => void;
 }) {
+  useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   return (
     <Pressable
       onPress={() =>

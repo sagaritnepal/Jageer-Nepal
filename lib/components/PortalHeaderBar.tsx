@@ -9,6 +9,7 @@ import { useSupabaseUpdate } from '../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { InboxButton } from './technician/InboxButton';
 import { NotificationBell } from './NotificationBell';
+import { CalendarToggle } from './CalendarToggle';
 
 function initialsOf(name: string | null | undefined) {
   if (!name) return '?';
@@ -119,6 +120,8 @@ export function PortalHeaderBar({
       <Text className="flex-1 text-xl font-bold text-gray-900" numberOfLines={1}>
         {title ?? ''}
       </Text>
+      {/* On every page: dates in English (AD) or Nepali (BS). */}
+      <CalendarToggle />
       {showAvailabilityToggle && profile?.role === 'technician' && <AvailabilityToggle />}
       {showInbox && profile?.role === 'technician' && <InboxButton />}
       {showNotifications && (profile?.role === 'reseller' || profile?.role === 'client') && (
