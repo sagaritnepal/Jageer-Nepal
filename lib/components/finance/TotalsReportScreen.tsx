@@ -14,7 +14,7 @@ import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
 import { TransactionDetailModal } from './TransactionsScreen';
-import { OptionMenu } from './ledger/LedgerUi';
+import { InlineSelect } from './ledger/LedgerUi';
 import type { BusinessTransaction } from '../../../types/database.types';
 
 /** Total Received / Total Paid are money that actually moved; Sales / Purchase / Expense are the bills themselves, paid or not. */
@@ -379,25 +379,44 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   // The Expense Report is laid out by category - Fuel, Bike Repair, Salary Advance ... - each with
   // what it adds up to, biggest first, and the individual ledgers / categories under it (Fuel
   // Aviator, Fuel Manish ...; the category pill on every row says which). Categories come from the
-  // words the names start with, so there is nothing to set up. The other reports stay by month.
+  // words the names start with, so there is nothing to set up. Every expense category and every
+  // ledger typed Expense has its place, spent on this year or not, so each is there to pick from the
+  // dropdown. The other reports stay by month.
   const grouped = useMemo(() => {
     if (kind !== 'expense' || partyId) return null;
     const UNFILED = 'Uncategorized';
-    const labelOf = groupExpenseNames(yearEntries.map((e) => e.category ?? UNFILED));
-    const groups = new Map<string, { label: string; total: number; rows: Entry[] }>();
-    for (const e of yearEntries) {
-      const label = labelOf.get(nameKey(e.category ?? UNFILED)) ?? UNFILED;
-      const group = groups.get(nameKey(label));
-      if (group) {
-        group.total += e.amount;
-        group.rows.push(e);
-      } else {
-        groups.set(nameKey(label), { label, total: e.amount, rows: [e] });
+    const names: string[] = [];
+    const known = new Set<string>();
+    const addName = (name: string | null | undefined) => {
+      const clean = (name ?? '').trim();
+      if (clean && !known.has(nameKey(clean))) {
+        known.add(nameKey(clean));
+        names.push(clean);
       }
+    };
+    for (const e of yearEntries) addName(e.category ?? UNFILED);
+    for (const c of categories ?? []) addName(c.name);
+    for (const c of customers ?? []) if (expensePartyIds.has(c.id)) addName(c.name);
+
+    const labelOf = groupExpenseNames(names);
+    const groups = new Map<string, { key: string; label: string; total: number; rows: Entry[] }>();
+    const groupOf = (name: string) => {
+      const label = labelOf.get(nameKey(name)) ?? name.trim();
+      let group = groups.get(nameKey(label));
+      if (!group) {
+        group = { key: nameKey(label), label, total: 0, rows: [] };
+        groups.set(group.key, group);
+      }
+      return group;
+    };
+    for (const name of names) groupOf(name);
+    for (const e of yearEntries) {
+      const group = groupOf(e.category ?? UNFILED);
+      group.total += e.amount;
+      group.rows.push(e);
     }
-    const ordered = [...groups.entries()]
-      .map(([key, g]) => ({ key, ...g }))
-      .sort((a, b) => b.total - a.total);
+
+    const ordered = [...groups.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
     // Each row's section heading, by the row's id; rows within a section stay newest first.
     const headingOf = new Map<string, string>();
     for (const g of ordered) {
@@ -405,14 +424,14 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       for (const e of g.rows) headingOf.set(e.id, heading);
     }
     return { groups: ordered, rows: ordered.flatMap((g) => g.rows), headingOf };
-  }, [kind, partyId, yearEntries]);
+  }, [kind, partyId, yearEntries, categories, customers, expensePartyIds]);
 
   // The one category picked from the dropdown ('' = every category), so a long report can be
   // narrowed to Fuel or Bike Repair without scrolling to it. Picking narrows the table and the
   // figures above it together.
   const [categoryPick, setCategoryPick] = useState('');
-  const activeGroup = grouped?.groups.find((g) => g.key === categoryPick);
-  const shownEntries = activeGroup ? activeGroup.rows : yearEntries;
+  const picked = grouped?.groups.find((g) => g.key === categoryPick) ?? null;
+  const shownEntries = picked ? picked.rows : yearEntries;
   const categoryOptions = useMemo(
     () => [
       { key: '', label: `All categories · ${money(yearEntries.reduce((sum, e) => sum + e.amount, 0))}` },
@@ -526,9 +545,11 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       </BookStats>
 
       {grouped && grouped.groups.length > 0 && (
-        <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
-          <OptionMenu label="Category" options={categoryOptions} value={activeGroup ? activeGroup.key : ''} onChange={setCategoryPick} searchable />
-          {activeGroup && (
+        // Raised above the table that follows: every View is its own stacking layer on the web, so
+        // the dropdown's list can only draw over the table if the row holding it is above it too.
+        <View className="flex-row flex-wrap items-center" style={{ gap: 8, zIndex: 50 }}>
+          <InlineSelect label="Category" options={categoryOptions} value={picked ? categoryPick : ''} onChange={setCategoryPick} searchable />
+          {picked && (
             <Pressable onPress={() => setCategoryPick('')} accessibilityRole="button" accessibilityLabel="Show every category" hitSlop={6}>
               <Text className="text-[12.5px] font-semibold text-blue-700">Show all</Text>
             </Pressable>
@@ -536,17 +557,21 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         </View>
       )}
 
-      {yearEntries.length === 0 ? (
+      {shownEntries.length === 0 ? (
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
           <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">
-            {partyId ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.` : 'Nothing here yet.'}
+            {partyId
+              ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.`
+              : picked
+                ? `Nothing recorded under ${picked.label} this year.`
+                : 'Nothing here yet.'}
           </Text>
         </View>
       ) : (
         <BookTable
           columns={columns}
-          rows={grouped ? (activeGroup ? activeGroup.rows : grouped.rows) : yearEntries}
+          rows={grouped ? (picked ? picked.rows : grouped.rows) : yearEntries}
           rowKey={(e) => e.id}
           onRowPress={open}
           groupOf={(e) => (grouped ? grouped.headingOf.get(e.id) ?? '' : bsMonthGroup(e.date))}
