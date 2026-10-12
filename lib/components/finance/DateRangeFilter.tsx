@@ -27,7 +27,22 @@ function shortLabel(ymd: string, mode: CalendarMode): string {
 }
 
 function rangeLabel(from: string, to: string, mode: CalendarMode): string {
-  if (from && to) return from === to ? shortLabel(from, mode) : `${shortLabel(from, mode)} – ${shortLabel(to, mode)}`;
+  if (from && to && from === to) {
+    // Today and yesterday by name - they are the days stepped to most, and the arrows beside the
+    // button would otherwise leave it saying a date.
+    const today = localTodayIso();
+    if (from === today) return 'Today';
+    if (from === shiftDay(today, -1)) return 'Yesterday';
+    return shortLabel(from, mode);
+  }
+  if (from && to) {
+    // Two days of one month read "Aswin 14 – 28", not "Aswin 14 – Aswin 28": it is shorter, so a
+    // button of one fixed size can hold it.
+    const a = shortLabel(from, mode);
+    const b = shortLabel(to, mode);
+    const month = (label: string) => label.slice(0, label.lastIndexOf(' '));
+    return month(a) === month(b) ? `${a} – ${b.slice(b.lastIndexOf(' ') + 1)}` : `${a} – ${b}`;
+  }
   return from ? `From ${shortLabel(from, mode)}` : `Until ${shortLabel(to, mode)}`;
 }
 
@@ -164,6 +179,10 @@ const PRESETS = [
 ] as const;
 
 const PANEL_WIDTH = 270;
+/** The dropdown's button is always this wide - about what it was when it held a date ("Aswin 25"),
+ * with room for "Yesterday" and a month's range ("Aswin 14 – 28"). A longer label is cut short
+ * rather than making the button, and the arrows beside it, move. */
+const BUTTON_WIDTH = 140;
 
 /** The Filter button. It shows the range that is on (or just "Filter" - or what the page calls
  * its resting range) and drops a menu down from itself: the page's own `shortcuts` first
@@ -236,19 +255,16 @@ function DateFilterDropdown({ from, to, onApply, idleLabel = 'Filter', shortcuts
           accessibilityLabel="Filter by date"
           accessibilityState={{ expanded: dropdown.open }}
           className="h-9 flex-row items-center rounded-lg border px-3"
-          style={{ gap: 6, borderColor: active ? '#2563EB' : '#D1D5DB', backgroundColor: active ? '#EFF6FF' : '#FFFFFF' }}
+          // One size whatever it says ("Today", "Aswin 25", a range): the arrows beside it would
+          // otherwise shift about every time the day changes.
+          style={{ gap: 6, width: BUTTON_WIDTH, borderColor: active ? '#2563EB' : '#D1D5DB', backgroundColor: active ? '#EFF6FF' : '#FFFFFF' }}
         >
           <Ionicons name="funnel-outline" size={14} color={active ? '#1D4ED8' : '#4B5563'} />
-          <Text className={`text-[13px] font-semibold ${active ? 'text-blue-700' : 'text-gray-700'}`} numberOfLines={1} style={{ maxWidth: 170 }}>
+          <Text className={`flex-1 text-[13px] font-semibold ${active ? 'text-blue-700' : 'text-gray-700'}`} numberOfLines={1}>
             {active ? rangeLabel(from, to, mode) : idleLabel}
           </Text>
           <Ionicons name="chevron-down" size={13} color={active ? '#1D4ED8' : '#6B7280'} />
         </Pressable>
-        {active && (
-          <Pressable onPress={() => onApply('', '')} hitSlop={8} accessibilityLabel="Clear dates">
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-          </Pressable>
-        )}
       </View>
 
       <DropdownPanel dropdown={dropdown}>

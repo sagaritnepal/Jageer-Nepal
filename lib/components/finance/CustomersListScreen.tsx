@@ -10,8 +10,7 @@ import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { usePartyDestination } from '../../hooks/usePartyDestination';
 import { supabase } from '../../supabase';
-import { ContactPickerModal } from '../ContactPickerModal';
-import { BookPage, BookStats, BookTable, Pill, ToolbarButton, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { BookPage, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { PartyBalance } from './PartyBalance';
 import { PartyTypeField } from './PartyTypeField';
 import { LedgerTypeMenuModal } from './LedgerTypeMenuModal';
@@ -638,9 +637,10 @@ function LedgerList({ basePath }: { basePath: string }) {
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
   const queryClient = useQueryClient();
-  // The search is a popup (see ContactPickerModal): tap the search box, pick a party, and their ledger opens.
-  const [pickerOpen, setPickerOpen] = useState(false);
-  // A name typed in that popup that is not saved yet starts the New party form with it filled in.
+  // The search box filters the table as you type: every party whose name or phone contains what is
+  // typed, those whose name starts with it first.
+  const [search, setSearch] = useState('');
+  // A name typed in the search that is not saved yet starts the New party form with it filled in.
   const [newPartyName, setNewPartyName] = useState('');
   const [showAddForm, setShowAddForm] = useState(add === '1');
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -745,16 +745,26 @@ function LedgerList({ basePath }: { basePath: string }) {
     return { receivable, payable, net: receivable - payable };
   }, [itemsByParty]);
 
-  // In name order (A-Z): `merged` is already sorted that way and filtering keeps the order.
-  const filtered = useMemo(
-    () =>
+  // In name order (A-Z): `merged` is already sorted that way and filtering keeps the order. With
+  // something typed in the search, a party shows when its name or phone contains it - and the ones
+  // whose name (or any word of it) starts with it come first, then the rest, each still A-Z.
+  const filtered = useMemo(() => {
+    const byStatus =
       filter === 'all'
         ? analysed
         : filter === 'open'
           ? analysed.filter((d) => d.status !== 'settled')
-          : analysed.filter((d) => d.status === filter),
-    [analysed, filter]
-  );
+          : analysed.filter((d) => d.status === filter);
+    const q = search.trim().toLowerCase();
+    if (!q) return byStatus;
+    const rank = (d: PartyRowData) => {
+      const name = d.row.name.toLowerCase();
+      return name.startsWith(q) ? 0 : name.split(/\s+/).some((word) => word.startsWith(q)) ? 1 : 2;
+    };
+    return byStatus
+      .filter((d) => d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q))
+      .sort((a, b) => rank(a) - rank(b));
+  }, [analysed, filter, search]);
 
   // --- selection (phone: the Select button): only saved parties - an app-only row has no ledger to act on ---
   const toggle = (id: string) =>
@@ -834,22 +844,13 @@ function LedgerList({ basePath }: { basePath: string }) {
       // Drawn in the app's top bar, outside this page's own tree - so it carries the capitals with it.
       right: (inBar) => (
         <CapsProvider>
-          <Pressable
-            onPress={() => setPickerOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Search the ledger"
-            className="h-9 flex-row items-center rounded-lg border border-gray-200 bg-white px-3"
-            style={inBar ? { width: 250 } : { flexGrow: 1, minWidth: 180 }}
-          >
-            <Ionicons name="search" size={15} color="#9CA3AF" />
-            <Text className="ml-2 text-sm text-gray-400">Search by name or phone</Text>
-          </Pressable>
+          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name or phone" wide={inBar} />
           <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
           <ToolbarButton icon="add" label="New party" onPress={openNewParty} />
         </CapsProvider>
       ),
     },
-    [exporting]
+    [exporting, search]
   );
 
   // --- pieces both layouts share ---
@@ -895,25 +896,6 @@ function LedgerList({ basePath }: { basePath: string }) {
       {showAddForm && userId ? (
         <AddCustomerForm userId={userId} basePath={basePath} initialName={newPartyName} onDone={() => setShowAddForm(false)} />
       ) : null}
-      <ContactPickerModal
-        visible={pickerOpen}
-        initialQuery=""
-        customers={customers ?? []}
-        phoneContacts={[]}
-        placeholder="Search by name or phone"
-        matchPhone
-        onSelectCustomer={(c) => {
-          setPickerOpen(false);
-          router.push(hrefFor(c.id) as any);
-        }}
-        onAddNewTyped={(name) => {
-          setPickerOpen(false);
-          setNewPartyName(name);
-          setShowAddForm(true);
-        }}
-        onSelectNew={() => {}}
-        onClose={() => setPickerOpen(false)}
-      />
     </>
   );
 
@@ -939,13 +921,29 @@ function LedgerList({ basePath }: { basePath: string }) {
     />
   );
 
+  const typedName = search.trim();
   const emptyState = (
     <View className="items-center rounded-xl border border-dashed border-gray-300 bg-white py-10">
       <Ionicons name="people-outline" size={28} color="#D1D5DB" />
       <Text className="mt-2 text-gray-500">{merged.length > 0 ? 'No matches.' : 'No customers yet.'}</Text>
       <Text className="text-xs text-gray-400">
-        {merged.length > 0 ? 'Try another filter.' : "Add one with New party, or they'll be saved when you record a bill for them."}
+        {merged.length > 0 ? 'Try another search or filter.' : "Add one with New party, or they'll be saved when you record a bill for them."}
       </Text>
+      {!!typedName && (
+        // Not in the Ledger yet: the typed name can start the New party form as it is.
+        <Pressable
+          onPress={() => {
+            setNewPartyName(typedName);
+            setShowAddForm(true);
+          }}
+          accessibilityRole="button"
+          className="mt-3 flex-row items-center rounded-lg border border-orange-200 bg-orange-50 px-3 py-2"
+          style={{ gap: 6 }}
+        >
+          <Ionicons name="add-circle-outline" size={15} color="#EA580C" />
+          <Text className="text-sm font-semibold text-orange-600">Add "{typedName}" as a new party</Text>
+        </Pressable>
+      )}
     </View>
   );
 
@@ -1110,15 +1108,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     <View className="flex-1 bg-gray-50">
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }} keyboardShouldPersistTaps="handled">
         <View className="flex-row items-center gap-2">
-          <Pressable
-            onPress={() => setPickerOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Search the ledger"
-            className="flex-1 flex-row items-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5"
-          >
-            <Ionicons name="search" size={18} color="#9CA3AF" />
-            <Text className="ml-2 text-sm text-gray-400">Search by name or phone</Text>
-          </Pressable>
+          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name or phone" wide={false} />
           <Pressable onPress={openNewParty} className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500">
             <Ionicons name="add" size={22} color="white" />
           </Pressable>

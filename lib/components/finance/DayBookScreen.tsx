@@ -118,6 +118,29 @@ function timeOf(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/** 'YYYY-MM-DD' moved by whole days (negative = earlier), in the device's own time zone. */
+function addDays(ymd: string, delta: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const moved = new Date(y, m - 1, d + delta);
+  return `${moved.getFullYear()}-${String(moved.getMonth() + 1).padStart(2, '0')}-${String(moved.getDate()).padStart(2, '0')}`;
+}
+
+/** The arrow beside the date button: one day back, or one day forward. */
+function DayStepButton({ direction, disabled, onPress }: { direction: 'back' | 'forward'; disabled?: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={direction === 'back' ? 'Previous day' : 'Next day'}
+      className="h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white"
+      style={{ opacity: disabled ? 0.4 : 1 }}
+    >
+      <Ionicons name={direction === 'back' ? 'chevron-back' : 'chevron-forward'} size={17} color="#374151" />
+    </Pressable>
+  );
+}
+
 function money(n: number | null | undefined): string {
   return n == null ? '—' : Math.round(n).toLocaleString();
 }
@@ -1153,6 +1176,18 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const isToday = from === today && day === today;
   const applyRange = (f: string, t: string) => setRange(f || t ? { from: f, to: t } : { from: today, to: today });
 
+  // The arrows beside the date button walk the book one day at a time, always by exactly one:
+  // yesterday, the day before ... and forward again as far as today. On a longer period the whole
+  // period moves a day (its start with it, unless it reaches back to the start of the books).
+  // Nothing past today - there is nothing to look at there.
+  const canStepForward = day < today;
+  const stepDays = (delta: number) =>
+    setRange((r) => {
+      const to = addDays(r.to || today, delta);
+      if (to > today) return r;
+      return { from: r.from ? addDays(r.from, delta) : '', to };
+    });
+
   // The Filter button and New entry live in the top bar on a wide screen, and as
   // a plain row above the tiles on a narrow one.
   const toolbar = useBookToolbar(
@@ -1162,18 +1197,22 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       right: () => (
         <>
           <NewEntryButtons basePath={basePath} />
-          <DateFilterButton
-            dropdown
-            from={isToday ? '' : range.from}
-            to={isToday ? '' : range.to}
-            idleLabel="Today"
-            onApply={applyRange}
-            shortcuts={[{ label: 'Today', on: isToday, onSelect: () => setRange({ from: today, to: today }) }]}
-          />
+          <View className="flex-row items-center" style={{ gap: 6 }}>
+            <DayStepButton direction="back" onPress={() => stepDays(-1)} />
+            <DateFilterButton
+              dropdown
+              from={isToday ? '' : range.from}
+              to={isToday ? '' : range.to}
+              idleLabel="Today"
+              onApply={applyRange}
+              shortcuts={[{ label: 'Today', on: isToday, onSelect: () => setRange({ from: today, to: today }) }]}
+            />
+            <DayStepButton direction="forward" disabled={!canStepForward} onPress={() => stepDays(1)} />
+          </View>
         </>
       ),
     },
-    [range, isToday, today, basePath]
+    [range, isToday, today, basePath, canStepForward]
   );
 
   const loaded = !(isLoading && !transactions);

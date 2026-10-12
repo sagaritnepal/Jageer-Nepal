@@ -55,6 +55,9 @@ interface Entry {
   /** What an expense is filed under - its category, or the ledger a payment went to. The Expense
    * Report is grouped by it (see groupExpenseNames). */
   category?: string;
+  /** Money received or paid on a ledger, listed beside a Sales / Purchase report's bills. It settles
+   * bills, so it is not part of what was billed (that would count a sale and its receipt twice). */
+  payment?: boolean;
   /** Where tapping it goes, when that is not the person's ledger page (see usePartyDestination). */
   href?: string;
 }
@@ -138,21 +141,27 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   const { nameById: partyTypeName } = usePartyTypes(userId);
   // Where a person opens from a report (the report for their Ledger type, else their ledger).
   const hrefFor = usePartyDestination(userId, basePath);
-  // What is paid to a ledger typed Expense (Bike Repair, Fuel ...) or Employee is an expense even
-  // though it is recorded as a payment on their ledger, not through the Expense form.
-  //  - An Expense ledger is itself a category: its payments are filed under its name.
-  //  - An Employee ledger is a person, not a category: its payments are filed under the existing
-  //    category its remark names ("FUEL" -> Fuel), else Uncategorized. The category list is
-  //    never added to by a person.
-  const { expenseLedgerIds, staffLedgerIds } = useMemo(() => {
+  // What is recorded on a person's own ledger page belongs in the report their Ledger type stands for:
+  //  - Expense: what is paid to the ledger is an expense even though it is a payment on their
+  //    ledger, not through the Expense form. An Expense ledger is itself a category: its payments are
+  //    filed under its name.
+  //  - Employee: a person, not a category: their payments are filed under the existing category the
+  //    remark names ("FUEL" -> Fuel), else Uncategorized. The category list is never added to by a person.
+  //  - Sales / Purchase: the money received from / paid to the ledger, listed beside its bills.
+  const { expenseLedgerIds, staffLedgerIds, saleLedgerIds, purchaseLedgerIds } = useMemo(() => {
     const expense = new Set<string>();
     const staff = new Set<string>();
+    const sale = new Set<string>();
+    const purchase = new Set<string>();
     for (const c of customers ?? []) {
       const typeName = c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined;
-      if (reportKindOfType(typeName) === 'expense') expense.add(c.id);
+      const typed = reportKindOfType(typeName);
+      if (typed === 'expense') expense.add(c.id);
+      else if (typed === 'sale') sale.add(c.id);
+      else if (typed === 'purchase') purchase.add(c.id);
       else if (isStaffLedgerType(typeName)) staff.add(c.id);
     }
-    return { expenseLedgerIds: expense, staffLedgerIds: staff };
+    return { expenseLedgerIds: expense, staffLedgerIds: staff, saleLedgerIds: sale, purchaseLedgerIds: purchase };
   }, [customers, partyTypeName]);
   const { data: categories } = useSupabaseQuery('expense_categories', {
     filters: userId ? { owner_id: userId } : {},
@@ -233,7 +242,12 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             // A bill to a saved customer / vendor opens that party's ledger; a walk-in or expense has none.
             nav: t.customer_id && kind !== 'expense' ? { kind: 'party', partyId: t.customer_id } : { kind: 'transactions', type: kind },
             tx: t,
-            category: kind === 'expense' ? category ?? 'Uncategorized' : undefined,
+            // Expense: filed under its category. Sales / Purchase: under who it was with, which is what
+            // those reports are grouped by.
+            category:
+              kind === 'expense'
+                ? category ?? 'Uncategorized'
+                : (t.customer_id ? nameById.get(t.customer_id) : undefined) || t.party_name?.trim() || 'No party',
           };
         });
       // An expense is often not a bill at all: money paid to a ledger typed Expense (Bike Repair, Fuel
@@ -287,6 +301,56 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         }
         for (const e of vendorSide) {
           if (counts(e.vendor_id) && e.entry_type === 'credit') rows.push(ledgerRow(e, e.vendor_id, false));
+        }
+      } else {
+        // Sales / Purchase: every ledger feeds them, whatever its type, by which way the money went -
+        // what was received on a ledger is a sale, what was paid on one is a purchase (an Expense or
+        // Employee ledger is the Expense Report's, not these). The copy a bill posts to the ledger is
+        // the bill itself, listed above, so it is left out.
+        //
+        // Counting: a person with bills of this kind has their payments listed but not added (they
+        // settle those bills - a sale and its receipt would count twice); a person with NO bills of this
+        // kind has had nothing else recorded, so what was received / paid is the sale / purchase.
+        const salesSide = kind === 'sale';
+        const billed = new Set<string>();
+        for (const row of rows) if (row.tx?.customer_id) billed.add(row.tx.customer_id);
+        const hasBills = (ledgerId: string) => (partyId ? rows.length > 0 : billed.has(ledgerId));
+        const ledgerRow = (
+          e: { id: string; entry_date: string | null; created_at: string; amount: number; receipt_no: string | null; note: string | null },
+          ledgerId: string,
+          moneyIn: boolean
+        ): Entry => {
+          const name = nameById.get(ledgerId) ?? partyRow?.name ?? 'Ledger';
+          return {
+            id: e.id,
+            date: e.entry_date ?? e.created_at,
+            amount: Number(e.amount),
+            party: `${moneyIn ? 'Received from' : 'Paid to'} ${name}`,
+            note: [e.receipt_no ? `${moneyIn ? 'Receipt' : 'Payment'} no. ${e.receipt_no}` : null, e.note].filter(Boolean).join(' · '),
+            type: moneyIn ? PILL.paymentReceived : PILL.paymentOut,
+            nav: { kind: 'party', partyId: ledgerId },
+            category: name,
+            // Listed but not added up when it settles a bill of theirs.
+            payment: hasBills(ledgerId),
+            href: partyId ? `${basePath}/customer/${ledgerId}` : hrefFor(ledgerId),
+          };
+        };
+        const customerSide = partyId ? partyCustomerEntries ?? [] : ledgerEntries ?? [];
+        const vendorSide = partyId ? partyVendorEntries ?? [] : vendorEntries ?? [];
+        const counts = (ledgerId: string) =>
+          partyId ? ledgerId === partyId : !expenseLedgerIds.has(ledgerId) && !staffLedgerIds.has(ledgerId);
+        for (const e of customerSide) {
+          if (!counts(e.customer_id) || e.source_type === 'business_transaction') continue;
+          if (salesSide && e.entry_type === 'credit') rows.push(ledgerRow(e, e.customer_id, true));
+          // Money paid out on the customer ledger (the older way of recording a payment) is a purchase's.
+          else if (!salesSide && e.entry_type === 'debit' && e.source === 'manual') rows.push(ledgerRow(e, e.customer_id, false));
+        }
+        if (!salesSide) {
+          for (const e of vendorSide) {
+            if (counts(e.vendor_id) && e.entry_type === 'credit' && e.source_type !== 'business_transaction') {
+              rows.push(ledgerRow(e, e.vendor_id, false));
+            }
+          }
         }
       }
       return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -375,6 +439,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     categories,
     expenseLedgerIds,
     staffLedgerIds,
+    saleLedgerIds,
+    purchaseLedgerIds,
     hrefFor,
     basePath,
     kind,
@@ -388,13 +454,16 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     if (!partyId) return [];
     const rows: Entry[] = [];
     const nav: NavTarget = { kind: 'party', partyId };
-    // On an Expense ledger what was paid out, and what came back, are the report's own rows above
-    // (see `entries`) - not repeated here.
-    const inReport = kind === 'expense';
+    // What is already one of the report's own rows above (see `entries`) is not repeated here. What
+    // is left is what has no place there: for Sales what they owe and what was paid out to them, for
+    // Purchase what was received from them and what was bought on credit, for an Expense ledger what
+    // they owe and what was bought on credit.
     for (const e of partyCustomerEntries ?? []) {
       if (e.source_type === 'business_transaction') continue;
       const manual = e.source === 'manual';
-      if (inReport && manual) continue;
+      const inReport =
+        kind === 'expense' ? manual : kind === 'sale' ? e.entry_type === 'credit' : e.entry_type === 'debit' && manual;
+      if (inReport) continue;
       rows.push({
         id: e.id,
         date: e.entry_date ?? e.created_at,
@@ -407,7 +476,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     }
     for (const e of partyVendorEntries ?? []) {
       if (e.source_type === 'business_transaction') continue;
-      if (inReport && e.entry_type === 'credit') continue;
+      // A payment out (credit) is one of Expense's and Purchase's own rows.
+      if (e.entry_type === 'credit' && kind !== 'sale') continue;
       rows.push({
         id: e.id,
         date: e.entry_date ?? e.created_at,
@@ -433,10 +503,14 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   // Aviator, Fuel Manish ...; the category pill on every row says which). Categories come from the
   // words the names start with, so there is nothing to set up. Every expense category and every
   // ledger typed Expense has its place, spent on this year or not, so each is there to pick from the
-  // dropdown. The other reports stay by month.
+  // dropdown.
+  //
+  // The Sales and Purchase reports are laid out the same way, by who it was with: a heading per
+  // customer / vendor (exactly as named) with what it adds up to, and a dropdown to pick one. Only
+  // people with something recorded this year are listed. The other reports stay by month.
   const grouped = useMemo(() => {
-    if (kind !== 'expense' || partyId) return null;
-    const UNFILED = 'Uncategorized';
+    if (partyId || (kind !== 'expense' && kind !== 'sale' && kind !== 'purchase')) return null;
+    const UNFILED = kind === 'expense' ? 'Uncategorized' : 'No party';
     const names: string[] = [];
     const known = new Set<string>();
     const addName = (name: string | null | undefined) => {
@@ -447,11 +521,15 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       }
     };
     for (const e of yearEntries) addName(e.category ?? UNFILED);
-    for (const c of categories ?? []) addName(c.name);
-    // Only Expense ledgers are categories; an employee is a person and never is one.
-    for (const c of customers ?? []) if (expenseLedgerIds.has(c.id)) addName(c.name);
+    if (kind === 'expense') {
+      for (const c of categories ?? []) addName(c.name);
+      // Only Expense ledgers are categories; an employee is a person and never is one.
+      for (const c of customers ?? []) if (expenseLedgerIds.has(c.id)) addName(c.name);
+    }
 
-    const labelOf = groupExpenseNames(names);
+    // Expense names are merged by the words they start with; a customer or vendor is its own heading.
+    const labelOf =
+      kind === 'expense' ? groupExpenseNames(names) : new Map(names.map((n) => [nameKey(n), n.trim()] as const));
     const groups = new Map<string, { key: string; label: string; total: number; rows: Entry[] }>();
     const groupOf = (name: string) => {
       const label = labelOf.get(nameKey(name)) ?? name.trim();
@@ -465,7 +543,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     for (const name of names) groupOf(name);
     for (const e of yearEntries) {
       const group = groupOf(e.category ?? UNFILED);
-      group.total += e.amount;
+      // A payment that settles a bill is listed under its heading but is not added to its figure.
+      if (!e.payment) group.total += e.amount;
       group.rows.push(e);
     }
 
@@ -479,18 +558,19 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     return { groups: ordered, rows: ordered.flatMap((g) => g.rows), headingOf };
   }, [kind, partyId, yearEntries, categories, customers, expenseLedgerIds]);
 
-  // The one category picked from the dropdown ('' = every category), so a long report can be
-  // narrowed to Fuel or Bike Repair without scrolling to it. Picking narrows the table and the
-  // figures above it together.
+  // The one category (Expense) or customer / vendor (Sales / Purchase) picked from the dropdown
+  // ('' = all of them), so a long report can be narrowed to Fuel or to one customer without
+  // scrolling to it. Picking narrows the table and the figures above it together.
   const [categoryPick, setCategoryPick] = useState('');
   const picked = grouped?.groups.find((g) => g.key === categoryPick) ?? null;
   const shownEntries = picked ? picked.rows : yearEntries;
+  const pickWord = kind === 'expense' ? { one: 'Category', all: 'All categories' } : kind === 'sale' ? { one: 'Customer', all: 'All customers' } : { one: 'Vendor', all: 'All vendors' };
   const categoryOptions = useMemo(
     () => [
-      { key: '', label: `All categories · ${money(yearEntries.reduce((sum, e) => sum + e.amount, 0))}` },
+      { key: '', label: `${pickWord.all} · ${money(yearEntries.reduce((sum, e) => (e.payment ? sum : sum + e.amount), 0))}` },
       ...(grouped?.groups ?? []).map((g) => ({ key: g.key, label: `${g.label} · ${money(g.total)}` })),
     ],
-    [grouped, yearEntries]
+    [grouped, yearEntries, pickWord.all]
   );
 
   const stats = useMemo(() => {
@@ -498,13 +578,21 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     let total = 0;
     let thisMonth = 0;
     let largest = 0;
+    // Money received / paid on a Sales / Purchase ledger: its own figure, apart from what was billed.
+    let payments = 0;
+    let paymentCount = 0;
     for (const e of shownEntries) {
+      if (e.payment) {
+        payments += e.amount;
+        paymentCount += 1;
+        continue;
+      }
       total += e.amount;
       largest = Math.max(largest, e.amount);
       const d = new Date(e.date);
       if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) thisMonth += e.amount;
     }
-    return { total, thisMonth, largest };
+    return { total, thisMonth, largest, payments, paymentCount };
   }, [shownEntries]);
 
   // Where the person stands, both of their ledgers netted - the same figure and wording as on
@@ -595,13 +683,16 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         <BookStat label="This month" value={`NPR ${money(stats.thisMonth)}`} color="#374151" />
         <BookStat label="Entries" value={String(shownEntries.length)} color="#374151" />
         <BookStat label="Largest" value={`NPR ${money(stats.largest)}`} color="#374151" />
+        {stats.paymentCount > 0 && (
+          <BookStat label={kind === 'sale' ? 'Received on bills' : 'Paid on bills'} value={`NPR ${money(stats.payments)}`} color={meta.color} />
+        )}
       </BookStats>
 
       {grouped && grouped.groups.length > 0 && (
         // Raised above the table that follows: every View is its own stacking layer on the web, so
         // the dropdown's list can only draw over the table if the row holding it is above it too.
         <View className="flex-row flex-wrap items-center" style={{ gap: 8, zIndex: 50 }}>
-          <InlineSelect label="Category" options={categoryOptions} value={picked ? categoryPick : ''} onChange={setCategoryPick} searchable />
+          <InlineSelect label={pickWord.one} options={categoryOptions} value={picked ? categoryPick : ''} onChange={setCategoryPick} searchable />
           {picked && (
             <Pressable onPress={() => setCategoryPick('')} accessibilityRole="button" accessibilityLabel="Show every category" hitSlop={6}>
               <Text className="text-[12.5px] font-semibold text-blue-700">Show all</Text>
@@ -654,14 +745,14 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         {partyId
           ? kind === 'expense'
             ? 'Tap a bill to open it; tap a payment to open this ledger, where it can be edited. Money paid to this ledger counts as an expense, and money received back is taken off. The balance above counts every entry of both ledgers.'
-            : 'Tap a bill to open it; tap a payment to open their ledger, where it can be edited. The balance above counts every entry of both ledgers, including these.'
+            : `Tap a bill to open it; tap a ${kind === 'sale' ? 'receipt' : 'payment'} to open their ledger, where it can be edited. What was ${kind === 'sale' ? 'received' : 'paid'} is listed with the bills. With bills recorded it settles them and is not added again (a bill and its payment would count twice); with none, it is the ${kind === 'sale' ? 'sale' : 'purchase'} and counts. The balance above counts every entry of both ledgers.`
           : kind === 'received'
             ? 'Tap an entry to open it. Only money actually collected counts here - a sale bill on credit shows up once the customer pays.'
             : kind === 'paid'
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
               : kind === 'expense'
                 ? "Tap an entry to open it. Grouped by category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one heading; use Category above to look at just one. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
-                : `Tap an entry to open it. Every ${kind} bill counts here, whether or not the money has moved yet - see Total ${kind === 'sale' ? 'Received' : 'Paid'} for what actually has.`}
+                : `Tap an entry to open it. Grouped by ${kind === 'sale' ? 'customer' : 'vendor'}; use ${pickWord.one} above to look at one. Every ${kind} bill counts here, whether or not the money has moved yet. What was ${kind === 'sale' ? 'received' : 'paid'} on any ledger is listed too: for someone with ${kind} bills it settles them and is not added again; for someone with none it is the ${kind} and counts. This year only.`}
       </Text>
     </BookPage>
     <TransactionDetailModal
