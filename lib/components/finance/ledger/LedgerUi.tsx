@@ -2,8 +2,8 @@
 //
 // The small pieces the Ledger list and a party's statement share: summary
 // cards, status badges, a dropdown and a checkbox.
-import { useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Text } from '../CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { Pill } from '../BookKit';
@@ -117,6 +117,7 @@ export function OptionMenuModal<K extends string>({
   selected,
   onPick,
   onClose,
+  searchable,
 }: {
   visible: boolean;
   title: string;
@@ -125,7 +126,16 @@ export function OptionMenuModal<K extends string>({
   selected?: K | null;
   onPick: (key: K) => void;
   onClose: () => void;
+  /** A search box over a long list: typing narrows the choices to the labels containing it. */
+  searchable?: boolean;
 }) {
+  const [query, setQuery] = useState('');
+  // Each opening starts from the whole list.
+  useEffect(() => {
+    if (visible) setQuery('');
+  }, [visible]);
+  const needle = query.trim().toLowerCase();
+  const shown = searchable && needle ? options.filter((o) => o.label.toLowerCase().includes(needle)) : options;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={onClose}>
@@ -136,9 +146,23 @@ export function OptionMenuModal<K extends string>({
               <Text className="text-sm font-semibold text-blue-700">Close</Text>
             </Pressable>
           </View>
-          <ScrollView>
-            {options.length === 0 && <Text className="px-2 py-3 text-center text-sm text-gray-400">Nothing to choose from.</Text>}
-            {options.map((o) => {
+          {searchable && (
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search"
+              placeholderTextColor="#9CA3AF"
+              autoFocus
+              className="mb-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+            />
+          )}
+          <ScrollView keyboardShouldPersistTaps="handled">
+            {shown.length === 0 && (
+              <Text className="px-2 py-3 text-center text-sm text-gray-400">
+                {options.length === 0 ? 'Nothing to choose from.' : 'No matches.'}
+              </Text>
+            )}
+            {shown.map((o) => {
               const on = o.key === selected;
               return (
                 <Pressable
@@ -167,11 +191,14 @@ export function OptionMenu<K extends string>({
   options,
   value,
   onChange,
+  searchable,
 }: {
   label: string;
   options: MenuOption<K>[];
   value: K;
   onChange: (key: K) => void;
+  /** Gives the popup a search box - for a list too long to scan. */
+  searchable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.key === value);
@@ -195,6 +222,7 @@ export function OptionMenu<K extends string>({
         title={label}
         options={options}
         selected={value}
+        searchable={searchable}
         onPick={(key) => {
           setOpen(false);
           onChange(key);

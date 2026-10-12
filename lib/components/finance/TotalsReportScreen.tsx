@@ -1,6 +1,6 @@
 // lib/components/finance/TotalsReportScreen.tsx
 import { useMemo, useState, type ReactNode } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -14,6 +14,7 @@ import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
 import { TransactionDetailModal } from './TransactionsScreen';
+import { OptionMenu } from './ledger/LedgerUi';
 import type { BusinessTransaction } from '../../../types/database.types';
 
 /** Total Received / Total Paid are money that actually moved; Sales / Purchase / Expense are the bills themselves, paid or not. */
@@ -390,29 +391,45 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         groups.set(nameKey(label), { label, total: e.amount, rows: [e] });
       }
     }
-    const ordered = [...groups.values()].sort((a, b) => b.total - a.total);
+    const ordered = [...groups.entries()]
+      .map(([key, g]) => ({ key, ...g }))
+      .sort((a, b) => b.total - a.total);
     // Each row's section heading, by the row's id; rows within a section stay newest first.
     const headingOf = new Map<string, string>();
     for (const g of ordered) {
       const heading = `${g.label}  ·  NPR ${money(g.total)}  ·  ${g.rows.length} ${g.rows.length === 1 ? 'entry' : 'entries'}`;
       for (const e of g.rows) headingOf.set(e.id, heading);
     }
-    return { rows: ordered.flatMap((g) => g.rows), headingOf };
+    return { groups: ordered, rows: ordered.flatMap((g) => g.rows), headingOf };
   }, [kind, partyId, yearEntries]);
+
+  // The one category picked from the dropdown ('' = every category), so a long report can be
+  // narrowed to Fuel or Bike Repair without scrolling to it. Picking narrows the table and the
+  // figures above it together.
+  const [categoryPick, setCategoryPick] = useState('');
+  const activeGroup = grouped?.groups.find((g) => g.key === categoryPick);
+  const shownEntries = activeGroup ? activeGroup.rows : yearEntries;
+  const categoryOptions = useMemo(
+    () => [
+      { key: '', label: `All categories · ${money(yearEntries.reduce((sum, e) => sum + e.amount, 0))}` },
+      ...(grouped?.groups ?? []).map((g) => ({ key: g.key, label: `${g.label} · ${money(g.total)}` })),
+    ],
+    [grouped, yearEntries]
+  );
 
   const stats = useMemo(() => {
     const now = new Date();
     let total = 0;
     let thisMonth = 0;
     let largest = 0;
-    for (const e of yearEntries) {
+    for (const e of shownEntries) {
       total += e.amount;
       largest = Math.max(largest, e.amount);
       const d = new Date(e.date);
       if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) thisMonth += e.amount;
     }
     return { total, thisMonth, largest };
-  }, [yearEntries]);
+  }, [shownEntries]);
 
   // Where the person stands, both of their ledgers netted - the same figure and wording as on
   // their ledger page's name card.
@@ -500,9 +517,20 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       <BookStats>
         <BookStat label={partyId ? 'Total' : `${year} total`} value={`NPR ${money(stats.total)}`} color={meta.color} />
         <BookStat label="This month" value={`NPR ${money(stats.thisMonth)}`} color="#374151" />
-        <BookStat label="Entries" value={String(yearEntries.length)} color="#374151" />
+        <BookStat label="Entries" value={String(shownEntries.length)} color="#374151" />
         <BookStat label="Largest" value={`NPR ${money(stats.largest)}`} color="#374151" />
       </BookStats>
+
+      {grouped && grouped.groups.length > 0 && (
+        <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
+          <OptionMenu label="Category" options={categoryOptions} value={activeGroup ? activeGroup.key : ''} onChange={setCategoryPick} searchable />
+          {activeGroup && (
+            <Pressable onPress={() => setCategoryPick('')} accessibilityRole="button" accessibilityLabel="Show every category" hitSlop={6}>
+              <Text className="text-[12.5px] font-semibold text-blue-700">Show all</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {yearEntries.length === 0 ? (
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
@@ -514,12 +542,12 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       ) : (
         <BookTable
           columns={columns}
-          rows={grouped ? grouped.rows : yearEntries}
+          rows={grouped ? (activeGroup ? activeGroup.rows : grouped.rows) : yearEntries}
           rowKey={(e) => e.id}
           onRowPress={open}
           groupOf={(e) => (grouped ? grouped.headingOf.get(e.id) ?? '' : bsMonthGroup(e.date))}
           footer={{
-            label: `${yearEntries.length} ${yearEntries.length === 1 ? 'entry' : 'entries'} · Total`,
+            label: `${shownEntries.length} ${shownEntries.length === 1 ? 'entry' : 'entries'} · Total`,
             cells: { amount: <Text className="text-[13px] font-extrabold" style={{ color: meta.color }}>{money(stats.total)}</Text> },
           }}
         />
@@ -548,7 +576,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             : kind === 'paid'
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
               : kind === 'expense'
-                ? "Tap an entry to open it. Grouped by category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one heading. Counts every expense bill, and money paid to a ledger typed Expense (listed under that ledger's name). This year only."
+                ? "Tap an entry to open it. Grouped by category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one heading; use Category above to look at just one. Counts every expense bill, and money paid to a ledger typed Expense (listed under that ledger's name). This year only."
                 : `Tap an entry to open it. Every ${kind} bill counts here, whether or not the money has moved yet - see Total ${kind === 'sale' ? 'Received' : 'Paid'} for what actually has.`}
       </Text>
     </BookPage>
