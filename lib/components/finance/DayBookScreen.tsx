@@ -20,6 +20,8 @@ import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { ENTRY_KINDS } from './entryKinds';
+import { TransactionDetailModal } from './TransactionsScreen';
+import type { BusinessTransaction } from '../../../types/database.types';
 
 type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer';
 
@@ -55,7 +57,8 @@ type BookRow = {
   /** The same movement per account, so one account can be viewed on its own. */
   moves: Move[];
   sortKey: string;
-  href?: string;
+  /** The sale / purchase / expense bill behind this row: tapping it opens it in a popup, edit and all. */
+  bill?: BusinessTransaction;
   /** What this row actually is in the database, so it can be edited here. */
   edit?: EditTarget;
 };
@@ -217,7 +220,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   );
   // Tapping an entry opens it for editing; the opening-balance line and
   // anything without a record behind it stays inert.
-  const open = (r: BookRow) => (r.edit ? () => onOpenRow(r) : r.href ? () => router.push(r.href as any) : undefined);
+  const open = (r: BookRow) => (r.edit || r.bill ? () => onOpenRow(r) : undefined);
 
   if (!full) {
     // Narrow: SN | Date (and time) | Details (type, notes, invoice no.) | Amount | Balance.
@@ -239,7 +242,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
           return (
             <Fragment key={r.id}>
             {dayBand(r, index)}
-            <Pressable onPress={open(r)} disabled={!r.edit && !r.href} className="flex-row border-b border-gray-200">
+            <Pressable onPress={open(r)} disabled={!r.edit && !r.bill} className="flex-row border-b border-gray-200">
               <Text className={`${cell} text-xs text-gray-500`} style={{ width: 34 }} numberOfLines={1}>
                 {r.kind === 'opening' ? '' : index}
               </Text>
@@ -315,7 +318,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             {dayBand(r, index)}
             <Pressable
               onPress={open(r)}
-              disabled={!r.edit && !r.href}
+              disabled={!r.edit && !r.bill}
               className="flex-row border-b border-gray-200"
               style={r.kind === 'opening' ? { backgroundColor: '#FAFAFA' } : undefined}
             >
@@ -872,6 +875,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const day = range.to || today;
   const singleDay = from === day;
   const [editing, setEditing] = useState<EditTarget | null>(null);
+  // A bill opened from its row: shown in a popup, and edited in it.
+  const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
+  const queryClient = useQueryClient();
+  const deleteTx = useSupabaseDelete('business_transactions');
   // null shows every account together; otherwise just what went through that one.
   const [selectedAccount, setSelectedAccount] = useState<AccountKey | null>(null);
 
@@ -940,9 +947,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         account: isExpense ? via(t.bank_account_id) : null,
         moves: isExpense ? [{ account: keyOf(t.bank_account_id), amount: t.amount, dir: 'out' }] : [],
         sortKey: t.created_at,
-        // A bill opens on its own page - the very page that recorded it, with the
-        // bill loaded - rather than in a cut-down popup.
-        href: `${basePath}/transactions?type=${t.type}&add=1&edit=${t.id}`,
+        // A bill opens in a popup right here, to read; its Edit button goes to the edit page.
+        bill: t,
       });
     }
 
@@ -1172,7 +1178,42 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       accountOptions,
       selected,
     };
-  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, basePath, selectedAccount]);
+  }, [transactions, customerEntries, vendorEntries, transfers, contacts, accounts, categories, day, from, singleDay, selectedAccount]);
+
+  // A bill's triggers write to the ledgers, so after it is changed the ledgers are read again too.
+  const refreshBooks = () =>
+    Promise.all(
+      ['business_transactions', 'customer_ledger_entries', 'vendor_ledger_entries', 'account_transfers'].map((table) =>
+        queryClient.invalidateQueries({ queryKey: [table] })
+      )
+    );
+  const closeBill = () => {
+    setViewingTx(null);
+    void refreshBooks();
+  };
+  // Edit: the bill's own edit page - the one New opens, with the bill loaded.
+  const editBill = () => {
+    if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}&add=1&edit=${viewingTx.id}` as never);
+    setViewingTx(null);
+  };
+  const removeBill = (tx: BusinessTransaction) => {
+    setViewingTx(null);
+    showAlert(`Delete this ${tx.type}?`, `${tx.party_name || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteTx.mutateAsync(tx.id);
+            await refreshBooks();
+          } catch (err) {
+            showAlert('Could not delete', getErrorMessage(err));
+          }
+        },
+      },
+    ]);
+  };
 
   // The date band above each day of a longer view.
   const dayLabel = (date: string) => dateLabels(date, calendarMode).join('  ·  ');
@@ -1243,10 +1284,26 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             closing={book.closing}
             full={fullTable}
             dayLabel={singleDay ? undefined : dayLabel}
-            onOpenRow={(row) => row.edit && setEditing(row.edit)}
+            onOpenRow={(row) => {
+              if (row.bill) setViewingTx(row.bill);
+              else if (row.edit) setEditing(row.edit);
+            }}
           />
 
           <EditEntryModal target={editing} onClose={() => setEditing(null)} />
+          <TransactionDetailModal
+            tx={viewingTx}
+            categoryName={
+              viewingTx?.expense_category_id ? (categories ?? []).find((c) => c.id === viewingTx.expense_category_id)?.name ?? null : null
+            }
+            bankAccountName={
+              viewingTx?.bank_account_id ? (accounts ?? []).find((a) => a.id === viewingTx.bank_account_id)?.name ?? null : null
+            }
+            onClose={closeBill}
+            onEdit={editBill}
+            editOnPage
+            onDelete={viewingTx ? () => removeBill(viewingTx) : undefined}
+          />
 
           {book.entryCount === 0 && (
             <Text className="px-1 text-[13px] text-gray-500">
@@ -1255,7 +1312,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           )}
 
           <Text className="px-1 text-xs leading-[17px] text-gray-500">
-            Tap any entry to edit, save or delete it. The button at the bottom picks Cash, Esewa, a bank or all
+            Tap any entry to open it. A bill opens with an Edit button that takes you to its edit page; a payment or transfer is edited right there. The button at the bottom picks Cash, Esewa, a bank or all
             accounts - a transfer shows under an account as money in or out. Sale and purchase bills show what was billed that day - they
             don't change the balance until the money is received or paid, which appears as its own Received or Payment
             Out row.

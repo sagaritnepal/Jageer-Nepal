@@ -13,7 +13,7 @@ import { usePhoneContacts } from '../../hooks/usePhoneContacts';
 import { useScanBill } from '../../hooks/useScanBill';
 import { DateField } from '../DateTimeFields';
 import { Field, FieldRow, FormActions, INPUT, PopupCard, Segmented } from './FormKit';
-import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, useEntryParty, useEntryWhen } from './EntryEditParts';
+import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, timeOf, useEntryParty, useEntryWhen } from './EntryEditParts';
 import { MONEY } from './moneyColors';
 import { TrendChartCard } from './TrendChartCard';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
@@ -35,7 +35,8 @@ import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/c
 import { readKey } from '../../utils/webKeys';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { toBsLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
-import { useCalendarMode } from '../../hooks/useCalendarMode';
+import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
+import { entryDay } from '../../utils/ledgerStatement';
 import type {
   AccountTransfer,
   BusinessTransaction,
@@ -2396,52 +2397,7 @@ function BillEditPopup({
       {hasItems && (
         <View style={{ gap: 8 }}>
           {/* The bill's items, ruled like the printed bill: what the amount above is made of. */}
-          <View className="overflow-hidden rounded-lg border border-gray-300 bg-white">
-            <View className="flex-row bg-gray-50">
-              <BillCell head align="center" width={BILL_COL.sn}>
-                S.N.
-              </BillCell>
-              <BillCell head>Item</BillCell>
-              <BillCell head align="right" width={BILL_COL.qty}>
-                Qty
-              </BillCell>
-              <BillCell head align="right" width={BILL_COL.rate}>
-                Rate
-              </BillCell>
-              <BillCell head ruled={false} align="right" width={BILL_COL.amount}>
-                Amount
-              </BillCell>
-            </View>
-            {tx.items.map((item, idx) => (
-              <View key={idx} className="flex-row border-t border-gray-200">
-                <BillCell align="center" width={BILL_COL.sn} textClass="text-gray-500">
-                  {idx + 1}
-                </BillCell>
-                <BillCell textClass="text-gray-900">{item.description}</BillCell>
-                <BillCell align="right" width={BILL_COL.qty}>
-                  {item.qty}
-                </BillCell>
-                <BillCell align="right" width={BILL_COL.rate}>
-                  {item.rate.toLocaleString()}
-                </BillCell>
-                <BillCell ruled={false} align="right" width={BILL_COL.amount} textClass="font-semibold text-gray-900">
-                  {item.amount.toLocaleString()}
-                </BillCell>
-              </View>
-            ))}
-            {(tx.discount_amount > 0 || tx.vat_amount > 0) && (
-              <BillTotal label="Sub-total" value={tx.items.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} />
-            )}
-            {tx.discount_amount > 0 && <BillTotal label="Discount" value={`− ${tx.discount_amount.toLocaleString()}`} />}
-            {tx.vat_amount > 0 && <BillTotal label="VAT" value={`+ ${tx.vat_amount.toLocaleString()}`} />}
-            <BillTotal
-              label="Total (NPR)"
-              value={tx.amount.toLocaleString()}
-              tint={TYPE_META[tx.type].bg}
-              color={TYPE_META[tx.type].color}
-              strong
-            />
-          </View>
+          <BillItemsReadOnly tx={tx} />
           <Pressable onPress={onEditItems} accessibilityRole="button" className="flex-row items-center self-start" style={{ gap: 6 }}>
             <Ionicons name="create-outline" size={14} color="#1D4ED8" />
             <Text className="text-[12px] font-semibold text-blue-700">Edit the items</Text>
@@ -2462,12 +2418,142 @@ function BillEditPopup({
   );
 }
 
+/** A bill's items ruled like the printed bill: what its amount is made of, with the sums under it. */
+function BillItemsReadOnly({ tx }: { tx: BusinessTransaction }) {
+  return (
+    <View className="overflow-hidden rounded-lg border border-gray-300 bg-white">
+      <View className="flex-row bg-gray-50">
+        <BillCell head align="center" width={BILL_COL.sn}>
+          S.N.
+        </BillCell>
+        <BillCell head>Item</BillCell>
+        <BillCell head align="right" width={BILL_COL.qty}>
+          Qty
+        </BillCell>
+        <BillCell head align="right" width={BILL_COL.rate}>
+          Rate
+        </BillCell>
+        <BillCell head ruled={false} align="right" width={BILL_COL.amount}>
+          Amount
+        </BillCell>
+      </View>
+      {tx.items.map((item, idx) => (
+        <View key={idx} className="flex-row border-t border-gray-200">
+          <BillCell align="center" width={BILL_COL.sn} textClass="text-gray-500">
+            {idx + 1}
+          </BillCell>
+          <BillCell textClass="text-gray-900">{item.description}</BillCell>
+          <BillCell align="right" width={BILL_COL.qty}>
+            {item.qty}
+          </BillCell>
+          <BillCell align="right" width={BILL_COL.rate}>
+            {item.rate.toLocaleString()}
+          </BillCell>
+          <BillCell ruled={false} align="right" width={BILL_COL.amount} textClass="font-semibold text-gray-900">
+            {item.amount.toLocaleString()}
+          </BillCell>
+        </View>
+      ))}
+      {(tx.discount_amount > 0 || tx.vat_amount > 0) && (
+        <BillTotal label="Sub-total" value={tx.items.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} />
+      )}
+      {tx.discount_amount > 0 && <BillTotal label="Discount" value={`− ${tx.discount_amount.toLocaleString()}`} />}
+      {tx.vat_amount > 0 && <BillTotal label="VAT" value={`+ ${tx.vat_amount.toLocaleString()}`} />}
+      <BillTotal
+        label="Total (NPR)"
+        value={tx.amount.toLocaleString()}
+        tint={TYPE_META[tx.type].bg}
+        color={TYPE_META[tx.type].color}
+        strong
+      />
+    </View>
+  );
+}
+
+/** One read-only box of a bill's card - what a typed box of BillEditPopup shows, as plain text. */
+function ReadBox({ children, icon }: { children: ReactNode; icon?: keyof typeof Ionicons.glyphMap }) {
+  return (
+    <View className="flex-row items-center rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5" style={{ gap: 8 }}>
+      {!!icon && <Ionicons name={icon} size={16} color="#6B7280" />}
+      <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
+        {children}
+      </Text>
+    </View>
+  );
+}
+
+/** A Sale / Purchase laid out like BillEditPopup, but to read - nothing in it is typed. Edit, where
+ * Save would be, goes to the bill's own edit page (the one New is) with the bill loaded. */
+function BillViewPopup({
+  tx,
+  bankAccountName,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  tx: BusinessTransaction;
+  bankAccountName: string | null;
+  onClose: () => void;
+  onEdit: () => void;
+  /** Shown as Remove, left of Cancel / Edit, only where the caller can remove the bill. */
+  onDelete?: () => void;
+}) {
+  const [calendarMode] = useCalendarMode();
+  const [dateMain, dateOther] = dateLabels(entryDay(tx.bill_date, tx.created_at), calendarMode);
+  const meta = TYPE_META[tx.type];
+  const tone = tx.type === 'purchase' ? MONEY.out : MONEY.in;
+  const method = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
+  return (
+    <PopupCard title={`${meta.label} bill`} onClose={onClose}>
+      <View className="self-start rounded-lg border px-4 py-2" style={{ borderColor: tone.base, backgroundColor: tone.bg }}>
+        <Text className="text-xs font-bold" style={{ color: tone.text }}>
+          {meta.label}
+        </Text>
+      </View>
+      <FieldRow>
+        <Field label="Person" basis={300}>
+          <ReadBox icon="person-outline">{tx.party_name || '—'}</ReadBox>
+        </Field>
+      </FieldRow>
+      <FieldRow>
+        <Field label="Date" basis={220}>
+          <View className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <Text className="text-sm font-bold text-gray-900">{dateMain}</Text>
+            <Text className="text-[11px] text-gray-500">{dateOther}</Text>
+          </View>
+        </Field>
+        <Field label="Time" basis={140}>
+          <ReadBox>{timeOf(tx.created_at)}</ReadBox>
+        </Field>
+      </FieldRow>
+      <FieldRow>
+        <Field label="Bill No." basis={110}>
+          <ReadBox>{tx.bill_no || '—'}</ReadBox>
+        </Field>
+        <Field label="Amount (NPR)" basis={160}>
+          <ReadBox>{tx.amount.toLocaleString()}</ReadBox>
+        </Field>
+        <Field label="Payment Method" basis={200}>
+          <ReadBox icon={tx.bank_account_id ? 'business-outline' : 'cash-outline'}>{method}</ReadBox>
+        </Field>
+        <Field label="Remarks" basis={260}>
+          <ReadBox>{tx.note || '—'}</ReadBox>
+        </Field>
+      </FieldRow>
+      {tx.items.length > 0 && <BillItemsReadOnly tx={tx} />}
+      <FormActions onCancel={onClose} onSave={onEdit} saveLabel="Edit" onRemove={onDelete} />
+    </PopupCard>
+  );
+}
+
 // What opens when a past transaction is tapped. A Sale / Purchase opens straight into its edit popup
 // (BillEditPopup, laid out like a ledger entry's); an Expense is a read-only receipt - you can see
 // what's in it without immediately dropping into an editable form. Edit is an explicit action from
 // there, not the default, and so is Delete (beside it, only where the caller passes `onDelete`).
 // Exported so a customer/vendor's own page (CustomerDetailScreen) can reuse the same one for a
 // linked bill instead of building a second.
+// With `editOnPage` (the Day Book) a Sale / Purchase opens as a card to read instead (BillViewPopup),
+// whose Edit button goes to the bill's edit page rather than saving in place.
 export function TransactionDetailModal({
   tx,
   categoryName,
@@ -2475,6 +2561,7 @@ export function TransactionDetailModal({
   onClose,
   onEdit,
   onDelete,
+  editOnPage,
 }: {
   tx: BusinessTransaction | null;
   categoryName: string | null;
@@ -2482,12 +2569,17 @@ export function TransactionDetailModal({
   onClose: () => void;
   onEdit: () => void;
   onDelete?: () => void;
+  /** A Sale / Purchase opens to read, with Edit (-> `onEdit`) in place of Save. */
+  editOnPage?: boolean;
 }) {
   if (!tx) return null;
   // A Sale / Purchase opens straight into its edit popup (see BillEditPopup), laid out like a ledger
   // entry's - there is no read-only sheet in front of it. The full form, with the items, is one step
   // on from there. An Expense keeps the sheet.
   if (tx.type !== 'expense') {
+    if (editOnPage) {
+      return <BillViewPopup key={tx.id} tx={tx} bankAccountName={bankAccountName} onClose={onClose} onEdit={onEdit} onDelete={onDelete} />;
+    }
     return <BillEditPopup key={tx.id} tx={tx} onClose={onClose} onEditItems={onEdit} onDelete={onDelete} />;
   }
   const meta = TYPE_META[tx.type];
