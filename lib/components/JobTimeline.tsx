@@ -46,6 +46,28 @@ function Dot({ node }: { node: JourneyNode }) {
   );
 }
 
+/** The strip's moment marker: a ticked blue disc once it has happened, a ring with a dot for the
+ * step the job is on now, a hollow circle if not reached; the end is green / grey as in `Dot`. */
+function StepDot({ node, current }: { node: JourneyNode; current: boolean }) {
+  const size = 24;
+  if (node.reached && node.kind !== 'plain') return <Dot node={node} />;
+  if (current) {
+    return (
+      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DBEAFE' }}>
+        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#1D4ED8' }} />
+      </View>
+    );
+  }
+  if (node.reached) {
+    return (
+      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1D4ED8' }}>
+        <Ionicons name="checkmark" size={15} color="#FFFFFF" />
+      </View>
+    );
+  }
+  return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: '#94A3B8', backgroundColor: '#FFFFFF' }} />;
+}
+
 function LegPill({ leg }: { leg: JourneyLeg }) {
   if (!leg.value) return null;
   const c = PILL[leg.warn ? 'warn' : leg.state === 'now' ? 'now' : 'done'];
@@ -62,8 +84,8 @@ function LegPill({ leg }: { leg: JourneyLeg }) {
 }
 
 /** The line under a moment, to the next one - with how long it took in the middle. */
-function Leg({ leg }: { leg: JourneyLeg }) {
-  const line = { flex: 1, height: 2, minWidth: 6, borderRadius: 1, backgroundColor: LINE[toneOf(leg)] } as const;
+function Leg({ leg, thick }: { leg: JourneyLeg; thick?: boolean }) {
+  const line = { flex: 1, height: thick ? 3 : 2, minWidth: 6, borderRadius: 1, backgroundColor: LINE[toneOf(leg)] } as const;
   return (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', marginHorizontal: 2 }}>
       <View style={line} />
@@ -156,22 +178,52 @@ export function JobTimeline({
     );
   }
 
+  // The step the job is on: the last one reached, unless the journey has ended.
+  const finished = nodes[last].reached;
+  let currentIndex = -1;
+  nodes.forEach((n, i) => {
+    if (n.reached) currentIndex = i;
+  });
+  if (finished) currentIndex = -1;
+  const liveLeg = currentIndex >= 0 ? legs[currentIndex] : undefined;
+  const stepNumber = finished ? nodes.length : currentIndex + 1;
+
   return (
-    <View className="flex-row px-3 pb-3.5" accessible accessibilityLabel={spoken(nodes, legs)}>
-      {nodes.map((n, i) => (
-        <View key={n.key} style={{ flex: i === last ? 0.8 : 1, minWidth: 0 }}>
-          <View className="flex-row items-center" style={{ height: 20 }}>
-            <Dot node={n} />
-            {i < last && <Leg leg={legs[i]} />}
-          </View>
-          <Text className="mt-1 text-[12.5px] font-bold" style={{ color: labelColor(n) }}>
-            {n.label}
-          </Text>
-          <Text className="text-[11.5px]" style={{ color: '#6B7280' }}>
-            {whenText(n)}
-          </Text>
-        </View>
-      ))}
+    <View accessible accessibilityLabel={spoken(nodes, legs)}>
+      <View className="flex-row items-baseline justify-between px-4 pb-3">
+        <Text className="text-[11.5px] font-bold capitalize tracking-wide" style={{ color: '#64748B' }}>
+          Progress
+        </Text>
+        <Text className="text-[12.5px]" style={{ color: '#475569' }}>
+          Step {stepNumber} of {nodes.length}
+          {liveLeg?.value && liveLeg.state === 'now' ? (
+            <>
+              {' · '}
+              {liveLeg.label} <Text style={{ fontWeight: '700', color: '#1E40AF' }}>{liveLeg.value}</Text>
+            </>
+          ) : null}
+        </Text>
+      </View>
+      <View className="flex-row px-3 pb-3.5">
+        {nodes.map((n, i) => {
+          const current = i === currentIndex;
+          return (
+            <View key={n.key} style={{ flex: i === last ? 0.8 : 1, minWidth: 0 }}>
+              <View className="flex-row items-center" style={{ height: 24 }}>
+                <StepDot node={n} current={current} />
+                {i < last && <Leg leg={legs[i]} thick />}
+              </View>
+              <Text className="mt-1.5 text-[14px] font-bold" style={{ color: current ? '#1E40AF' : labelColor(n) }}>
+                {n.label}
+                {current ? ' · Current step' : ''}
+              </Text>
+              <Text className="text-[12.5px]" style={{ color: '#475569' }}>
+                {whenText(n)}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }

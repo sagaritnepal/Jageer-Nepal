@@ -119,6 +119,32 @@ function statusChip(request: ServiceRequest): { label: string; color: string; bg
   return { label: 'Not started', color: '#6B7280', bg: '#F3F4F6' };
 }
 
+/** "CCTV & Surveillance - Repair" reads as a category over a job name; a name without the dash is all title. */
+function splitIssue(issue: string): { eyebrow: string | null; title: string } {
+  const at = issue.indexOf(' - ');
+  if (at <= 0) return { eyebrow: null, title: issue };
+  return { eyebrow: issue.slice(0, at), title: issue.slice(at + 3) };
+}
+
+/** Whole days (or hours, under a day) past the time the job was meant to be done. */
+function initialsOf(name: string): string {
+  const letters = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+  return letters || '?';
+}
+
+function overdueBy(request: ServiceRequest): string {
+  const late = Date.now() - dueAt(request);
+  const days = Math.floor(late / DAY_MS);
+  if (days >= 1) return `${days} day${days === 1 ? '' : 's'}`;
+  const hours = Math.max(1, Math.floor(late / (60 * 60 * 1000)));
+  return `${hours} hour${hours === 1 ? '' : 's'}`;
+}
+
 function OverdueChip() {
   return (
     <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: '#FEF2F2' }}>
@@ -347,20 +373,42 @@ function Fact({
   children,
   roomy,
   full,
+  icon,
+  initials,
 }: {
   label: string;
   children: React.ReactNode;
   roomy: boolean;
   /** Takes a whole row of its own - for a longer piece of text. */
   full?: boolean;
+  /** A round badge beside the fact: an icon, or the initials of a person. */
+  icon?: keyof typeof Ionicons.glyphMap;
+  initials?: string;
 }) {
+  const badge = icon || initials ? (
+    <View
+      className="items-center justify-center rounded-full"
+      style={{ width: 36, height: 36, backgroundColor: initials ? '#1E293B' : '#EFF6FF' }}
+    >
+      {initials ? (
+        <Text className="text-[13px] font-bold text-white">{initials}</Text>
+      ) : (
+        <Ionicons name={icon!} size={18} color="#1D4ED8" />
+      )}
+    </View>
+  ) : null;
   return (
     <View
-      className="bg-white px-4 py-3"
-      style={{ gap: 2, ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 170, minWidth: 170 }) : null) }}
+      className="flex-row bg-white px-4 py-3.5"
+      style={{ gap: 12, ...(roomy ? (full ? { flexBasis: '100%' } : { flexGrow: 1, flexBasis: 200, minWidth: 200 }) : null) }}
     >
-      <Text className="text-[10.5px] font-bold capitalize tracking-wide text-gray-500">{label}</Text>
-      {children}
+      {badge}
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text className="text-[12px] font-semibold capitalize" style={{ color: '#64748B' }}>
+          {label}
+        </Text>
+        {children}
+      </View>
     </View>
   );
 }
@@ -407,6 +455,8 @@ function JobRowCard({
   const hold = r.hold_status === 'requested' ? HOLD_CHIP.requested : r.hold_status === 'on_hold' ? HOLD_CHIP.on_hold : null;
   const lines = expanded ? undefined : 2;
   const scheduled = formatScheduledWhen(r.scheduled_date, r.scheduled_time);
+  const issue = splitIssue(r.issue_type);
+  const overdue = isOverdue(r);
   // What the customer wrote when they asked for the job - the first thing to read.
   const customerRequest = r.description?.trim();
 
@@ -429,21 +479,39 @@ function JobRowCard({
 
   return (
     <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-      <Pressable onPress={open} className="flex-row items-start gap-3 px-4 py-3.5">
-        <CategoryBadge category={r.issue_type} size={roomy ? 40 : 36} />
-        <View className="flex-1" style={{ gap: 6, minWidth: 0 }}>
-          <View className="flex-row items-center" style={{ gap: 8 }}>
-            <TicketChip no={r.ticket_no} />
-            <Text className="text-[14.5px] font-bold text-gray-900" style={{ flex: 1, minWidth: 0 }} numberOfLines={lines}>
-              {r.issue_type}
+      {overdue && (
+        <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderBottomColor: '#FECACA' }}>
+          <Ionicons name="time-outline" size={17} color="#B91C1C" />
+          <Text className="text-[13.5px] font-bold" style={{ color: '#991B1B' }}>
+            Overdue by {overdueBy(r)}
+          </Text>
+          <Text className="text-[13px]" style={{ color: '#7F1D1D', flexShrink: 1 }}>
+            {scheduled ? `Scheduled for ${scheduled}. ` : ''}The job is still {r.status === 'in_progress' ? 'in progress' : 'open'}.
+          </Text>
+        </View>
+      )}
+      <Pressable onPress={open} className="flex-row items-center gap-3.5 px-5 py-4">
+        <CategoryBadge category={r.issue_type} size={roomy ? 48 : 40} />
+        <View className="flex-1" style={{ gap: 5, minWidth: 0 }}>
+          {!!issue.eyebrow && (
+            <Text className="text-[11.5px] font-semibold capitalize tracking-wide" style={{ color: '#64748B' }} numberOfLines={1}>
+              {issue.eyebrow}
             </Text>
-          </View>
-          <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
-            <Chip {...chip} />
+          )}
+          <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
+            <TicketChip no={r.ticket_no} />
+            <Text className="text-[19px] font-bold text-gray-900" style={{ flexShrink: 1, minWidth: 0 }} numberOfLines={lines}>
+              {issue.title}
+            </Text>
+            <View className="flex-row items-center rounded-full" style={{ gap: 6, backgroundColor: chip.bg, paddingHorizontal: 9, paddingVertical: 3 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: chip.color }} />
+              <Text className="text-[12px] font-semibold" style={{ color: chip.color }}>
+                {chip.label}
+              </Text>
+            </View>
             {!!hold && <Chip {...hold} />}
-            {isOverdue(r) && <OverdueChip />}
           </View>
-          {/* On a phone the price would squeeze the title, so it sits under the chips. */}
+          {/* On a phone the price would squeeze the title, so it sits under it. */}
           {!roomy && (
             <View className="flex-row items-center" style={{ gap: 8 }}>
               <Text className="text-[15px] font-extrabold text-gray-900">{money(r.quoted_price)}</Text>
@@ -452,9 +520,18 @@ function JobRowCard({
           )}
         </View>
         {roomy && (
-          <View className="items-end" style={{ gap: 4 }}>
-            <Text className="text-[15px] font-extrabold text-gray-900">{money(r.quoted_price)}</Text>
-            <Chip {...pay} />
+          <View className="flex-row items-center rounded-xl border border-gray-200 px-4 py-2.5" style={{ gap: 14, backgroundColor: '#F8FAFC' }}>
+            <View className="items-end" style={{ gap: 2 }}>
+              <Text className="text-[12px] font-semibold" style={{ color: '#64748B' }}>
+                Job amount
+              </Text>
+              <Text className="text-[20px] font-bold text-gray-900">{money(r.quoted_price)}</Text>
+            </View>
+            <View className="rounded-md px-2.5 py-1" style={{ backgroundColor: pay.bg, borderWidth: 1, borderColor: `${pay.color}55` }}>
+              <Text className="text-[12px] font-bold" style={{ color: pay.color }}>
+                {pay.label}
+              </Text>
+            </View>
           </View>
         )}
       </Pressable>
@@ -477,7 +554,7 @@ function JobRowCard({
             </Text>
           </Fact>
         )}
-        <Fact label="Customer" roomy={roomy}>
+        <Fact label="Customer" roomy={roomy} icon="person-outline">
           <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
             {r.customer_name ?? 'Customer'}
           </Text>
@@ -490,17 +567,22 @@ function JobRowCard({
             </Pressable>
           )}
         </Fact>
-        <Fact label="Where" roomy={roomy}>
+        <Fact label="Location" roomy={roomy} icon="location-outline">
           <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
             {r.location_data?.address ?? 'No address'}
           </Text>
         </Fact>
-        <Fact label="When" roomy={roomy}>
+        <Fact label="Scheduled" roomy={roomy} icon="calendar-outline">
           <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
             {scheduled ?? 'Not scheduled'}
           </Text>
         </Fact>
-        <Fact label="Technician" roomy={roomy}>
+        <Fact
+          label="Technician"
+          roomy={roomy}
+          icon={r.technician_id ? undefined : 'people-outline'}
+          initials={r.technician_id ? initialsOf(technicianName(r.technician_id)) : undefined}
+        >
           {r.technician_id ? (
             <Text className="text-[13.5px] font-semibold text-gray-900" numberOfLines={lines}>
               {technicianName(r.technician_id)}
@@ -525,47 +607,53 @@ function JobRowCard({
       )}
 
       <View
-        className="flex-row flex-wrap items-center border-t border-gray-100 px-4 py-3"
-        style={{ gap: 8, justifyContent: roomy ? 'flex-end' : 'flex-start' }}
+        className="flex-row flex-wrap items-center border-t border-gray-100 px-5 py-3.5"
+        style={{ gap: 10, justifyContent: roomy ? 'space-between' : 'flex-start' }}
       >
-        {actions.map((a) => {
-          const tone = ACTION_TONE[a.tone];
-          return (
-            <Pressable
-              key={a.label}
-              onPress={a.onPress}
-              disabled={busy}
-              className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg px-3.5 disabled:opacity-50"
-              style={{
-                backgroundColor: tone.bg,
-                borderWidth: 1,
-                borderColor: tone.border,
-                ...(roomy ? null : { flexGrow: 1, flexBasis: 120 }),
-              }}
-            >
-              <Ionicons name={a.icon} size={15} color={tone.fg} />
-              <Text className="text-[12.5px] font-semibold" style={{ color: tone.fg }}>
-                {a.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-        {canCancelWork(r) && (
+        {canCancelWork(r) ? (
           <Pressable
             onPress={() => onCancelWork(r)}
             disabled={busy}
-            accessibilityLabel="Cancel work"
-            className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg border bg-white px-3 disabled:opacity-50"
-            style={{ borderColor: '#FECACA', ...(roomy ? null : { flexGrow: 1, flexBasis: 120 }) }}
+            accessibilityLabel="Cancel job"
+            className="h-11 flex-row items-center justify-center gap-2 rounded-lg px-3 disabled:opacity-50"
+            style={roomy ? undefined : { flexGrow: 1, flexBasis: 120 }}
           >
-            <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
-            {!roomy && (
-              <Text className="text-[12.5px] font-semibold" style={{ color: '#DC2626' }}>
-                Cancel work
-              </Text>
-            )}
+            <Ionicons name="close-circle-outline" size={18} color="#B91C1C" />
+            <Text className="text-[14px] font-semibold" style={{ color: '#B91C1C' }}>
+              Cancel job
+            </Text>
           </Pressable>
+        ) : (
+          <View />
         )}
+        <View className="flex-row flex-wrap items-center" style={{ gap: 10 }}>
+          {actions
+            .slice()
+            .reverse()
+            .map((a) => {
+              const tone = ACTION_TONE[a.tone];
+              const label = a.label === 'Reassign' ? 'Reassign technician' : a.label;
+              return (
+                <Pressable
+                  key={a.label}
+                  onPress={a.onPress}
+                  disabled={busy}
+                  className="h-11 flex-row items-center justify-center gap-2 rounded-lg px-5 disabled:opacity-50"
+                  style={{
+                    backgroundColor: tone.bg,
+                    borderWidth: 1,
+                    borderColor: a.tone === 'violet' ? '#A78BFA' : tone.border,
+                    ...(roomy ? null : { flexGrow: 1, flexBasis: 120 }),
+                  }}
+                >
+                  <Ionicons name={a.icon} size={18} color={a.tone === 'violet' ? '#5B21B6' : tone.fg} />
+                  <Text className="text-[14px] font-semibold" style={{ color: a.tone === 'violet' ? '#5B21B6' : tone.fg }}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+        </View>
       </View>
     </View>
   );
