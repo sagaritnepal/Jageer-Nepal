@@ -13,7 +13,9 @@ import { localTodayIso } from '../../utils/localDate';
 import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
 import { SALARY_HEADER, expenseHeading, groupExpenseNames, isSalaryName, nameKey, reportCategoryName } from '../../utils/expenseGroups';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
-import { DateStepFilter } from './DateRangeFilter';
+import { DateStepFilter, monthLabelOf } from './DateRangeFilter';
+import { useFreshLedgerArea } from '../../hooks/useFreshLedgerArea';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
@@ -225,25 +227,31 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     return map;
   }, [customers, partyTypeName]);
 
-  const today = localTodayIso();
-  // The period the report covers, set with the date control beside Print. A report opens on Today,
-  // as the Day Book does; a person's own page opens on every date (their bills would mostly be
-  // out of a single day). Clearing the control comes back to that.
-  const restView = partyId ? { from: '', to: '' } : { from: today, to: today };
-  const [range, setRange] = useState(restView);
+  const year = new Date().getFullYear();
+  const [calendarMode] = useCalendarMode();
+  // The period the report covers, set with the date control beside Print. Both '' is the page's
+  // resting view: this year's entries, or every date on a person's own page.
+  const [range, setRange] = useState({ from: '', to: '' });
   const rangeActive = !!range.from || !!range.to;
   // The name typed in the search bar: the page narrows to the entries whose name has it.
   const [search, setSearch] = useState('');
   const needle = search.trim().toLowerCase();
-  const restingLabel = partyId ? 'All dates' : 'Today';
-  const totalLabel = 'Total';
-  const periodNote = rangeActive ? 'For the period picked above.' : '';
+  const restingLabel = partyId ? 'All dates' : 'This year';
+  const totalLabel = partyId || rangeActive ? 'Total' : `${year} total`;
+  const periodNote = rangeActive ? 'For the period picked above.' : partyId ? '' : 'This year only.';
   // The period in words, for the printed page.
+  const monthName = monthLabelOf(range.from, range.to, calendarMode);
   const periodText = rangeActive
-    ? range.from && range.from === range.to
-      ? toBsHistoryLabel(range.from)
-      : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`
-    : 'All dates';
+    ? monthName
+      ? calendarMode === 'bs'
+        ? `${monthName} BS`
+        : monthName
+      : range.from && range.from === range.to
+        ? toBsHistoryLabel(range.from)
+        : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`
+    : partyId
+      ? 'All dates'
+      : `Year ${year}`;
   const inPeriod = (date: string) => {
     const day = dayOf(date);
     return (!range.from || day >= range.from) && (!range.to || day <= range.to);
@@ -273,9 +281,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           <DateStepFilter
             from={range.from}
             to={range.to}
-            onChange={(f, t) => setRange(f || t ? { from: f, to: t } : restView)}
+            onChange={(f, t) => setRange({ from: f, to: t })}
             idleLabel={restingLabel}
-            shortcuts={partyId ? [{ label: 'All dates', on: !range.from && !range.to, onSelect: () => setRange(restView) }] : []}
+            shortcuts={[{ label: restingLabel, on: !range.from && !range.to, onSelect: () => setRange({ from: '', to: '' }) }]}
           />
           <PrintButton onPress={() => printNow.current()} />
           <ExcelButton onPress={() => excelNow.current()} />
@@ -285,7 +293,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         </>
       ),
     },
-    [partyId, basePath, range.from, range.to, restingLabel, search, today]
+    [partyId, basePath, range.from, range.to, restingLabel, search]
   );
 
   // "Received" = every payment actually collected from a customer, whether
@@ -577,12 +585,16 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyId, kind, partyCustomerEntries, partyVendorEntries, range.from, range.to]);
 
-  // What the page shows: the period picked with the date control (a person's own page, with none
-  // picked, is all of their bills - one person has few, and an old one should not look like there is
-  // nothing).
+  // What the page shows: the period picked with the date control; with none, the plain reports are
+  // this year's, and a person's own report is all of their bills - one person has few, and an old one
+  // should not look like there is nothing.
   const yearEntries = useMemo(
     () => {
-      const inPeriodEntries = rangeActive ? entries.filter((e) => inPeriod(e.date)) : entries;
+      const inPeriodEntries = rangeActive
+        ? entries.filter((e) => inPeriod(e.date))
+        : partyId
+          ? entries
+          : entries.filter((e) => new Date(e.date).getFullYear() === year);
       // Searched by name: who it was with, the category it is filed under, the bike / person paid.
       if (!needle || partyId) return inPeriodEntries;
       return inPeriodEntries.filter((e) =>
@@ -590,7 +602,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [entries, partyId, range.from, range.to, needle]
+    [entries, year, partyId, range.from, range.to, needle]
   );
 
   // The Expense Report is laid out by category - Fuel, Bike Repair, Salary Expenses ... - each with
@@ -1016,9 +1028,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             {needle
               ? `No name matches "${search.trim()}".`
               : rangeActive
-              ? range.from === today && range.to === today
-                ? 'Nothing recorded today.'
-                : 'Nothing recorded in this period.'
+              ? 'Nothing recorded in this period.'
               : partyId
                 ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.`
                 : 'Nothing here yet.'}
@@ -1174,9 +1184,10 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
  * next time the plain report was opened from the side panel. */
 export function PartyReportScreen({ basePath }: { basePath: string }) {
   const { id, kind } = useLocalSearchParams<{ id: string; kind: string }>();
+  const visit = useFreshLedgerArea();
   if (!id || (kind !== 'sale' && kind !== 'purchase' && kind !== 'expense')) {
     return <Redirect href={`${basePath}/customers` as never} />;
   }
-  // Keyed, so another person's report starts from its own state.
-  return <TotalsReportScreen key={`${id}-${kind}`} kind={kind} basePath={basePath} partyId={id} />;
+  // Keyed, so another person's report starts from its own state - and a visit that has ended from nothing.
+  return <TotalsReportScreen key={`${id}-${kind}-${visit}`} kind={kind} basePath={basePath} partyId={id} />;
 }

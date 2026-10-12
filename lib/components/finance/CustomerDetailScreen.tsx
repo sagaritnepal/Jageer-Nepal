@@ -14,6 +14,7 @@ import {
 } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
+import { useFreshLedgerArea } from '../../hooks/useFreshLedgerArea';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, useEntryParty, useEntryWhen } from './EntryEditParts';
 import { PartyTypeField } from './PartyTypeField';
@@ -683,8 +684,10 @@ export function CustomerDetailScreen({ basePath }: { basePath: string }) {
   // Hidden tab screens stay mounted between visits, so opening another
   // record reused this one's component state (typed quote/remark/price, a
   // "thanks for rating" flag, an open edit form...). Keying on the id gives
-  // every record its own fresh state.
-  return <CustomerDetail key={id} id={id} basePath={basePath} />;
+  // every record its own fresh state - and on the visit, so a page left open (a form, a popup)
+  // is gone once the Ledger has been left for another page.
+  const visit = useFreshLedgerArea();
+  return <CustomerDetail key={`${id}-${visit}`} id={id} basePath={basePath} />;
 }
 
 function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {

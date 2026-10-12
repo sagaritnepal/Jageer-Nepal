@@ -9,6 +9,7 @@ import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseInsert, useSupabaseQuery } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { usePartyDestination } from '../../hooks/usePartyDestination';
+import { useFreshLedgerArea } from '../../hooks/useFreshLedgerArea';
 import { supabase } from '../../supabase';
 import { BookPage, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money as bookMoney, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { PartyBalance } from './PartyBalance';
@@ -643,9 +644,12 @@ function BulkBar({
 
 /** The Ledger page: every word on it - table, cards, popups, top-bar controls - is in capitals. */
 export function CustomersListScreen(props: { basePath: string }) {
+  // Keyed on the visit: once the Ledger has been left for another page, the list comes back with
+  // nothing open, nothing typed in the search and the figures read again.
+  const visit = useFreshLedgerArea();
   return (
     <CapsProvider>
-      <LedgerList {...props} />
+      <LedgerList key={visit} {...props} />
     </CapsProvider>
   );
 }
