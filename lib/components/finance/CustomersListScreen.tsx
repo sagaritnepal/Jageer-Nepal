@@ -338,8 +338,8 @@ interface LedgerGroup {
   net: number;
 }
 
-/** The header for parties that are app users with no saved ledger. */
-const APP_GROUP = '__app__';
+/** The header an app user with no saved ledger sits under when there is no Ledger type called Customer. */
+const CUSTOMER_GROUP = '__customer__';
 
 /** A party on a phone: who, how to reach them, when they last traded, Sales /
  * Purchases / Payments / Balance, and where they stand. */
@@ -787,8 +787,9 @@ function LedgerList({ basePath }: { basePath: string }) {
   }, [analysed, filter, search]);
 
   // The Ledger is laid out by Ledger type - Customer, Vendor, Employee, Expense ... - each header with
-  // how many parties it holds and what they add up to, and the parties inside it. Every type is a
-  // header, used or not; a search or a status filter lists (and opens) only the headers with a match.
+  // how many parties it holds and what they add up to, and the parties inside it. Only a type with
+  // someone in it is a header: one nobody is filed under is left out. A search or a status filter
+  // lists (and opens) only the headers with a match.
   const narrowed = !!search.trim() || filter !== 'all';
   const groups = useMemo((): LedgerGroup[] => {
     const byKey = new Map<string, LedgerGroup>();
@@ -800,12 +801,15 @@ function LedgerList({ basePath }: { basePath: string }) {
       }
       return g;
     };
-    if (!narrowed) for (const t of partyTypes) slot(t.id, t.name);
+    // An app user with no saved ledger is a customer: they go under Customer, with their APP badge.
+    const customerType = partyTypes.find((t) => /^customers?$/i.test(t.name.trim()));
     for (const d of filtered) {
       const typeId = d.row.kind === 'customer' ? d.row.customer.party_type_id ?? null : null;
       const g =
         d.row.kind !== 'customer'
-          ? slot(APP_GROUP, 'App users')
+          ? customerType
+            ? slot(customerType.id, customerType.name)
+            : slot(CUSTOMER_GROUP, 'Customer')
           : typeId
             ? slot(typeId, partyTypeName.get(typeId) ?? 'No ledger type')
             : slot(NO_TYPE, 'No ledger type');
@@ -814,10 +818,10 @@ function LedgerList({ basePath }: { basePath: string }) {
       if (d.status === 'receivable') g.receivable += d.balance;
       else if (d.status === 'payable') g.payable += -d.balance;
     }
-    const last = (k: string) => (k === NO_TYPE || k === APP_GROUP ? 1 : 0);
+    const last = (k: string) => (k === NO_TYPE ? 1 : 0);
     return [...byKey.values()].sort((a, b) => last(a.key) - last(b.key) || a.label.localeCompare(b.label));
-  }, [filtered, partyTypes, partyTypeName, narrowed]);
-  const groupKeys = groups.filter((g) => g.rows.length > 0).map((g) => g.key);
+  }, [filtered, partyTypes, partyTypeName]);
+  const groupKeys = groups.map((g) => g.key);
   const allOpen = groupKeys.length > 0 && groupKeys.every((k) => openKeys.has(k));
   const toggleGroup = (key: string) =>
     setOpenKeys((prev) => {
@@ -1023,26 +1027,25 @@ function LedgerList({ basePath }: { basePath: string }) {
         </View>
       )}
       {groups.map((g) => {
-        const empty = g.rows.length === 0;
-        const isOpen = !empty && (narrowed || openKeys.has(g.key));
+        const isOpen = narrowed || openKeys.has(g.key);
         return (
           <View key={g.key} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
             <Pressable
               onPress={() => toggleGroup(g.key)}
-              disabled={empty || narrowed}
+              disabled={narrowed}
               accessibilityRole="button"
               accessibilityState={{ expanded: isOpen }}
               className="flex-row items-center px-3.5 py-3"
               style={{ gap: 10, backgroundColor: isOpen ? '#F9FAFB' : '#FFFFFF' }}
             >
-              <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={16} color={empty ? '#D1D5DB' : '#6B7280'} />
-              <Text className={`flex-1 text-[14px] font-bold ${empty ? 'text-gray-400' : 'text-gray-900'}`} numberOfLines={1}>
+              <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={16} color="#6B7280" />
+              <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
                 {g.label}
               </Text>
               <Text className="text-[12px] text-gray-400">
-                {empty ? 'No parties' : `${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`}
+                {`${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`}
               </Text>
-              {tableMode && !empty && (
+              {tableMode && (
                 <>
                   <View style={{ width: 105, alignItems: 'flex-end' }}>
                     <Text className="text-[12.5px] font-bold" style={{ color: g.receivable > 0 ? LEDGER_TONE.receivable.text : '#D1D5DB' }}>
@@ -1056,11 +1059,9 @@ function LedgerList({ basePath }: { basePath: string }) {
                   </View>
                 </>
               )}
-              {!empty && (
-                <View style={{ width: 120, alignItems: 'flex-end' }}>
-                  <PartyBalance position={partyPosition({ receivable: g.net, payable: 0 })} compact />
-                </View>
-              )}
+              <View style={{ width: 120, alignItems: 'flex-end' }}>
+                <PartyBalance position={partyPosition({ receivable: g.net, payable: 0 })} compact />
+              </View>
             </Pressable>
             {isOpen && <View className="border-t border-gray-200">{body(g)}</View>}
           </View>
