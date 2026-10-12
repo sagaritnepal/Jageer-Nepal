@@ -5,8 +5,11 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow } from '../../hooks/useSupabase';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
+import { reportKindOfType, usePartyDestination } from '../../hooks/usePartyDestination';
 import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
 import { BS_MONTHS, adStringToBs } from '../../utils/nepaliDate';
+import { groupExpenseNames, nameKey } from '../../utils/expenseGroups';
 import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
@@ -48,6 +51,11 @@ interface Entry {
   nav: NavTarget;
   /** The bill itself, for a Sales / Purchase / Expense report - what a person's own report opens in place. */
   tx?: BusinessTransaction;
+  /** What an expense is filed under - its category, or the ledger a payment went to. The Expense
+   * Report is grouped by it (see groupExpenseNames). */
+  category?: string;
+  /** Where tapping it goes, when that is not the person's ledger page (see usePartyDestination). */
+  href?: string;
 }
 
 const KIND_META: Record<Kind, { title: string; subtitle: string; color: string }> = {
@@ -101,22 +109,43 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     all: true,
     enabled: !!userId && !!partyId,
   });
+  // Every row: a plain read stops at the API's first 1000, unordered, and a report that quietly
+  // drops its older rows is worse than a slow one. (The ordering gives each read a cache entry of
+  // its own - the key ignores `columns`, so these must not share one with a narrow read.)
   const { data: transactions } = useSupabaseQuery('business_transactions', {
     filters: userId ? { owner_id: userId } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    all: true,
     enabled: !!userId,
   });
   const { data: ledgerEntries } = useSupabaseQuery('customer_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    all: true,
     enabled: !!userId,
   });
   const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    all: true,
     enabled: !!userId,
   });
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
   });
+  const { nameById: partyTypeName } = usePartyTypes(userId);
+  // Where a person opens from a report (the report for their Ledger type, else their ledger).
+  const hrefFor = usePartyDestination(userId, basePath);
+  // Ledgers typed Expense (Bike Repair, Fuel ...): what is paid to them is an expense even
+  // though it is recorded as a payment on their ledger, not through the Expense form.
+  const expensePartyIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of customers ?? []) {
+      if (c.party_type_id && reportKindOfType(partyTypeName.get(c.party_type_id)) === 'expense') ids.add(c.id);
+    }
+    return ids;
+  }, [customers, partyTypeName]);
   const { data: categories } = useSupabaseQuery('expense_categories', {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
@@ -173,7 +202,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         t.customer_id === partyId ||
         (!t.customer_id &&
           (named(t.party_name) || (kind === 'expense' && named(t.expense_category_id ? categoryById.get(t.expense_category_id) : null))));
-      return (partyId ? kindBills ?? [] : transactions ?? [])
+      const rows = (partyId ? kindBills ?? [] : transactions ?? [])
         .filter((t) => t.type === kind && (!partyId || isTheirs(t)))
         .map((t): Entry => {
           // The expense report shows the category (same one picked in the entry portal) in
@@ -192,9 +221,40 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             // A bill to a saved customer / vendor opens that party's ledger; a walk-in or expense has none.
             nav: t.customer_id && kind !== 'expense' ? { kind: 'party', partyId: t.customer_id } : { kind: 'transactions', type: kind },
             tx: t,
+            category: kind === 'expense' ? category ?? 'Uncategorized' : undefined,
           };
-        })
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        });
+      // The Expense Report also lists what was paid to a ledger typed Expense (Bike Repair, Fuel ...):
+      // it is recorded as a payment on that ledger rather than through the Expense form, so it was
+      // never in a list of expense bills. Money paid out only - same rule as Total Paid - and filed
+      // under the ledger's own name, which is its category here.
+      if (kind === 'expense' && !partyId) {
+        const paidTo = (id: string, date: string, amount: number, ledgerId: string, receiptNo: string | null, note: string | null): Entry => {
+          const name = nameById.get(ledgerId) ?? 'Expense ledger';
+          return {
+            id,
+            date,
+            amount: Number(amount),
+            party: `Paid to ${name}`,
+            note: [receiptNo ? `Payment no. ${receiptNo}` : null, note].filter(Boolean).join(' · '),
+            type: { label: name, color: MONEY.out.text, bg: MONEY.out.bg },
+            nav: { kind: 'party', partyId: ledgerId },
+            category: name,
+            href: hrefFor(ledgerId),
+          };
+        };
+        for (const e of ledgerEntries ?? []) {
+          if (expensePartyIds.has(e.customer_id) && e.entry_type === 'debit' && e.source === 'manual') {
+            rows.push(paidTo(e.id, e.entry_date ?? e.created_at, e.amount, e.customer_id, e.receipt_no, e.note));
+          }
+        }
+        for (const e of vendorEntries ?? []) {
+          if (expensePartyIds.has(e.vendor_id) && e.entry_type === 'credit') {
+            rows.push(paidTo(e.id, e.entry_date ?? e.created_at, e.amount, e.vendor_id, e.receipt_no, e.note));
+          }
+        }
+      }
+      return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     const list: Entry[] = [];
     for (const t of transactions ?? []) {
@@ -267,7 +327,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       }
     }
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions, kindBills, partyRow, ledgerEntries, vendorEntries, nameById, categoryById, kind, partyId]);
+  }, [transactions, kindBills, partyRow, ledgerEntries, vendorEntries, nameById, categoryById, expensePartyIds, hrefFor, kind, partyId]);
 
   // The rest of what is on a person's ledger - money received from or paid to them, and what they
   // owe or are owed outside a bill - listed under their bills so the page shows all of it. The
@@ -311,6 +371,35 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     [entries, year, partyId]
   );
 
+  // The Expense Report is laid out by category - Fuel, Bike Repair, Salary Advance ... - each with
+  // what it adds up to, biggest first, and the individual ledgers / categories under it (Fuel
+  // Aviator, Fuel Manish ...; the category pill on every row says which). Categories come from the
+  // words the names start with, so there is nothing to set up. The other reports stay by month.
+  const grouped = useMemo(() => {
+    if (kind !== 'expense' || partyId) return null;
+    const UNFILED = 'Uncategorized';
+    const labelOf = groupExpenseNames(yearEntries.map((e) => e.category ?? UNFILED));
+    const groups = new Map<string, { label: string; total: number; rows: Entry[] }>();
+    for (const e of yearEntries) {
+      const label = labelOf.get(nameKey(e.category ?? UNFILED)) ?? UNFILED;
+      const group = groups.get(nameKey(label));
+      if (group) {
+        group.total += e.amount;
+        group.rows.push(e);
+      } else {
+        groups.set(nameKey(label), { label, total: e.amount, rows: [e] });
+      }
+    }
+    const ordered = [...groups.values()].sort((a, b) => b.total - a.total);
+    // Each row's section heading, by the row's id; rows within a section stay newest first.
+    const headingOf = new Map<string, string>();
+    for (const g of ordered) {
+      const heading = `${g.label}  ·  NPR ${money(g.total)}  ·  ${g.rows.length} ${g.rows.length === 1 ? 'entry' : 'entries'}`;
+      for (const e of g.rows) headingOf.set(e.id, heading);
+    }
+    return { rows: ordered.flatMap((g) => g.rows), headingOf };
+  }, [kind, partyId, yearEntries]);
+
   const stats = useMemo(() => {
     const now = new Date();
     let total = 0;
@@ -347,7 +436,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       return;
     }
     router.push(
-      (e.nav.kind === 'transactions' ? `${basePath}/transactions?type=${e.nav.type}` : `${basePath}/customer/${e.nav.partyId}`) as never
+      (e.href ??
+        (e.nav.kind === 'transactions' ? `${basePath}/transactions?type=${e.nav.type}` : `${basePath}/customer/${e.nav.partyId}`)) as never
     );
   };
 
@@ -424,10 +514,10 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       ) : (
         <BookTable
           columns={columns}
-          rows={yearEntries}
+          rows={grouped ? grouped.rows : yearEntries}
           rowKey={(e) => e.id}
           onRowPress={open}
-          groupOf={(e) => bsMonthGroup(e.date)}
+          groupOf={(e) => (grouped ? grouped.headingOf.get(e.id) ?? '' : bsMonthGroup(e.date))}
           footer={{
             label: `${yearEntries.length} ${yearEntries.length === 1 ? 'entry' : 'entries'} · Total`,
             cells: { amount: <Text className="text-[13px] font-extrabold" style={{ color: meta.color }}>{money(stats.total)}</Text> },
@@ -457,7 +547,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             ? 'Tap an entry to open it. Only money actually collected counts here - a sale bill on credit shows up once the customer pays.'
             : kind === 'paid'
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
-              : `Tap an entry to open it. Every ${kind} bill counts here, whether or not the money has moved yet - see Total ${kind === 'sale' ? 'Received' : 'Paid'} for what actually has.`}
+              : kind === 'expense'
+                ? "Tap an entry to open it. Grouped by category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one heading. Counts every expense bill, and money paid to a ledger typed Expense (listed under that ledger's name). This year only."
+                : `Tap an entry to open it. Every ${kind} bill counts here, whether or not the money has moved yet - see Total ${kind === 'sale' ? 'Received' : 'Paid'} for what actually has.`}
       </Text>
     </BookPage>
     <TransactionDetailModal
