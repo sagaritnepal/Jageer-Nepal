@@ -1,5 +1,5 @@
 // lib/components/finance/CustomersListScreen.tsx
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, TextInput, Pressable, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -323,6 +323,23 @@ function positionOf(data: PartyRowData): PartyPosition {
 }
 
 const dash = (n: number) => (Math.round(n) === 0 ? '—' : bookMoney(n));
+
+/** One header of the Ledger: a Ledger type (Customer, Vendor, Employee, Expense ...) and the parties
+ * under it, with what they add up to. */
+interface LedgerGroup {
+  key: string;
+  label: string;
+  rows: PartyRowData[];
+  /** What the ones who owe you add up to. */
+  receivable: number;
+  /** What you owe the ones you owe. */
+  payable: number;
+  /** Both netted: positive = they owe you. */
+  net: number;
+}
+
+/** The header for parties that are app users with no saved ledger. */
+const APP_GROUP = '__app__';
 
 /** A party on a phone: who, how to reach them, when they last traded, Sales /
  * Purchases / Payments / Balance, and where they stand. */
@@ -649,6 +666,9 @@ function LedgerList({ basePath }: { basePath: string }) {
   const [selecting, setSelecting] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Which headers (Ledger types) are open to show their parties. They all start closed - the headers
+  // are the overview, and a type's parties are a tap away instead of a scroll.
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
 
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
@@ -657,7 +677,7 @@ function LedgerList({ basePath }: { basePath: string }) {
   });
   const appCustomers = useAppCustomers(userId);
   const { byParty: itemsByParty, referenceById } = useLedgerItems(userId);
-  const { nameById: partyTypeName } = usePartyTypes(userId);
+  const { nameById: partyTypeName, types: partyTypes } = usePartyTypes(userId);
   // A person typed Expense / Sales / Purchase opens on that report (see usePartyDestination).
   const hrefFor = usePartyDestination(userId, basePath);
 
@@ -765,6 +785,50 @@ function LedgerList({ basePath }: { basePath: string }) {
       .filter((d) => d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q))
       .sort((a, b) => rank(a) - rank(b));
   }, [analysed, filter, search]);
+
+  // The Ledger is laid out by Ledger type - Customer, Vendor, Employee, Expense ... - each header with
+  // how many parties it holds and what they add up to, and the parties inside it. Every type is a
+  // header, used or not; a search or a status filter lists (and opens) only the headers with a match.
+  const narrowed = !!search.trim() || filter !== 'all';
+  const groups = useMemo((): LedgerGroup[] => {
+    const byKey = new Map<string, LedgerGroup>();
+    const slot = (key: string, label: string) => {
+      let g = byKey.get(key);
+      if (!g) {
+        g = { key, label, rows: [], receivable: 0, payable: 0, net: 0 };
+        byKey.set(key, g);
+      }
+      return g;
+    };
+    if (!narrowed) for (const t of partyTypes) slot(t.id, t.name);
+    for (const d of filtered) {
+      const typeId = d.row.kind === 'customer' ? d.row.customer.party_type_id ?? null : null;
+      const g =
+        d.row.kind !== 'customer'
+          ? slot(APP_GROUP, 'App users')
+          : typeId
+            ? slot(typeId, partyTypeName.get(typeId) ?? 'No ledger type')
+            : slot(NO_TYPE, 'No ledger type');
+      g.rows.push(d);
+      g.net += d.balance;
+      if (d.status === 'receivable') g.receivable += d.balance;
+      else if (d.status === 'payable') g.payable += -d.balance;
+    }
+    const last = (k: string) => (k === NO_TYPE || k === APP_GROUP ? 1 : 0);
+    return [...byKey.values()].sort((a, b) => last(a.key) - last(b.key) || a.label.localeCompare(b.label));
+  }, [filtered, partyTypes, partyTypeName, narrowed]);
+  const groupKeys = groups.filter((g) => g.rows.length > 0).map((g) => g.key);
+  const allOpen = groupKeys.length > 0 && groupKeys.every((k) => openKeys.has(k));
+  const toggleGroup = (key: string) =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  // The listed rows' own figures added up, so the line under the headers agrees with them.
+  const footerNet = filtered.reduce((sum, d) => sum + d.balance, 0);
+  const footerPosition = partyPosition({ receivable: footerNet, payable: 0 });
 
   // --- selection (phone: the Select button): only saved parties - an app-only row has no ledger to act on ---
   const toggle = (id: string) =>
@@ -947,6 +1011,72 @@ function LedgerList({ basePath }: { basePath: string }) {
     </View>
   );
 
+  // The headers, each a card: its Ledger type, how many parties and what they add up to. Tap one to
+  // open the parties inside it (`body`); a search or a status filter opens the ones with a match.
+  const groupsView = (body: (g: LedgerGroup) => ReactNode) => (
+    <View style={{ gap: 10 }}>
+      {!narrowed && groupKeys.length > 1 && (
+        <View className="flex-row items-center justify-end px-1">
+          <Pressable onPress={() => setOpenKeys(allOpen ? new Set() : new Set(groupKeys))} accessibilityRole="button" hitSlop={6}>
+            <Text className="text-[12.5px] font-semibold text-blue-700">{allOpen ? 'Close all' : 'Open all'}</Text>
+          </Pressable>
+        </View>
+      )}
+      {groups.map((g) => {
+        const empty = g.rows.length === 0;
+        const isOpen = !empty && (narrowed || openKeys.has(g.key));
+        return (
+          <View key={g.key} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
+            <Pressable
+              onPress={() => toggleGroup(g.key)}
+              disabled={empty || narrowed}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: isOpen }}
+              className="flex-row items-center px-3.5 py-3"
+              style={{ gap: 10, backgroundColor: isOpen ? '#F9FAFB' : '#FFFFFF' }}
+            >
+              <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={16} color={empty ? '#D1D5DB' : '#6B7280'} />
+              <Text className={`flex-1 text-[14px] font-bold ${empty ? 'text-gray-400' : 'text-gray-900'}`} numberOfLines={1}>
+                {g.label}
+              </Text>
+              <Text className="text-[12px] text-gray-400">
+                {empty ? 'No parties' : `${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`}
+              </Text>
+              {tableMode && !empty && (
+                <>
+                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                    <Text className="text-[12.5px] font-bold" style={{ color: g.receivable > 0 ? LEDGER_TONE.receivable.text : '#D1D5DB' }}>
+                      {g.receivable > 0 ? bookMoney(g.receivable) : '—'}
+                    </Text>
+                  </View>
+                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                    <Text className="text-[12.5px] font-bold" style={{ color: g.payable > 0 ? LEDGER_TONE.payable.text : '#D1D5DB' }}>
+                      {g.payable > 0 ? bookMoney(g.payable) : '—'}
+                    </Text>
+                  </View>
+                </>
+              )}
+              {!empty && (
+                <View style={{ width: 120, alignItems: 'flex-end' }}>
+                  <PartyBalance position={partyPosition({ receivable: g.net, payable: 0 })} compact />
+                </View>
+              )}
+            </Pressable>
+            {isOpen && <View className="border-t border-gray-200">{body(g)}</View>}
+          </View>
+        );
+      })}
+      <View className="flex-row items-center justify-end px-1" style={{ gap: 10 }}>
+        <Text className="text-[12.5px] font-bold text-gray-600">
+          {`${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`}
+        </Text>
+        <View style={{ width: 120, alignItems: 'flex-end' }}>
+          <PartyBalance position={footerPosition} compact />
+        </View>
+      </View>
+    </View>
+  );
+
   // ---------------- wide screen: the ledger table ----------------
   if (tableMode) {
     // Under the name: the ledger type, the phone number and the address, on one line.
@@ -990,21 +1120,6 @@ function LedgerList({ basePath }: { basePath: string }) {
         render: (_d, index) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>,
       },
       { key: 'party', label: 'Party', render: partyCell },
-      {
-        // The party's ledger type (Customer, Vendor, Employee ...), shown as plain text - it is
-        // changed from the party's own page or in bulk with the tick boxes, not in this table.
-        key: 'ledger',
-        label: 'Ledger',
-        width: 150,
-        render: (d) =>
-          d.row.kind === 'customer' && d.typeName ? (
-            <Text className="text-[12.5px] font-semibold text-gray-800" numberOfLines={1}>
-              {d.typeName}
-            </Text>
-          ) : (
-            <Text className="text-[12.5px] text-gray-300">—</Text>
-          ),
-      },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
       {
         // The number on that last transaction, with what it is the number of underneath.
@@ -1058,11 +1173,6 @@ function LedgerList({ basePath }: { basePath: string }) {
       { key: 'balance', label: 'Balance', width: 120, align: 'right', render: (d) => <PartyBalance position={positionOf(d)} compact /> },
     ];
 
-    // The listed rows' own figures added up (every page, not just this one), so
-    // the footer always agrees with the list above it.
-    const footerNet = filtered.reduce((sum, d) => sum + d.balance, 0);
-    const footerPosition = partyPosition({ receivable: footerNet, payable: 0 });
-
     return (
       <BookPage wide={layout.wide}>
         {toolbar}
@@ -1070,32 +1180,12 @@ function LedgerList({ basePath }: { basePath: string }) {
         {addForm}
         {bulkBar}
 
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && (narrowed || merged.length === 0) ? (
           emptyState
         ) : (
-          <BookTable
-            columns={columns}
-            rows={filtered}
-            rowKey={(d) => `${d.row.kind}-${d.row.id}`}
-            onRowPress={open}
-            stickyHeader
-            footer={{
-              label: `${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`,
-              cells: {
-                receivable: (
-                  <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.receivable.text }}>
-                    {bookMoney(filtered.reduce((sum, d) => (d.status === 'receivable' ? sum + d.balance : sum), 0))}
-                  </Text>
-                ),
-                payable: (
-                  <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.payable.text }}>
-                    {bookMoney(filtered.reduce((sum, d) => (d.status === 'payable' ? sum - d.balance : sum), 0))}
-                  </Text>
-                ),
-                balance: <PartyBalance position={footerPosition} compact />,
-              },
-            }}
-          />
+          groupsView((g) => (
+            <BookTable bare columns={columns} rows={g.rows} rowKey={(d) => `${d.row.kind}-${d.row.id}`} onRowPress={open} />
+          ))
         )}
 
         {typeMenu}
@@ -1133,22 +1223,24 @@ function LedgerList({ basePath }: { basePath: string }) {
         {addForm}
         {bulkBar}
 
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && (narrowed || merged.length === 0) ? (
           emptyState
         ) : (
-          <View>
-            {filtered.map((d) => (
-              <PartyCard
-                key={`${d.row.kind}-${d.row.id}`}
-                data={d}
-                hrefFor={hrefFor}
-                today={today}
-                selecting={selecting}
-                selected={selected.has(d.row.id)}
-                onToggle={() => toggle(d.row.id)}
-              />
-            ))}
-          </View>
+          groupsView((g) => (
+            <View className="p-2.5 pb-0">
+              {g.rows.map((d) => (
+                <PartyCard
+                  key={`${d.row.kind}-${d.row.id}`}
+                  data={d}
+                  hrefFor={hrefFor}
+                  today={today}
+                  selecting={selecting}
+                  selected={selected.has(d.row.id)}
+                  onToggle={() => toggle(d.row.id)}
+                />
+              ))}
+            </View>
+          ))
         )}
 
         {typeMenu}
