@@ -170,9 +170,13 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     if (router.canGoBack()) router.back();
     else router.replace(`${basePath}/customers` as never);
   };
+  // The person's page is titled for what they are - their Ledger type, as on their ledger page - and
+  // never says "Report"; failing a type, the kind it lists (Expense, Sales, Purchase).
+  const personType = partyRow?.party_type_id ? partyTypeName.get(partyRow.party_type_id) : undefined;
+  const personTitle = personType || meta.title.replace(/\s*report$/i, '');
   const toolbar = useBookToolbar(
     {
-      title: partyId ? meta.title : undefined,
+      title: partyId ? personTitle : undefined,
       wide: layout.wide,
       left: layout.wide && !partyId ? undefined : () => <BackButton onPress={goBack} />,
       right: partyId
