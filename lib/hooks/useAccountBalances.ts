@@ -108,7 +108,7 @@ export function useAccountBalances(userId: string | undefined) {
         add(t.bank_account_id, -t.amount, {
           id: t.id,
           date: t.bill_date ?? t.created_at,
-          label: partyLabel ? `Expense · ${partyLabel}` : 'Expense',
+          label: partyLabel ? `Expenses · ${partyLabel}` : 'Expenses',
           sub: t.note ?? '',
           isInflow: false,
           nav: { kind: 'transactions', type: 'expense' },

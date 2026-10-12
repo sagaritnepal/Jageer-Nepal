@@ -15,7 +15,7 @@ const METRIC_META: Record<TrendMetric, { label: string; color: string }> = {
   all: { label: 'Available Balance', color: '#2563EB' },
   sale: { label: 'Sales', color: '#059669' },
   purchase: { label: 'Purchase', color: '#dc2626' },
-  expense: { label: 'Expense', color: '#dc2626' },
+  expense: { label: 'Expenses', color: '#dc2626' },
 };
 
 function startOfDay(d: Date) {

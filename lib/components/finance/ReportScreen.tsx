@@ -29,7 +29,7 @@ const REPORT_GROUPS: { heading: string; links: ReportLink[] }[] = [
     links: [
       { title: 'Sales Report', subtitle: 'Every sale bill, newest first', icon: 'trending-up', color: '#059669', path: '/sales-report' },
       { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', icon: 'cart', color: '#DC2626', path: '/purchase-report' },
-      { title: 'Expense Report', subtitle: 'Every expense you recorded, newest first', icon: 'receipt', color: '#DC2626', path: '/expense-report' },
+      { title: 'Expenses Report', subtitle: 'Every expense you recorded, newest first', icon: 'receipt', color: '#DC2626', path: '/expense-report' },
       {
         title: 'Receivable Report',
         subtitle: 'Customers who owe you money',
@@ -110,12 +110,12 @@ export function ReportScreen({ basePath }: { basePath: string }) {
             ['Sales', n(totals.sale)],
             ['Purchase', n(totals.purchase)],
             ['Gross Profit', n(grossProfit)],
-            ['Expense', n(totals.expense)],
+            ['Expenses', n(totals.expense)],
             ['Net Profit', n(netProfit)],
           ],
         },
       ],
-      note: 'Sales, Purchase and Expense are the bills dated in the period, paid or not.',
+      note: 'Sales, Purchase and Expenses are the bills dated in the period, paid or not.',
     };
   };
   const printNow = useRef<() => void>(() => {});
@@ -154,7 +154,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         <View className="border-t border-gray-100" />
         <Row label="Gross Profit" value={grossProfit} color={grossProfit >= 0 ? '#059669' : '#DC2626'} bold />
         <View className="mt-1 border-t border-gray-200" />
-        <Row label="Expense" value={totals.expense} color="#DC2626" />
+        <Row label="Expenses" value={totals.expense} color="#DC2626" />
         <View className="border-t border-gray-100" />
         <Row label="Net Profit" value={netProfit} color={netProfit >= 0 ? '#059669' : '#DC2626'} bold />
       </View>

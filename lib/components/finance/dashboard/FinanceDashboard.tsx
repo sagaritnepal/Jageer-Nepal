@@ -58,7 +58,7 @@ export function Card({
 const TYPE_STYLE = {
   sale: { icon: 'trending-up', color: SALES, label: 'Sale' },
   purchase: { icon: 'cart', color: PURCHASE, label: 'Purchase' },
-  expense: { icon: 'receipt', color: EXPENSE, label: 'Expense' },
+  expense: { icon: 'receipt', color: EXPENSE, label: 'Expenses' },
 } as const;
 
 function useTransactions() {

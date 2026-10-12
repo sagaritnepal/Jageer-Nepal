@@ -11,7 +11,7 @@ import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
 import { BS_MONTHS, adStringToBs, toBsHistoryLabel } from '../../utils/nepaliDate';
 import { localTodayIso } from '../../utils/localDate';
 import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
-import { advanceHeader, groupExpenseNames, isAdvanceName, nameKey } from '../../utils/expenseGroups';
+import { SALARY_HEADER, expenseHeading, groupExpenseNames, isSalaryName, nameKey, reportCategoryName } from '../../utils/expenseGroups';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
@@ -33,7 +33,7 @@ interface PillStyle {
 const PILL = {
   sale: { label: 'Sale', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase', color: MONEY.out.text, bg: MONEY.out.bg },
-  expense: { label: 'Expense', color: MONEY.out.text, bg: MONEY.out.bg },
+  expense: { label: 'Expenses', color: MONEY.out.text, bg: MONEY.out.bg },
   paymentReceived: { label: 'Received', color: MONEY.in.text, bg: MONEY.in.bg },
   jobPayment: { label: 'Job payment', color: MONEY.in.text, bg: MONEY.in.bg },
   paymentOut: { label: 'Paid', color: MONEY.out.text, bg: MONEY.out.bg },
@@ -76,7 +76,7 @@ const KIND_META: Record<Kind, { title: string; subtitle: string; color: string }
   paid: { title: 'Total Paid', subtitle: 'Money that actually left the business, newest first', color: '#DC2626' },
   sale: { title: 'Sales Report', subtitle: 'Every sale bill, newest first', color: '#059669' },
   purchase: { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', color: '#DC2626' },
-  expense: { title: 'Expense Report', subtitle: 'Every expense you recorded, newest first', color: '#DC2626' },
+  expense: { title: 'Expenses Report', subtitle: 'Every expense you recorded, newest first', color: '#DC2626' },
 };
 
 /** An Expense heading's entries as one line for each subject (a bike, a person, a payee): what was
@@ -179,7 +179,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   // their ledger, not through the Expense form, so the Expense Report lists it:
   //  - An Expense ledger is itself a category: its payments are filed under its name.
   //  - An Employee ledger is a person, not a category: their payments are filed under the existing
-  //    category the remark names ("FUEL" -> Fuel), else Salary Advance. The category list is never
+  //    category the remark names ("FUEL" -> Fuel), else Salary Expenses. The category list is never
   //    added to by a person.
   // Sales and Purchase are their bills only; what was received or paid is Total Received / Total Paid's.
   const { expenseLedgerIds, staffLedgerIds } = useMemo(() => {
@@ -272,7 +272,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         .map((t): Entry => {
           // The expense report shows the category (same one picked in the entry portal) in
           // place of the generic "Expense" type - the title still falls back to it when there's no party.
-          const category = t.expense_category_id ? categoryById.get(t.expense_category_id) : undefined;
+          // Shown under the report's own name for it (Salary Advance -> Salary Expenses).
+          const savedCategory = t.expense_category_id ? categoryById.get(t.expense_category_id) : undefined;
+          const category = savedCategory ? reportCategoryName(savedCategory) : undefined;
           return {
             id: t.id,
             date: t.bill_date ?? t.created_at,
@@ -313,10 +315,6 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           const name = nameById.get(id);
           if (name) knownCategory.set(nameKey(name), name.trim());
         }
-        // Where an employee's payment goes when its remark names no category: the advance header -
-        // the "Salary Advance" there already (Employee / Staff Advance are the same thing and sit
-        // under it too, see `grouped`).
-        const staffHeader = advanceHeader([...knownCategory.values()]);
         const ledgerRow = (
           e: { id: string; entry_date: string | null; created_at: string; amount: number; receipt_no: string | null; note: string | null },
           ledgerId: string,
@@ -325,10 +323,10 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           const name = nameById.get(ledgerId) ?? partyRow?.name ?? 'Expense ledger';
           const tone = refund ? MONEY.in : MONEY.out;
           // An Expense ledger is its own category; an employee's payment goes under the category its
-          // remark names, else Employee Advance - so a person is never a header of their own, and
+          // remark names, else Salary Expenses - so a person is never a header of their own, and
           // never lands in Uncategorized.
           const isStaff = staffLedgerIds.has(ledgerId);
-          const category = isStaff ? knownCategory.get(nameKey(e.note ?? '')) ?? staffHeader : name;
+          const category = reportCategoryName(isStaff ? knownCategory.get(nameKey(e.note ?? '')) ?? SALARY_HEADER : name);
           return {
             id: e.id,
             date: e.entry_date ?? e.created_at,
@@ -543,7 +541,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     [entries, year, partyId]
   );
 
-  // The Expense Report is laid out by category - Fuel, Bike Repair, Salary Advance ... - each with
+  // The Expense Report is laid out by category - Fuel, Bike Repair, Salary Expenses ... - each with
   // what it adds up to, biggest first, and the individual ledgers / categories under it (Fuel
   // Aviator, Fuel Manish ...; the category pill on every row says which). Categories come from the
   // words the names start with, so there is nothing to set up. Every expense category and every
@@ -575,17 +573,18 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     // Expense names are merged by the words they start with; a customer or vendor is its own heading.
     const labelOf =
       kind === 'expense' ? groupExpenseNames(names) : new Map(names.map((n) => [nameKey(n), n.trim()] as const));
-    // Salary, Employee and Staff advances are one header, whatever the words they start with.
+    // Salary, Employee and Staff advances and salary expenses are one header - Salary Expenses -
+    // whatever the words they start with.
     if (kind === 'expense') {
-      const advance = advanceHeader(names);
-      for (const n of names) if (isAdvanceName(n)) labelOf.set(nameKey(n), advance);
+      for (const n of names) if (isSalaryName(n)) labelOf.set(nameKey(n), SALARY_HEADER);
     }
     const groups = new Map<string, { key: string; label: string; total: number; rows: Entry[] }>();
     const groupOf = (name: string) => {
       const label = labelOf.get(nameKey(name)) ?? name.trim();
       let group = groups.get(nameKey(label));
       if (!group) {
-        group = { key: nameKey(label), label, total: 0, rows: [] };
+        // An Expense heading always ends in "Expenses" (Fuel -> Fuel Expenses); the key stays the name.
+        group = { key: nameKey(label), label: kind === 'expense' ? expenseHeading(label) : label, total: 0, rows: [] };
         groups.set(group.key, group);
       }
       return group;

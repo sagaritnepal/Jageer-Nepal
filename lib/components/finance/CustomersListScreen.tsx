@@ -47,7 +47,7 @@ interface LedgerReference {
   kind: string;
 }
 
-const BILL_KIND: Record<BusinessTransactionType, string> = { sale: 'Sales no.', purchase: 'Purchase no.', expense: 'Expense no.' };
+const BILL_KIND: Record<BusinessTransactionType, string> = { sale: 'Sales no.', purchase: 'Purchase no.', expense: 'Expenses no.' };
 
 /** Every ledger entry of every party, grouped by party. A party's two ledgers
  * (customer_ledger_entries, vendor_ledger_entries - opposite polarity, see

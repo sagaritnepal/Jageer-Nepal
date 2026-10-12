@@ -14,7 +14,7 @@ import type { Customer } from '../../../types/database.types';
 
 const TYPE_META: Record<StatementAction, { label: string; color: string; bg: string }> = {
   payment_out: { label: 'Paid', color: '#DC2626', bg: '#FEF2F2' },
-  expense: { label: 'Expense', color: '#DC2626', bg: '#FEF2F2' },
+  expense: { label: 'Expenses', color: '#DC2626', bg: '#FEF2F2' },
   withdraw: { label: 'Withdraw', color: '#4B5563', bg: '#F3F4F6' },
   payment_in: { label: 'Received', color: '#059669', bg: '#ECFDF5' },
   deposit: { label: 'Deposit', color: '#059669', bg: '#ECFDF5' },

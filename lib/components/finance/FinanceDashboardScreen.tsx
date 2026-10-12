@@ -385,7 +385,7 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
   const metrics = [
     { label: 'Sales', value: totals.sale, caption: 'All time', icon: 'trending-up' as const, color: MONEY.in.base, path: '/transactions?type=sale' },
     { label: 'Purchase', value: totals.purchase, caption: 'All time', icon: 'cart' as const, color: MONEY.out.base, path: '/transactions?type=purchase' },
-    { label: 'Expense', value: totals.expense, caption: 'All time', icon: 'receipt' as const, color: MONEY.out.base, path: '/transactions?type=expense' },
+    { label: 'Expenses', value: totals.expense, caption: 'All time', icon: 'receipt' as const, color: MONEY.out.base, path: '/transactions?type=expense' },
     { label: 'Total received', value: yearReceived, caption: 'This year', icon: 'arrow-down-circle' as const, color: MONEY.in.base, path: '/received' },
     { label: 'Total paid', value: yearPaid, caption: 'This year', icon: 'arrow-up-circle' as const, color: MONEY.out.base, path: '/paid' },
     {

@@ -100,7 +100,7 @@ const KIND: Record<Kind, { label: string; color: string; bg: string }> = {
   opening: { label: 'Opening', color: '#374151', bg: '#F3F4F6' },
   received: { label: 'Received', color: '#047857', bg: '#ECFDF5' },
   paid: { label: 'Paid', color: '#B91C1C', bg: '#FEF2F2' },
-  expense: { label: 'Expense', color: '#B91C1C', bg: '#FEF2F2' },
+  expense: { label: 'Expenses', color: '#B91C1C', bg: '#FEF2F2' },
   sale: { label: 'Sale bill', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase bill', color: MONEY.out.text, bg: MONEY.out.bg },
   transfer: { label: 'Transfer', color: '#4338CA', bg: '#EEF2FF' },
@@ -913,7 +913,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         date,
         time: timeOf(t.created_at),
         details: isExpense
-          ? t.party_name || category || 'Expense'
+          ? t.party_name || category || 'Expenses'
           : t.party_name || (t.type === 'sale' ? 'Sale' : 'Purchase'),
         sub:
           [

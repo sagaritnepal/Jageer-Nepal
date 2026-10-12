@@ -331,7 +331,7 @@ const FILTERS: { key: 'all' | BusinessTransactionType; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'sale', label: 'Sales' },
   { key: 'purchase', label: 'Purchase' },
-  { key: 'expense', label: 'Expense' },
+  { key: 'expense', label: 'Expenses' },
 ];
 
 
@@ -1215,7 +1215,7 @@ function TransactionForm({
       rows: [
         ...validRows.slice(0, 5).map((r) => {
           const cat = (categories ?? []).find((c) => c.id === r.categoryId)?.name;
-          return { label: `${r.partyName.trim() || 'Expense'}${cat ? ' · ' + cat : ''}`, value: `NPR ${Number(r.amount).toLocaleString()}` };
+          return { label: `${r.partyName.trim() || 'Expenses'}${cat ? ' · ' + cat : ''}`, value: `NPR ${Number(r.amount).toLocaleString()}` };
         }),
         ...(validRows.length > 5 ? [{ label: `+ ${validRows.length - 5} more` }] : []),
         { label: 'Paid via', value: selectedAccountName },
@@ -2508,7 +2508,7 @@ export function TransactionDetailModal({
                 <View className="flex-row items-center gap-2">
                   <Ionicons name={meta.icon} size={16} color={meta.color} />
                   <Text className="text-sm font-extrabold capitalize tracking-wide" style={{ color: meta.color }}>
-                    {isBill ? `${meta.label} bill` : meta.label}
+                    {isBill ? `${meta.label} bill` : 'Expenses'}
                   </Text>
                 </View>
                 <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
@@ -3149,7 +3149,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                   >
                     <Ionicons name="chevron-back" size={20} color="#374151" />
                   </Pressable>
-                  <Text className="text-base font-bold text-gray-900">{TYPE_META[initialFilter].label}</Text>
+                  <Text className="text-base font-bold text-gray-900">{initialFilter === 'expense' ? 'Expenses' : TYPE_META[initialFilter].label}</Text>
                 </View>
               ) : (
                 <View className="flex-row gap-2">

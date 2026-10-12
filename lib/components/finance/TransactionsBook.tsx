@@ -21,7 +21,7 @@ interface PillStyle {
 const PILL = {
   received: { label: 'Received', color: '#047857', bg: '#ECFDF5' },
   paid: { label: 'Paid', color: '#B91C1C', bg: '#FEF2F2' },
-  expense: { label: 'Expense', color: '#B91C1C', bg: '#FEF2F2' },
+  expense: { label: 'Expenses', color: '#B91C1C', bg: '#FEF2F2' },
   sale: { label: 'Sale bill', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase bill', color: MONEY.out.text, bg: MONEY.out.bg },
   creditSale: { label: 'Credit sale', color: MONEY.in.text, bg: MONEY.in.bg },
@@ -167,7 +167,7 @@ export function TransactionsBook({
           id: `b-${t.id}`,
           group,
           time: timeOf(t.created_at),
-          details: isExpense ? t.party_name || category || 'Expense' : t.party_name || (t.type === 'sale' ? 'Sale' : 'Purchase'),
+          details: isExpense ? t.party_name || category || 'Expenses' : t.party_name || (t.type === 'sale' ? 'Sale' : 'Purchase'),
           sub:
             [
               t.bill_no ? `Bill #${t.bill_no}` : null,

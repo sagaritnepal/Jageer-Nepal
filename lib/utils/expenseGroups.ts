@@ -5,18 +5,31 @@ export const nameKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowe
 
 const wordsOf = (name: string) => name.trim().split(/\s+/).filter(Boolean);
 
-/** Whether an expense name is an advance paid to staff - "Salary Advance", "Employee Advance",
- * "Staff Advance". They are one thing under three names, so the Expense Report keeps them under
- * one header (see advanceHeader). */
-export function isAdvanceName(name: string): boolean {
-  return /\b(employees?|staff|salary)\b/i.test(name) && /\badvance\b/i.test(name);
+/** What the Expense Report calls everything paid to staff as pay: "Salary Expenses". */
+export const SALARY_HEADER = 'Salary Expenses';
+
+/** Whether an expense name is pay to staff - "Salary Advance", "Employee Advance", "Staff Advance",
+ * "Salary Expenses". They are one thing under several names, so the Expense Report keeps them
+ * under one header and calls it SALARY_HEADER. */
+export function isSalaryName(name: string): boolean {
+  return (
+    (/\b(employees?|staff|salary)\b/i.test(name) && /\badvance\b/i.test(name)) || /\bsalary\s+expenses?\b/i.test(name)
+  );
 }
 
-/** The header the advances go under: the "Salary Advance" you already have, else whichever advance
- * name there is, else "Salary Advance". */
-export function advanceHeader(names: readonly string[]): string {
-  const advances = names.filter(isAdvanceName);
-  return advances.find((n) => /\bsalary\b/i.test(n)) ?? advances[0] ?? 'Salary Advance';
+/** A heading as the Expense Report shows it: it always says "Expenses". "Fuel" -> "Fuel Expenses",
+ * "Bike Repair" -> "Bike Repair Expenses"; a name that already says it (or abbreviates it) keeps its
+ * words and gets the whole word - "Lunch Exp" -> "Lunch Expenses", "Recharge Expenses" as it is. */
+export function expenseHeading(label: string): string {
+  const name = label.trim().replace(/\s+/g, ' ');
+  const spelled = name.replace(/\bexp\.?(?=\W|$)/gi, 'Expenses').replace(/\bexpense\b/gi, 'Expenses');
+  return /\bexpenses\b/i.test(spelled) ? spelled : `${spelled} Expenses`;
+}
+
+/** The name a category is shown under in the report: the salary ones all read "Salary Expenses",
+ * every other one as it is saved. (Only the report's wording - the category itself is not renamed.) */
+export function reportCategoryName(name: string): string {
+  return isSalaryName(name) ? SALARY_HEADER : name;
 }
 
 /** The category each expense name belongs to, from the words it starts with: "Fuel Aviator",

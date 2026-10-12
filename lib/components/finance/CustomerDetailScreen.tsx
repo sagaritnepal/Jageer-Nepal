@@ -53,7 +53,7 @@ import type {
 const TX_TYPE_LABEL: Record<BusinessTransactionType, string> = {
   sale: 'Sale bill',
   purchase: 'Purchase bill',
-  expense: 'Expense',
+  expense: 'Expenses',
 };
 
 // The two colours a choice or tag takes: green for money in, red for money out.

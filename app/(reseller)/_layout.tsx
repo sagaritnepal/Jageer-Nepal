@@ -44,7 +44,7 @@ const financeNavRank = (key: string) => {
 const REPORT_FAMILY: WebNavItem[] = [
   { href: '/(reseller)/sales-report', label: 'Sales Report', icon: 'trending-up' },
   { href: '/(reseller)/purchase-report', label: 'Purchase Report', icon: 'cart' },
-  { href: '/(reseller)/expense-report', label: 'Expense Report', icon: 'receipt' },
+  { href: '/(reseller)/expense-report', label: 'Expenses Report', icon: 'receipt' },
   { href: '/(reseller)/to-receive', label: 'Receivable Report', icon: 'people' },
   { href: '/(reseller)/to-give', label: 'Payable Report', icon: 'storefront' },
 ];
@@ -189,7 +189,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="paid" options={{ href: null, title: 'Total Paid' }} />
         <Tabs.Screen name="sales-report" options={{ href: null, title: 'Sales Report' }} />
         <Tabs.Screen name="purchase-report" options={{ href: null, title: 'Purchase Report' }} />
-        <Tabs.Screen name="expense-report" options={{ href: null, title: 'Expense Report' }} />
+        <Tabs.Screen name="expense-report" options={{ href: null, title: 'Expenses Report' }} />
         <Tabs.Screen name="party-report" options={{ href: null, title: 'Ledger' }} />
         <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable Report' }} />
         <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable Report' }} />
