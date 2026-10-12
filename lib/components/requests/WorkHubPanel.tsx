@@ -114,7 +114,7 @@ function statusChip(request: ServiceRequest): { label: string; color: string; bg
       : { label: 'Completed', color: '#16A34A', bg: '#F0FDF4' };
   }
   if (request.status === 'in_progress') return { label: 'Working on it', color: '#1D4ED8', bg: '#EFF6FF' };
-  if (request.status === 'assigned') return { label: 'Waiting for them to accept', color: '#B45309', bg: '#FFFBEB' };
+  if (request.status === 'assigned') return { label: 'Waiting for them to accept', color: '#4B5563', bg: '#F3F4F6' };
   if (request.open_to_team) return { label: 'Waiting to be picked up', color: '#047857', bg: '#ECFDF5' };
   return { label: 'Not started', color: '#6B7280', bg: '#F3F4F6' };
 }
@@ -253,7 +253,7 @@ function Column({
 
 const PAY_CHIP: Record<string, { label: string; color: string; bg: string }> = {
   paid: { label: 'Paid', color: '#047857', bg: '#ECFDF5' },
-  partial: { label: 'Part paid', color: '#B45309', bg: '#FFFBEB' },
+  partial: { label: 'Part paid', color: '#4B5563', bg: '#F3F4F6' },
   unpaid: { label: 'Unpaid', color: '#B91C1C', bg: '#FEF2F2' },
 };
 
@@ -362,8 +362,8 @@ function AssignSheet({
 
 /** What a hold on a job looks like, beside its status. */
 const HOLD_CHIP = {
-  requested: { label: 'Hold requested', color: '#92400E', bg: '#FFFBEB' },
-  on_hold: { label: 'On hold', color: '#92400E', bg: '#FFFBEB' },
+  requested: { label: 'Hold requested', color: '#4B5563', bg: '#F3F4F6' },
+  on_hold: { label: 'On hold', color: '#4B5563', bg: '#F3F4F6' },
 } as const;
 
 /** One fact about a job: a small label over its value. The cells of a card sit
@@ -388,12 +388,12 @@ function Fact({
   const badge = icon || initials ? (
     <View
       className="items-center justify-center rounded-full"
-      style={{ width: 36, height: 36, backgroundColor: initials ? '#44403C' : '#FDE8CC' }}
+      style={{ width: 36, height: 36, backgroundColor: initials ? '#374151' : '#F3F4F6' }}
     >
       {initials ? (
         <Text className="text-[13px] font-bold text-white">{initials}</Text>
       ) : (
-        <Ionicons name={icon!} size={18} color="#B45309" />
+        <Ionicons name={icon!} size={18} color="#4B5563" />
       )}
     </View>
   ) : null;
@@ -404,7 +404,7 @@ function Fact({
     >
       {badge}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text className="text-[12px] font-semibold capitalize" style={{ color: '#78716C' }}>
+        <Text className="text-[12px] font-semibold capitalize" style={{ color: '#6B7280' }}>
           {label}
         </Text>
         {children}
@@ -483,12 +483,12 @@ function JobRowCard({
       style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', boxShadow: '0 1px 3px rgba(16,24,40,0.06)' }}
     >
       {overdue && (
-        <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#FFF1E0', borderBottomWidth: 1, borderBottomColor: '#F3CFA0' }}>
-          <Ionicons name="time-outline" size={17} color="#9A3412" />
-          <Text className="text-[13.5px] font-bold" style={{ color: '#9A3412' }}>
+        <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#F3F4F6', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
+          <Ionicons name="time-outline" size={17} color="#4B5563" />
+          <Text className="text-[13.5px] font-bold" style={{ color: '#1F2937' }}>
             Overdue by {overdueBy(r)}
           </Text>
-          <Text className="text-[13px]" style={{ color: '#7C2D12', flexShrink: 1 }}>
+          <Text className="text-[13px]" style={{ color: '#4B5563', flexShrink: 1 }}>
             {scheduled ? `Scheduled for ${scheduled}. ` : ''}The job is still {r.status === 'in_progress' ? 'in progress' : 'open'}.
           </Text>
         </View>
@@ -591,7 +591,7 @@ function JobRowCard({
               {technicianName(r.technician_id)}
             </Text>
           ) : (
-            <Text className="text-[13.5px] font-semibold" style={{ color: r.open_to_team ? '#047857' : '#B45309' }}>
+            <Text className="text-[13.5px] font-semibold" style={{ color: r.open_to_team ? '#047857' : '#4B5563' }}>
               {r.open_to_team ? 'Open to the team' : 'Nobody yet'}
             </Text>
           )}
@@ -968,8 +968,8 @@ export function WorkHubPanel({
         title="Nobody yet"
         subtitle="Assign someone, or open it to the team"
         count={unassigned.length}
-        color="#B45309"
-        tint="#FFFBEB"
+        color="#4B5563"
+        tint="#F3F4F6"
         wide={wide}
       >
         {unassigned.length === 0

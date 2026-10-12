@@ -4,21 +4,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { jobJourney, type JobTimes, type JourneyLeg, type JourneyNode } from '../utils/jobTimeline';
 import type { ServiceRequest } from '../../types/database.types';
 
-// Warm paper palette: finished steps are amber-brown, the live step is green.
-const BLUE = '#B45309';
+// Finished steps are grey, the live step is green.
+const BLUE = '#4B5563';
 
 type Tone = 'done' | 'now' | 'warn' | 'todo';
 const toneOf = (leg: JourneyLeg): Tone => (leg.warn ? 'warn' : leg.state);
 
 /** The line between two moments: solid blue once it is over, light blue while
  * the job is in it, amber when an offer has sat unanswered, grey if not reached. */
-const LINE: Record<Tone, string> = { done: BLUE, now: '#86EFAC', warn: '#FCD34D', todo: '#D6CDBD' };
+const LINE: Record<Tone, string> = { done: BLUE, now: '#86EFAC', warn: '#9CA3AF', todo: '#D6CDBD' };
 
 /** How long it took, as a soft badge - the same pairs the status chips use. */
 const PILL = {
   done: { bg: '#FFFFFF', border: '#D1D5DB', label: '#78716C', value: '#1C1917' },
   now: { bg: '#DCFCE7', border: '#86EFAC', label: '#166534', value: '#166534' },
-  warn: { bg: '#FFFBEB', border: '#FDE68A', label: '#B45309', value: '#92400E' },
+  warn: { bg: '#F3F4F6', border: '#D1D5DB', label: '#4B5563', value: '#374151' },
 };
 
 /** A moment on the line: a filled dot once it has happened, a hollow one if
@@ -61,7 +61,7 @@ function StepDot({ node, current }: { node: JourneyNode; current: boolean }) {
   }
   if (node.reached) {
     return (
-      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#B45309' }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#4B5563' }}>
         <Ionicons name="checkmark" size={15} color="#FFFFFF" />
       </View>
     );
