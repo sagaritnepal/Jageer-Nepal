@@ -17,7 +17,6 @@ import { MONEY } from './moneyColors';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
 import { TransactionDetailModal } from './TransactionsScreen';
-import { InlineSelect } from './ledger/LedgerUi';
 import type { BusinessTransaction } from '../../../types/database.types';
 
 /** Total Received / Total Paid are money that actually moved; Sales / Purchase / Expense are the bills themselves, paid or not. */
@@ -604,11 +603,6 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     return { groups: ordered };
   }, [kind, partyId, yearEntries, categories, customers, expenseLedgerIds]);
 
-  // The one category (Expense) or customer / vendor (Sales / Purchase) picked from the dropdown
-  // ('' = all of them), so a long report can be narrowed to Fuel or to one customer without
-  // scrolling to it. Picking narrows the table and the figures above it together.
-  const [categoryPick, setCategoryPick] = useState('');
-  const picked = grouped?.groups.find((g) => g.key === categoryPick) ?? null;
   // Which headings are open to show their transactions. They all start closed: the headings are the
   // overview, and the log of one is a tap away instead of a scroll.
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
@@ -631,15 +625,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       else next.add(key);
       return next;
     });
-  const shownEntries = picked ? picked.rows : yearEntries;
-  const pickWord = kind === 'expense' ? { one: 'Category', all: 'All categories' } : kind === 'sale' ? { one: 'Customer', all: 'All customers' } : { one: 'Vendor', all: 'All vendors' };
-  const categoryOptions = useMemo(
-    () => [
-      { key: '', label: `${pickWord.all} · ${money(yearEntries.reduce((sum, e) => (e.payment ? sum : sum + e.amount), 0))}` },
-      ...(grouped?.groups ?? []).map((g) => ({ key: g.key, label: `${g.label} · ${money(g.total)}` })),
-    ],
-    [grouped, yearEntries, pickWord.all]
-  );
+  const shownEntries = yearEntries;
+  // What the column that names who it was with is called.
+  const pickWord = { one: kind === 'expense' ? 'Category' : kind === 'sale' ? 'Customer' : 'Vendor' };
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -693,10 +681,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
 
   // --- Print and Excel: what is open on the page, as a document - Print shows it in the system's print
   // preview, Excel saves it as a spreadsheet. ---
-  // Only what has been opened prints, not the whole report. With a category picked, that one; else the
-  // headings that are open - and inside one, just the bikes / people opened under it; with nothing
-  // open, the page as it stands (the headings and what each adds up to). A person's own report is
-  // that person alone.
+  // Only what has been opened prints, not the whole report: the headings that are open - and inside
+  // one, just the bikes / people opened under it; with nothing open, the page as it stands (the
+  // headings and what each adds up to). A person's own report is that person alone.
   const buildReport = (): PrintReport => {
     const dateOf = (e: Entry) => toBsHistoryLabel(e.date.slice(0, 10));
     const printRow = (e: Entry) => [
@@ -741,11 +728,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     // prints, so each table carries its own total instead.
     let narrowed = false;
     if (grouped && billLog) {
-      // Sales / Purchase: one table of bills, as on screen - all of them, or just the one customer /
-      // vendor picked.
-      narrowed = !!picked;
+      // Sales / Purchase: one table of bills, as on screen.
       sections.push({
-        heading: picked ? `${picked.label} - NPR ${money(picked.total)} - ${entryWord(picked.rows.length)}` : undefined,
         columns: billColumnsPrint,
         rows: shownEntries.map(billRowPrint),
         footer: ['', '', '', '', 'Total', money(stats.total)],
@@ -753,7 +737,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       });
     } else if (grouped) {
       const withRows = grouped.groups.filter((g) => g.rows.length > 0);
-      const opened = picked ? [picked] : withRows.filter((g) => openKeys.has(g.key));
+      const opened = withRows.filter((g) => openKeys.has(g.key));
       if (opened.length === 0) {
         sections.push({
           columns: [{ label: pickWord.one }, { label: 'Entries', align: 'right' }, { label: 'Amount (NPR)', align: 'right' }],
@@ -820,7 +804,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       businessName: profile?.business_name ?? profile?.full_name ?? '',
       subtitle: partyId
         ? 'All dates'
-        : [`Year ${year}`, picked ? `${pickWord.one}: ${picked.label}` : null].filter(Boolean).join(' · '),
+        : `Year ${year}`,
       printedOn: toBsHistoryLabel(localTodayIso()),
       summary,
       sections,
@@ -956,25 +940,15 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         )}
       </BookStats>
 
-      {grouped && grouped.groups.length > 0 && (
-        // Raised above the table that follows: every View is its own stacking layer on the web, so
-        // the dropdown's list can only draw over the table if the row holding it is above it too.
-        <View className="flex-row flex-wrap items-center" style={{ gap: 8, zIndex: 50 }}>
-          <InlineSelect label={pickWord.one} options={categoryOptions} value={picked ? categoryPick : ''} onChange={setCategoryPick} searchable />
-          {picked && (
-            <Pressable onPress={() => setCategoryPick('')} accessibilityRole="button" accessibilityLabel="Show every category" hitSlop={6}>
-              <Text className="text-[12.5px] font-semibold text-blue-700">Show all</Text>
-            </Pressable>
-          )}
-          {kind === 'expense' && !picked && openableKeys.length > 1 && (
-            <Pressable
-              onPress={() => setOpenKeys(allOpen ? new Set() : new Set(openableKeys))}
-              accessibilityRole="button"
-              hitSlop={6}
-            >
-              <Text className="text-[12.5px] font-semibold text-blue-700">{allOpen ? 'Close all' : 'Open all'}</Text>
-            </Pressable>
-          )}
+      {kind === 'expense' && grouped !== null && openableKeys.length > 1 && (
+        <View className="flex-row items-center justify-end px-1">
+          <Pressable
+            onPress={() => setOpenKeys(allOpen ? new Set() : new Set(openableKeys))}
+            accessibilityRole="button"
+            hitSlop={6}
+          >
+            <Text className="text-[12.5px] font-semibold text-blue-700">{allOpen ? 'Close all' : 'Open all'}</Text>
+          </Pressable>
         </View>
       )}
 
@@ -982,11 +956,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
           <Ionicons name="cash-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">
-            {partyId
-              ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.`
-              : picked
-                ? `Nothing recorded under ${picked.label} this year.`
-                : 'Nothing here yet.'}
+            {partyId ? `No ${kind} bills recorded for ${partyRow?.name ?? 'this person'}.` : 'Nothing here yet.'}
           </Text>
         </View>
       ) : grouped !== null && kind === 'expense' ? (
@@ -994,9 +964,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         // up to. Tap one to open the log of transactions inside it. A heading with nothing recorded is
         // there too, shut.
         <View style={{ gap: 10 }}>
-          {(picked ? [picked] : grouped.groups).map((g) => {
+          {grouped.groups.map((g) => {
             const empty = g.rows.length === 0;
-            const isOpen = !empty && (!!picked || openKeys.has(g.key));
+            const isOpen = !empty && openKeys.has(g.key);
             // Expenses: inside a heading each bike / person is one line, the payments to it added up.
             // A heading with just one subject has nothing to fold, so it lists its payments as they are.
             const subjects = isOpen && kind === 'expense' ? subjectsOf(g.rows) : [];
@@ -1004,7 +974,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
               <View key={g.key} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
                 <Pressable
                   onPress={() => toggleGroup(g.key)}
-                  disabled={empty || !!picked}
+                  disabled={empty}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: isOpen }}
                   className="flex-row items-center px-3.5 py-3"
@@ -1115,8 +1085,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             : kind === 'paid'
               ? 'Tap an entry to open it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor.'
               : kind === 'expense'
-                ? "Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it, or pick one in Category above. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
-                : `Tap a bill to open it with its items, or pick a ${pickWord.one.toLowerCase()} above to look at just one. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. This year only.`}
+                ? "Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). This year only."
+                : `Tap a bill to open it with its items. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. This year only.`}
       </Text>
     </BookPage>
     <TransactionDetailModal
