@@ -37,7 +37,8 @@ interface Row {
   details: string;
   sub: string | null;
   pill: PillStyle;
-  invoice: number | null;
+  /** The bill's own number (its invoice / bill no.); null for anything that is not a bill. */
+  invoiceNo: string | null;
   discount: number | null;
   amount: number | null;
   cashIn: number | null;
@@ -180,7 +181,7 @@ export function TransactionsBook({
               .filter(Boolean)
               .join(' · ') || null,
           pill: isExpense ? PILL.expense : t.type === 'sale' ? PILL.sale : PILL.purchase,
-          invoice: isExpense ? null : t.amount + discount - (t.vat_amount ?? 0),
+          invoiceNo: isExpense ? null : t.bill_no?.trim() || null,
           discount: isExpense ? null : discount,
           amount: isExpense ? null : t.amount,
           cashIn: null,
@@ -201,7 +202,7 @@ export function TransactionsBook({
           details: isIn ? `Received from ${name}` : manual ? `Paid to ${name}` : `Receivable from ${name}`,
           sub: [e.receipt_no ? `${isIn ? 'Receipt' : 'Payment'} No. ${e.receipt_no}` : null, e.note ?? (manual ? null : 'From a booked job')].filter(Boolean).join(' · ') || null,
           pill: isIn ? PILL.received : manual ? PILL.paid : PILL.creditSale,
-          invoice: null,
+          invoiceNo: null,
           discount: null,
           amount: !isIn && !manual ? e.amount : null,
           cashIn: isIn ? e.amount : null,
@@ -220,7 +221,7 @@ export function TransactionsBook({
           details: isPayment ? `Paid to ${name}` : `Bought on credit · ${name}`,
           sub: [e.receipt_no ? `Payment No. ${e.receipt_no}` : null, e.note ?? (e.source === 'booking' ? 'From a credit purchase' : null)].filter(Boolean).join(' · ') || null,
           pill: isPayment ? PILL.paid : PILL.creditPurchase,
-          invoice: null,
+          invoiceNo: null,
           discount: null,
           amount: isPayment ? null : e.amount,
           cashIn: null,
@@ -236,7 +237,7 @@ export function TransactionsBook({
         details: `${accountName(tr.from_account_id)} → ${accountName(tr.to_account_id)}`,
         sub: tr.note ?? 'Between your own accounts',
         pill: PILL.transfer,
-        invoice: null,
+        invoiceNo: null,
         discount: null,
         amount: tr.amount,
         cashIn: null,
@@ -303,7 +304,20 @@ export function TransactionsBook({
         { key: 'time', label: 'Time', width: 58, render: (r) => <Text className="text-[12.5px] text-gray-500">{r.time}</Text> },
         { key: 'details', label: 'Transaction details', render: (r) => detailsCell(r, false) },
         { key: 'type', label: 'Type', width: 116, render: (r) => <Pill text={r.pill.label} color={r.pill.color} bg={r.pill.bg} /> },
-        { key: 'invoice', label: 'Invoice', width: 84, align: 'right', render: (r) => num(r.invoice, '#4B5563') },
+        {
+          // The bill's own number - INV/83-84/2217 - not an amount; anything that is not a bill has none.
+          key: 'invoice',
+          label: 'Invoice no.',
+          width: 150,
+          render: (r) =>
+            r.invoiceNo ? (
+              <Text className="text-[12.5px] font-semibold text-gray-700" numberOfLines={1}>
+                {r.invoiceNo}
+              </Text>
+            ) : (
+              <Text className="text-[12.5px] text-gray-400">—</Text>
+            ),
+        },
         { key: 'discount', label: 'Discount', width: 76, align: 'right', render: (r) => num(r.discount, '#4B5563') },
         { key: 'amount', label: 'Bill amount', width: 100, align: 'right', render: (r) => num(r.amount, r.pill.color) },
         { key: 'cashIn', label: 'Cash in', width: 96, align: 'right', render: (r) => num(r.cashIn, '#047857', true) },
