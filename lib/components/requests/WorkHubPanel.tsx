@@ -499,7 +499,7 @@ function JobRowCard({
             </Text>
           )}
           <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
-            <TicketChip no={r.ticket_no} />
+            <TicketChip no={r.ticket_no} prefix="Token" />
             <Text className="text-[19px] font-bold text-gray-900" style={{ flexShrink: 1, minWidth: 0 }} numberOfLines={lines}>
               {issue.title}
             </Text>
