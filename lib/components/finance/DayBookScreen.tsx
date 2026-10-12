@@ -14,6 +14,7 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { ContactPickerModal } from '../ContactPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
+import { shortDateLabel } from '../../utils/nepaliDate';
 import { DateFilterButton, DayStepButton } from './DateRangeFilter';
 import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
@@ -40,7 +41,8 @@ type BookRow = {
   time: string;
   details: string;
   sub: string | null;
-  invoice: number | null;
+  /** The bill's own number (its invoice / bill no.); null for anything that is not a bill. */
+  invoiceNo: string | null;
   discount: number | null;
   /** Bill total (sale/purchase) or amount moved (transfer) - not cash. */
   amount: number | null;
@@ -137,7 +139,7 @@ function amountText(n: number | null | undefined): string {
 // columns need about this much window to fit beside the sidebar - narrower
 // than that and the table falls back to the compact four-column form rather
 // than cutting off Cash in / Cash out / Balance.
-const COL = { time: 58, type: 104, invoice: 96, discount: 76, amount: 104, cashIn: 100, cashOut: 100, balance: 112 };
+const COL = { sn: 52, date: 140, type: 104, invoice: 150, discount: 76, amount: 104, cashIn: 100, cashOut: 100, balance: 112 };
 const FULL_TABLE_MIN_WINDOW = 1280;
 
 function TypePill({ kind }: { kind: Kind }) {
@@ -182,6 +184,17 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   onOpenRow: (row: BookRow) => void;
 }) {
   const cell = 'px-2.5 py-2 border-r border-gray-200';
+  const [calendarMode] = useCalendarMode();
+  // The Date column: the day, with the time under it (the opening line has neither).
+  const dateCell = (r: BookRow, short: boolean) =>
+    r.kind === 'opening' ? null : (
+      <>
+        <Text className={`${short ? 'text-[11.5px]' : 'text-[12.5px]'} font-medium text-gray-800`} numberOfLines={1}>
+          {short ? shortDateLabel(r.date) : dateLabels(r.date, calendarMode)[0]}
+        </Text>
+        <Text className="text-[11px] text-gray-400">{r.time}</Text>
+      </>
+    );
   const dayBand = (r: BookRow, index: number) =>
     dayLabel && r.kind !== 'opening' && rows[index - 1]?.date !== r.date ? (
       <View className="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5">
@@ -207,11 +220,12 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   const open = (r: BookRow) => (r.edit ? () => onOpenRow(r) : r.href ? () => router.push(r.href as any) : undefined);
 
   if (!full) {
-    // Narrow: Time | Details (type, notes, invoice) | Amount | Balance.
+    // Narrow: SN | Date (and time) | Details (type, notes, invoice no.) | Amount | Balance.
     return (
       <View className="overflow-hidden rounded-xl border border-gray-300 bg-white">
         <View className="flex-row border-b border-gray-300 bg-gray-50">
-          {headCell('Time', { width: 50 })}
+          {headCell('SN', { width: 34 })}
+          {headCell('Date', { width: 84 })}
           {headCell('Transaction details', { flex: 1 })}
           {headCell('Amount', { width: 82 }, true)}
           <Text className="px-2.5 py-2 text-right text-xs font-bold text-gray-600" style={{ width: 84 }}>
@@ -226,9 +240,10 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             <Fragment key={r.id}>
             {dayBand(r, index)}
             <Pressable onPress={open(r)} disabled={!r.edit && !r.href} className="flex-row border-b border-gray-200">
-              <Text className={`${cell} text-xs text-gray-500`} style={{ width: 50 }} numberOfLines={1}>
-                {r.time}
+              <Text className={`${cell} text-xs text-gray-500`} style={{ width: 34 }} numberOfLines={1}>
+                {r.kind === 'opening' ? '' : index}
               </Text>
+              <View className={cell} style={{ width: 84 }}>{dateCell(r, true)}</View>
               <View className={cell} style={{ flex: 1, gap: 2 }}>
                 <Text className={`text-[13px] text-gray-900 ${r.kind === 'opening' ? 'font-bold' : 'font-medium'}`} numberOfLines={2}>
                   {r.details}
@@ -242,10 +257,9 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
                     {r.sub}
                   </Text>
                 )}
-                {r.invoice != null && (
+                {(r.invoiceNo != null || !!r.discount) && (
                   <Text className="text-xs text-gray-500">
-                    Invoice {money(r.invoice)}
-                    {r.discount ? ` · Discount ${money(r.discount)}` : ''}
+                    {[r.invoiceNo ? `Invoice no. ${r.invoiceNo}` : null, r.discount ? `Discount ${money(r.discount)}` : null].filter(Boolean).join(' · ')}
                   </Text>
                 )}
               </View>
@@ -282,10 +296,11 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
     <View className="overflow-hidden rounded-xl border border-gray-300 bg-white">
       <View>
           <View className="flex-row border-b border-gray-300 bg-gray-50">
-            {headCell('Time', { width: COL.time })}
+            {headCell('SN', { width: COL.sn })}
+            {headCell('Date', { width: COL.date })}
+            {headCell('Invoice no.', { width: COL.invoice })}
             {headCell('Transaction details', { flex: 1 })}
             {headCell('Type', { width: COL.type })}
-            {headCell('Invoice', { width: COL.invoice }, true)}
             {headCell('Discount', { width: COL.discount }, true)}
             {headCell('Bill amount', { width: COL.amount }, true)}
             {headCell('Cash in', { width: COL.cashIn }, true)}
@@ -304,8 +319,16 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
               className="flex-row border-b border-gray-200"
               style={r.kind === 'opening' ? { backgroundColor: '#FAFAFA' } : undefined}
             >
-              <Text className={`${cell} text-[12.5px] text-gray-500`} style={{ width: COL.time }} numberOfLines={1}>
-                {r.time}
+              <Text className={`${cell} text-[12.5px] text-gray-500`} style={{ width: COL.sn }} numberOfLines={1}>
+                {r.kind === 'opening' ? '' : index}
+              </Text>
+              <View className={cell} style={{ width: COL.date, minWidth: 0 }}>{dateCell(r, false)}</View>
+              <Text
+                className={`${cell} text-[12.5px] font-semibold text-gray-700`}
+                style={{ width: COL.invoice, color: r.invoiceNo ? '#374151' : '#9CA3AF' }}
+                numberOfLines={1}
+              >
+                {r.invoiceNo ?? '—'}
               </Text>
               <View className={cell} style={{ flex: 1, minWidth: 0 }}>
                 <Text className={`text-[13px] text-gray-900 ${r.kind === 'opening' ? 'font-bold' : 'font-medium'}`} numberOfLines={1}>
@@ -321,7 +344,6 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
                 <TypePill kind={r.kind} />
                 <AccountPill row={r} />
               </View>
-              {num(r.invoice, { width: COL.invoice }, '#4B5563')}
               {num(r.discount, { width: COL.discount }, '#4B5563')}
               {num(r.amount, { width: COL.amount }, KIND[r.kind].color)}
               {num(r.cashIn, { width: COL.cashIn }, '#047857', true)}
@@ -868,7 +890,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]));
     const via = (bankId: string | null) => (bankId ? (accountName.get(bankId) ?? 'Other account') : 'Cash');
     const keyOf = (bankId: string | null): AccountKey => bankId ?? CASH;
-    const blank = { invoice: null, discount: null, amount: null, cashIn: null, cashOut: null, balance: null, account: null, moves: [] as Move[] };
+    const blank = { invoiceNo: null, discount: null, amount: null, cashIn: null, cashOut: null, balance: null, account: null, moves: [] as Move[] };
 
     // Every account's balance at the start of the day. Transfers count here -
     // they leave one account and enter another - though they net to nothing in
@@ -908,8 +930,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           ]
             .filter(Boolean)
             .join(' · ') || null,
-        // Invoice is the value before discount and VAT; the bill amount after.
-        invoice: t.amount + discount - (t.vat_amount ?? 0),
+        // The bill's own number - what the Invoice column shows (an expense has none).
+        invoiceNo: isExpense ? null : t.bill_no?.trim() || null,
         discount,
         // An expense is paid on the spot, so it's cash out; a sale or
         // purchase bill is a debt until its payment is recorded.

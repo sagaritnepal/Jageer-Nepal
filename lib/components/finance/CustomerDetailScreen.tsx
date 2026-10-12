@@ -16,7 +16,7 @@ import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { useFreshLedgerArea } from '../../hooks/useFreshLedgerArea';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
-import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, useEntryParty, useEntryWhen } from './EntryEditParts';
+import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, timeOf, useEntryParty, useEntryWhen } from './EntryEditParts';
 import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { BackButton, BookTable, Pill, ToolbarButton, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
@@ -1063,10 +1063,11 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     const kind = row.tx ? 'Bill' : row.vendor || (row.ledger?.entry_type === 'debit' && row.manual) ? 'Payment' : 'Receipt';
     return [row.reference ? `${kind} No. ${row.reference}` : null, row.detail].filter(Boolean).join(' · ');
   };
-  const detailsCell = (row: HistoryRow, withDate: boolean) => (
+  // `withNumber` false is the wide table, whose Invoice no. column already has the number.
+  const detailsCell = (row: HistoryRow, withDate: boolean, withNumber = true) => (
     <View style={{ minWidth: 0 }}>
       <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
-        {detailText(row) || row.label}
+        {(withNumber ? detailText(row) : row.detail) || row.label}
       </Text>
       {withDate && (
         <Text className="text-[11px] text-gray-400" numberOfLines={1}>
@@ -1120,16 +1121,49 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     align: 'right',
     render: (row) => (row.tx ? <Ionicons name="chevron-forward" size={14} color="#D1D5DB" /> : row.manual ? removeButton(row) : null),
   };
+  const snColumn = (width: number): BookColumn<HistoryRow> => ({
+    key: 'sn',
+    label: 'SN',
+    width,
+    render: (_row, index) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>,
+  });
+  // SN, the date with its time under it, the number of the bill / receipt / payment, then what it was.
   const columns: BookColumn<HistoryRow>[] =
     windowWidth >= 1280
       ? [
-          { key: 'date', label: 'Date', width: 130, render: (row) => <Text className="text-[12.5px] text-gray-600">{row.dateLabel}</Text> },
-          { key: 'details', label: 'Details', render: (row) => detailsCell(row, false) },
+          snColumn(52),
+          {
+            key: 'date',
+            label: 'Date',
+            width: 150,
+            render: (row) => (
+              <View style={{ minWidth: 0 }}>
+                <Text className="text-[12.5px] text-gray-700" numberOfLines={1}>
+                  {row.dateLabel}
+                </Text>
+                <Text className="text-[11px] text-gray-400">{timeOf(row.createdAt)}</Text>
+              </View>
+            ),
+          },
+          {
+            key: 'invoice',
+            label: 'Invoice no.',
+            width: 150,
+            render: (row) =>
+              row.reference ? (
+                <Text className="text-[12.5px] font-semibold text-gray-700" numberOfLines={1}>
+                  {row.reference}
+                </Text>
+              ) : (
+                <Text className="text-[12.5px] text-gray-400">—</Text>
+              ),
+          },
+          { key: 'details', label: 'Transaction details', render: (row) => detailsCell(row, false, false) },
           typeColumn,
           amountColumn,
           actionColumn,
         ]
-      : [{ key: 'details', label: 'Details', render: (row) => detailsCell(row, true) }, typeColumn, amountColumn, actionColumn];
+      : [snColumn(38), { key: 'details', label: 'Details', render: (row) => detailsCell(row, true) }, typeColumn, amountColumn, actionColumn];
 
   const historyView =
     rows.length === 0 ? (

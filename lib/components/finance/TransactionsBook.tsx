@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { shortDateLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { DateFilterButton } from './DateRangeFilter';
@@ -33,6 +33,8 @@ const PILL = {
 interface Row {
   id: string;
   group: string;
+  /** The entry's day, 'YYYY-MM-DD' - the Date column; `time` goes under it. */
+  date: string;
   time: string;
   details: string;
   sub: string | null;
@@ -169,6 +171,7 @@ export function TransactionsBook({
         return {
           id: `b-${t.id}`,
           group,
+          date: ymdOf(item.date),
           time: timeOf(t.created_at),
           details: isExpense ? t.party_name || category || 'Expenses' : t.party_name || (t.type === 'sale' ? 'Sale' : 'Purchase'),
           sub:
@@ -198,6 +201,7 @@ export function TransactionsBook({
         return {
           id: `l-${e.id}`,
           group,
+          date: ymdOf(item.date),
           time: timeOf(e.created_at),
           details: isIn ? `Received from ${name}` : manual ? `Paid to ${name}` : `Receivable from ${name}`,
           sub: [e.receipt_no ? `${isIn ? 'Receipt' : 'Payment'} No. ${e.receipt_no}` : null, e.note ?? (manual ? null : 'From a booked job')].filter(Boolean).join(' · ') || null,
@@ -217,6 +221,7 @@ export function TransactionsBook({
         return {
           id: `v-${e.id}`,
           group,
+          date: ymdOf(item.date),
           time: timeOf(e.created_at),
           details: isPayment ? `Paid to ${name}` : `Bought on credit · ${name}`,
           sub: [e.receipt_no ? `Payment No. ${e.receipt_no}` : null, e.note ?? (e.source === 'booking' ? 'From a credit purchase' : null)].filter(Boolean).join(' · ') || null,
@@ -233,6 +238,7 @@ export function TransactionsBook({
       return {
         id: `t-${tr.id}`,
         group,
+        date: ymdOf(item.date),
         time: timeOf(tr.created_at),
         details: `${accountName(tr.from_account_id)} → ${accountName(tr.to_account_id)}`,
         sub: tr.note ?? 'Between your own accounts',
@@ -299,11 +305,21 @@ export function TransactionsBook({
     </View>
   );
 
+  // SN, then the date with its time under it, then the bill's number, then what happened.
+  const snCell = (index: number) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>;
+  const dateCell = (r: Row) => (
+    <View style={{ minWidth: 0 }}>
+      <Text className="text-[12.5px] font-medium text-gray-800" numberOfLines={1}>
+        {toBsHistoryLabel(r.date)}
+      </Text>
+      <Text className="text-[11px] text-gray-400">{r.time}</Text>
+    </View>
+  );
+
   const columns: BookColumn<Row>[] = layout.full
     ? [
-        { key: 'time', label: 'Time', width: 58, render: (r) => <Text className="text-[12.5px] text-gray-500">{r.time}</Text> },
-        { key: 'details', label: 'Transaction details', render: (r) => detailsCell(r, false) },
-        { key: 'type', label: 'Type', width: 116, render: (r) => <Pill text={r.pill.label} color={r.pill.color} bg={r.pill.bg} /> },
+        { key: 'sn', label: 'SN', width: 52, render: (_r, index) => snCell(index) },
+        { key: 'date', label: 'Date', width: 140, render: (r) => dateCell(r) },
         {
           // The bill's own number - INV/83-84/2217 - not an amount; anything that is not a bill has none.
           key: 'invoice',
@@ -318,6 +334,8 @@ export function TransactionsBook({
               <Text className="text-[12.5px] text-gray-400">—</Text>
             ),
         },
+        { key: 'details', label: 'Transaction details', render: (r) => detailsCell(r, false) },
+        { key: 'type', label: 'Type', width: 116, render: (r) => <Pill text={r.pill.label} color={r.pill.color} bg={r.pill.bg} /> },
         { key: 'discount', label: 'Discount', width: 76, align: 'right', render: (r) => num(r.discount, '#4B5563') },
         { key: 'amount', label: 'Bill amount', width: 100, align: 'right', render: (r) => num(r.amount, r.pill.color) },
         { key: 'cashIn', label: 'Cash in', width: 96, align: 'right', render: (r) => num(r.cashIn, '#047857', true) },
@@ -325,7 +343,20 @@ export function TransactionsBook({
         { key: 'act', label: '', width: 40, align: 'right', render: trash },
       ]
     : [
-        { key: 'time', label: 'Time', width: 50, render: (r) => <Text className="text-[11.5px] text-gray-500">{r.time}</Text> },
+        { key: 'sn', label: 'SN', width: 34, render: (_r, index) => snCell(index) },
+        {
+          key: 'date',
+          label: 'Date',
+          width: 84,
+          render: (r) => (
+            <View style={{ minWidth: 0 }}>
+              <Text className="text-[11.5px] font-medium text-gray-700" numberOfLines={1}>
+                {shortDateLabel(r.date)}
+              </Text>
+              <Text className="text-[10.5px] text-gray-400">{r.time}</Text>
+            </View>
+          ),
+        },
         { key: 'details', label: 'Transaction details', render: (r) => detailsCell(r, true) },
         {
           key: 'amount',
