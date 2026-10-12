@@ -20,7 +20,7 @@ interface PillStyle {
 
 const PILL = {
   received: { label: 'Received', color: '#047857', bg: '#ECFDF5' },
-  paid: { label: 'Payment Out', color: '#B91C1C', bg: '#FEF2F2' },
+  paid: { label: 'Paid', color: '#B91C1C', bg: '#FEF2F2' },
   expense: { label: 'Expense', color: '#B91C1C', bg: '#FEF2F2' },
   sale: { label: 'Sale bill', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase bill', color: MONEY.out.text, bg: MONEY.out.bg },
@@ -196,7 +196,7 @@ export function TransactionsBook({
           id: `l-${e.id}`,
           group,
           time: timeOf(e.created_at),
-          details: isIn ? `Received from ${name}` : manual ? `Payment Out to ${name}` : `Receivable from ${name}`,
+          details: isIn ? `Received from ${name}` : manual ? `Paid to ${name}` : `Receivable from ${name}`,
           sub: [e.receipt_no ? `${isIn ? 'Receipt' : 'Payment'} No. ${e.receipt_no}` : null, e.note ?? (manual ? null : 'From a booked job')].filter(Boolean).join(' · ') || null,
           pill: isIn ? PILL.received : manual ? PILL.paid : PILL.creditSale,
           invoice: null,
@@ -215,7 +215,7 @@ export function TransactionsBook({
           id: `v-${e.id}`,
           group,
           time: timeOf(e.created_at),
-          details: isPayment ? `Payment Out to ${name}` : `Bought on credit · ${name}`,
+          details: isPayment ? `Paid to ${name}` : `Bought on credit · ${name}`,
           sub: [e.receipt_no ? `Payment No. ${e.receipt_no}` : null, e.note ?? (e.source === 'booking' ? 'From a credit purchase' : null)].filter(Boolean).join(' · ') || null,
           pill: isPayment ? PILL.paid : PILL.creditPurchase,
           invoice: null,
@@ -381,7 +381,7 @@ export function TransactionsBook({
       )}
 
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
-        Tap an entry to open it. Sale and purchase bills show what was billed - they don't change the balance until the money is received or paid, which appears as its own Received or Payment Out row.
+        Tap an entry to open it. Sale and purchase bills show what was billed - they don't change the balance until the money is received or paid, which appears as its own Received or Paid row.
       </Text>
     </BookPage>
   );

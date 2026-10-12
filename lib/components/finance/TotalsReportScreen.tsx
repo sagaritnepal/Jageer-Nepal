@@ -27,8 +27,8 @@ const PILL = {
   expense: { label: 'Expense', color: MONEY.out.text, bg: MONEY.out.bg },
   paymentReceived: { label: 'Received', color: MONEY.in.text, bg: MONEY.in.bg },
   jobPayment: { label: 'Job payment', color: MONEY.in.text, bg: MONEY.in.bg },
-  paymentOut: { label: 'Payment Out', color: MONEY.out.text, bg: MONEY.out.bg },
-  paidVendor: { label: 'Payment Out', color: MONEY.out.text, bg: MONEY.out.bg },
+  paymentOut: { label: 'Paid', color: MONEY.out.text, bg: MONEY.out.bg },
+  paidVendor: { label: 'Paid', color: MONEY.out.text, bg: MONEY.out.bg },
 } satisfies Record<string, PillStyle>;
 
 interface Entry {

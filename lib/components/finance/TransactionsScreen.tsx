@@ -2466,7 +2466,7 @@ function LedgerRow({ item, customerName, basePath }: { item: CustomerLedgerEntry
       </View>
       <View className="flex-1">
         <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-          {!isDebit ? 'Received' : isOut ? 'Payment Out' : 'Receivable'} · {customerName ?? 'Unknown customer'}
+          {!isDebit ? 'Received' : isOut ? 'Paid' : 'Receivable'} · {customerName ?? 'Unknown customer'}
         </Text>
         <Text className="text-xs text-gray-400" numberOfLines={1}>
           {item.note ?? (item.source === 'booking' ? 'From a booked job' : 'Manual entry')} ·{' '}
@@ -2492,7 +2492,7 @@ function VendorFeedRow({ item, vendorName, basePath }: { item: VendorLedgerEntry
       </View>
       <View className="flex-1">
         <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-          {isDebit ? 'Bought on credit' : 'Payment Out'} · {vendorName ?? 'Unknown vendor'}
+          {isDebit ? 'Bought on credit' : 'Paid'} · {vendorName ?? 'Unknown vendor'}
         </Text>
         <Text className="text-xs text-gray-400" numberOfLines={1}>
           {item.note ?? (item.source === 'booking' ? 'From a credit purchase' : 'Manual entry')} ·{' '}

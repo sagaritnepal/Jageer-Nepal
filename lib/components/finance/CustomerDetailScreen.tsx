@@ -757,7 +757,7 @@ function AddVendorEntryForm({
     />
   );
   const kindOptions = [
-    { key: 'paid' as const, label: 'Payment Out', ...OUT_TONE },
+    { key: 'paid' as const, label: 'Paid', ...OUT_TONE },
     { key: 'received' as const, label: 'Received', ...IN_TONE },
     ...(initial?.entry_type === 'debit' ? [{ key: 'onCredit' as const, label: 'Bought on credit', ...OUT_TONE }] : []),
   ];
@@ -1009,7 +1009,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       const outgoing = owes && e.source === 'manual';
       lines.push({
         key: `ledger-${e.id}`,
-        label: syncedFromBill ? TX_TYPE_LABEL.sale : !owes ? 'Received' : outgoing ? 'Payment Out' : 'Receivable',
+        label: syncedFromBill ? TX_TYPE_LABEL.sale : !owes ? 'Received' : outgoing ? 'Paid' : 'Receivable',
         tone: outgoing ? OUT_TONE : IN_TONE,
         detail: e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
         reference: e.receipt_no ?? '',
@@ -1042,7 +1042,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       const onCredit = e.entry_type === 'debit';
       lines.push({
         key: `vendor-${e.id}`,
-        label: onCredit ? (syncedFromBill ? TX_TYPE_LABEL.purchase : 'Bought on credit') : 'Payment Out',
+        label: onCredit ? (syncedFromBill ? TX_TYPE_LABEL.purchase : 'Bought on credit') : 'Paid',
         tone: OUT_TONE,
         detail: e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a credit purchase' : 'Manual entry'),
         reference: e.receipt_no ?? '',
@@ -1141,7 +1141,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       left: () => <BackButton onPress={goBack} />,
       right: () => (
         <>
-          {showVendor && <ToolbarButton icon="arrow-up-circle-outline" label="Payment Out" onPress={openVendorForm} />}
+          {showVendor && <ToolbarButton icon="arrow-up-circle-outline" label="Paid" onPress={openVendorForm} />}
           {showCustomer && (
             <HeaderButton
               icon="receipt-outline"

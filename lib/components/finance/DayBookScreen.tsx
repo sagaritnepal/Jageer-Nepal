@@ -99,7 +99,7 @@ type EditTarget = {
 const KIND: Record<Kind, { label: string; color: string; bg: string }> = {
   opening: { label: 'Opening', color: '#374151', bg: '#F3F4F6' },
   received: { label: 'Received', color: '#047857', bg: '#ECFDF5' },
-  paid: { label: 'Payment Out', color: '#B91C1C', bg: '#FEF2F2' },
+  paid: { label: 'Paid', color: '#B91C1C', bg: '#FEF2F2' },
   expense: { label: 'Expense', color: '#B91C1C', bg: '#FEF2F2' },
   sale: { label: 'Sale bill', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase bill', color: MONEY.out.text, bg: MONEY.out.bg },
@@ -588,7 +588,7 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
                   <View className="flex-row" style={{ gap: 8 }}>
                     {([
                       { key: 'credit', label: 'Received', color: '#047857' },
-                      { key: 'debit', label: 'Payment Out', color: '#B91C1C' },
+                      { key: 'debit', label: 'Paid', color: '#B91C1C' },
                     ] as const).map((o) => {
                       const on = form.entryType === o.key;
                       return (
@@ -933,7 +933,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         kind: isIn ? 'received' : 'paid',
         date,
         time: timeOf(e.created_at),
-        details: `${isIn ? 'Received from' : 'Payment Out to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
+        details: `${isIn ? 'Received from' : 'Paid to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
         sub: [e.receipt_no ? `${isIn ? 'Receipt' : 'Payment'} No. ${e.receipt_no}` : null, e.note].filter(Boolean).join(' · ') || null,
         cashIn: isIn ? e.amount : null,
         cashOut: isIn ? null : e.amount,
@@ -943,7 +943,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         edit: {
           table: 'customer_ledger_entries',
           id: e.id,
-          title: `${isIn ? 'Received from' : 'Payment Out to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
+          title: `${isIn ? 'Received from' : 'Paid to'} ${contactName.get(e.customer_id) ?? 'customer'}`,
           lockedReason:
             e.source === 'manual'
               ? undefined
@@ -983,7 +983,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         kind: 'paid',
         date,
         time: timeOf(e.created_at),
-        details: `Payment Out to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
+        details: `Paid to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
         sub: [e.receipt_no ? `Payment No. ${e.receipt_no}` : null, e.note].filter(Boolean).join(' · ') || null,
         cashOut: e.amount,
         account: via(e.bank_account_id),
@@ -992,7 +992,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         edit: {
           table: 'vendor_ledger_entries',
           id: e.id,
-          title: `Payment Out to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
+          title: `Paid to ${contactName.get(e.vendor_id) ?? 'vendor'}`,
           lockedReason:
             e.source === 'manual'
               ? undefined
