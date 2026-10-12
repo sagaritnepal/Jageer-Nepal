@@ -645,12 +645,6 @@ function LedgerList({ basePath }: { basePath: string }) {
   // A phone shows tick boxes only while selecting; the wide table always has them.
   const [selecting, setSelecting] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
-  /** The one party whose Ledger cell was tapped in the table - its type is being changed on its own. */
-  /** The party being renamed from its row in the table. */
-  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [renaming, setRenaming] = useState(false);
-  const [rowTypeTarget, setRowTypeTarget] = useState<{ id: string; name: string; typeId: string | null } | null>(null);
   const [exporting, setExporting] = useState(false);
 
   const { data: customers } = useSupabaseQuery('customers', {
@@ -803,10 +797,9 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
   }
 
-  async function applyLedgerType(key: string, only?: string) {
+  async function applyLedgerType(key: string) {
     setTypeMenuOpen(false);
-    setRowTypeTarget(null);
-    const ids = only ? [only] : [...selected];
+    const ids = [...selected];
     if (ids.length === 0) return;
     const { error } = await (supabase.from('customers') as any)
       .update({ party_type_id: key === NO_TYPE ? null : key })
@@ -817,7 +810,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
     queryClient.invalidateQueries({ queryKey: ['customers'] });
     showAlert('Ledger type updated', `${ids.length} ${ids.length === 1 ? 'party' : 'parties'} updated.`);
-    if (!only) clearSelection();
+    clearSelection();
   }
 
   // Search, Export and New party live in the top bar on a wide screen (a plain row
@@ -931,44 +924,6 @@ function LedgerList({ basePath }: { basePath: string }) {
       />
     ) : null;
 
-  async function saveRename() {
-    const name = nameCaps(renameValue.trim());
-    if (!renameTarget || renaming) return;
-    if (!name) {
-      showAlert('Name needed', 'Enter the name of the ledger.');
-      return;
-    }
-    setRenaming(true);
-    try {
-      const { error } = await (supabase.from('customers') as any).update({ name }).eq('id', renameTarget.id);
-      if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      setRenameTarget(null);
-    } catch (err) {
-      showAlert('Could not rename', getErrorMessage(err));
-    } finally {
-      setRenaming(false);
-    }
-  }
-  const renamePopup = renameTarget ? (
-    <PopupCard title="Rename ledger" onClose={() => setRenameTarget(null)}>
-      <Field label="Name *">
-        <TextInput
-          value={renameValue}
-          onChangeText={(v) => setRenameValue(nameCaps(v))}
-          onSubmitEditing={saveRename}
-          autoCapitalize="words"
-          autoFocus
-          selectTextOnFocus
-          placeholder="Name"
-          placeholderTextColor="#9CA3AF"
-          className={INPUT}
-        />
-      </Field>
-      <FormActions onCancel={() => setRenameTarget(null)} onSave={saveRename} saving={renaming} />
-    </PopupCard>
-  ) : null;
-
   const typeMenu = (
     <LedgerTypeMenuModal
       visible={typeMenuOpen}
@@ -976,16 +931,6 @@ function LedgerList({ basePath }: { basePath: string }) {
       ownerId={userId}
       onPick={(id) => applyLedgerType(id ?? NO_TYPE)}
       onClose={() => setTypeMenuOpen(false)}
-    />
-  );
-  const rowTypeMenu = (
-    <LedgerTypeMenuModal
-      visible={!!rowTypeTarget}
-      title={`Ledger · ${rowTypeTarget?.name ?? ''}`}
-      ownerId={userId}
-      selectedId={rowTypeTarget?.typeId ?? null}
-      onPick={(id) => rowTypeTarget && applyLedgerType(id ?? NO_TYPE, rowTypeTarget.id)}
-      onClose={() => setRowTypeTarget(null)}
     />
   );
 
@@ -1010,20 +955,6 @@ function LedgerList({ basePath }: { basePath: string }) {
           <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
             <Text className="text-[13px] font-semibold text-gray-900">{nameCaps(d.row.name)}</Text>
             {(d.row.kind === 'app' || (d.row.kind === 'customer' && d.row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
-            {d.row.kind === 'customer' && (
-              <Pressable
-                onPress={(e: any) => {
-                  e?.stopPropagation?.();
-                  setRenameTarget({ id: d.row.id, name: d.row.name });
-                  setRenameValue(nameCaps(d.row.name));
-                }}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={`Rename ${d.row.name}`}
-              >
-                <Ionicons name="pencil" size={12} color="#9CA3AF" />
-              </Pressable>
-            )}
           </View>
           {!!typeAndContact && (
             <Text className="text-[11px] text-gray-400" numberOfLines={1}>
@@ -1057,27 +988,16 @@ function LedgerList({ basePath }: { basePath: string }) {
       },
       { key: 'party', label: 'Party', render: partyCell },
       {
-        // The party's ledger type (Customer, Vendor, Employee ...) - tap it to change it right here.
+        // The party's ledger type (Customer, Vendor, Employee ...), shown as plain text - it is
+        // changed from the party's own page or in bulk with the tick boxes, not in this table.
         key: 'ledger',
         label: 'Ledger',
         width: 150,
         render: (d) =>
-          d.row.kind === 'customer' ? (
-            <Pressable
-              onPress={(e: any) => {
-                e?.stopPropagation?.();
-                setRowTypeTarget({ id: d.row.id, name: d.row.name, typeId: d.row.customer.party_type_id ?? null });
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Change ledger type of ${d.row.name}`}
-              className="flex-row items-center self-stretch justify-between rounded-md border border-gray-200 bg-white px-2 py-1"
-              style={{ gap: 4 }}
-            >
-              <Text className={`flex-1 text-[12.5px] ${d.typeName ? 'font-semibold text-gray-800' : 'text-gray-400'}`} numberOfLines={1}>
-                {d.typeName ?? 'Set ledger'}
-              </Text>
-              <Ionicons name="chevron-down" size={13} color="#9CA3AF" />
-            </Pressable>
+          d.row.kind === 'customer' && d.typeName ? (
+            <Text className="text-[12.5px] font-semibold text-gray-800" numberOfLines={1}>
+              {d.typeName}
+            </Text>
           ) : (
             <Text className="text-[12.5px] text-gray-300">—</Text>
           ),
@@ -1176,8 +1096,6 @@ function LedgerList({ basePath }: { basePath: string }) {
         )}
 
         {typeMenu}
-        {rowTypeMenu}
-        {renamePopup}
       </BookPage>
     );
   }
@@ -1239,8 +1157,6 @@ function LedgerList({ basePath }: { basePath: string }) {
         )}
 
         {typeMenu}
-        {rowTypeMenu}
-        {renamePopup}
       </ScrollView>
     </View>
   );
