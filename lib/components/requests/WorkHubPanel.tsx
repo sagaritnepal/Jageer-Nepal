@@ -478,7 +478,10 @@ function JobRowCard({
   actions.push({ label: 'Request Outsource', icon: 'paper-plane-outline', tone: 'violet', onPress: () => onRequest(r) });
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+    <View
+      className="overflow-hidden rounded-2xl bg-white"
+      style={{ borderWidth: 1, borderColor: '#D5DBE4', boxShadow: '0 1px 2px rgba(16,24,40,0.05), 0 4px 12px rgba(16,24,40,0.04)' }}
+    >
       {overdue && (
         <View className="flex-row flex-wrap items-center px-5 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderBottomColor: '#FECACA' }}>
           <Ionicons name="time-outline" size={17} color="#B91C1C" />
