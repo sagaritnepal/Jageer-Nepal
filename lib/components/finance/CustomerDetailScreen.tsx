@@ -1136,8 +1136,16 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // the name card (there are too many for the top bar on most screens). Payment Out
   // is what the rest of the app calls paying someone; a payment received from a
   // customer is an Add Entry, which opens on Received.
+  //
+  // The page is titled for what this person is - their Ledger type (Customer, Vendor, Employee,
+  // Expense ...) - rather than "Customer" for everyone. A person with no type is called what their
+  // entries say they are, and just "Ledger" until they say anything.
+  const typeName = partyRow?.party_type_id ? partyTypeName.get(partyRow.party_type_id) : undefined;
+  const pageTitle = typeName || (isPureVendor ? 'Vendor' : isPureCustomer ? 'Customer' : 'Ledger');
   const toolbar = useBookToolbar(
     {
+      title: pageTitle,
+      resetTitle: 'Ledger',
       wide: layout.wide,
       inBarMinWidth: 1500,
       left: () => <BackButton onPress={goBack} />,
