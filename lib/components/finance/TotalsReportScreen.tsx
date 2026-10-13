@@ -1147,13 +1147,18 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       </Text>
     </BookPage>
     {subjectView && (
-      // The individual's payments - the same table the dropdown used to show, with Print and Excel for it.
-      <PopupCard title={subjectView.name} onClose={() => setSubjectView(null)} maxWidth={920}>
-        {/* Print and Excel carry this card's table alone. */}
-        <View className="flex-row justify-end" style={{ gap: 8 }}>
-          <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(subjectView)))} />
-          <ExcelButton onPress={() => void exportReportDocument(buildReport(subjectView))} />
-        </View>
+      // The individual's payments - the same table the dropdown used to show; Print and Excel for it are in the blue bar.
+      <PopupCard
+        title={subjectView.name}
+        onClose={() => setSubjectView(null)}
+        maxWidth={920}
+        headerRight={
+          <>
+            <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(subjectView)))} />
+            <ExcelButton onPress={() => void exportReportDocument(buildReport(subjectView))} />
+          </>
+        }
+      >
         <BookTable
           stickyHeader
           columns={columns}

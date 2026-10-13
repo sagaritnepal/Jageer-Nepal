@@ -133,11 +133,14 @@ export function PopupCard({
   title,
   onClose,
   maxWidth = 560,
+  headerRight,
   children,
 }: {
   title: string;
   onClose: () => void;
   maxWidth?: number;
+  /** Buttons in the blue bar, left of the close button - so they take no room from the form below. */
+  headerRight?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -146,7 +149,10 @@ export function PopupCard({
         <View className="flex-1 items-center justify-center bg-black/50 px-4">
           <View className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth, maxHeight: '92%' }}>
             <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: '#1D4ED8' }}>
-              <Text className="flex-1 text-[16px] font-bold text-white">{title}</Text>
+              <Text className="flex-1 text-[16px] font-bold text-white" numberOfLines={1}>
+                {title}
+              </Text>
+              {headerRight}
               <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
                 <Ionicons name="close" size={22} color="#FFFFFF" />
               </Pressable>

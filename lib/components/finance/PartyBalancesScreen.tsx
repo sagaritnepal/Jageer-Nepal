@@ -367,12 +367,18 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">{meta.note}</Text>
 
       {view && (
-        // The heading's entries - the same log it used to open inline - with Print and Excel for it alone.
-        <PopupCard title={nameCaps(view.name)} onClose={() => setView(null)} maxWidth={920}>
-          <View className="flex-row justify-end" style={{ gap: 8 }}>
-            <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(view)))} />
-            <ExcelButton onPress={() => void exportReportDocument(buildReport(view))} />
-          </View>
+        // The heading's entries - the same log it used to open inline; Print and Excel for it alone are in the blue bar.
+        <PopupCard
+          title={nameCaps(view.name)}
+          onClose={() => setView(null)}
+          maxWidth={920}
+          headerRight={
+            <>
+              <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(view)))} />
+              <ExcelButton onPress={() => void exportReportDocument(buildReport(view))} />
+            </>
+          }
+        >
           <BookTable
             stickyHeader
             columns={logColumns}
