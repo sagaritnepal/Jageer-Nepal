@@ -742,10 +742,10 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
 
   // --- Print and Excel: what is open on the page, as a document - Print shows it in the system's print
   // preview, Excel saves it as a spreadsheet. ---
-  // Only what has been opened prints, not the whole report: the headings that are open - and inside
-  // one, just the bikes / people opened under it; with nothing open, the page as it stands (the
-  // headings and what each adds up to). A person's own report is that person alone.
-  const buildReport = (): PrintReport => {
+  // Only what has been opened prints, not the whole report: the headings that are open; with
+  // nothing open, the page as it stands (the headings and what each adds up to). A person's own report
+  // is that person alone. `only` is one name's payments - the card open on screen - and prints alone.
+  const buildReport = (only?: { name: string; rows: Entry[] }): PrintReport => {
     const dateOf = (e: Entry) => toBsHistoryLabel(e.date.slice(0, 10));
     const printRow = (e: Entry) => [
       dateOf(e),
@@ -788,7 +788,11 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     // True once something specific was opened: the page-wide figures would then not be about what
     // prints, so each table carries its own total instead.
     let narrowed = false;
-    if (grouped && billLog) {
+    if (only) {
+      narrowed = true;
+      const onlyTotal = only.rows.reduce((sum, e) => sum + e.amount, 0);
+      sections.push(logSection(`${only.name} - NPR ${money(onlyTotal)} - ${entryWord(only.rows.length)}`, only.rows, onlyTotal));
+    } else if (grouped && billLog) {
       // Sales / Purchase: one table of bills, as on screen.
       sections.push({
         columns: billColumnsPrint,
@@ -1144,8 +1148,13 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       </Text>
     </BookPage>
     {subjectView && (
-      // The individual's payments - the same table the dropdown used to show, and nothing else.
+      // The individual's payments - the same table the dropdown used to show, with Print and Excel for it.
       <PopupCard title={subjectView.name} onClose={() => setSubjectView(null)} maxWidth={920}>
+        {/* Print and Excel carry this card's table alone. */}
+        <View className="flex-row justify-end" style={{ gap: 8 }}>
+          <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(subjectView)))} />
+          <ExcelButton onPress={() => void exportReportDocument(buildReport(subjectView))} />
+        </View>
         <BookTable
           stickyHeader
           columns={columns}
