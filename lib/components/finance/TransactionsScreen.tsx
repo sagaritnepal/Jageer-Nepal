@@ -70,8 +70,9 @@ interface ServiceRowState {
   amount: string;
 }
 
-/** The optional table of service charges on a Sale (installation, wiring, configuration ...): one
- * line per service, each with its own amount. Direct income - no item or stock behind it. */
+/** The Services table of a Sale, a second table under the Items one: one line per service
+ * (installation, wiring, configuration ...), each with its own amount. Optional, and direct income -
+ * no item or stock behind it. Lines left empty are not saved. */
 function ServiceChargesTable({
   rows,
   onChange,
@@ -82,56 +83,82 @@ function ServiceChargesTable({
   accent: string;
 }) {
   const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const filled = rows.filter((r) => Number(r.amount) > 0).length;
   const update = (index: number, patch: Partial<ServiceRowState>) =>
     onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  const head = 'px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500';
   return (
-    <View className="rounded-lg border border-gray-200 bg-white" style={{ overflow: 'hidden' }}>
-      <View className="flex-row items-center justify-between bg-gray-50 px-3 py-2">
-        <Text className="text-xs font-semibold text-gray-600">Service charges (optional)</Text>
-        {total > 0 && <Text className="text-xs font-bold text-gray-800">NPR {total.toLocaleString()}</Text>}
-      </View>
-      {rows.length > 0 && (
-        <View className="flex-row border-t border-gray-100 px-3 py-1.5" style={{ gap: 8 }}>
-          <Text className="flex-1 text-[11px] font-bold text-gray-500">Service</Text>
-          <Text className="text-right text-[11px] font-bold text-gray-500" style={{ width: 110 }}>
-            Amount (Rs)
-          </Text>
-          <View style={{ width: 22 }} />
+    <View className="rounded-xl border border-gray-200 bg-white" style={{ overflow: 'hidden' }}>
+      <View className="flex-row items-center justify-between px-4 py-2.5">
+        <View className="flex-row items-center gap-2">
+          <Ionicons name="construct-outline" size={14} color="#6B7280" />
+          <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Services (optional)</Text>
         </View>
-      )}
+        <Text className="text-xs text-gray-400">
+          {filled} {filled === 1 ? 'service' : 'services'}
+          {total > 0 ? ` · NPR ${total.toLocaleString()}` : ''}
+        </Text>
+      </View>
+      <View className="flex-row items-center border-y border-gray-200 bg-gray-50 px-2 py-2">
+        <Text className="text-center text-[11px] font-bold tracking-wider text-gray-500" style={{ width: 36 }}>
+          #
+        </Text>
+        <Text className={head} style={{ flex: 1 }}>
+          Service
+        </Text>
+        <Text className={`${head} text-right`} style={{ width: 150 }}>
+          Amount (Rs)
+        </Text>
+        <View style={{ width: 36 }} />
+      </View>
       {rows.map((row, index) => (
-        <View key={index} className="flex-row items-center border-t border-gray-100 px-3 py-1.5" style={{ gap: 8 }}>
-          <TextInput
-            value={row.name}
-            onChangeText={(v) => update(index, { name: v })}
-            placeholder="e.g. Installation, Wiring, Configuration"
-            placeholderTextColor="#9CA3AF"
-            accessibilityLabel={`Service name, line ${index + 1}`}
-            className="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-sm text-gray-900"
-          />
-          <TextInput
-            value={row.amount}
-            onChangeText={(v) => update(index, { amount: v.replace(/[^0-9.]/g, '') })}
-            placeholder="0"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            accessibilityLabel={`Service amount, line ${index + 1}`}
-            className="rounded-md border border-gray-200 px-2.5 py-1.5 text-right text-sm font-semibold text-gray-900"
-            style={{ width: 110 }}
-          />
-          <Pressable
-            onPress={() => onChange(rows.filter((_, i) => i !== index))}
-            hitSlop={6}
-            accessibilityLabel={`Remove service line ${index + 1}`}
-            style={{ width: 22, alignItems: 'center' }}
-          >
-            <Ionicons name="close-circle" size={18} color="#DC2626" />
-          </Pressable>
+        <View key={index} className="flex-row items-center border-b border-gray-100 px-2 py-0.5">
+          <Text className="text-center text-[13px] font-semibold text-gray-400" style={{ width: 36 }}>
+            {index + 1}
+          </Text>
+          <View style={{ flex: 1 }}>
+            <TextInput
+              value={row.name}
+              onChangeText={(v) => update(index, { name: v })}
+              placeholder="Service, e.g. Installation, Wiring, Configuration"
+              placeholderTextColor="#B2B8C1"
+              accessibilityLabel={`Service name, row ${index + 1}`}
+              className="rounded-lg px-2.5 py-2.5 text-sm text-gray-900"
+              style={{ borderWidth: 1.5, borderColor: '#F1F2F4', outlineStyle: 'none' } as object}
+            />
+          </View>
+          <View style={{ width: 150 }}>
+            <TextInput
+              value={row.amount}
+              onChangeText={(v) => update(index, { amount: v.replace(/[^0-9.]/g, '') })}
+              placeholder="0"
+              placeholderTextColor="#B2B8C1"
+              keyboardType="numeric"
+              accessibilityLabel={`Service amount, row ${index + 1}`}
+              className="rounded-lg px-2.5 py-2.5 text-right text-sm font-semibold text-gray-900"
+              style={{ borderWidth: 1.5, borderColor: '#F1F2F4', outlineStyle: 'none' } as object}
+            />
+          </View>
+          <View style={{ width: 36, alignItems: 'center' }}>
+            {(rows.length > 1 || row.name.trim() || row.amount.trim()) && (
+              <Pressable
+                onPress={() => {
+                  const next = rows.filter((_, i) => i !== index);
+                  onChange(next.length > 0 ? next : [{ name: '', amount: '' }]);
+                }}
+                hitSlop={6}
+                accessibilityLabel={`Remove service row ${index + 1}`}
+                style={{ opacity: 0.6 }}
+              >
+                <Ionicons name="close-circle" size={18} color="#DC2626" />
+              </Pressable>
+            )}
+          </View>
         </View>
       ))}
       <Pressable
         onPress={() => onChange([...rows, { name: '', amount: '' }])}
-        className="flex-row items-center border-t border-gray-100 px-3 py-2"
+        className="flex-row items-center px-4 py-2.5"
         style={{ gap: 6 }}
       >
         <Ionicons name="add-circle" size={16} color={accent} />
@@ -771,7 +798,7 @@ function TransactionForm({
     // A bill saved before the table existed carried one lump installation charge.
     if (initial?.installation_charge) return [{ name: 'Installation', amount: String(initial.installation_charge) }];
     if (jobPrefill?.installation) return [{ name: 'Installation', amount: String(jobPrefill.installation) }];
-    return [];
+    return [{ name: '', amount: '' }];
   });
   const [showDiscount, setShowDiscount] = useState(!!initial && initial.discount_amount > 0);
   const [showVat, setShowVat] = useState(!!initial && initial.vat_amount > 0);
@@ -1737,12 +1764,12 @@ function TransactionForm({
                   className="flex-row flex-wrap border-t border-gray-200 bg-gray-50 px-5 py-4"
                   style={{ columnGap: 28, rowGap: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}
                 >
+                  {type === 'sale' && (
+                    <View style={{ flexBasis: '100%' }}>
+                      <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} />
+                    </View>
+                  )}
                   <View style={{ flex: 1, minWidth: 240 }}>
-                    {type === 'sale' && (
-                      <View className="mb-3">
-                        <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} />
-                      </View>
-                    )}
                     <Text className="mb-1.5 text-xs font-semibold text-gray-600">Remarks</Text>
                     <KeyInput
                       value={note}
