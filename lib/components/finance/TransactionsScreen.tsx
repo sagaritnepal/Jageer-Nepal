@@ -65,6 +65,84 @@ export interface JobBillPrefill {
   note: string;
 }
 
+interface ServiceRowState {
+  name: string;
+  amount: string;
+}
+
+/** The optional table of service charges on a Sale (installation, wiring, configuration ...): one
+ * line per service, each with its own amount. Direct income - no item or stock behind it. */
+function ServiceChargesTable({
+  rows,
+  onChange,
+  accent,
+}: {
+  rows: ServiceRowState[];
+  onChange: (rows: ServiceRowState[]) => void;
+  accent: string;
+}) {
+  const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const update = (index: number, patch: Partial<ServiceRowState>) =>
+    onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  return (
+    <View className="rounded-lg border border-gray-200 bg-white" style={{ overflow: 'hidden' }}>
+      <View className="flex-row items-center justify-between bg-gray-50 px-3 py-2">
+        <Text className="text-xs font-semibold text-gray-600">Service charges (optional)</Text>
+        {total > 0 && <Text className="text-xs font-bold text-gray-800">NPR {total.toLocaleString()}</Text>}
+      </View>
+      {rows.length > 0 && (
+        <View className="flex-row border-t border-gray-100 px-3 py-1.5" style={{ gap: 8 }}>
+          <Text className="flex-1 text-[11px] font-bold text-gray-500">Service</Text>
+          <Text className="text-right text-[11px] font-bold text-gray-500" style={{ width: 110 }}>
+            Amount (Rs)
+          </Text>
+          <View style={{ width: 22 }} />
+        </View>
+      )}
+      {rows.map((row, index) => (
+        <View key={index} className="flex-row items-center border-t border-gray-100 px-3 py-1.5" style={{ gap: 8 }}>
+          <TextInput
+            value={row.name}
+            onChangeText={(v) => update(index, { name: v })}
+            placeholder="e.g. Installation, Wiring, Configuration"
+            placeholderTextColor="#9CA3AF"
+            accessibilityLabel={`Service name, line ${index + 1}`}
+            className="flex-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-sm text-gray-900"
+          />
+          <TextInput
+            value={row.amount}
+            onChangeText={(v) => update(index, { amount: v.replace(/[^0-9.]/g, '') })}
+            placeholder="0"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            accessibilityLabel={`Service amount, line ${index + 1}`}
+            className="rounded-md border border-gray-200 px-2.5 py-1.5 text-right text-sm font-semibold text-gray-900"
+            style={{ width: 110 }}
+          />
+          <Pressable
+            onPress={() => onChange(rows.filter((_, i) => i !== index))}
+            hitSlop={6}
+            accessibilityLabel={`Remove service line ${index + 1}`}
+            style={{ width: 22, alignItems: 'center' }}
+          >
+            <Ionicons name="close-circle" size={18} color="#DC2626" />
+          </Pressable>
+        </View>
+      ))}
+      <Pressable
+        onPress={() => onChange([...rows, { name: '', amount: '' }])}
+        className="flex-row items-center border-t border-gray-100 px-3 py-2"
+        style={{ gap: 6 }}
+      >
+        <Ionicons name="add-circle" size={16} color={accent} />
+        <Text className="text-xs font-semibold" style={{ color: accent }}>
+          Add service
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 interface ItemRowState {
   hs_code?: string;
   description: string;
@@ -688,9 +766,13 @@ function TransactionForm({
       : '0'
   );
   // Installation: a service charged to the customer on a Sale - direct income, no item or stock behind it.
-  const [installationInput, setInstallationInput] = useState(
-    initial?.installation_charge ? String(initial.installation_charge) : jobPrefill?.installation ? String(jobPrefill.installation) : ''
-  );
+  const [serviceRows, setServiceRows] = useState<ServiceRowState[]>(() => {
+    if (initial?.service_charges?.length) return initial.service_charges.map((s) => ({ name: s.name, amount: String(s.amount) }));
+    // A bill saved before the table existed carried one lump installation charge.
+    if (initial?.installation_charge) return [{ name: 'Installation', amount: String(initial.installation_charge) }];
+    if (jobPrefill?.installation) return [{ name: 'Installation', amount: String(jobPrefill.installation) }];
+    return [];
+  });
   const [showDiscount, setShowDiscount] = useState(!!initial && initial.discount_amount > 0);
   const [showVat, setShowVat] = useState(!!initial && initial.vat_amount > 0);
 
@@ -726,7 +808,8 @@ function TransactionForm({
   }
   const discountInputValue = discountMode === 'percent' ? discountPercentInput : discountAmountInput;
   const vatAmount = Math.round(((subtotal - discountAmount) * (Number(vatPercent) || 0)) / 100);
-  const installationAmount = type === 'sale' ? Math.max(0, Number(installationInput) || 0) : 0;
+  const installationAmount =
+    type === 'sale' ? serviceRows.reduce((sum, r) => sum + Math.max(0, Number(r.amount) || 0), 0) : 0;
   const grandTotal = subtotal - discountAmount + vatAmount + installationAmount;
   const selectedCategory = (categories ?? []).find((c) => c.id === categoryId) ?? null;
   const selectedAccountName = bankAccountId
@@ -880,7 +963,7 @@ function TransactionForm({
           ...(billNo.trim() ? [{ label: 'Bill no.', value: billNo.trim() }] : []),
           ...(discountAmount > 0 ? [{ label: 'Discount', value: `− NPR ${discountAmount.toLocaleString()}` }] : []),
           ...(vatAmount > 0 ? [{ label: 'VAT', value: `+ NPR ${vatAmount.toLocaleString()}` }] : []),
-          ...(installationAmount > 0 ? [{ label: 'Installation', value: `+ NPR ${installationAmount.toLocaleString()}` }] : []),
+          ...(installationAmount > 0 ? [{ label: 'Service charges', value: `+ NPR ${installationAmount.toLocaleString()}` }] : []),
         ],
         total: { label: 'Grand total', value: `NPR ${grandTotal.toLocaleString()}`, color: TYPE_META[type].color },
       });
@@ -920,6 +1003,12 @@ function TransactionForm({
           discount_amount: Math.round(discountAmount),
           vat_amount: vatAmount,
           installation_charge: installationAmount,
+          service_charges:
+            type === 'sale'
+              ? serviceRows
+                  .filter((r) => Number(r.amount) > 0)
+                  .map((r) => ({ name: r.name.trim() || 'Service', amount: Number(r.amount) }))
+              : [],
           payment_mode: 'cash' as const,
           bank_account_id: null,
         };
@@ -1299,7 +1388,6 @@ function TransactionForm({
   const billDateRef = useRef<TextInput>(null);
   const discountRef = useRef<TextInput>(null);
   const vatRef = useRef<TextInput>(null);
-  const installationRef = useRef<TextInput>(null);
   const remarkRef = useRef<TextInput>(null);
   const saveButtonRef = useRef<View>(null);
   const expenseTableRef = useRef<ExpenseEntryTableHandle>(null);
@@ -1650,6 +1738,11 @@ function TransactionForm({
                   style={{ columnGap: 28, rowGap: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}
                 >
                   <View style={{ flex: 1, minWidth: 240 }}>
+                    {type === 'sale' && (
+                      <View className="mb-3">
+                        <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} />
+                      </View>
+                    )}
                     <Text className="mb-1.5 text-xs font-semibold text-gray-600">Remarks</Text>
                     <KeyInput
                       value={note}
@@ -1739,7 +1832,7 @@ function TransactionForm({
                             value={vatPercent}
                             onChangeText={setVatPercent}
                             inputRef={vatRef}
-                            onEnter={() => (type === 'sale' ? installationRef.current?.focus() : remarkRef.current?.focus())}
+                            onEnter={() => remarkRef.current?.focus()}
                             onRequestSave={handleSave}
                             accent={accent}
                             numeric
@@ -1762,32 +1855,6 @@ function TransactionForm({
                         </Text>
                       </View>
                     </View>
-                    {type === 'sale' && (
-                      <View className="flex-row items-center justify-between py-1">
-                        <Text className="text-[13px] text-gray-500">Installation charge (Rs)</Text>
-                        <View className="flex-row items-center" style={{ gap: 8 }}>
-                          <View style={{ width: 84 }}>
-                            <KeyInput
-                              value={installationInput}
-                              onChangeText={(v) => setInstallationInput(v.replace(/[^0-9.]/g, ''))}
-                              inputRef={installationRef}
-                              onEnter={() => remarkRef.current?.focus()}
-                              onRequestSave={handleSave}
-                              accent={accent}
-                              numeric
-                              align="right"
-                              placeholder="0"
-                              accessibilityLabel="Installation charge in NPR"
-                              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold text-gray-900"
-                            />
-                          </View>
-                          <View style={{ width: 42 }} />
-                          <Text className="text-right text-[13px] font-semibold text-gray-700" style={{ width: 70 }}>
-                            + {installationAmount.toLocaleString()}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
                     <View className="mt-2 flex-row items-center justify-between border-t border-gray-300 pt-2.5">
                       <Text className="text-sm font-bold text-gray-900">G. Total</Text>
                       <Text className="text-xl font-extrabold" style={{ color: TYPE_META[type].color }}>
@@ -2021,27 +2088,16 @@ function TransactionForm({
                   </View>
                 )}
               </View>
-              {type === 'sale' && (
-                <View className="flex-row items-center justify-between border-t border-gray-200 py-1.5">
-                  <Text className="text-xs text-gray-500">Installation charge</Text>
-                  <View className="flex-row items-center gap-2">
-                    <TextInput
-                      value={installationInput}
-                      onChangeText={(v) => setInstallationInput(v.replace(/[^0-9.]/g, ''))}
-                      keyboardType="numeric"
-                      placeholder="0"
-                      placeholderTextColor="#9CA3AF"
-                      className="w-16 rounded border border-gray-300 bg-white px-1 py-0.5 text-center text-xs text-gray-900"
-                    />
-                    <Text className="w-16 text-right text-xs text-gray-700">+ NPR {installationAmount.toLocaleString()}</Text>
-                  </View>
-                </View>
-              )}
             </View>
             <View className="flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
               <Text className="text-sm font-bold text-gray-900">G. Total</Text>
               <Text className="text-base font-extrabold text-gray-900">NPR {grandTotal.toLocaleString()}</Text>
             </View>
+            {type === 'sale' && (
+              <View className="mt-3">
+                <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent="#EA580C" />
+              </View>
+            )}
             <TextInput
               value={note}
               onChangeText={setNote}
