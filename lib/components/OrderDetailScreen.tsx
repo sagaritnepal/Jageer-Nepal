@@ -1,4 +1,5 @@
 // lib/components/OrderDetailScreen.tsx
+import { ticketLabel } from '../utils/ticket';
 import { useMemo, useState } from 'react';
 import { View, Text, Image, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -214,7 +215,7 @@ export function OrderDetailScreen() {
             <Ionicons name="gift" size={wide ? 28 : 24} color="#2563EB" />
           </View>
         }
-        title={`Order #${order.id.slice(0, 8)}`}
+        title={ticketLabel(order.ticket_no) ? `Token ${ticketLabel(order.ticket_no)}` : `Order #${order.id.slice(0, 8)}`}
         pill={STATUS_LABEL[order.status]}
         amountLabel="Order total"
         amount={total}

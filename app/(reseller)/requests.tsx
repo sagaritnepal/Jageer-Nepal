@@ -225,7 +225,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
   if (wide) {
     return (
-      <View className="flex-row items-center border-t border-gray-100 px-[18px] py-3.5" style={{ gap: 16 }}>
+      <View className="flex-row items-center rounded-xl bg-white px-4 py-3.5" style={{ gap: 16, borderWidth: 1, borderColor: '#E5E7EB' }}>
         <Pressable onPress={data.open} className="flex-row items-center gap-3" style={{ flex: COLS.job, minWidth: 0 }}>
           {data.icon}
           <View className="flex-1" style={{ gap: 2 }}>
@@ -412,7 +412,11 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
         who: customerName,
         place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
-        lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
+        lines: finishedStage
+          ? finishedLines(item, jobCards?.[0])
+          : ticketLabel(item.ticket_no)
+            ? [`Token ${ticketLabel(item.ticket_no)}`]
+            : undefined,
         tag,
         amount: item.quoted_price,
         action,
@@ -441,7 +445,12 @@ function OrderJobRow({
   const open = () => router.push(`/(reseller)/order/${order.id}`);
 
   const first = orderItems?.[0];
-  const firstName = first ? `${productMap.get(first.product_id)?.name ?? 'Product'} × ${first.quantity}` : `Order #${order.id.slice(0, 8)}`;
+  const orderToken = ticketLabel(order.ticket_no);
+  const firstName = first
+    ? `${productMap.get(first.product_id)?.name ?? 'Product'} × ${first.quantity}`
+    : orderToken
+      ? `Token ${orderToken}`
+      : `Order #${order.id.slice(0, 8)}`;
   const title = orderItems && orderItems.length > 1 ? `${firstName} + ${orderItems.length - 1} more` : firstName;
 
   const shipping = order.shipping_address as { address?: string; city?: string } | null;
@@ -471,6 +480,7 @@ function OrderJobRow({
         who: buyer?.full_name ?? '…',
         place,
         when: null,
+        lines: orderToken ? [`Token ${orderToken}`] : undefined,
         tag: TAGS.order,
         amount: order.total_amount,
         action,
@@ -688,7 +698,7 @@ export default function ResellerRequestQueue() {
             Shop orders to deliver and on the way
           </Text>
           {isWideWeb ? (
-            <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <View style={{ gap: 8 }}>
               {stageJobs.filter((item) => item.kind === 'order').map(jobRow)}
             </View>
           ) : (
@@ -768,13 +778,13 @@ export default function ResellerRequestQueue() {
         </View>
 
         {hubView ?? (
-        <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-          <View className="flex-row items-center gap-2.5 px-[18px] py-3.5" style={{ backgroundColor: activeMeta.tint }}>
+        <View style={{ gap: 8 }}>
+          <View className="flex-row items-center gap-2.5 rounded-lg px-4 py-3" style={{ backgroundColor: activeMeta.tint }}>
             <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeMeta.color }} />
             <Text className="text-[15px] font-bold text-gray-900">{activeMeta.label}</Text>
             <Text className="text-[13px] text-gray-500">— {activeMeta.todo}</Text>
           </View>
-          <View className="flex-row px-[18px] py-2" style={{ gap: 16 }}>
+          <View className="flex-row rounded-lg px-4 py-2" style={{ gap: 16, backgroundColor: '#F3F4F6' }}>
             {(
               [
                 ['Job', { flex: COLS.job }],
@@ -785,13 +795,13 @@ export default function ResellerRequestQueue() {
                 ['', { width: COLS.manage }],
               ] as const
             ).map(([label, style]) => (
-              <Text key={label || 'manage'} className="text-[11px] font-bold capitalize tracking-wide text-gray-400" style={style}>
+              <Text key={label || 'manage'} className="text-[11px] font-bold capitalize tracking-wide text-gray-500" style={style}>
                 {label}
               </Text>
             ))}
           </View>
           {stageJobs.length === 0 ? (
-            <Text className="border-t border-gray-100 px-[18px] py-6 text-sm text-gray-500">{emptyText}</Text>
+            <Text className="px-4 py-6 text-sm text-gray-500">{emptyText}</Text>
           ) : (
             stageJobs.map(jobRow)
           )}

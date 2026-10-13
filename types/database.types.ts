@@ -410,6 +410,8 @@ export interface Order {
   payment_method: string | null;
   payment_reference: string | null;
   shipping_address: Record<string, unknown> | null;
+  /** The order's token number, from the same serial as jobs (migration 0092). */
+  ticket_no?: number | null;
   created_at: string;
   updated_at: string;
 }
