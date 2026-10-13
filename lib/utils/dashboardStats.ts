@@ -87,7 +87,7 @@ function shortDate(iso: string, mode: CalendarMode): string {
 function fullDate(iso: string, mode: CalendarMode): string {
   if (mode === 'bs') {
     const bs = adStringToBs(iso);
-    if (bs) return `${BS_MONTHS[bs.month]} ${bs.date}, ${bs.year} BS`;
+    if (bs) return `${BS_MONTHS[bs.month]} ${bs.date}, ${bs.year}`;
   }
   const [y, m, d] = parts(iso);
   return `${MON[m - 1]} ${d}, ${y}`;
@@ -135,7 +135,7 @@ function dayTitle(iso: string, mode: CalendarMode): string {
   const dow = DOW[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   if (mode === 'bs') {
     const bs = adStringToBs(iso);
-    if (bs) return `${dow}, ${BS_MONTHS[bs.month]} ${bs.date}, ${bs.year} BS`;
+    if (bs) return `${dow}, ${BS_MONTHS[bs.month]} ${bs.date}, ${bs.year}`;
   }
   return `${dow}, ${MON[m - 1]} ${d}, ${y}`;
 }
@@ -230,7 +230,6 @@ export function buildBuckets(r: DateRange, limits: BucketLimits, mode: CalendarM
 
   const months = calendarMonths(r, mode) ?? calendarMonths(r, 'ad')!;
   const effectiveMode: CalendarMode = calendarMonths(r, mode) ? mode : 'ad';
-  const suffix = effectiveMode === 'bs' ? ' BS' : '';
   const multiYear = months[0].year !== months[months.length - 1].year;
 
   if (months.length > 36) {
@@ -239,7 +238,7 @@ export function buildBuckets(r: DateRange, limits: BucketLimits, mode: CalendarM
     months.forEach((m) => byYear.set(m.year, (byYear.get(m.year) ?? []).concat(m)));
     byYear.forEach((ms, year) => {
       const [s, e] = clip(ms[0].startIso, ms[ms.length - 1].endIso, r);
-      buckets.push({ kind: 'year', startIso: s, endIso: e, label: String(year), title: `${year}${suffix}` });
+      buckets.push({ kind: 'year', startIso: s, endIso: e, label: String(year), title: String(year) });
     });
     return buckets;
   }
@@ -253,7 +252,7 @@ export function buildBuckets(r: DateRange, limits: BucketLimits, mode: CalendarM
       startIso: s,
       endIso: e,
       label: name + (multiYear ? ` '${String(m.year).slice(2)}` : ''),
-      title: `${full} ${m.year}${suffix}`,
+      title: `${full} ${m.year}`,
     });
   });
   return buckets;

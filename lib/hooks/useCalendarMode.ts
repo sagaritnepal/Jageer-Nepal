@@ -37,8 +37,8 @@ export function useCalendarMode(): [CalendarMode, (mode: CalendarMode) => void] 
 }
 
 /** Main and secondary label for an AD 'YYYY-MM-DD' in the chosen calendar,
- * e.g. BS -> ["Bhadra 14, 2083 BS", "Sun, Aug 30, 2026"],
- *      AD -> ["Sun, Aug 30, 2026", "Bhadra 14, 2083 BS"]. */
+ * e.g. BS -> ["Bhadra 14, 2083", "Sun, Aug 30, 2026"],
+ *      AD -> ["Sun, Aug 30, 2026", "Bhadra 14, 2083"]. */
 export function dateLabels(value: string, mode: CalendarMode): [string, string] {
   const bs = toBsLabel(value);
   const ad = toAdLabel(value);

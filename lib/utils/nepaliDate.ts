@@ -39,7 +39,7 @@ export function nepaliFiscalYearSuffix(bsYear: number, bsMonth: number): string 
   return `${String(startYear).slice(-3)}/${String(startYear + 1).slice(-2)}`;
 }
 
-/** Bikram Sambat label for an AD date string ('YYYY-MM-DD'), e.g. "Falgun 27, 2082 BS".
+/** Bikram Sambat label for an AD date string ('YYYY-MM-DD'), e.g. "Falgun 27, 2082".
  * Nepal runs on the BS calendar day-to-day, so every date shown or picked in the app
  * should carry its BS equivalent alongside the AD one - not just the Gregorian date. */
 export function toBsLabel(adDateStr: string): string {
@@ -47,7 +47,7 @@ export function toBsLabel(adDateStr: string): string {
   if (!y || !m || !d) return '';
   try {
     const bs = new NepaliDate(new Date(y, m - 1, d));
-    return `${bs.format('MMMM DD, YYYY')} BS`;
+    return bs.format('MMMM DD, YYYY');
   } catch {
     return '';
   }
@@ -107,13 +107,13 @@ export function shortDateLabel(adDateStr: string): string {
   return bs ? `${BS_MONTHS[bs.month]} ${bs.date}` : '';
 }
 
-/** The month a date is in, as a row heading: "Aswin 2083 BS" read in BS, "Oct 2026" in AD. */
+/** The month a date is in, as a row heading: "Aswin 2083" read in BS, "Oct 2026" in AD. */
 export function monthGroupLabel(adDateStr: string): string {
   const [y, m, d] = adDateStr.split('-').map(Number);
   if (!y || !m || !d) return 'Other';
   if (labelMode === 'ad') return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   const bs = adStringToBs(adDateStr);
-  return bs ? `${BS_MONTHS[bs.month]} ${bs.year} BS` : 'Other';
+  return bs ? `${BS_MONTHS[bs.month]} ${bs.year}` : 'Other';
 }
 
 /** English (Gregorian) label for an AD date string, e.g. "Wed, Feb 18, 2026". */

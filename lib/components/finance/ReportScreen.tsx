@@ -121,11 +121,10 @@ export function ReportScreen({ basePath }: { basePath: string }) {
       subtitle:
         period !== 'range'
           ? PERIOD_LABEL[period]
-          : monthLabelOf(range.from, range.to, calendarMode)
-            ? `${monthLabelOf(range.from, range.to, calendarMode)}${calendarMode === 'bs' ? ' BS' : ''}`
-            : range.from && range.from === range.to
-            ? toBsHistoryLabel(range.from)
-            : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`,
+          : monthLabelOf(range.from, range.to, calendarMode) ||
+            (range.from && range.from === range.to
+              ? toBsHistoryLabel(range.from)
+              : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`),
       printedOn: toBsHistoryLabel(localTodayIso()),
       sections: [
         {

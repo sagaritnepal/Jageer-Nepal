@@ -101,7 +101,7 @@ function subjectsOf(rows: Entry[]) {
   return [...bySubject.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 }
 
-/** The table's month rows - "Aswin 2083 BS", or "Oct 2026" when dates are read in AD. Dates are stored
+/** The table's month rows - "Aswin 2083", or "Oct 2026" when dates are read in AD. Dates are stored
  * as AD strings ('YYYY-MM-DD' or a full timestamp). */
 function bsMonthGroup(date: string): string {
   return monthGroupLabel(date.slice(0, 10));
@@ -241,9 +241,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   const monthName = monthLabelOf(range.from, range.to, calendarMode);
   const periodText = rangeActive
     ? monthName
-      ? calendarMode === 'bs'
-        ? `${monthName} BS`
-        : monthName
+      ? monthName
       : range.from && range.from === range.to
         ? toBsHistoryLabel(range.from)
         : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`
