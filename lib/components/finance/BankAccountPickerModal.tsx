@@ -9,7 +9,11 @@ import type { AvailableAmounts } from '../../hooks/useAvailableAmounts';
 /** The money available in an account, shown at the right of its row. */
 function Available({ amount }: { amount: number | undefined }) {
   if (amount === undefined) return null;
-  return <Text className="text-xs font-bold text-gray-700">NPR {amount.toLocaleString()}</Text>;
+  return (
+    <Text className="text-xs font-bold" style={{ color: amount < 0 ? '#DC2626' : '#374151' }}>
+      NPR {amount.toLocaleString()}
+    </Text>
+  );
 }
 
 // null selectedId/onSelect(null) means "Cash" - the one payment account that
@@ -26,6 +30,7 @@ export function BankAccountPickerModal({
   onRename,
   onDelete,
   available,
+  totalAmount,
 }: {
   visible: boolean;
   accounts: BankAccount[];
@@ -36,6 +41,9 @@ export function BankAccountPickerModal({
   onDelete: (id: string) => Promise<void>;
   /** When given, each choice shows how much money is in it. */
   available?: AvailableAmounts | null;
+  /** The bank and wallet accounts together, shown above the choices. Cash is not in it, and has no
+   * amount of its own: the books do not track cash in hand. */
+  totalAmount?: number;
 }) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -65,6 +73,16 @@ export function BankAccountPickerModal({
               <Text className="text-sm font-semibold text-blue-700">Close</Text>
             </Pressable>
           </View>
+
+          {totalAmount !== undefined && (
+            <View className="mb-2 flex-row items-center gap-2 rounded-lg bg-blue-50 px-2.5 py-2">
+              <Ionicons name="wallet-outline" size={16} color="#1D4ED8" />
+              <Text className="flex-1 text-sm font-semibold text-blue-800">All accounts · without cash</Text>
+              <Text className="text-xs font-bold" style={{ color: totalAmount < 0 ? '#DC2626' : '#047857' }}>
+                NPR {totalAmount.toLocaleString()}
+              </Text>
+            </View>
+          )}
 
           <ScrollView>
             <Pressable

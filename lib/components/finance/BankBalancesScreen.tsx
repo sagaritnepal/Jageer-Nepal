@@ -89,6 +89,12 @@ export function TransferForm({ userId, onDone, bare = false }: { userId: string;
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // What each place holds right now - the true books' figures (a negative one is shown as it is) -
+  // shown in the list of accounts when one is being chosen, so it is plain where the money is.
+  const balances = useAccountBalances(userId);
+  const available = balances.ready
+    ? { byId: Object.fromEntries(balances.perAccount.map((a) => [a.id, Math.round(a.balance)])) }
+    : null;
   const nameFor = (id: string | null) => (id ? accounts.find((a) => a.id === id)?.name ?? 'Bank' : 'Cash');
 
   async function handleSave() {
@@ -182,6 +188,8 @@ export function TransferForm({ userId, onDone, bare = false }: { userId: string;
         onClose={() => setPickerOpen(null)}
         onRename={rename}
         onDelete={remove}
+        available={available}
+        totalAmount={balances.ready ? Math.round(balances.perAccount.reduce((sum, a) => sum + a.balance, 0)) : undefined}
       />
     </View>
   );
