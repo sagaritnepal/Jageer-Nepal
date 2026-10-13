@@ -5,6 +5,11 @@
 // those raw strings ("2026-09-15 - 15:00") this reads as ambiguous or even
 // like a duration; spelling it out as a weekday/month name and 12-hour time
 // makes clear it's a single scheduled moment, not a span.
+//
+// The date part follows the calendar the person reads in (BS by default, AD when they switch),
+// the same way every other date in the app does.
+import { toBsHistoryLabel } from './nepaliDate';
+
 function parseSlot(date: string, time: string | null): Date | null {
   const [y, m, d] = date.split('-').map(Number);
   if (!y || !m || !d) return null;
@@ -17,9 +22,7 @@ export function formatScheduledWhen(date: string | null, time: string | null): s
   if (!date) return `Date TBD · ${time}`;
 
   const parsed = parseSlot(date, time);
-  const dateLabel = parsed
-    ? parsed.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-    : date;
+  const dateLabel = parsed ? toBsHistoryLabel(date) : date;
 
   if (!time) return `${dateLabel} · Time TBD`;
   const timeLabel = parsed ? parsed.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : time;
