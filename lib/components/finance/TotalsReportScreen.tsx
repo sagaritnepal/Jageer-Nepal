@@ -17,6 +17,7 @@ import { DateStepFilter, monthLabelOf } from './DateRangeFilter';
 import { useFreshLedgerArea } from '../../hooks/useFreshLedgerArea';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { MONEY } from './moneyColors';
+import { PopupCard } from './FormKit';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
 import { TransactionDetailModal } from './TransactionsScreen';
@@ -129,6 +130,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
+  // The Expenses Report's individual (a person, a bike, a payee) whose payments are open in a popup:
+  // the same table that is under it, on a card of its own that scrolls.
+  const [subjectView, setSubjectView] = useState<{ name: string; rows: Entry[] } | null>(null);
   // Print opens the system's print preview of what is open on the page - nothing goes to the printer
   // until Print is pressed there. The top bar keeps the Print button it was last given, so it reaches
   // the current page through a ref.
@@ -680,16 +684,6 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     });
   const openableKeys = (grouped?.groups ?? []).filter((g) => g.rows.length > 0).map((g) => g.key);
   const allOpen = openableKeys.length > 0 && openableKeys.every((k) => openKeys.has(k));
-  // Inside an open heading each bike / person is one line (its payments added up); this is which of
-  // those lines are open to show the payments themselves. Keyed heading + subject.
-  const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
-  const toggleSubject = (key: string) =>
-    setOpenSubjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
   const shownEntries = yearEntries;
   // What the column that names who it was with is called.
   const pickWord = {
@@ -816,11 +810,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         narrowed = true;
         for (const g of opened) {
           const subjects = kind === 'expense' ? subjectsOf(g.rows) : [];
-          const openSubs = subjects.filter((x) => x.rows.length > 1 && openSubjects.has(`${g.key}::${x.key}`));
-          if (openSubs.length > 0) {
-            // A bike / person was opened: that one's payments, and only that.
-            for (const x of openSubs) sections.push(logSection(`${g.label} › ${x.name} - ${entryWord(x.rows.length)}`, x.rows, x.total));
-          } else if (subjects.length > 1) {
+          if (subjects.length > 1) {
             // A heading opened as it shows on screen: one line for each bike / person.
             sections.push({
               heading: `${g.label} - NPR ${money(g.total)} - ${entryWord(g.rows.length)}`,
@@ -1065,19 +1055,17 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                 {isOpen && subjects.length > 1 && (
                   <View className="border-t border-gray-200">
                     {subjects.map((s, i) => {
-                      const subjectKey = `${g.key}::${s.key}`;
                       const single = s.rows.length === 1;
-                      const subjectOpen = !single && openSubjects.has(subjectKey);
                       return (
                         <View key={s.key} className={i > 0 ? 'border-t border-gray-100' : ''}>
+                          {/* One payment opens as it is; several open on a card of their own - the same table, scrollable. */}
                           <Pressable
-                            onPress={() => (single ? open(s.rows[0]) : toggleSubject(subjectKey))}
+                            onPress={() => (single ? open(s.rows[0]) : setSubjectView({ name: s.name, rows: s.rows }))}
                             accessibilityRole="button"
-                            accessibilityState={{ expanded: subjectOpen }}
                             className="flex-row items-center py-2.5 pl-9 pr-3.5"
-                            style={{ gap: 10, backgroundColor: subjectOpen ? '#F9FAFB' : '#FFFFFF' }}
+                            style={{ gap: 10, backgroundColor: '#FFFFFF' }}
                           >
-                            <Ionicons name={subjectOpen ? 'chevron-down' : 'chevron-forward'} size={14} color="#9CA3AF" />
+                            <Ionicons name="chevron-forward" size={14} color="#9CA3AF" />
                             <Text className="flex-1 text-[13px] font-semibold text-gray-900" numberOfLines={1}>
                               {s.name}
                             </Text>
@@ -1088,11 +1076,6 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                               {money(s.total)}
                             </Text>
                           </Pressable>
-                          {subjectOpen && (
-                            <View className="border-t border-gray-100 pl-6">
-                              <BookTable bare columns={columns} rows={s.rows} rowKey={(e) => e.id} onRowPress={open} />
-                            </View>
-                          )}
                         </View>
                       );
                     })}
@@ -1156,10 +1139,30 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             : kind === 'paid'
               ? `Each name is listed once - tap it to open everything recorded for it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor. ${periodNote}`
               : kind === 'expense'
-                ? `Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the transactions inside it. Tap a transaction to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). ${periodNote}`
+                ? `Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the names inside it, and a name to see its payments. Tap a payment to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). ${periodNote}`
                 : `Tap a bill to open it with its items. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. ${periodNote}`}
       </Text>
     </BookPage>
+    {subjectView && (
+      // The individual's payments - the same table the dropdown used to show, and nothing else.
+      <PopupCard title={subjectView.name} onClose={() => setSubjectView(null)} maxWidth={920}>
+        <BookTable
+          stickyHeader
+          columns={columns}
+          rows={subjectView.rows}
+          rowKey={(e) => e.id}
+          onRowPress={(e) => {
+            // A bill opens as a bill on top of this card; a payment goes to its ledger, so this card goes.
+            if (e.tx) {
+              setViewingTx(e.tx);
+              return;
+            }
+            setSubjectView(null);
+            open(e);
+          }}
+        />
+      </PopupCard>
+    )}
     <TransactionDetailModal
       tx={viewingTx}
       categoryName={viewingTx?.expense_category_id ? categoryById.get(viewingTx.expense_category_id) ?? null : null}
