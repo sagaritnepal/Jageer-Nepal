@@ -121,6 +121,8 @@ function JobCard({ id }: { id: string }) {
   // turned typing 500 into "0500".
   const [parts, setParts] = useState<PartRow[]>([{ name: '', quantity: '1', cost: '' }]);
   const [laborCost, setLaborCost] = useState('');
+  // The number on the chalan slip: with its photo, it is needed before the job can be marked complete.
+  const [chalanNo, setChalanNo] = useState('');
   const [answering, setAnswering] = useState<'accept' | 'reject' | 'reopen' | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [showHoldModal, setShowHoldModal] = useState(false);
@@ -129,6 +131,10 @@ function JobCard({ id }: { id: string }) {
   const wide = useIsWideWeb();
   const queryClient = useQueryClient();
   const now = useNow(request?.status === 'in_progress' && !!jobCard?.started_at);
+
+  useEffect(() => {
+    setChalanNo(request?.chalan_no ?? '');
+  }, [request?.chalan_no]);
 
   // Start the form from what's already on the job card, so re-completing a
   // reopened job doesn't overwrite the recorded parts and labor with blanks.
@@ -256,6 +262,17 @@ function JobCard({ id }: { id: string }) {
 
   async function handleAdvance() {
     if (!userId || !nextStatus || !request) return;
+    // The chalan comes first: its number and a photo of the slip, before the job can be completed.
+    if (request.status === 'in_progress') {
+      const missing = [
+        !chalanNo.trim() && 'the chalan number',
+        (request.chalan_urls?.length ?? 0) === 0 && 'a photo of the chalan',
+      ].filter(Boolean);
+      if (missing.length > 0) {
+        showAlert('Add the chalan first', `Before this job can be marked complete, add ${missing.join(' and ')}.`);
+        return;
+      }
+    }
     try {
       if (request.status === 'in_progress') {
         const validParts = parts
@@ -277,7 +294,10 @@ function JobCard({ id }: { id: string }) {
         }
       }
 
-      await updateRequest.mutateAsync({ id: request.id, values: { status: nextStatus } });
+      await updateRequest.mutateAsync({
+        id: request.id,
+        values: { status: nextStatus, ...(request.status === 'in_progress' ? { chalan_no: chalanNo.trim() } : null) },
+      });
     } catch (err) {
       showAlert('Could not update job', getErrorMessage(err));
     }
@@ -498,6 +518,21 @@ function JobCard({ id }: { id: string }) {
     <>
       {hasAccepted && (
         <View className="mb-6 rounded-xl bg-white p-5">
+          {request.status === 'in_progress' && (
+            <View className="mb-4">
+              <Text className="mb-1.5 text-sm font-semibold text-gray-900">Chalan number *</Text>
+              <TextInput
+                value={chalanNo}
+                onChangeText={setChalanNo}
+                placeholder="Number written on the chalan"
+                placeholderTextColor="#9CA3AF"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <Text className="mt-1.5 text-xs text-gray-500">
+                Add the chalan number and a photo of the slip below - the job can't be marked complete without both.
+              </Text>
+            </View>
+          )}
           <ChalanPhotos
             chalanUrls={request.chalan_urls}
             requestId={request.id}
