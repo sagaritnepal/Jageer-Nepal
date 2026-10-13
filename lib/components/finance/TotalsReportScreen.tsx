@@ -384,14 +384,20 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           // never lands in Uncategorized.
           const isStaff = staffLedgerIds.has(ledgerId);
           const category = reportCategoryName(isStaff ? knownCategory.get(nameKey(e.note ?? '')) ?? SALARY_HEADER : name);
+          // A journal voucher is listed too (it is how an advance is moved onto what it was spent on: out
+          // of Dilip's ledger, onto Fuel), as what it is - no cash, so no receipt number, but its code and
+          // narration.
+          const voucher = journalOf(e.note);
           return {
             id: e.id,
             date: e.entry_date ?? e.created_at,
             amount: refund ? -Number(e.amount) : Number(e.amount),
-            party: `${refund ? 'Received from' : 'Paid to'} ${name}`,
-            note: [e.receipt_no ? `${refund ? 'Receipt' : 'Payment'} no. ${e.receipt_no}` : null, refund ? 'Refund' : null, e.note]
-              .filter(Boolean)
-              .join(' · '),
+            party: voucher ? `Journal voucher · ${refund ? 'out of' : 'onto'} ${name}` : `${refund ? 'Received from' : 'Paid to'} ${name}`,
+            note: voucher
+              ? [voucher.code, voucher.narration].filter(Boolean).join(' · ')
+              : [e.receipt_no ? `${refund ? 'Receipt' : 'Payment'} no. ${e.receipt_no}` : null, refund ? 'Refund' : null, e.note]
+                  .filter(Boolean)
+                  .join(' · '),
             type: { label: category, color: tone.text, bg: tone.bg },
             nav: { kind: 'party', partyId: ledgerId },
             category,
@@ -400,8 +406,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             href: partyId ? `${basePath}/customer/${ledgerId}` : hrefFor(ledgerId),
           };
         };
-        const customerSide = partyId ? partyCustomerEntries ?? [] : ledgerEntries ?? [];
-        const vendorSide = partyId ? partyVendorEntries ?? [] : vendorEntries ?? [];
+        // Every entry, journal vouchers included (the received / paid reports leave those out - no cash).
+        const customerSide = partyId ? partyCustomerEntries ?? [] : allLedgerEntries ?? [];
+        const vendorSide = partyId ? partyVendorEntries ?? [] : allVendorEntries ?? [];
         const counts = (ledgerId: string) =>
           partyId ? ledgerId === partyId : expenseLedgerIds.has(ledgerId) || staffLedgerIds.has(ledgerId);
         for (const e of customerSide) {
@@ -533,6 +540,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     partyRow,
     ledgerEntries,
     vendorEntries,
+    allLedgerEntries,
+    allVendorEntries,
     partyCustomerEntries,
     partyVendorEntries,
     nameById,

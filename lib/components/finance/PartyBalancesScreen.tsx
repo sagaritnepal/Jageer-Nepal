@@ -16,6 +16,7 @@ import { localTodayIso } from '../../utils/localDate';
 import { entryDay } from '../../utils/ledgerStatement';
 import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
 import { MONEY } from './moneyColors';
+import { journalOf } from '../../utils/journalVoucher';
 import { PopupCard } from './FormKit';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 
@@ -87,6 +88,7 @@ const BILLED = { label: 'Billed', color: MONEY.in.text, bg: MONEY.in.bg };
 const PAID_OUT = { label: 'Paid out', color: MONEY.out.text, bg: MONEY.out.bg };
 const RECEIVED = { label: 'Received', color: MONEY.in.text, bg: MONEY.in.bg };
 const PAID = { label: 'Paid', color: MONEY.out.text, bg: MONEY.out.bg };
+const JOURNAL = { label: 'Journal voucher', color: '#B45309', bg: '#FFFBEB' };
 
 /** Detail view behind the dashboard's To Receive / To Give tiles - who
  * specifically makes up that total, so it isn't just one opaque number.
@@ -143,12 +145,13 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
       for (const e of customerEntries ?? []) {
         const credit = e.entry_type === 'credit';
         // A debit made by hand is money given to the customer; one from a booking or bill is what they were billed.
-        const kind = credit ? RECEIVED : e.source === 'manual' ? PAID_OUT : BILLED;
+        const voucher = journalOf(e.note);
+        const kind = voucher ? JOURNAL : credit ? RECEIVED : e.source === 'manual' ? PAID_OUT : BILLED;
         add(e.customer_id, {
           id: e.id,
           day: entryDay(e.entry_date, e.created_at),
           createdAt: e.created_at,
-          detail: detailOf(e.receipt_no, e.note, kind.label),
+          detail: voucher ? [voucher.code, voucher.narration].filter(Boolean).join(' · ') : detailOf(e.receipt_no, e.note, kind.label),
           ...kind,
           signed: credit ? -Number(e.amount) : Number(e.amount),
         });
@@ -156,12 +159,13 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
     } else {
       for (const e of vendorEntries ?? []) {
         const credit = e.entry_type === 'credit';
-        const kind = credit ? PAID : BILLED;
+        const voucher = journalOf(e.note);
+        const kind = voucher ? JOURNAL : credit ? PAID : BILLED;
         add(e.vendor_id, {
           id: e.id,
           day: entryDay(e.entry_date, e.created_at),
           createdAt: e.created_at,
-          detail: detailOf(e.receipt_no, e.note, kind.label),
+          detail: voucher ? [voucher.code, voucher.narration].filter(Boolean).join(' · ') : detailOf(e.receipt_no, e.note, kind.label),
           ...kind,
           signed: credit ? -Number(e.amount) : Number(e.amount),
         });

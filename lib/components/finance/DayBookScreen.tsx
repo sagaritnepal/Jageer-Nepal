@@ -937,10 +937,13 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const [selectedAccount, setSelectedAccount] = useState<AccountKey | null>(null);
 
   const owner: Record<string, string> = userId ? { owner_id: userId } : {};
-  const { data: transactions, isLoading } = useSupabaseQuery('business_transactions', { filters: owner, enabled: !!userId });
-  const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', { filters: owner, enabled: !!userId });
-  const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', { filters: owner, enabled: !!userId });
-  const { data: transfers } = useSupabaseQuery('account_transfers', { filters: owner, enabled: !!userId });
+  // `all`: the book sums every entry before the day shown to carry its opening balance, and a plain read
+  // stops at the API's first 1000 rows (in no set order) - past that, the newest entries went missing
+  // from the book and the opening balance was short.
+  const { data: transactions, isLoading } = useSupabaseQuery('business_transactions', { filters: owner, all: true, enabled: !!userId });
+  const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', { filters: owner, all: true, enabled: !!userId });
+  const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', { filters: owner, all: true, enabled: !!userId });
+  const { data: transfers } = useSupabaseQuery('account_transfers', { filters: owner, all: true, enabled: !!userId });
   const { data: contacts } = useSupabaseQuery('customers', { filters: owner, enabled: !!userId });
   const { data: accounts } = useSupabaseQuery('bank_accounts', { filters: owner, orderBy: { column: 'name' }, enabled: !!userId });
   const { data: categories } = useSupabaseQuery('expense_categories', { filters: owner, orderBy: { column: 'name' }, enabled: !!userId });

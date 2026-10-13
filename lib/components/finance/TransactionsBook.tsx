@@ -8,6 +8,7 @@ import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { DateFilterButton } from './DateRangeFilter';
 import { MONEY } from './moneyColors';
+import { journalOf } from '../../utils/journalVoucher';
 import { useAuthStore } from '../../hooks/useAuth';
 import { localTodayIso } from '../../utils/localDate';
 import type { PrintReport } from '../../utils/printReport';
@@ -32,6 +33,7 @@ const PILL = {
   creditSale: { label: 'Credit sale', color: MONEY.in.text, bg: MONEY.in.bg },
   creditPurchase: { label: 'Credit purchase', color: MONEY.out.text, bg: MONEY.out.bg },
   transfer: { label: 'Transfer', color: '#4338CA', bg: '#EEF2FF' },
+  journal: { label: 'Journal', color: '#B45309', bg: '#FFFBEB' },
 } satisfies Record<string, PillStyle>;
 
 interface Row {
@@ -49,6 +51,8 @@ interface Row {
   amount: number | null;
   cashIn: number | null;
   cashOut: number | null;
+  /** A journal voucher's entry: shown with its amount, but no cash moved and it is left out of the totals. */
+  journal?: boolean;
   onPress?: () => void;
   onDelete?: () => void;
 }
@@ -208,19 +212,29 @@ export function TransactionsBook({
         const isIn = e.entry_type === 'credit';
         const manual = e.source === 'manual';
         const name = item.customerName ?? 'Unknown customer';
+        const voucher = journalOf(e.note);
         return {
           id: `l-${e.id}`,
           group,
           date: ymdOf(item.date),
           time: timeOf(e.created_at),
-          details: isIn ? `Received from ${name}` : manual ? `Paid to ${name}` : `Receivable from ${name}`,
-          sub: [e.receipt_no ? `${isIn ? 'Receipt' : 'Payment'} No. ${e.receipt_no}` : null, e.note ?? (manual ? null : 'From a booked job')].filter(Boolean).join(' · ') || null,
-          pill: isIn ? PILL.received : manual ? PILL.paid : PILL.creditSale,
+          details: voucher
+            ? `Journal voucher · ${isIn ? 'out of' : 'onto'} ${name}`
+            : isIn
+              ? `Received from ${name}`
+              : manual
+                ? `Paid to ${name}`
+                : `Receivable from ${name}`,
+          sub: voucher
+            ? [voucher.code, voucher.narration].filter(Boolean).join(' · ') || null
+            : [e.receipt_no ? `${isIn ? 'Receipt' : 'Payment'} No. ${e.receipt_no}` : null, e.note ?? (manual ? null : 'From a booked job')].filter(Boolean).join(' · ') || null,
+          pill: voucher ? PILL.journal : isIn ? PILL.received : manual ? PILL.paid : PILL.creditSale,
           invoiceNo: null,
           discount: null,
-          amount: !isIn && !manual ? e.amount : null,
-          cashIn: isIn ? e.amount : null,
-          cashOut: !isIn && manual ? e.amount : null,
+          amount: voucher ? e.amount : !isIn && !manual ? e.amount : null,
+          cashIn: voucher ? null : isIn ? e.amount : null,
+          cashOut: voucher ? null : !isIn && manual ? e.amount : null,
+          journal: !!voucher,
           onPress: goParty(e.customer_id),
         };
       }
@@ -228,19 +242,23 @@ export function TransactionsBook({
         const e = item.entry;
         const isPayment = e.entry_type === 'credit';
         const name = item.vendorName ?? 'Unknown vendor';
+        const voucher = journalOf(e.note);
         return {
           id: `v-${e.id}`,
           group,
           date: ymdOf(item.date),
           time: timeOf(e.created_at),
-          details: isPayment ? `Paid to ${name}` : `Bought on credit · ${name}`,
-          sub: [e.receipt_no ? `Payment No. ${e.receipt_no}` : null, e.note ?? (e.source === 'booking' ? 'From a credit purchase' : null)].filter(Boolean).join(' · ') || null,
-          pill: isPayment ? PILL.paid : PILL.creditPurchase,
+          details: voucher ? `Journal voucher · ${isPayment ? 'onto' : 'out of'} ${name}` : isPayment ? `Paid to ${name}` : `Bought on credit · ${name}`,
+          sub: voucher
+            ? [voucher.code, voucher.narration].filter(Boolean).join(' · ') || null
+            : [e.receipt_no ? `Payment No. ${e.receipt_no}` : null, e.note ?? (e.source === 'booking' ? 'From a credit purchase' : null)].filter(Boolean).join(' · ') || null,
+          pill: voucher ? PILL.journal : isPayment ? PILL.paid : PILL.creditPurchase,
           invoiceNo: null,
           discount: null,
-          amount: isPayment ? null : e.amount,
+          amount: voucher ? e.amount : isPayment ? null : e.amount,
           cashIn: null,
-          cashOut: isPayment ? e.amount : null,
+          cashOut: voucher ? null : isPayment ? e.amount : null,
+          journal: !!voucher,
           onPress: goParty(e.vendor_id),
         };
       }
@@ -278,7 +296,8 @@ export function TransactionsBook({
 
   const totals = useMemo(
     () => ({
-      amount: rows.reduce((s, r) => s + (r.amount ?? 0), 0),
+      // A voucher's amount is not billed or paid - it is on the line for the record only.
+      amount: rows.reduce((s, r) => s + (r.journal ? 0 : r.amount ?? 0), 0),
       cashIn: rows.reduce((s, r) => s + (r.cashIn ?? 0), 0),
       cashOut: rows.reduce((s, r) => s + (r.cashOut ?? 0), 0),
     }),

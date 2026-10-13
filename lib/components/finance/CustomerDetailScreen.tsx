@@ -15,6 +15,7 @@ import {
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { useFreshLedgerArea } from '../../hooks/useFreshLedgerArea';
+import { journalOf } from '../../utils/journalVoucher';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, timeOf, useEntryParty, useEntryWhen } from './EntryEditParts';
 import { PartyTypeField } from './PartyTypeField';
@@ -72,6 +73,12 @@ async function phoneAlreadyUsed(ownerId: string, phone: string, excludeCustomerI
     .limit(1);
   if (error) throw error;
   return (data ?? []).length > 0;
+}
+
+/** What a journal voucher's entry says: its code and narration; null for any other entry. */
+function journalText(note: string | null | undefined): string | null {
+  const voucher = journalOf(note);
+  return voucher ? [voucher.code, voucher.narration].filter(Boolean).join(' · ') : null;
 }
 
 /** The balance in the name card: "To receive" or "To pay" over the coloured amount. */
@@ -846,9 +853,9 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       const outgoing = owes && e.source === 'manual';
       lines.push({
         key: `ledger-${e.id}`,
-        label: syncedFromBill ? TX_TYPE_LABEL.sale : !owes ? 'Received' : outgoing ? 'Paid' : 'Receivable',
+        label: journalOf(e.note) ? 'Journal' : syncedFromBill ? TX_TYPE_LABEL.sale : !owes ? 'Received' : outgoing ? 'Paid' : 'Receivable',
         tone: outgoing ? OUT_TONE : IN_TONE,
-        detail: e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
+        detail: journalText(e.note) ?? e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
         reference: e.receipt_no ?? '',
         dateLabel: toBsHistoryLabel(day),
         day,
@@ -879,9 +886,9 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       const onCredit = e.entry_type === 'debit';
       lines.push({
         key: `vendor-${e.id}`,
-        label: onCredit ? (syncedFromBill ? TX_TYPE_LABEL.purchase : 'Bought on credit') : 'Paid',
+        label: journalOf(e.note) ? 'Journal' : onCredit ? (syncedFromBill ? TX_TYPE_LABEL.purchase : 'Bought on credit') : 'Paid',
         tone: OUT_TONE,
-        detail: e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a credit purchase' : 'Manual entry'),
+        detail: journalText(e.note) ?? e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a credit purchase' : 'Manual entry'),
         reference: e.receipt_no ?? '',
         dateLabel: toBsHistoryLabel(day),
         day,
