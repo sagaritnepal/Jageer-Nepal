@@ -2,6 +2,7 @@
 import { Platform, View, useWindowDimensions } from 'react-native';
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
+import { freshScreenLayout } from '../../lib/components/FreshScreen';
 import { TabIcon } from '../../lib/components/TabIcon';
 import { PortalHeaderBar } from '../../lib/components/PortalHeaderBar';
 import { ROLE_ACCENT } from '../../lib/constants/roleColors';
@@ -101,6 +102,8 @@ export default function ResellerLayout() {
   const tabs = (
     <Tabs
       backBehavior="history"
+      // Coming back to a page starts it fresh: nothing left open, nothing typed, the figures read again.
+      screenLayout={freshScreenLayout}
       screenOptions={{
         header: ({ options }) => (
           <PortalHeaderBar
