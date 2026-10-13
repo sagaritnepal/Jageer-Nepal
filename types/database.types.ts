@@ -392,6 +392,8 @@ export interface BusinessTransaction {
   vat_amount: number;
   /** A Sale's installation charge: direct income on top of the items (0 when none). */
   installation_charge?: number;
+  /** The service lines behind it: [{ name, amount }] - installation, wiring, configuration ... */
+  service_charges?: { name: string; amount: number }[];
   expense_category_id: string | null;
   payment_mode: PaymentMode;
   bank_account_id: string | null;

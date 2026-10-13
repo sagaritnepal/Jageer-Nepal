@@ -1,5 +1,5 @@
 // app/(reseller)/request-details.tsx
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -85,6 +85,9 @@ function ResellerRequestDetails({ formKey }: { formKey: string }) {
   const [notes, setNotes] = useState('');
   const [quotedPrice, setQuotedPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Set the instant Submit is pressed - the state above only updates on the next render, so a quick
+  // double tap could otherwise create the same job twice.
+  const submittingRef = useRef(false);
   const [registeringCustomer, setRegisteringCustomer] = useState(false);
 
   async function handlePickNewCustFromContacts() {
@@ -222,6 +225,7 @@ function ResellerRequestDetails({ formKey }: { formKey: string }) {
   }
 
   async function handleSubmit() {
+    if (submittingRef.current) return;
     if (!userId) {
       showAlert('Please sign in', 'Your session may have expired — sign in again and retry.');
       return;
@@ -252,6 +256,7 @@ function ResellerRequestDetails({ formKey }: { formKey: string }) {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const photoUrls: string[] = [];
@@ -314,6 +319,7 @@ function ResellerRequestDetails({ formKey }: { formKey: string }) {
     } catch (err) {
       showAlert('Something went wrong', getErrorMessage(err));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }

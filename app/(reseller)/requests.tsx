@@ -15,6 +15,7 @@ import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { ticketLabel } from '../../lib/utils/ticket';
 import { jobStages, type StageStepState } from '../../lib/utils/jobTimeline';
+import { useRequestsStageStore } from '../../lib/hooks/useRequestsStage';
 import type { BusinessTransaction, JobCard, Order, Product, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
@@ -607,7 +608,8 @@ export default function ResellerRequestQueue() {
   // returning. jobStage only ever falls back to the smart "most needs
   // attention" default (below) while it's still null, i.e. before the
   // reseller has chosen anything themselves this session.
-  const [jobStage, setJobStage] = useState<Stage | null>(null);
+  const jobStage = useRequestsStageStore((state) => state.stage) as Stage | null;
+  const setJobStage = useRequestsStageStore((state) => state.setStage);
 
   // A phone browser hitting the website is still "web" (Platform.OS ===
   // 'web'), but the pipeline + table layout only makes sense once the

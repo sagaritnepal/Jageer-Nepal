@@ -1,6 +1,6 @@
 // lib/components/finance/SuggestInput.tsx
 import { useState, type ReactNode } from 'react';
-import { Pressable, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { readKey } from '../../utils/webKeys';
 
 export interface SuggestOption {
@@ -31,6 +31,8 @@ interface Props {
   /** Small indicator drawn inside the right edge of the box. */
   adornment?: ReactNode;
   adornmentWidth?: number;
+  /** Show the list as soon as the box is focused, even before anything is typed (a pick-from-all box). */
+  showWhenEmpty?: boolean;
 }
 
 /** A text box with a typeahead list that is fully driven from the keyboard:
@@ -54,11 +56,12 @@ export function SuggestInput({
   inputStyle,
   adornment,
   adornmentWidth = 0,
+  showWhenEmpty,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(-1);
 
-  const visible = open && value.trim().length > 0 && options.length > 0;
+  const visible = open && (showWhenEmpty || value.trim().length > 0) && options.length > 0;
   const activeIndex = Math.min(index, options.length - 1);
 
   function choose(option: SuggestOption, via: PickVia) {
@@ -151,20 +154,22 @@ export function SuggestInput({
             boxShadow: '0 10px 28px rgba(16,24,40,0.14)',
           }}
         >
-          {options.map((o, i) => (
-            <Pressable
-              key={o.key}
-              tabIndex={-1}
-              onPress={() => choose(o, 'click')}
-              className="flex-row items-center justify-between px-3 py-2"
-              style={{ backgroundColor: i === activeIndex ? `${accent}14` : 'transparent' }}
-            >
-              <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
-                {o.label}
-              </Text>
-              {!!o.hint && <Text className="ml-2 text-[11px] text-gray-400">{o.hint}</Text>}
-            </Pressable>
-          ))}
+          <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled">
+            {options.map((o, i) => (
+              <Pressable
+                key={o.key}
+                tabIndex={-1}
+                onPress={() => choose(o, 'click')}
+                className="flex-row items-center justify-between px-3 py-2"
+                style={{ backgroundColor: i === activeIndex ? `${accent}14` : 'transparent' }}
+              >
+                <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
+                  {o.label}
+                </Text>
+                {!!o.hint && <Text className="ml-2 text-[11px] text-gray-400">{o.hint}</Text>}
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       )}
     </View>
