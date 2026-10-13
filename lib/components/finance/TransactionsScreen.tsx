@@ -99,26 +99,18 @@ function ServiceChargesTable({
       .map((n) => ({ key: n, label: n }));
   };
   return (
-    <View className="border-t border-gray-200 bg-white" style={{ zIndex: focusedRow != null ? 30 : 0 }}>
-      <View className="flex-row items-center justify-between px-5 pb-3 pt-4">
-        <View className="flex-row items-center gap-2">
-          <Ionicons name="construct-outline" size={14} color="#6B7280" />
-          <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Services (optional)</Text>
-        </View>
-        <Text className="text-xs text-gray-400">
-          {filled} {filled === 1 ? 'service' : 'services'}
-          {total > 0 ? ` · NPR ${total.toLocaleString()}` : ''}
-        </Text>
-      </View>
+    <View className="bg-white" style={{ zIndex: focusedRow != null ? 30 : 0 }}>
       <View className="flex-row items-center border-y border-gray-200 bg-gray-50 px-2 py-2">
         <Text className="text-center text-[11px] font-bold tracking-wider text-gray-500" style={{ width: 36 }}>
           #
         </Text>
         <Text className={head} style={{ flex: 1 }}>
-          Service
+          Service{filled > 0 ? ` · ${filled} ${filled === 1 ? 'line' : 'lines'}` : ' (optional)'}
         </Text>
+        {/* The Qty and Rate columns of the Items table above are left empty so Amount lines up with it. */}
+        <View style={{ width: 210 }} />
         <Text className={`${head} text-right`} style={{ width: 130 }}>
-          Amount
+          {total > 0 ? total.toLocaleString() : 'Amount'}
         </Text>
         <View style={{ width: 36 }} />
       </View>
@@ -147,6 +139,7 @@ function ServiceChargesTable({
               inputStyle={{ borderWidth: 1.5, borderColor: '#F1F2F4', outlineStyle: 'none' } as object}
             />
           </View>
+          <View style={{ width: 210 }} />
           <View style={{ width: 130 }}>
             <TextInput
               value={row.amount}
@@ -179,7 +172,7 @@ function ServiceChargesTable({
       ))}
       <Pressable
         onPress={() => onChange([...rows, { name: '', amount: '' }])}
-        className="flex-row items-center px-5 py-3"
+        className="flex-row items-center px-4 py-2"
         style={{ gap: 6 }}
       >
         <Ionicons name="add-circle" size={16} color={accent} />
