@@ -372,6 +372,7 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
           title={nameCaps(view.name)}
           onClose={() => setView(null)}
           maxWidth={920}
+          closeOnOutside
           headerRight={
             <>
               <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(view)))} />

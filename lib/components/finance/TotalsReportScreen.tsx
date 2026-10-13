@@ -1152,6 +1152,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         title={subjectView.name}
         onClose={() => setSubjectView(null)}
         maxWidth={920}
+        closeOnOutside
         headerRight={
           <>
             <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(subjectView)))} />

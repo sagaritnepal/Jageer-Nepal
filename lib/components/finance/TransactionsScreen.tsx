@@ -2504,7 +2504,7 @@ function BillViewPopup({
   const tone = tx.type === 'purchase' ? MONEY.out : MONEY.in;
   const method = tx.bank_account_id ? bankAccountName ?? 'Bank' : 'Cash';
   return (
-    <PopupCard title={`${meta.label} bill`} onClose={onClose}>
+    <PopupCard title={`${meta.label} bill`} onClose={onClose} closeOnOutside>
       <View className="self-start rounded-lg border px-4 py-2" style={{ borderColor: tone.base, backgroundColor: tone.bg }}>
         <Text className="text-xs font-bold" style={{ color: tone.text }}>
           {meta.label}
