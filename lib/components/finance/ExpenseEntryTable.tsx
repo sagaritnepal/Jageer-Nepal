@@ -152,11 +152,20 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
     else onExit();
   }
 
+  // Shift+Enter is Shift+Tab: back one cell, or to the last cell of the row above.
+  function retreat(rowIndex: number, col: ExpenseCol) {
+    if (col > 0) focusCell(rowIndex, (col - 1) as ExpenseCol);
+    else if (rowIndex > 0) focusCell(rowIndex - 1, LAST_COL);
+  }
+
   function handleKeyPress(e: unknown, row: ExpenseEntryRow, rowIndex: number, col: ExpenseCol) {
     const k = readKey(e);
     if (k.key === 'Enter' && k.ctrl) {
       k.prevent();
       onRequestSave();
+    } else if (k.key === 'Enter' && k.shift) {
+      k.prevent();
+      retreat(rowIndex, col);
     } else if (k.key === 'Enter') {
       k.prevent();
       advance(rowIndex, col);

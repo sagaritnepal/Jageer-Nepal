@@ -18,8 +18,12 @@ export interface BillItemsTableHandle {
   focusRow: (index: number, col?: 0 | 1 | 2 | 3) => void;
 }
 
-/** 0 Item, 1 Qty, 2 Rate, 3 HS code (shown before Item, but optional so Enter skips it). */
+/** 0 Item, 1 Qty, 2 Rate, 3 HS code. */
 type Col = 0 | 1 | 2 | 3;
+/** The order the keyboard walks a row in - the order the cells are drawn: HS code, Item, Qty, Rate. Enter
+ * goes forward through it (and from the Rate to the next row's HS code), Shift+Enter goes back. The HS
+ * code is optional, but it is always in the way: Enter on an empty one just moves on. */
+const WALK: Col[] = [3, 0, 1, 2];
 const MAX_SUGGESTIONS = 6;
 
 interface ItemSuggestion {
@@ -63,7 +67,8 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
   const [focusedCell, setFocusedCell] = useState<{ index: number; col: Col } | null>(null);
 
   useImperativeHandle(ref, () => ({
-    focusRow: (index, col = 0) => {
+    // Starts at the first cell drawn - the HS code.
+    focusRow: (index, col = 3) => {
       inputRefs.current[`${index}:${col}`]?.focus();
     },
   }));
@@ -120,11 +125,17 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
     if (k.key === 'Enter' && k.ctrl) {
       k.prevent();
       onRequestSave();
+    } else if (k.key === 'Enter' && k.shift) {
+      // Back one cell - and from a row's first cell to the Rate of the row above.
+      k.prevent();
+      const at = WALK.indexOf(col);
+      if (at > 0) focusCell(index, WALK[at - 1]);
+      else if (index > 0) focusCell(index - 1, WALK[WALK.length - 1]);
     } else if (k.key === 'Enter') {
       k.prevent();
-      if (col === 3) focusCell(index, 0);
-      else if (col < 2) focusCell(index, (col + 1) as Col);
-      else if (index < items.length - 1) focusCell(index + 1, 0);
+      const at = WALK.indexOf(col);
+      if (at < WALK.length - 1) focusCell(index, WALK[at + 1]);
+      else if (index < items.length - 1) focusCell(index + 1, WALK[0]);
       else onExit();
     } else if (k.key === 'ArrowDown' && index < items.length - 1) {
       k.prevent();

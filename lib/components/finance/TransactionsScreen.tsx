@@ -1599,7 +1599,7 @@ function TransactionForm({
                     onChange={setBillDate}
                     inputRef={billDateRef}
                     accent={accent}
-                    onEnter={() => itemsTableRef.current?.focusRow(0, 0)}
+                    onEnter={() => itemsTableRef.current?.focusRow(0)}
                     onRequestSave={handleSave}
                   />
                 </View>

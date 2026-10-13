@@ -138,11 +138,20 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
     else onExit();
   }
 
+  // Shift+Enter is Shift+Tab: back one cell, or to the last cell of the row above.
+  function retreat(rowIndex: number, col: Col) {
+    if (col > 0) focusCell(rowIndex, (col - 1) as Col);
+    else if (rowIndex > 0) focusCell(rowIndex - 1, 2);
+  }
+
   function handleKeyPress(e: unknown, row: PaymentRow, rowIndex: number, col: Col) {
     const k = readKey(e);
     if (k.key === 'Enter' && k.ctrl) {
       k.prevent();
       onRequestSave();
+    } else if (k.key === 'Enter' && k.shift) {
+      k.prevent();
+      retreat(rowIndex, col);
     } else if (k.key === 'Enter') {
       k.prevent();
       advance(rowIndex, col);
