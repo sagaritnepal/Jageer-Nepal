@@ -664,6 +664,8 @@ function TransactionForm({
       ? String(Math.round(((initial.vat_amount / (initialSubtotal - initial.discount_amount)) * 100) * 100) / 100)
       : '0'
   );
+  // Installation: a service charged to the customer on a Sale - direct income, no item or stock behind it.
+  const [installationInput, setInstallationInput] = useState(initial?.installation_charge ? String(initial.installation_charge) : '');
   const [showDiscount, setShowDiscount] = useState(!!initial && initial.discount_amount > 0);
   const [showVat, setShowVat] = useState(!!initial && initial.vat_amount > 0);
 
@@ -699,7 +701,8 @@ function TransactionForm({
   }
   const discountInputValue = discountMode === 'percent' ? discountPercentInput : discountAmountInput;
   const vatAmount = Math.round(((subtotal - discountAmount) * (Number(vatPercent) || 0)) / 100);
-  const grandTotal = subtotal - discountAmount + vatAmount;
+  const installationAmount = type === 'sale' ? Math.max(0, Number(installationInput) || 0) : 0;
+  const grandTotal = subtotal - discountAmount + vatAmount + installationAmount;
   const selectedCategory = (categories ?? []).find((c) => c.id === categoryId) ?? null;
   const selectedAccountName = bankAccountId
     ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
@@ -852,6 +855,7 @@ function TransactionForm({
           ...(billNo.trim() ? [{ label: 'Bill no.', value: billNo.trim() }] : []),
           ...(discountAmount > 0 ? [{ label: 'Discount', value: `− NPR ${discountAmount.toLocaleString()}` }] : []),
           ...(vatAmount > 0 ? [{ label: 'VAT', value: `+ NPR ${vatAmount.toLocaleString()}` }] : []),
+          ...(installationAmount > 0 ? [{ label: 'Installation', value: `+ NPR ${installationAmount.toLocaleString()}` }] : []),
         ],
         total: { label: 'Grand total', value: `NPR ${grandTotal.toLocaleString()}`, color: TYPE_META[type].color },
       });
@@ -890,6 +894,7 @@ function TransactionForm({
           })),
           discount_amount: Math.round(discountAmount),
           vat_amount: vatAmount,
+          installation_charge: installationAmount,
           payment_mode: 'cash' as const,
           bank_account_id: null,
         };
@@ -1264,6 +1269,7 @@ function TransactionForm({
   const billDateRef = useRef<TextInput>(null);
   const discountRef = useRef<TextInput>(null);
   const vatRef = useRef<TextInput>(null);
+  const installationRef = useRef<TextInput>(null);
   const remarkRef = useRef<TextInput>(null);
   const saveButtonRef = useRef<View>(null);
   const expenseTableRef = useRef<ExpenseEntryTableHandle>(null);
@@ -1703,7 +1709,7 @@ function TransactionForm({
                             value={vatPercent}
                             onChangeText={setVatPercent}
                             inputRef={vatRef}
-                            onEnter={() => remarkRef.current?.focus()}
+                            onEnter={() => (type === 'sale' ? installationRef.current?.focus() : remarkRef.current?.focus())}
                             onRequestSave={handleSave}
                             accent={accent}
                             numeric
@@ -1726,6 +1732,32 @@ function TransactionForm({
                         </Text>
                       </View>
                     </View>
+                    {type === 'sale' && (
+                      <View className="flex-row items-center justify-between py-1">
+                        <Text className="text-[13px] text-gray-500">Installation charge (Rs)</Text>
+                        <View className="flex-row items-center" style={{ gap: 8 }}>
+                          <View style={{ width: 84 }}>
+                            <KeyInput
+                              value={installationInput}
+                              onChangeText={(v) => setInstallationInput(v.replace(/[^0-9.]/g, ''))}
+                              inputRef={installationRef}
+                              onEnter={() => remarkRef.current?.focus()}
+                              onRequestSave={handleSave}
+                              accent={accent}
+                              numeric
+                              align="right"
+                              placeholder="0"
+                              accessibilityLabel="Installation charge in NPR"
+                              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold text-gray-900"
+                            />
+                          </View>
+                          <View style={{ width: 42 }} />
+                          <Text className="text-right text-[13px] font-semibold text-gray-700" style={{ width: 70 }}>
+                            + {installationAmount.toLocaleString()}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
                     <View className="mt-2 flex-row items-center justify-between border-t border-gray-300 pt-2.5">
                       <Text className="text-sm font-bold text-gray-900">G. Total</Text>
                       <Text className="text-xl font-extrabold" style={{ color: TYPE_META[type].color }}>
@@ -1959,6 +1991,22 @@ function TransactionForm({
                   </View>
                 )}
               </View>
+              {type === 'sale' && (
+                <View className="flex-row items-center justify-between border-t border-gray-200 py-1.5">
+                  <Text className="text-xs text-gray-500">Installation charge</Text>
+                  <View className="flex-row items-center gap-2">
+                    <TextInput
+                      value={installationInput}
+                      onChangeText={(v) => setInstallationInput(v.replace(/[^0-9.]/g, ''))}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor="#9CA3AF"
+                      className="w-16 rounded border border-gray-300 bg-white px-1 py-0.5 text-center text-xs text-gray-900"
+                    />
+                    <Text className="w-16 text-right text-xs text-gray-700">+ NPR {installationAmount.toLocaleString()}</Text>
+                  </View>
+                </View>
+              )}
             </View>
             <View className="flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
               <Text className="text-sm font-bold text-gray-900">G. Total</Text>
