@@ -19,7 +19,8 @@ import { PaymentEntryTable, type PaymentEntryTableHandle, type PaymentRow } from
 import { KeyboardDateInput } from './KeyboardDateInput';
 import { KeyboardSelect } from './KeyboardSelect';
 import { useConfirmSave } from './ConfirmSave';
-import { useAvailableAmounts, optionLabel } from '../../hooks/useAvailableAmounts';
+import { optionLabel } from '../../hooks/useAvailableAmounts';
+import { useAccountBalances } from '../../hooks/useAccountBalances';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { MONEY } from './moneyColors';
 import { readKey } from '../../utils/webKeys';
@@ -96,8 +97,13 @@ function QuickPaymentForm() {
   const createCustomer = useSupabaseInsert('customers');
   const updateCustomer = useSupabaseUpdate('customers');
   const bankAccounts = useBankAccounts(userId);
-  // Money in each place, shown in the Payment method dropdown - only when paying out.
-  const available = useAvailableAmounts(isOut ? userId : undefined);
+  // Money in each bank / wallet account, shown beside it in the Payment method dropdown - receiving and
+  // paying alike: the books' own figures (the same as the account lists show). Cash has none.
+  const balances = useAccountBalances(userId);
+  const available = useMemo(
+    () => (balances.ready ? { byId: Object.fromEntries(balances.perAccount.map((a) => [a.id, Math.round(a.balance)])) } : null),
+    [balances]
+  );
   const phoneContacts = usePhoneContacts();
   const { scanning, pickAndScan } = useScanBill();
   const { confirm: confirmSave, dialog: confirmDialog } = useConfirmSave();

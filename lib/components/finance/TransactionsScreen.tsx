@@ -23,7 +23,8 @@ import { FormSection } from './FormSection';
 import { BillItemsTable, type BillItemsTableHandle } from './BillItemsTable';
 import { KeyboardDateInput } from './KeyboardDateInput';
 import { KeyboardSelect } from './KeyboardSelect';
-import { useAvailableAmounts, optionLabel } from '../../hooks/useAvailableAmounts';
+import { optionLabel } from '../../hooks/useAvailableAmounts';
+import { useAccountBalances } from '../../hooks/useAccountBalances';
 import { ExpenseEntryTable, type ExpenseEntryRow as ExpenseRow, type ExpenseEntryTableHandle } from './ExpenseEntryTable';
 import { KeyInput } from './KeyInput';
 import { useConfirmSave } from './ConfirmSave';
@@ -623,8 +624,14 @@ function TransactionForm({
   // Expense: date + addable name + a managed category + amount + remark.
   const [amount, setAmount] = useState(initial && initial.type === 'expense' ? String(initial.amount) : '');
   const [expenseDate, setExpenseDate] = useState(initial?.bill_date ?? todayIso());
-  // Money in each place, shown in the Payment method dropdown of a new expense.
-  const available = useAvailableAmounts(type === 'expense' && !initial ? userId : undefined);
+  // Money in each bank / wallet account, shown beside it in an expense's Payment method dropdown - new
+  // or being edited: the books' own figures, as every list of accounts shows them. Cash has none. (The
+  // other kinds of entry read them when their list of accounts is opened.)
+  const balances = useAccountBalances(type === 'expense' ? userId : undefined);
+  const available = useMemo(
+    () => (balances.ready ? { byId: Object.fromEntries(balances.perAccount.map((a) => [a.id, Math.round(a.balance)])) } : null),
+    [balances]
+  );
   const [categoryId, setCategoryId] = useState<string | null>(initial?.expense_category_id ?? null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 

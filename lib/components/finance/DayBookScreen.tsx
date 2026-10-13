@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
+import { useAccountBalances } from '../../hooks/useAccountBalances';
 import { DateField } from '../DateTimeFields';
 import { FormSection } from './FormSection';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
@@ -810,13 +811,23 @@ function NewEntryButtons({ basePath, onVoucher, onContra }: { basePath: string; 
  * the Day Book shows: all of them together, Cash, or one bank / wallet. It names
  * the account in use, and opens a small menu above itself; tapping anywhere else
  * closes the menu. */
-function AccountPicker({ options, selected, onSelect }: {
+function AccountPicker({ options, selected, onSelect, userId }: {
   options: AccountOption[];
   /** null is every account together. */
   selected: AccountKey | null;
   onSelect: (key: AccountKey | null) => void;
+  /** Whose books the balances beside each account are read from - only while the menu is open. */
+  userId?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const books = useAccountBalances(open ? userId : undefined);
+  // What each bank / wallet holds, and all of them together. Cash has no figure: cash in hand is not tracked.
+  const amountOf = (key: AccountKey | null): number | undefined => {
+    if (!books.ready) return undefined;
+    if (key == null) return Math.round(books.perAccount.reduce((sum, a) => sum + a.balance, 0));
+    const account = books.perAccount.find((a) => a.id === key);
+    return account ? Math.round(account.balance) : undefined;
+  };
   const insets = useSafeAreaInsets();
   type IconName = ComponentProps<typeof Ionicons>['name'];
   const iconFor = (key: AccountKey | null): IconName => (key == null ? 'wallet-outline' : key === CASH ? 'cash-outline' : 'business-outline');
@@ -860,11 +871,17 @@ function AccountPicker({ options, selected, onSelect }: {
                     <Text className={`flex-1 text-[14px] ${on ? 'font-bold text-blue-700' : 'font-medium text-gray-900'}`} numberOfLines={1}>
                       {c.name}
                     </Text>
+                    {amountOf(c.key) !== undefined && (
+                      <Text className="text-xs font-bold" style={{ color: (amountOf(c.key) ?? 0) < 0 ? '#DC2626' : '#374151' }}>
+                        NPR {(amountOf(c.key) ?? 0).toLocaleString()}
+                      </Text>
+                    )}
                     {on && <Ionicons name="checkmark" size={17} color="#1D4ED8" />}
                   </Pressable>
                 );
               })}
             </ScrollView>
+            <Text className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-400">Balances are bank and wallet accounts; cash is not counted.</Text>
           </View>
         )}
         <Pressable
@@ -1510,7 +1527,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         </>
       )}
     </ScrollView>
-    {loaded && <AccountPicker options={book.accountOptions} selected={book.selected?.key ?? null} onSelect={setSelectedAccount} />}
+    {loaded && <AccountPicker options={book.accountOptions} selected={book.selected?.key ?? null} onSelect={setSelectedAccount} userId={userId} />}
     </View>
   );
 }
