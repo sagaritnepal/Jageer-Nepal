@@ -13,7 +13,7 @@ import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { WorkHubPanel } from '../../lib/components/requests/WorkHubPanel';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
-import type { Order, Product, ServiceRequest } from '../../types/database.types';
+import type { BusinessTransaction, Order, Product, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
 // was hard to tell what actually needed attention. Group by pipeline stage
@@ -111,7 +111,10 @@ function orderStageOf(order: Order): Stage {
   }
 }
 
-type JobItem = { kind: 'request'; id: string; request: ServiceRequest } | { kind: 'order'; id: string; order: Order };
+type JobItem =
+  | { kind: 'request'; id: string; request: ServiceRequest }
+  | { kind: 'order'; id: string; order: Order }
+  | { kind: 'sale'; id: string; sale: BusinessTransaction; stage: Stage };
 
 type JobAction = {
   label: string;
@@ -438,6 +441,49 @@ function OrderJobRow({
   );
 }
 
+/** A sale bill added straight to a customer (not through a job). It starts under Completed with
+ * no bill number; once the number is added it moves to Awaiting payment, and to Paid when the
+ * customer's ledger is settled. */
+function SaleBillRow({ sale, stage, wide }: { sale: BusinessTransaction; stage: Stage; wide: boolean }) {
+  const hasBillNo = !!sale.bill_no?.trim();
+  const editPath = `/(reseller)/transactions?type=sale&add=1&edit=${sale.id}`;
+  const open = () => router.push(editPath as any);
+  const action: JobAction = !hasBillNo
+    ? { label: 'Add bill number', icon: 'document-text-outline', primary: true, onPress: open }
+    : stage === 'paid'
+      ? { label: 'View bill', icon: 'eye-outline', primary: false, onPress: open }
+      : { label: 'Record payment', icon: 'cash-outline', primary: true, onPress: () => router.push('/(reseller)/quick-payment?type=in' as any) };
+  const tag: Tag = !hasBillNo
+    ? { label: 'Needs bill no.', bg: '#F3F4F6', fg: '#4B5563' }
+    : stage === 'paid'
+      ? TAGS.paid
+      : TAGS.unpaid;
+  return (
+    <JobRowView
+      stage={stage}
+      wide={wide}
+      data={{
+        icon: (
+          <View
+            className="items-center justify-center bg-emerald-500"
+            style={{ width: wide ? 40 : 44, height: wide ? 40 : 44, borderRadius: 12 }}
+          >
+            <Ionicons name="receipt" size={wide ? 18 : 20} color="white" />
+          </View>
+        ),
+        title: hasBillNo ? `Sale · Bill #${sale.bill_no}` : 'Sale · no bill number yet',
+        who: sale.party_name ?? 'Customer',
+        place: null,
+        when: sale.bill_date ?? sale.created_at.slice(0, 10),
+        tag,
+        amount: sale.amount,
+        action,
+        open,
+      }}
+    />
+  );
+}
+
 export default function ResellerRequestQueue() {
   const userId = useAuthStore((state) => state.session?.user.id);
   // Once the reseller taps a pill, it stays picked - including across a
@@ -472,6 +518,18 @@ export default function ResellerRequestQueue() {
   const { data: sellingOrders } = useSupabaseQuery('orders', {
     filters: userId ? { seller_id: userId } : {},
     orderBy: { column: 'created_at', ascending: true },
+    enabled: !!userId,
+  });
+  // Sale bills added straight to a customer, and every customer's ledger entries to tell which
+  // of them are settled: these follow Completed -> Awaiting payment -> Paid too.
+  const { data: directSales } = useSupabaseQuery('business_transactions', {
+    filters: userId ? { owner_id: userId, type: 'sale' } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    enabled: !!userId,
+  });
+  const { data: ledgerEntries } = useSupabaseQuery('customer_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId,
   });
   const { data: allProducts } = useSupabaseQuery('products', {});
@@ -524,8 +582,24 @@ export default function ResellerRequestQueue() {
     (sellingOrders ?? []).forEach((order) =>
       groups.get(orderStageOf(order))!.push({ kind: 'order', id: order.id, order })
     );
+    // A customer owes while their debits outrun their credits.
+    const owed = new Map<string, number>();
+    (ledgerEntries ?? []).forEach((e) =>
+      owed.set(e.customer_id, (owed.get(e.customer_id) ?? 0) + (e.entry_type === 'debit' ? e.amount : -e.amount))
+    );
+    (directSales ?? []).forEach((sale) => {
+      // Only bills typed in by hand to a saved customer; ones a job or order wrote are already
+      // in the pipeline as that job or order.
+      if (sale.source_type || !sale.customer_id) return;
+      const stage: Stage = !sale.bill_no?.trim()
+        ? 'completed'
+        : (owed.get(sale.customer_id) ?? 0) > 0
+          ? 'awaiting_payment'
+          : 'paid';
+      groups.get(stage)!.push({ kind: 'sale', id: sale.id, sale, stage });
+    });
     return groups;
-  }, [incoming, mine, sellingOrders]);
+  }, [incoming, mine, sellingOrders, directSales, ledgerEntries]);
 
   const countOf = (stage: Stage) => myByStage.get(stage)?.length ?? 0;
   const activeStage = jobStage ?? STAGE_ORDER.find((stage) => countOf(stage) > 0) ?? 'requests';
@@ -547,6 +621,8 @@ export default function ResellerRequestQueue() {
   const jobRow = (item: JobItem) =>
     item.kind === 'request' ? (
       <RequestJobRow key={`r-${item.id}`} item={item.request} stage={activeStage} wide={isWideWeb} />
+    ) : item.kind === 'sale' ? (
+      <SaleBillRow key={`s-${item.id}`} sale={item.sale} stage={item.stage} wide={isWideWeb} />
     ) : (
       <OrderJobRow key={`o-${item.id}`} order={item.order} stage={activeStage} wide={isWideWeb} productMap={productMap} />
     );
