@@ -39,7 +39,6 @@ const PAGE_BG = '#FFFFFF';
 
 const STAGE_ORDER: Stage[] = [
   'requests',
-  'waiting_customer',
   'my_jobs',
   'completed',
   'awaiting_payment',
@@ -49,14 +48,14 @@ const STAGE_ORDER: Stage[] = [
 // The numbered pipeline is the job itself, finishing at Completed. What
 // happens to the money after that - part paid, settled - sits in the row
 // of chips underneath, where Cancelled already lived.
-const WORKING_STAGES: Stage[] = ['requests', 'waiting_customer', 'my_jobs', 'completed'];
+const WORKING_STAGES: Stage[] = ['requests', 'my_jobs', 'completed'];
 const SIDE_STAGES: Stage[] = ['awaiting_payment', 'paid', 'cancelled'];
 
 const STAGE_META: Record<
   Stage,
   { label: string; todo: string; icon: keyof typeof Ionicons.glyphMap; color: string; tint: string }
 > = {
-  requests: { label: 'Requests', todo: 'Accept or confirm', icon: 'download-outline', color: '#EA580C', tint: '#FFF7ED' },
+  requests: { label: 'Customer App Jobs', todo: 'Accept, quote and wait for approval', icon: 'download-outline', color: '#EA580C', tint: '#FFF7ED' },
   waiting_customer: { label: 'Waiting on customer', todo: 'Quote & wait for approval', icon: 'time-outline', color: '#D97706', tint: '#FFFBEB' },
   my_jobs: { label: 'My Jobs', todo: 'Assign a technician and follow the work', icon: 'briefcase', color: '#2563EB', tint: '#EFF6FF' },
   in_progress: { label: 'Job in progress', todo: 'Technician is working', icon: 'build', color: '#2563EB', tint: '#EFF6FF' },
@@ -74,9 +73,9 @@ function stageOf(item: ServiceRequest): Stage {
       // A self-sourced (reseller-posted) job skips the quote/approval
       // conversation entirely - SelfSourcedAssign lets the reseller pick a
       // technician immediately, so it lands directly in "My Jobs".
-      return item.origin === 'reseller' ? 'my_jobs' : 'waiting_customer';
+      return item.origin === 'reseller' ? 'my_jobs' : 'requests';
     case 'quoted':
-      return 'waiting_customer';
+      return 'requests';
     case 'approved':
       return 'my_jobs';
     case 'assigned':
