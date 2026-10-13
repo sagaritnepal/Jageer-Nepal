@@ -584,7 +584,7 @@ type StatusFilter = 'all' | 'receivable' | 'payable' | 'open';
 /** "No ledger type" in the bulk menu - the key can't clash with a real type's id. */
 const NO_TYPE = '__none__';
 
-/** Exports the list on screen to Excel. */
+/** Exports the list on screen to Excel - the page's Excel button, beside Print. */
 function ExportButton({ onPress, busy }: { onPress: () => void; busy: boolean }) {
   return (
     <Pressable
@@ -594,8 +594,8 @@ function ExportButton({ onPress, busy }: { onPress: () => void; busy: boolean })
       className="h-9 flex-row items-center rounded-lg border border-gray-300 bg-white px-3"
       style={{ gap: 6, opacity: busy ? 0.5 : 1 }}
     >
-      <Ionicons name="download-outline" size={14} color="#4B5563" />
-      <Text className="text-[13px] font-semibold text-gray-700">{busy ? 'Exporting…' : 'Export'}</Text>
+      <Ionicons name="download-outline" size={14} color="#047857" />
+      <Text className="text-[13px] font-semibold text-gray-700">{busy ? 'Exporting…' : 'Excel'}</Text>
     </Pressable>
   );
 }
@@ -988,8 +988,8 @@ function LedgerList({ basePath }: { basePath: string }) {
       right: (inBar) => (
         <CapsProvider>
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name, phone or type" wide={inBar} />
-          <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
           <PrintButton onPress={() => printNow.current()} />
+          <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
           <ToolbarButton icon="add" label="New party" onPress={openNewParty} />
         </CapsProvider>
       ),
@@ -1294,8 +1294,8 @@ function LedgerList({ basePath }: { basePath: string }) {
             <Ionicons name="checkbox-outline" size={14} color={selecting ? '#1D4ED8' : '#4B5563'} />
             <Text className={`text-[13px] font-semibold ${selecting ? 'text-blue-700' : 'text-gray-700'}`}>{selecting ? 'Done' : 'Select'}</Text>
           </Pressable>
-          <ExportButton onPress={() => exportRows(false)} busy={exporting} />
           <PrintButton onPress={() => printNow.current()} />
+          <ExportButton onPress={() => exportRows(false)} busy={exporting} />
         </View>
 
         {addForm}

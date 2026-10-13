@@ -254,7 +254,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
   };
 
   // A person's report is a page of its own, titled for its kind, with a way back to the list they
-  // came from and to their full ledger (statement, payments, Print / Download).
+  // came from and to their full ledger (statement, payments, Print, Excel).
   const goBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace(`${basePath}/customers` as never);

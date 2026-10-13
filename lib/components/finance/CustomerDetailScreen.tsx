@@ -1,5 +1,5 @@
 // lib/components/finance/CustomerDetailScreen.tsx
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, Linking, useWindowDimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -20,7 +20,6 @@ import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, timeOf, 
 import { PartyTypeField } from './PartyTypeField';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { BackButton, BookTable, Pill, ToolbarButton, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
-import { OptionMenuModal } from './ledger/LedgerUi';
 import { Field, FieldRow, FormActions, FormCard, INPUT, PopupCard, Segmented } from './FormKit';
 import { MONEY } from './moneyColors';
 import { supabase } from '../../supabase';
@@ -765,7 +764,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const { nameById: partyTypeName } = usePartyTypes(partyRow?.owner_id);
 
   // ---- The statement: both ledgers as one account (see ledgerStatement.ts) ----
-  const [exportMenu, setExportMenu] = useState(false);
   const today = localTodayIso();
 
   const items = useMemo<LedgerItem[]>(
@@ -970,7 +968,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     setShowAddVendorEntry(true);
   }
 
-  // Payment Out, New Sale, Add Entry, Print / Download - a row of their own under
+  // Payment Out, New Sale, Add Entry, Print, Excel - a row of their own under
   // the name card (there are too many for the top bar on most screens). Payment Out
   // is what the rest of the app calls paying someone; a payment received from a
   // customer is an Add Entry, which opens on Received.
@@ -978,6 +976,9 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // The page is titled for what this person is - their Ledger type (Customer, Vendor, Employee,
   // Expense ...) - rather than "Customer" for everyone. A person with no type is called what their
   // entries say they are, and just "Ledger" until they say anything.
+  // Print and Excel reach the statement as it is now through a ref: the bar keeps the buttons it was given.
+  const exportNow = useRef<(kind: 'print' | 'excel') => void>(() => {});
+  exportNow.current = runExport;
   const typeName = partyRow?.party_type_id ? partyTypeName.get(partyRow.party_type_id) : undefined;
   const pageTitle = typeName || (isPureVendor ? 'Vendor' : isPureCustomer ? 'Customer' : 'Ledger');
   const toolbar = useBookToolbar(
@@ -998,7 +999,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
             />
           )}
           {showCustomer && <HeaderButton icon="add" label="Add Entry" onPress={openCustomerForm} />}
-          <HeaderButton icon="print-outline" label="Print / Download" onPress={() => setExportMenu(true)} />
+          <HeaderButton icon="print-outline" label="Print" onPress={() => exportNow.current('print')} />
+          <HeaderButton icon="download-outline" label="Excel" onPress={() => exportNow.current('excel')} />
         </>
       ),
     },
@@ -1008,7 +1010,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // The statement as the print / Excel export draws it: oldest first, without the
   // lines that are not in the balance.
   async function runExport(kind: 'print' | 'excel') {
-    setExportMenu(false);
     if (!partyRow) return;
     const closingWords = totals.closing > 0.5 ? 'To receive' : totals.closing < -0.5 ? 'To pay' : 'Settled';
     const data: StatementData = {
@@ -1243,16 +1244,6 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         )}
 
         {historyView}
-        <OptionMenuModal
-          visible={exportMenu}
-          title="Print / Download statement"
-          options={[
-            { key: 'print', label: 'Print (or save as PDF)' },
-            { key: 'excel', label: 'Download Excel (.xlsx)' },
-          ]}
-          onPick={(kind) => runExport(kind)}
-          onClose={() => setExportMenu(false)}
-        />
       </KeyboardAwareScrollView>
       {/* Editing an entry: the form shows itself as a popup (see EntryShell). Keyed on the
           entry so reopening another one starts from its own values. */}
