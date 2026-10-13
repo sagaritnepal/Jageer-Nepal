@@ -5,6 +5,7 @@
 // is what makes it readable. Pure functions over a request and its job card,
 // so every screen reads it the same way.
 import { formatDuration } from './duration';
+import { shortDateLabel } from './nepaliDate';
 import { STUCK_OFFER_MS } from './teamStatus';
 import type { ServiceRequest } from '../../types/database.types';
 
@@ -49,7 +50,11 @@ const ms = (iso: string | null | undefined) => {
 
 /** "Sep 27, 15:56" - 24-hour, to match the times the job list already shows. */
 export function stamp(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // The date follows the BS / AD choice ("Aswin 25" or "Oct 12"); the time stays 24-hour.
+  return `${shortDateLabel(day)}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function jobJourney(request: ServiceRequest, times: JobTimes | undefined, now: number): Journey {
