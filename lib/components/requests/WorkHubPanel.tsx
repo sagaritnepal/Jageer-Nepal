@@ -8,7 +8,7 @@ import { supabase } from '../../supabase';
 import { JobTimeline } from '../JobTimeline';
 import { TicketChip } from '../TicketChip';
 import { ticketLabel } from '../../utils/ticket';
-import { jobJourney, type JobTimes } from '../../utils/jobTimeline';
+import { jobJourney, jobStages, type JobTimes } from '../../utils/jobTimeline';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
 import { useMyEmployees } from '../../hooks/useTechnicianEmployment';
@@ -646,26 +646,29 @@ function JobCompactHeader() {
   const head = 'text-[11px] font-bold capitalize tracking-wide text-gray-500';
   const grow = (g: number) => ({ flexBasis: 0, flexGrow: g, minWidth: 0 }) as const;
   return (
-    <View className="flex-row items-center rounded-lg px-4 py-2" style={{ gap: 16, backgroundColor: '#F3F4F6' }}>
-      <Text className={head} style={grow(1.7)}>
+    <View className="flex-row items-center rounded-lg px-4 py-2" style={{ gap: 14, backgroundColor: '#F3F4F6' }}>
+      <Text className={head} style={{ width: 84 }}>
+        Token no.
+      </Text>
+      <Text className={head} style={{ width: 150 }}>
+        Date &amp; time
+      </Text>
+      <Text className={head} style={grow(1.5)}>
         Job
       </Text>
       <Text className={head} style={grow(1.1)}>
         Customer
       </Text>
       <Text className={head} style={grow(1)}>
-        Location
+        Address
       </Text>
-      <Text className={head} style={{ width: 150 }}>
-        Scheduled
-      </Text>
-      <Text className={head} style={{ width: 140 }}>
-        Technician
-      </Text>
-      <Text className={`${head} text-right`} style={{ width: 110 }}>
+      <Text className={`${head} text-right`} style={{ width: 104 }}>
         Amount
       </Text>
-      <Text className={head} style={{ width: 170 }}>
+      <Text className={head} style={{ width: 130 }}>
+        Technician
+      </Text>
+      <Text className={head} style={{ width: 250 }}>
         Progress
       </Text>
       <Text className={`${head} text-right`} style={{ width: 176 }}>
@@ -720,25 +723,34 @@ function JobCompactRow({
   const mainPress = r.hold_status === 'requested' ? open : () => onAssign(r);
 
   const cell = { minWidth: 0 } as const;
+  const stages = jobStages(r, times);
+  const statusLine = [chip.label, hold?.label, overdue ? `Overdue by ${overdueBy(r)}` : null, pay.label].filter(Boolean).join(' · ');
   return (
     <View
       className="flex-row items-center rounded-xl bg-white px-4 py-3"
-      style={{ gap: 16, borderWidth: 1, borderColor: '#E5E7EB' }}
+      style={{ gap: 14, borderWidth: 1, borderColor: '#E5E7EB' }}
     >
-      <Pressable onPress={open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: 1.7, ...cell }}>
+      <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: 84 }} numberOfLines={1}>
+        {ticketLabel(r.ticket_no) ?? '—'}
+      </Text>
+
+      <View style={{ width: 150, ...cell }}>
+        <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
+          {scheduled ?? 'Not scheduled'}
+        </Text>
+      </View>
+
+      <Pressable onPress={open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: 1.5, ...cell }}>
         <CategoryBadge category={r.issue_type} size={34} />
-        <View style={{ flex: 1, gap: 3, ...cell }}>
+        <View style={{ flex: 1, gap: 2, ...cell }}>
           {!!issue.eyebrow && (
             <Text className="text-[11px] font-semibold text-gray-500" numberOfLines={1}>
               {issue.eyebrow}
             </Text>
           )}
-          <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
-            <TicketChip no={r.ticket_no} prefix="Token" />
-            <Text className="text-[15px] font-bold text-gray-900" numberOfLines={1} style={{ flexShrink: 1 }}>
-              {issue.title}
-            </Text>
-          </View>
+          <Text className="text-[14px] font-bold text-gray-900" numberOfLines={1}>
+            {issue.title}
+          </Text>
         </View>
       </Pressable>
 
@@ -761,13 +773,11 @@ function JobCompactRow({
         </Text>
       </View>
 
-      <View style={{ width: 150, ...cell }}>
-        <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
-          {scheduled ?? 'Not scheduled'}
-        </Text>
-      </View>
+      <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: 104 }}>
+        {money(r.quoted_price)}
+      </Text>
 
-      <View className="flex-row items-center" style={{ width: 140, gap: 8, ...cell }}>
+      <View className="flex-row items-center" style={{ width: 130, gap: 8, ...cell }}>
         {r.technician_id ? (
           <>
             <View className="items-center justify-center rounded-full" style={{ width: 26, height: 26, backgroundColor: '#374151' }}>
@@ -784,30 +794,29 @@ function JobCompactRow({
         )}
       </View>
 
-      <View className="items-end" style={{ width: 110, gap: 3 }}>
-        <Text className="text-[14px] font-extrabold text-gray-900">{money(r.quoted_price)}</Text>
-      </View>
-
-      <View style={{ width: 170, gap: 4 }}>
-        <View className="flex-row items-center" style={{ gap: 4 }}>
-          {nodes.map((n, i) => (
-            <View
-              key={n.key}
-              style={{
-                flex: 1,
-                height: 5,
-                borderRadius: 3,
-                backgroundColor: i === current && !finished ? '#16A34A' : n.reached ? '#4B5563' : '#E5E7EB',
-              }}
-            />
-          ))}
+      {/* Assigned / WIP / Hold / Completed, with the words above their bars. */}
+      <View style={{ width: 250, gap: 4 }}>
+        <View className="flex-row" style={{ gap: 6 }}>
+          {stages.map((step) => {
+            const color = step.state === 'current' ? '#15803D' : step.state === 'done' ? '#374151' : '#9CA3AF';
+            return (
+              <View key={step.label} style={{ flex: 1, gap: 4 }}>
+                <Text className="text-[10.5px] font-semibold" style={{ color }} numberOfLines={1}>
+                  {step.label}
+                </Text>
+                <View
+                  style={{
+                    height: 5,
+                    borderRadius: 3,
+                    backgroundColor: step.state === 'current' ? '#16A34A' : step.state === 'done' ? '#4B5563' : '#E5E7EB',
+                  }}
+                />
+              </View>
+            );
+          })}
         </View>
-        <Text className="text-[11.5px] font-semibold text-gray-800" numberOfLines={1}>
-          {[chip.label, hold?.label, overdue ? `Overdue by ${overdueBy(r)}` : null, pay.label].filter(Boolean).join(' · ')}
-        </Text>
-        <Text className="text-[11.5px] text-gray-600" numberOfLines={1}>
-          Step {step} of {nodes.length}
-          {live?.value ? ` · ${live.label} ${live.value}` : finished ? ` · ${nodes[nodes.length - 1].label}` : ''}
+        <Text className="text-[11px] text-gray-600" numberOfLines={1}>
+          {statusLine}
         </Text>
       </View>
 

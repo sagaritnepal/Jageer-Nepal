@@ -14,7 +14,7 @@ import { WorkHubPanel } from '../../lib/components/requests/WorkHubPanel';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { ticketLabel } from '../../lib/utils/ticket';
-import { jobJourney } from '../../lib/utils/jobTimeline';
+import { jobStages, type StageStepState } from '../../lib/utils/jobTimeline';
 import type { BusinessTransaction, JobCard, Order, Product, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
@@ -151,8 +151,10 @@ type JobRowData = {
   customerPhone?: string | null;
   /** The technician's name; the table shows a dash when there is none. */
   technician?: string | null;
-  /** Four-step progress for a job, drawn as a thin bar with the status words under it. */
-  progress?: { reached: boolean[]; current: number; finished: boolean; stepText: string };
+  /** The job's token number, shown in its own column. */
+  token?: string | null;
+  /** Assigned / WIP / Hold / Completed, drawn as four labelled segments. */
+  progress?: { label: string; state: StageStepState }[];
   tag: Tag;
   amount: number | null;
   action: JobAction;
@@ -164,7 +166,7 @@ type JobRowData = {
 
 // Web table columns - the same ones My Jobs uses (see JobCompactRow in WorkHubPanel), shared by
 // the header row and every job row of every tab.
-const COLS = { job: 1.7, customer: 1.1, where: 1, when: 150, tech: 140, amount: 110, status: 170, actions: 176 };
+const COLS = { token: 84, when: 150, job: 1.5, customer: 1.1, where: 1, amount: 104, tech: 130, status: 250, actions: 176 };
 
 function formatAmount(amount: number | null): string {
   return amount != null ? `NPR ${Number(amount).toLocaleString()}` : '';
@@ -226,6 +228,32 @@ function ManageButtons({ data }: { data: JobRowData }) {
   );
 }
 
+/** Assigned / WIP / Hold / Completed as four short bars with their words above: the step the job is
+ * on is dark green, finished ones dark grey, the rest light. */
+function ProgressFour({ steps }: { steps: { label: string; state: StageStepState }[] }) {
+  return (
+    <View className="flex-row" style={{ gap: 6 }}>
+      {steps.map((step) => {
+        const color = step.state === 'current' ? '#15803D' : step.state === 'done' ? '#374151' : '#9CA3AF';
+        return (
+          <View key={step.label} style={{ flex: 1, gap: 4 }}>
+            <Text className="text-[10.5px] font-semibold" style={{ color }} numberOfLines={1}>
+              {step.label}
+            </Text>
+            <View
+              style={{
+                height: 5,
+                borderRadius: 3,
+                backgroundColor: step.state === 'current' ? '#16A34A' : step.state === 'done' ? '#4B5563' : '#E5E7EB',
+              }}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 /** One job, rendered either as a table row (wide web) or a card (phone). */
 function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
   // One brand blue for every job's button, whatever stage it is in.
@@ -234,7 +262,17 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
   if (wide) {
     const cell = { minWidth: 0 } as const;
     return (
-      <View className="flex-row items-center rounded-xl bg-white px-4 py-3" style={{ gap: 16, borderWidth: 1, borderColor: '#E5E7EB' }}>
+      <View className="flex-row items-center rounded-xl bg-white px-4 py-3" style={{ gap: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+        <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: COLS.token }} numberOfLines={1}>
+          {data.token ?? '—'}
+        </Text>
+
+        <View style={{ width: COLS.when, ...cell }}>
+          <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
+            {data.when ?? '—'}
+          </Text>
+        </View>
+
         <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: COLS.job, ...cell }}>
           {data.icon}
           <View style={{ flex: 1, gap: 2, ...cell }}>
@@ -266,11 +304,9 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           </Text>
         </View>
 
-        <View style={{ width: COLS.when, ...cell }}>
-          <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
-            {data.when ?? '—'}
-          </Text>
-        </View>
+        <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: COLS.amount }}>
+          {formatAmount(data.amount) || '—'}
+        </Text>
 
         <View style={{ width: COLS.tech, ...cell }}>
           <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
@@ -278,33 +314,12 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           </Text>
         </View>
 
-        <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: COLS.amount }}>
-          {formatAmount(data.amount) || '—'}
-        </Text>
-
-        <View style={{ width: COLS.status, gap: 4 }}>
-          {data.progress && (
-            <View className="flex-row items-center" style={{ gap: 4 }}>
-              {data.progress.reached.map((reached, i) => (
-                <View
-                  key={i}
-                  style={{
-                    flex: 1,
-                    height: 5,
-                    borderRadius: 3,
-                    backgroundColor:
-                      i === data.progress!.current && !data.progress!.finished ? '#16A34A' : reached ? '#4B5563' : '#E5E7EB',
-                  }}
-                />
-              ))}
-            </View>
-          )}
-          <Text className="text-[11.5px] font-semibold text-gray-800" numberOfLines={1}>
-            {data.tag.label}
-          </Text>
-          {!!data.progress && (
-            <Text className="text-[11.5px] text-gray-600" numberOfLines={1}>
-              {data.progress.stepText}
+        <View style={{ width: COLS.status }}>
+          {data.progress ? (
+            <ProgressFour steps={data.progress} />
+          ) : (
+            <Text className="text-[12px] font-semibold text-gray-700" numberOfLines={1}>
+              {data.tag.label}
             </Text>
           )}
         </View>
@@ -330,6 +345,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           <Text className="text-[13px] text-gray-600" numberOfLines={1}>
             {data.who}
           </Text>
+          {!!data.token && <Text className="text-xs font-bold text-gray-700">{`Token ${data.token}`}</Text>}
           {data.lines?.map((line) => (
             <Text key={line} className="text-xs text-gray-600">
               {line}
@@ -353,7 +369,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
 /** What a finished job shows: token and chalan numbers, the products used and the installation. */
 function finishedLines(item: ServiceRequest, card: JobCard | undefined): string[] {
-  const ids = [ticketLabel(item.ticket_no) && `Token ${ticketLabel(item.ticket_no)}`, item.chalan_no && `Chalan no. ${item.chalan_no}`];
+  const ids = [item.chalan_no && `Chalan no. ${item.chalan_no}`];
   const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
   const products = parts.length > 0 ? `Products: ${parts.map((p) => `${p.name} × ${p.quantity}`).join(', ')}` : 'Products: none recorded';
   const installation = Number(card?.labor_cost) > 0 ? `Installation: NPR ${Number(card!.labor_cost).toLocaleString()}` : null;
@@ -444,22 +460,8 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
     stage === 'in_progress' && technicianProfile
       ? `${technicianProfile.full_name ?? 'Technician'}${distance != null ? ` · ${distance.toFixed(1)} km away` : ''}`
       : (item.location_data?.address ?? null);
-  // Where the job has got to, as the same four steps the technician sees.
-  const journey = jobJourney(item, jobCards?.[0], Date.now());
-  let currentStep = -1;
-  journey.nodes.forEach((n, i) => {
-    if (n.reached) currentStep = i;
-  });
-  const journeyDone = journey.nodes[journey.nodes.length - 1].reached;
-  const liveLeg = currentStep >= 0 && !journeyDone ? journey.legs[currentStep] : undefined;
-  const progress = {
-    reached: journey.nodes.map((n) => n.reached),
-    current: currentStep,
-    finished: journeyDone,
-    stepText: `Step ${journeyDone ? journey.nodes.length : currentStep + 1} of ${journey.nodes.length}${
-      liveLeg?.value ? ` · ${liveLeg.label} ${liveLeg.value}` : ''
-    }`,
-  };
+  // Where the job has got to: Assigned, WIP, Hold, Completed.
+  const progress = jobStages(item, jobCards?.[0]);
 
   // Any job this reseller owns can be cancelled while it's still open (a
   // no-show app customer included); only their own walk-in jobs can be
@@ -477,14 +479,11 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
         who: customerName,
         customerPhone,
         technician: technicianProfile?.full_name ?? null,
+        token: ticketLabel(item.ticket_no),
         progress,
         place: wide ? (item.location_data?.address ?? null) : place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
-        lines: finishedStage
-          ? finishedLines(item, jobCards?.[0])
-          : ticketLabel(item.ticket_no)
-            ? [`Token ${ticketLabel(item.ticket_no)}`]
-            : undefined,
+        lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
         tag,
         amount: item.quoted_price,
         action,
@@ -548,7 +547,7 @@ function OrderJobRow({
         who: buyer?.full_name ?? '…',
         place,
         when: null,
-        lines: orderToken ? [`Token ${orderToken}`] : undefined,
+        token: orderToken,
         tag: TAGS.order,
         amount: order.total_amount,
         action,
@@ -852,16 +851,17 @@ export default function ResellerRequestQueue() {
             <Text className="text-[15px] font-bold text-gray-900">{activeMeta.label}</Text>
             <Text className="text-[13px] text-gray-500">— {activeMeta.todo}</Text>
           </View>
-          <View className="flex-row rounded-lg px-4 py-2" style={{ gap: 16, backgroundColor: '#F3F4F6' }}>
+          <View className="flex-row rounded-lg px-4 py-2" style={{ gap: 14, backgroundColor: '#F3F4F6' }}>
             {(
               [
+                ['Token no.', { width: COLS.token }],
+                ['Date & time', { width: COLS.when }],
                 ['Job', { flexBasis: 0, flexGrow: COLS.job, minWidth: 0 }],
                 ['Customer', { flexBasis: 0, flexGrow: COLS.customer, minWidth: 0 }],
-                ['Location', { flexBasis: 0, flexGrow: COLS.where, minWidth: 0 }],
-                ['Scheduled', { width: COLS.when }],
-                ['Technician', { width: COLS.tech }],
+                ['Address', { flexBasis: 0, flexGrow: COLS.where, minWidth: 0 }],
                 ['Amount', { width: COLS.amount, textAlign: 'right' }],
-                ['Status', { width: COLS.status }],
+                ['Technician', { width: COLS.tech }],
+                ['Progress', { width: COLS.status }],
                 ['Actions', { width: COLS.actions, textAlign: 'right' }],
               ] as const
             ).map(([label, style]) => (
