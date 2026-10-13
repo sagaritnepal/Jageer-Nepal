@@ -5,6 +5,7 @@ import { KeyboardAwareSectionList } from 'react-native-keyboard-aware-scroll-vie
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
+import { ticketLabel } from '../../utils/ticket';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { useScreenHeader } from '../../hooks/useScreenHeader';
@@ -53,6 +54,16 @@ import { localTodayIso } from '../../utils/localDate';
 
 // Local date, not UTC - see localTodayIso.
 const todayIso = localTodayIso;
+
+/** A bill started from a completed job: its customer, the products used and the installation. */
+export interface JobBillPrefill {
+  requestId: string;
+  customerId: string | null;
+  partyName: string;
+  items: { description: string; qty: string; rate: string }[];
+  installation: number;
+  note: string;
+}
 
 interface ItemRowState {
   hs_code?: string;
@@ -574,6 +585,7 @@ function TransactionForm({
   products,
   voicePrefill,
   presetPartyId,
+  jobPrefill,
   onOpenRecent,
   onDone,
   onCancel,
@@ -587,6 +599,8 @@ function TransactionForm({
   voicePrefill?: { amount?: string; party?: string; date?: string; note?: string } | null;
   /** A saved party to start the bill with - "New Sale" from their statement. */
   presetPartyId?: string;
+  /** Starts the bill from a completed job (Create bill on the Requests page). */
+  jobPrefill?: JobBillPrefill | null;
   /** Opens an entry from the Recent list (web) - see RecentEntriesCard. */
   onOpenRecent?: (tx: BusinessTransaction) => void;
   onDone: () => void;
@@ -639,7 +653,9 @@ function TransactionForm({
   const [billNo, setBillNo] = useState(initial?.bill_no ?? '');
   const [billDate, setBillDate] = useState(initial?.bill_date ?? todayIso());
   const [items, setItems] = useState<ItemRowState[]>(
-    initial ? initial.items.map((i) => ({ hs_code: i.hs_code ?? '', description: i.description, qty: String(i.qty), rate: String(i.rate) })) : []
+    initial
+      ? initial.items.map((i) => ({ hs_code: i.hs_code ?? '', description: i.description, qty: String(i.qty), rate: String(i.rate) }))
+      : (jobPrefill?.items ?? [])
   );
   const [showItemPicker, setShowItemPicker] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
@@ -672,18 +688,20 @@ function TransactionForm({
       : '0'
   );
   // Installation: a service charged to the customer on a Sale - direct income, no item or stock behind it.
-  const [installationInput, setInstallationInput] = useState(initial?.installation_charge ? String(initial.installation_charge) : '');
+  const [installationInput, setInstallationInput] = useState(
+    initial?.installation_charge ? String(initial.installation_charge) : jobPrefill?.installation ? String(jobPrefill.installation) : ''
+  );
   const [showDiscount, setShowDiscount] = useState(!!initial && initial.discount_amount > 0);
   const [showVat, setShowVat] = useState(!!initial && initial.vat_amount > 0);
 
-  const [partyName, setPartyName] = useState(initial?.party_name ?? '');
+  const [partyName, setPartyName] = useState(initial?.party_name ?? jobPrefill?.partyName ?? '');
   // Links this bill to a real saved customer/vendor record, not just its
   // free-text name - a Sale/Purchase always books against this party's
   // ledger now (see 0061_sale_purchase_always_ledger.sql), so it's required
   // for a bill, same as Quick Payment already requires a real customer.
   // Only ever set by actually picking a saved contact below, never typing.
-  const [customerId, setCustomerId] = useState<string | null>(initial?.customer_id ?? null);
-  const [note, setNote] = useState(initial?.note ?? '');
+  const [customerId, setCustomerId] = useState<string | null>(initial?.customer_id ?? jobPrefill?.customerId ?? null);
+  const [note, setNote] = useState(initial?.note ?? jobPrefill?.note ?? '');
   const [bankAccountId, setBankAccountId] = useState<string | null>(initial?.bank_account_id ?? null);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -908,7 +926,12 @@ function TransactionForm({
         if (initial) {
           await updateTx.mutateAsync({ id: initial.id, values });
         } else {
-          await createTx.mutateAsync({ owner_id: userId, ...values });
+          await createTx.mutateAsync({
+            owner_id: userId,
+            ...values,
+            // A bill made from a job points back at it - that is what moves the job to Awaiting payment.
+            ...(jobPrefill ? { source_type: 'service_request_bill', source_id: jobPrefill.requestId } : null),
+          });
         }
         // The typeahead lets an item be typed straight into the bill; one
         // that isn't in the catalog yet is remembered for next time, like
@@ -2918,6 +2941,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     add: addParam,
     edit: editParam,
     partyId: partyIdParam,
+    fromJob,
     voiceAmount,
     voiceParty,
     voiceDate,
@@ -2927,6 +2951,8 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     add?: string;
     edit?: string;
     partyId?: string;
+    /** A completed job to start the bill from. */
+    fromJob?: string;
     voiceAmount?: string;
     voiceParty?: string;
     voiceDate?: string;
@@ -2946,6 +2972,26 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     [voiceAmount, voiceParty, voiceDate, voiceNote]
   );
   const userId = useAuthStore((state) => state.session?.user.id);
+  const { data: jobForBill } = useSupabaseRow('service_requests', fromJob || undefined);
+  const { data: jobCardsForBill } = useSupabaseQuery('job_cards', {
+    filters: fromJob ? { service_request_id: fromJob } : {},
+    enabled: !!fromJob,
+  });
+  const jobPrefill = useMemo<JobBillPrefill | null>(() => {
+    if (!fromJob || !jobForBill || jobForBill.id !== fromJob || !jobCardsForBill) return null;
+    const card = jobCardsForBill[0];
+    const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
+    return {
+      requestId: jobForBill.id,
+      customerId: jobForBill.customer_id,
+      partyName: jobForBill.customer_name ?? '',
+      items: parts.map((p) => ({ description: p.name, qty: String(p.quantity || 1), rate: String(p.cost || 0) })),
+      installation: Number(card?.labor_cost) || 0,
+      note: [ticketLabel(jobForBill.ticket_no) && `Job ${ticketLabel(jobForBill.ticket_no)}`, jobForBill.chalan_no && `Chalan ${jobForBill.chalan_no}`]
+        .filter(Boolean)
+        .join(' · '),
+    };
+  }, [fromJob, jobForBill, jobCardsForBill]);
   const role = useRole();
   const { data: products } = useSupabaseQuery('products', {
     filters: userId && role ? { seller_id: userId, seller_role: role } : {},
@@ -3366,7 +3412,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
 
             {showForm && userId && (
               <TransactionForm
-                key={`${editingTx?.id ?? (filter === 'all' ? 'sale' : filter)}-${formKey}`}
+                key={`${editingTx?.id ?? (filter === 'all' ? 'sale' : filter)}-${formKey}-${jobPrefill ? 'job' : ''}`}
                 userId={userId}
                 initial={editingTx ?? undefined}
                 type={editType ?? (filter === 'all' ? 'sale' : filter)}
@@ -3375,8 +3421,14 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 products={products ?? []}
                 voicePrefill={editingTx || formKey > 0 ? null : voicePrefill}
                 presetPartyId={editingTx || formKey > 0 ? undefined : partyIdParam}
+                jobPrefill={editingTx || formKey > 0 ? null : jobPrefill}
                 onOpenRecent={desktopWeb ? setViewingTx : undefined}
                 onDone={() => {
+                  // A bill made from a job goes back to the job list, where the job has moved on.
+                  if (jobPrefill && !editingTx) {
+                    router.replace('/(reseller)/requests' as any);
+                    return;
+                  }
                   if (editLinkTx) {
                     leaveEdit();
                     return;

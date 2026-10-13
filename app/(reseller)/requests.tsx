@@ -13,7 +13,8 @@ import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { WorkHubPanel } from '../../lib/components/requests/WorkHubPanel';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
-import type { BusinessTransaction, Order, Product, ServiceRequest } from '../../types/database.types';
+import { ticketLabel } from '../../lib/utils/ticket';
+import type { BusinessTransaction, JobCard, Order, Product, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
 // was hard to tell what actually needed attention. Group by pipeline stage
@@ -65,7 +66,7 @@ const STAGE_META: Record<
   cancelled: { label: 'Cancelled', todo: 'Nothing left to do', icon: 'close-circle', color: '#9CA3AF', tint: '#F3F4F6' },
 };
 
-function stageOf(item: ServiceRequest): Stage {
+function stageOf(item: ServiceRequest, billedJobs?: Set<string>): Stage {
   switch (item.status) {
     case 'cancelled':
       return 'cancelled';
@@ -87,7 +88,9 @@ function stageOf(item: ServiceRequest): Stage {
       // Finished and settled leaves the pipeline; part paid is the one
       // still worth chasing; anything else is simply done but unpaid.
       if (item.payment_status === 'paid') return 'paid';
-      return item.payment_status === 'partial' ? 'awaiting_payment' : 'completed';
+      // Once a bill has been created for the job it waits for the money.
+      if (item.payment_status === 'partial' || billedJobs?.has(item.id)) return 'awaiting_payment';
+      return 'completed';
   }
 }
 
@@ -141,6 +144,8 @@ type JobRowData = {
   who: string;
   place: string | null;
   when: string | null;
+  /** Extra short lines under the name - a finished job's token, chalan, products and installation. */
+  lines?: string[];
   tag: Tag;
   amount: number | null;
   action: JobAction;
@@ -230,6 +235,11 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             <Text className="text-[12.5px] text-gray-500" numberOfLines={1}>
               {data.who}
             </Text>
+            {data.lines?.map((line) => (
+              <Text key={line} className="text-[12px] text-gray-600" numberOfLines={2}>
+                {line}
+              </Text>
+            ))}
           </View>
         </Pressable>
         <View style={{ flex: COLS.where, minWidth: 0, gap: 2 }}>
@@ -271,6 +281,11 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           <Text className="text-[13px] text-gray-600" numberOfLines={1}>
             {data.who}
           </Text>
+          {data.lines?.map((line) => (
+            <Text key={line} className="text-xs text-gray-600">
+              {line}
+            </Text>
+          ))}
           {!!meta && (
             <Text className="text-xs text-gray-400" numberOfLines={1}>
               {meta}
@@ -287,6 +302,15 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
   );
 }
 
+/** What a finished job shows: token and chalan numbers, the products used and the installation. */
+function finishedLines(item: ServiceRequest, card: JobCard | undefined): string[] {
+  const ids = [ticketLabel(item.ticket_no) && `Token ${ticketLabel(item.ticket_no)}`, item.chalan_no && `Chalan no. ${item.chalan_no}`];
+  const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
+  const products = parts.length > 0 ? `Products: ${parts.map((p) => `${p.name} × ${p.quantity}`).join(', ')}` : 'Products: none recorded';
+  const installation = Number(card?.labor_cost) > 0 ? `Installation: NPR ${Number(card!.labor_cost).toLocaleString()}` : null;
+  return [ids.filter(Boolean).join(' · '), [products, installation].filter(Boolean).join(' · ')].filter(Boolean);
+}
+
 function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Stage; wide: boolean }) {
   // A "reseller" origin request's client_id is just the reseller's own id
   // (there's no real customer profile behind it), so only look up real app
@@ -300,6 +324,12 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
     isIncoming ? 'id, full_name, avatar_url' : '*'
   );
   const { data: technicianProfile } = useSupabaseRow('profiles', item.technician_id ?? undefined);
+  // A finished job lists what was used on it, from the technician's job card.
+  const finishedStage = stage === 'completed' || stage === 'awaiting_payment' || stage === 'paid';
+  const { data: jobCards } = useSupabaseQuery('job_cards', {
+    filters: { service_request_id: item.id },
+    enabled: finishedStage,
+  });
   const { confirmCancelWork, busyId } = useCancelWork();
   const deleting = busyId === item.id;
 
@@ -334,7 +364,15 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
     action = { label: 'Review hold request', icon: 'pause-circle-outline', primary: true, onPress: open };
   } else if (stage === 'in_progress') {
     action = { label: 'View job', icon: 'eye-outline', primary: false, onPress: open };
-  } else if (stage === 'completed' || stage === 'awaiting_payment') {
+  } else if (stage === 'completed') {
+    // The finished job becomes a bill: its products and installation pre-filled.
+    action = {
+      label: 'Create bill',
+      icon: 'document-text-outline',
+      primary: true,
+      onPress: () => router.push(`/(reseller)/transactions?type=sale&add=1&fromJob=${item.id}` as any),
+    };
+  } else if (stage === 'awaiting_payment') {
     action = { label: 'Record payment', icon: 'cash-outline', primary: true, onPress: open };
   } else {
     action = { label: 'View', icon: 'eye-outline', primary: false, onPress: open };
@@ -374,6 +412,7 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
         who: customerName,
         place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
+        lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
         tag,
         amount: item.quoted_price,
         action,
@@ -578,7 +617,10 @@ export default function ResellerRequestQueue() {
     const groups = new Map<Stage, JobItem[]>();
     STAGE_ORDER.forEach((stage) => groups.set(stage, []));
     incoming.forEach((item) => groups.get('requests')!.push({ kind: 'request', id: item.id, request: item }));
-    (mine ?? []).forEach((item) => groups.get(stageOf(item))!.push({ kind: 'request', id: item.id, request: item }));
+    const billedJobs = new Set(
+      (directSales ?? []).filter((t) => t.source_type === 'service_request_bill' && t.source_id).map((t) => t.source_id as string)
+    );
+    (mine ?? []).forEach((item) => groups.get(stageOf(item, billedJobs))!.push({ kind: 'request', id: item.id, request: item }));
     (sellingOrders ?? []).forEach((order) =>
       groups.get(orderStageOf(order))!.push({ kind: 'order', id: order.id, order })
     );

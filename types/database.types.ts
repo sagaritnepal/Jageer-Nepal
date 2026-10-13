@@ -157,6 +157,8 @@ export interface ServiceRequest {
   // see ChalanPhotos. Stored the same way as photo_urls (private paths in
   // the request-photos bucket).
   chalan_urls: string[];
+  /** The number on that chalan - asked for, with its photo, before the job can be completed. */
+  chalan_no?: string | null;
   payment_status: PaymentStatus;
   payment_method: PaymentMethod | null;
   fonepay_prn: string | null;
