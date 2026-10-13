@@ -23,9 +23,14 @@ import { ENTRY_KINDS } from './entryKinds';
 import { useReportActions } from './PrintButton';
 import type { PrintReport } from '../../utils/printReport';
 import { TransactionDetailModal } from './TransactionsScreen';
+import { TransferForm } from './BankBalancesScreen';
+import { PopupCard } from './FormKit';
+import { JournalVoucherForm } from './JournalVoucherForm';
+import { journalOf } from '../../utils/journalVoucher';
+import { supabase } from '../../supabase';
 import type { BusinessTransaction } from '../../../types/database.types';
 
-type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer';
+type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer' | 'journal';
 
 /** Where money sits: 'cash' for cash in hand, otherwise a bank_accounts id
  * (eSewa, Khalti, a bank...). */
@@ -63,6 +68,8 @@ type BookRow = {
   bill?: BusinessTransaction;
   /** What this row actually is in the database, so it can be edited here. */
   edit?: EditTarget;
+  /** A journal voucher: the two ledger entries behind this one line (nothing moved through an account). */
+  journal?: { entries: { table: 'customer_ledger_entries' | 'vendor_ledger_entries'; id: string }[] };
 };
 
 type EditTable = 'customer_ledger_entries' | 'vendor_ledger_entries' | 'account_transfers';
@@ -110,7 +117,8 @@ const KIND: Record<Kind, { label: string; color: string; bg: string }> = {
   expense: { label: 'Expenses', color: '#B91C1C', bg: '#FEF2F2' },
   sale: { label: 'Sale bill', color: MONEY.in.text, bg: MONEY.in.bg },
   purchase: { label: 'Purchase bill', color: MONEY.out.text, bg: MONEY.out.bg },
-  transfer: { label: 'Transfer', color: '#4338CA', bg: '#EEF2FF' },
+  transfer: { label: 'Contra', color: '#4338CA', bg: '#EEF2FF' },
+  journal: { label: 'Journal', color: '#B45309', bg: '#FFFBEB' },
 };
 
 /** Local calendar day of a timestamp, as YYYY-MM-DD - going through
@@ -222,7 +230,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   );
   // Tapping an entry opens it for editing; the opening-balance line and
   // anything without a record behind it stays inert.
-  const open = (r: BookRow) => (r.edit || r.bill ? () => onOpenRow(r) : undefined);
+  const open = (r: BookRow) => (r.edit || r.bill || r.journal ? () => onOpenRow(r) : undefined);
 
   if (!full) {
     // Narrow: SN | Date (and time) | Details (type, notes, invoice no.) | Amount | Balance.
@@ -244,7 +252,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
           return (
             <Fragment key={r.id}>
             {dayBand(r, index)}
-            <Pressable onPress={open(r)} disabled={!r.edit && !r.bill} className="flex-row border-b border-gray-200">
+            <Pressable onPress={open(r)} disabled={!r.edit && !r.bill && !r.journal} className="flex-row border-b border-gray-200">
               <Text className={`${cell} text-xs text-gray-500`} style={{ width: 34 }} numberOfLines={1}>
                 {r.kind === 'opening' ? '' : index}
               </Text>
@@ -320,7 +328,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
             {dayBand(r, index)}
             <Pressable
               onPress={open(r)}
-              disabled={!r.edit && !r.bill}
+              disabled={!r.edit && !r.bill && !r.journal}
               className="flex-row border-b border-gray-200"
               style={r.kind === 'opening' ? { backgroundColor: '#FAFAFA' } : undefined}
             >
@@ -756,7 +764,7 @@ const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
   path: kind.path,
 }));
 
-function NewEntryButtons({ basePath }: { basePath: string }) {
+function NewEntryButtons({ basePath, onVoucher, onContra }: { basePath: string; onVoucher: () => void; onContra: () => void }) {
   return (
     <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
       {NEW_ENTRY_KINDS.map((kind) => (
@@ -772,6 +780,28 @@ function NewEntryButtons({ basePath }: { basePath: string }) {
           <Text className="text-[13px] font-semibold text-gray-800">{kind.label}</Text>
         </Pressable>
       ))}
+      {/* A journal voucher moves an amount from one person's ledger to another's - no cash: a popup, not a page. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="New Voucher"
+        onPress={onVoucher}
+        className="flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3"
+        style={{ minHeight: 36 }}
+      >
+        <Ionicons name="document-text" size={16} color="#B45309" />
+        <Text className="text-[13px] font-semibold text-gray-800">Voucher</Text>
+      </Pressable>
+      {/* A contra moves money between your own accounts (cash <-> bank, bank <-> wallet): a popup, not a page. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="New Contra"
+        onPress={onContra}
+        className="flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3"
+        style={{ minHeight: 36 }}
+      >
+        <Ionicons name="swap-horizontal" size={16} color="#4338CA" />
+        <Text className="text-[13px] font-semibold text-gray-800">Contra</Text>
+      </Pressable>
     </View>
   );
 }
@@ -878,6 +908,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const day = range.to || today;
   const singleDay = from === day;
   const [editing, setEditing] = useState<EditTarget | null>(null);
+  // The Contra popup: money moved between your own accounts. The Voucher popup: an amount moved from
+  // one person's ledger to another's.
+  const [showContra, setShowContra] = useState(false);
+  const [showVoucher, setShowVoucher] = useState(false);
   // A bill opened from its row: shown in a popup, and edited in it.
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
   const queryClient = useQueryClient();
@@ -956,6 +990,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     }
 
     for (const e of customerEntries ?? []) {
+      // A journal voucher's halves are listed as one line below, and are not cash.
+      if (journalOf(e.note)) continue;
       const isIn = e.entry_type === 'credit';
       // Booking debits are the Sale itself, not cash.
       if (!isIn && e.source !== 'manual') continue;
@@ -1007,6 +1043,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     }
 
     for (const e of vendorEntries ?? []) {
+      if (journalOf(e.note)) continue;
       // Only payments to a vendor move money; debits are the Purchase.
       if (e.entry_type !== 'credit') continue;
       const date = e.entry_date ?? localDay(e.created_at);
@@ -1052,6 +1089,61 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             entryType: 'credit',
           },
         },
+      });
+    }
+
+    // A journal voucher is two entries - one on each person's ledger - that carry the same code in their
+    // remark. It is one line here: its amount in the Bill amount column, and no cash in or out.
+    type VoucherParts = {
+      date: string;
+      createdAt: string;
+      amount: number;
+      narration: string;
+      from?: string;
+      to?: string;
+      entries: NonNullable<BookRow['journal']>['entries'];
+    };
+    const vouchers = new Map<string, VoucherParts>();
+    const voucherOf = (code: string, date: string, createdAt: string, amount: number, narration: string) => {
+      let v = vouchers.get(code);
+      if (!v) {
+        v = { date, createdAt, amount, narration, entries: [] };
+        vouchers.set(code, v);
+      }
+      return v;
+    };
+    for (const e of customerEntries ?? []) {
+      const j = journalOf(e.note);
+      if (!j) continue;
+      const v = voucherOf(j.code, e.entry_date ?? localDay(e.created_at), e.created_at, Number(e.amount), j.narration);
+      v.entries.push({ table: 'customer_ledger_entries', id: e.id });
+      const who = contactName.get(e.customer_id) ?? 'Customer';
+      // Received = the person credited (From); Paid = the person debited (To).
+      if (e.entry_type === 'credit') v.from = who;
+      else v.to = who;
+    }
+    for (const e of vendorEntries ?? []) {
+      const j = journalOf(e.note);
+      if (!j) continue;
+      const v = voucherOf(j.code, e.entry_date ?? localDay(e.created_at), e.created_at, Number(e.amount), j.narration);
+      v.entries.push({ table: 'vendor_ledger_entries', id: e.id });
+      const who = contactName.get(e.vendor_id) ?? 'Vendor';
+      if (e.entry_type === 'credit') v.to = who;
+      else v.from = who;
+    }
+    for (const [code, v] of vouchers) {
+      if (v.date < from || v.date > day) continue;
+      rows.push({
+        ...blank,
+        id: `journal-${code}`,
+        kind: 'journal',
+        date: v.date,
+        time: timeOf(v.createdAt),
+        details: `Journal voucher ${code}`,
+        sub: [`${v.from ?? '…'} → ${v.to ?? '…'}`, v.narration || null].filter(Boolean).join(' · '),
+        amount: v.amount,
+        sortKey: v.createdAt,
+        journal: { entries: v.entries },
       });
     }
 
@@ -1199,6 +1291,28 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     if (viewingTx) router.push(`${basePath}/transactions?type=${viewingTx.type}&add=1&edit=${viewingTx.id}` as never);
     setViewingTx(null);
   };
+  // A journal voucher is two entries: removing it takes both.
+  const removeJournal = (row: BookRow) => {
+    const entries = row.journal?.entries ?? [];
+    showAlert('Remove this journal voucher?', [row.details, row.sub].filter(Boolean).join('\n'), [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            for (const entry of entries) {
+              const { error } = await (supabase.from(entry.table) as any).delete().eq('id', entry.id);
+              if (error) throw error;
+            }
+            await refreshBooks();
+          } catch (err) {
+            showAlert('Could not remove the voucher', getErrorMessage(err));
+          }
+        },
+      },
+    ]);
+  };
   const removeBill = (tx: BusinessTransaction) => {
     setViewingTx(null);
     showAlert(`Delete this ${tx.type}?`, `${tx.party_name || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}`, [
@@ -1298,10 +1412,10 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   const toolbar = useBookToolbar(
     {
       wide,
-      inBarMinWidth: 1400,
+      inBarMinWidth: 1640,
       right: () => (
         <>
-          <NewEntryButtons basePath={basePath} />
+          <NewEntryButtons basePath={basePath} onVoucher={() => setShowVoucher(true)} onContra={() => setShowContra(true)} />
           <View className="flex-row items-center" style={{ gap: 6 }}>
             <DayStepButton direction="back" onPress={() => stepDays(-1)} />
             <DateFilterButton
@@ -1345,11 +1459,22 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             dayLabel={singleDay ? undefined : dayLabel}
             onOpenRow={(row) => {
               if (row.bill) setViewingTx(row.bill);
+              else if (row.journal) removeJournal(row);
               else if (row.edit) setEditing(row.edit);
             }}
           />
 
           <EditEntryModal target={editing} onClose={() => setEditing(null)} />
+          {showVoucher && userId && (
+            <PopupCard title="Journal voucher" onClose={() => setShowVoucher(false)}>
+              <JournalVoucherForm ownerId={userId} onDone={() => setShowVoucher(false)} />
+            </PopupCard>
+          )}
+          {showContra && userId && (
+            <PopupCard title="Contra" onClose={() => setShowContra(false)}>
+              <TransferForm bare userId={userId} onDone={() => setShowContra(false)} />
+            </PopupCard>
+          )}
           <TransactionDetailModal
             tx={viewingTx}
             categoryName={

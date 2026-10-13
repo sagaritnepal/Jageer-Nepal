@@ -88,6 +88,7 @@ export function PartyMoveField({
   onPick,
   hint = 'Entered on the wrong person? Pick the right one and save - this entry moves to their ledger.',
   pickerTitle = 'Move this entry to',
+  label = 'Person',
 }: {
   ownerId: string;
   /** Who it is on now; may be '' for something with nobody saved against it. */
@@ -98,6 +99,8 @@ export function PartyMoveField({
   onPick: (party: { id: string; name: string }) => void;
   hint?: string;
   pickerTitle?: string;
+  /** The field's name above the box. */
+  label?: string;
 }) {
   const { data: party } = useSupabaseRow('customers', partyId || undefined);
   const { data: customers } = useSupabaseQuery('customers', { filters: { owner_id: ownerId } });
@@ -133,7 +136,7 @@ export function PartyMoveField({
     <View style={{ gap: 6 }}>
       {/* Field's flexBasis is a width inside a row - in this column it would be a 300px-tall box. */}
       <FieldRow>
-        <Field label="Person" basis={300}>
+        <Field label={label} basis={300}>
           <Pressable
             onPress={() => {
               phoneContacts.request();

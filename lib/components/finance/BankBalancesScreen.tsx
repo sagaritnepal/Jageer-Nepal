@@ -76,8 +76,9 @@ function ActivityRow({
 /** Move money between the business's own accounts (e.g. withdrawing cash
  * from a bank, or moving Esewa funds into a bank account) - not a Sale,
  * Purchase, Expense, or party payment, so it gets its own small form
- * instead of overloading one of those. */
-function TransferForm({ userId, onDone }: { userId: string; onDone: () => void }) {
+ * instead of overloading one of those. `bare` is for a form that is already in a card of its own
+ * (the Day Book's Contra popup): no border and no title of its own. */
+export function TransferForm({ userId, onDone, bare = false }: { userId: string; onDone: () => void; bare?: boolean }) {
   const { accounts, rename, remove } = useBankAccounts(userId);
   const insertTransfer = useSupabaseInsert('account_transfers');
   const [fromAccountId, setFromAccountId] = useState<string | null>(null);
@@ -119,8 +120,8 @@ function TransferForm({ userId, onDone }: { userId: string; onDone: () => void }
   }
 
   return (
-    <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-      <Text className="mb-3 text-sm font-semibold text-gray-900">Transfer money</Text>
+    <View className={bare ? '' : 'mb-4 rounded-2xl border border-gray-200 bg-white p-4'}>
+      {!bare && <Text className="mb-3 text-sm font-semibold text-gray-900">Transfer money</Text>}
 
       <Text className="mb-1 text-xs font-medium text-gray-500">From</Text>
       <Pressable

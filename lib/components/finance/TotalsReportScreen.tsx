@@ -10,6 +10,7 @@ import { isStaffLedgerType, reportKindOfType, usePartyDestination } from '../../
 import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
 import { monthGroupLabel, shortDateLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
 import { localTodayIso } from '../../utils/localDate';
+import { journalOf } from '../../utils/journalVoucher';
 import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
 import { SALARY_HEADER, expenseHeading, groupExpenseNames, isSalaryName, nameKey, reportCategoryName } from '../../utils/expenseGroups';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
@@ -169,18 +170,21 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
     all: true,
     enabled: !!userId,
   });
-  const { data: ledgerEntries } = useSupabaseQuery('customer_ledger_entries', {
+  const { data: allLedgerEntries } = useSupabaseQuery('customer_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
     orderBy: { column: 'created_at', ascending: false },
     all: true,
     enabled: !!userId,
   });
-  const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
+  const { data: allVendorEntries } = useSupabaseQuery('vendor_ledger_entries', {
     filters: userId ? { owner_id: userId } : {},
     orderBy: { column: 'created_at', ascending: false },
     all: true,
     enabled: !!userId,
   });
+  // A journal voucher's halves are not money received or paid: the reports leave them out.
+  const ledgerEntries = useMemo(() => (allLedgerEntries ?? []).filter((e) => !journalOf(e.note)), [allLedgerEntries]);
+  const vendorEntries = useMemo(() => (allVendorEntries ?? []).filter((e) => !journalOf(e.note)), [allVendorEntries]);
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,

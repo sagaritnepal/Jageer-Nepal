@@ -1,5 +1,6 @@
 // lib/hooks/useAccountBalances.ts
 import { useMemo } from 'react';
+import { journalOf } from '../utils/journalVoucher';
 import { useSupabaseQuery } from './useSupabase';
 import { useBankAccounts } from './useBankAccounts';
 
@@ -116,6 +117,8 @@ export function useAccountBalances(userId: string | undefined) {
       }
     }
     for (const e of customerEntries ?? []) {
+      // A journal voucher moves no cash: its two halves are not in the account's activity.
+      if (journalOf(e.note)) continue;
       const name = nameById.get(e.customer_id) ?? 'Unknown customer';
       if (e.entry_type === 'credit') {
         add(e.bank_account_id, e.amount, {
@@ -138,6 +141,7 @@ export function useAccountBalances(userId: string | undefined) {
       }
     }
     for (const e of vendorEntries ?? []) {
+      if (journalOf(e.note)) continue;
       if (e.entry_type === 'credit') {
         const name = nameById.get(e.vendor_id) ?? 'Unknown vendor';
         add(e.bank_account_id, -e.amount, {

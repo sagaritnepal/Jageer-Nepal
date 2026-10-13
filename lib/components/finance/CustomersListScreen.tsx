@@ -41,6 +41,7 @@ import { showAlert, getErrorMessage } from '../../utils/alert';
 import { nameCaps } from '../../utils/nameCaps';
 import { isValidPhone10 } from '../../utils/phone';
 import { localTodayIso } from '../../utils/localDate';
+import { journalOf } from '../../utils/journalVoucher';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
@@ -697,10 +698,20 @@ function PartyLedgerPopup({
   const balanceText = (b: number) => `${dash(Math.abs(b))}${sideWord(b)}`;
   const balanceColor = (b: number) => (Math.round(b) > 0 ? LEDGER_TONE.receivable.text : Math.round(b) < 0 ? LEDGER_TONE.payable.text : '#6B7280');
   const kindOf = (item: LedgerItem) =>
-    item.side === 'customer' ? (item.entryType === 'debit' ? 'Billed' : 'Received') : item.entryType === 'debit' ? 'Bought on credit' : 'Paid';
+    journalOf(item.note)
+      ? 'Journal voucher'
+      : item.side === 'customer'
+        ? item.entryType === 'debit'
+          ? 'Billed'
+          : 'Received'
+        : item.entryType === 'debit'
+          ? 'Bought on credit'
+          : 'Paid';
   const subOf = (item: LedgerItem) => {
     const ref = referenceById.get(item.id);
-    return [ref ? `${ref.kind} ${ref.no}` : null, item.note].filter(Boolean).join(' · ');
+    const journal = journalOf(item.note);
+    const note = journal ? [journal.code, journal.narration].filter(Boolean).join(' · ') : item.note;
+    return [ref ? `${ref.kind} ${ref.no}` : null, note].filter(Boolean).join(' · ');
   };
 
   const buildReport = (): PrintReport => ({

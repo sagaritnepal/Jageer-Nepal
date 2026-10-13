@@ -1,5 +1,6 @@
 // lib/components/finance/FinanceDashboardScreen.tsx
 import { useMemo, useState } from 'react';
+import { journalOf } from '../../utils/journalVoucher';
 import { View, Text, Pressable, ScrollView, useWindowDimensions, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -341,11 +342,14 @@ export function FinanceDashboardScreen({ basePath }: { basePath: string }) {
       }
     }
     for (const e of allEntries ?? []) {
+      // A journal voucher's halves are not money received or paid.
+      if (journalOf(e.note)) continue;
       if (!inYear(e.entry_date ?? e.created_at)) continue;
       if (e.entry_type === 'credit') received += e.amount;
       if (e.entry_type === 'debit' && e.source === 'manual') paid += e.amount;
     }
     for (const e of vendorEntries ?? []) {
+      if (journalOf(e.note)) continue;
       if (!inYear(e.entry_date ?? e.created_at)) continue;
       if (e.entry_type === 'credit') paid += e.amount;
     }
