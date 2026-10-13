@@ -662,6 +662,40 @@ function JobRowCard({
   );
 }
 
+/** The column names above the compact rows - the same widths as the cells under them. */
+function JobCompactHeader() {
+  const head = 'text-[11px] font-bold capitalize tracking-wide text-gray-500';
+  const grow = (g: number) => ({ flexBasis: 0, flexGrow: g, minWidth: 0 }) as const;
+  return (
+    <View className="flex-row items-center rounded-lg px-4 py-2" style={{ gap: 16, backgroundColor: '#F3F4F6' }}>
+      <Text className={head} style={grow(1.7)}>
+        Job
+      </Text>
+      <Text className={head} style={grow(1.1)}>
+        Customer
+      </Text>
+      <Text className={head} style={grow(1)}>
+        Location
+      </Text>
+      <Text className={head} style={{ width: 150 }}>
+        Scheduled
+      </Text>
+      <Text className={head} style={{ width: 140 }}>
+        Technician
+      </Text>
+      <Text className={`${head} text-right`} style={{ width: 110 }}>
+        Amount
+      </Text>
+      <Text className={head} style={{ width: 170 }}>
+        Progress
+      </Text>
+      <Text className={`${head} text-right`} style={{ width: 114 }}>
+        Actions
+      </Text>
+    </View>
+  );
+}
+
 /** One job on one short row, so a whole page of work fits on the screen at once: what and who,
  * where and when, the technician, the amount, how far along it is, and the actions as buttons. */
 function JobCompactRow({
@@ -886,6 +920,7 @@ function JobList({
 
   return (
     <View style={{ gap: compact ? 8 : 12 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
+      {compact && <JobCompactHeader />}
       {jobs.map((r) =>
         compact ? (
           <JobCompactRow
