@@ -1053,13 +1053,16 @@ function TransactionForm({
           })),
           discount_amount: Math.round(discountAmount),
           vat_amount: vatAmount,
-          installation_charge: installationAmount,
-          service_charges:
-            type === 'sale'
-              ? serviceRows
+          // Only sent when there is a service charge (or one is being cleared on an edit), so a bill
+          // without services saves the same as it always did, whether or not the columns exist yet.
+          ...(installationAmount > 0 || (initial && (initial.installation_charge ?? 0) > 0)
+            ? {
+                installation_charge: installationAmount,
+                service_charges: serviceRows
                   .filter((r) => Number(r.amount) > 0)
-                  .map((r) => ({ name: r.name.trim() || 'Service', amount: Number(r.amount) }))
-              : [],
+                  .map((r) => ({ name: r.name.trim() || 'Service', amount: Number(r.amount) })),
+              }
+            : null),
           payment_mode: 'cash' as const,
           bank_account_id: null,
         };
