@@ -135,11 +135,15 @@ export function JobTimeline({
   times,
   now,
   layout,
+  statusNote,
 }: {
   request: ServiceRequest;
   times: JobTimes | undefined;
   now: number;
   layout: 'strip' | 'list';
+  /** Plain words for where the job stands ("Working on it · Overdue by 1 day · Unpaid"), shown in the
+   * progress header instead of as coloured chips on the card. */
+  statusNote?: string;
 }) {
   const { nodes, legs } = jobJourney(request, times, now);
   const last = nodes.length - 1;
@@ -193,7 +197,7 @@ export function JobTimeline({
     <View accessible accessibilityLabel={spoken(nodes, legs)}>
       <View className="flex-row items-baseline justify-between px-4 pb-3">
         <Text className="text-[11.5px] font-bold capitalize tracking-wide" style={{ color: '#64748B' }}>
-          Progress
+          Progress{statusNote ? ` · ${statusNote}` : ''}
         </Text>
         <Text className="text-[12.5px]" style={{ color: '#475569' }}>
           Step {stepNumber} of {nodes.length}

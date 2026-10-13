@@ -14,6 +14,7 @@ import { WorkHubPanel } from '../../lib/components/requests/WorkHubPanel';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { ticketLabel } from '../../lib/utils/ticket';
+import { jobStages, type StageStepState } from '../../lib/utils/jobTimeline';
 import type { BusinessTransaction, JobCard, Order, Product, ServiceRequest } from '../../types/database.types';
 
 // "My Jobs" mixed every status (and payment state) into one flat list, so it
@@ -146,6 +147,14 @@ type JobRowData = {
   when: string | null;
   /** Extra short lines under the name - a finished job's token, chalan, products and installation. */
   lines?: string[];
+  /** Customer's phone, under their name in the table. */
+  customerPhone?: string | null;
+  /** The technician's name; the table shows a dash when there is none. */
+  technician?: string | null;
+  /** The job's token number, shown in its own column. */
+  token?: string | null;
+  /** Assigned / WIP / Hold / Completed, drawn as four labelled segments. */
+  progress?: { label: string; state: StageStepState }[];
   tag: Tag;
   amount: number | null;
   action: JobAction;
@@ -155,8 +164,9 @@ type JobRowData = {
   deleting?: boolean;
 };
 
-// Web table columns - shared by the header row and every job row.
-const COLS = { job: 2.2, where: 1.4, type: 120, amount: 110, action: 190, manage: 64 };
+// Web table columns - the same ones My Jobs uses (see JobCompactRow in WorkHubPanel), shared by
+// the header row and every job row of every tab.
+const COLS = { token: 84, when: 150, job: 1.5, customer: 1.1, where: 1, amount: 104, tech: 130, status: 250, actions: 176 };
 
 function formatAmount(amount: number | null): string {
   return amount != null ? `NPR ${Number(amount).toLocaleString()}` : '';
@@ -218,22 +228,56 @@ function ManageButtons({ data }: { data: JobRowData }) {
   );
 }
 
+/** Assigned / WIP / Hold / Completed as four short bars with their words above: the step the job is
+ * on is dark green, finished ones dark grey, the rest light. */
+function ProgressFour({ steps }: { steps: { label: string; state: StageStepState }[] }) {
+  return (
+    <View className="flex-row" style={{ gap: 6 }}>
+      {steps.map((step) => {
+        const color = step.state === 'current' ? '#15803D' : step.state === 'done' ? '#374151' : '#9CA3AF';
+        return (
+          <View key={step.label} style={{ flex: 1, gap: 4 }}>
+            <Text className="text-[10.5px] font-semibold" style={{ color }} numberOfLines={1}>
+              {step.label}
+            </Text>
+            <View
+              style={{
+                height: 5,
+                borderRadius: 3,
+                backgroundColor: step.state === 'current' ? '#16A34A' : step.state === 'done' ? '#4B5563' : '#E5E7EB',
+              }}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 /** One job, rendered either as a table row (wide web) or a card (phone). */
 function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
   // One brand blue for every job's button, whatever stage it is in.
   const color = '#2563EB';
 
   if (wide) {
+    const cell = { minWidth: 0 } as const;
     return (
-      <View className="flex-row items-center border-t border-gray-100 px-[18px] py-3.5" style={{ gap: 16 }}>
-        <Pressable onPress={data.open} className="flex-row items-center gap-3" style={{ flex: COLS.job, minWidth: 0 }}>
+      <View className="flex-row items-center rounded-xl bg-white px-4 py-3" style={{ gap: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+        <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: COLS.token }} numberOfLines={1}>
+          {data.token ?? '—'}
+        </Text>
+
+        <View style={{ width: COLS.when, ...cell }}>
+          <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
+            {data.when ?? '—'}
+          </Text>
+        </View>
+
+        <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: COLS.job, ...cell }}>
           {data.icon}
-          <View className="flex-1" style={{ gap: 2 }}>
-            <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+          <View style={{ flex: 1, gap: 2, ...cell }}>
+            <Text className="text-[14px] font-bold text-gray-900" numberOfLines={1}>
               {data.title}
-            </Text>
-            <Text className="text-[12.5px] text-gray-500" numberOfLines={1}>
-              {data.who}
             </Text>
             {data.lines?.map((line) => (
               <Text key={line} className="text-[12px] text-gray-600" numberOfLines={2}>
@@ -242,26 +286,46 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             ))}
           </View>
         </Pressable>
-        <View style={{ flex: COLS.where, minWidth: 0, gap: 2 }}>
-          <Text className="text-[13px] text-gray-600" numberOfLines={1}>
-            {data.place ?? '—'}
+
+        <View style={{ flexBasis: 0, flexGrow: COLS.customer, ...cell }}>
+          <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+            {data.who}
           </Text>
-          {!!data.when && (
-            <Text className="text-xs text-gray-400" numberOfLines={1}>
-              {data.when}
+          {!!data.customerPhone && (
+            <Text className="text-[12px] font-medium" style={{ color: '#0F766E' }} numberOfLines={1}>
+              {data.customerPhone}
             </Text>
           )}
         </View>
-        <View style={{ width: COLS.type }}>
-          <TagPill tag={data.tag} />
+
+        <View style={{ flexBasis: 0, flexGrow: COLS.where, ...cell }}>
+          <Text className="text-[13px] text-gray-800" numberOfLines={2}>
+            {data.place ?? '—'}
+          </Text>
         </View>
-        <Text className="text-right text-sm font-extrabold text-gray-900" style={{ width: COLS.amount }}>
+
+        <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: COLS.amount }}>
           {formatAmount(data.amount) || '—'}
         </Text>
-        <View style={{ width: COLS.action }}>
-          <ActionButton action={data.action} color={color} height={38} />
+
+        <View style={{ width: COLS.tech, ...cell }}>
+          <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
+            {data.technician ?? '—'}
+          </Text>
         </View>
-        <View style={{ width: COLS.manage, alignItems: 'flex-end' }}>
+
+        <View style={{ width: COLS.status }}>
+          {data.progress ? (
+            <ProgressFour steps={data.progress} />
+          ) : (
+            <Text className="text-[12px] font-semibold text-gray-700" numberOfLines={1}>
+              {data.tag.label}
+            </Text>
+          )}
+        </View>
+
+        <View className="flex-row items-center justify-end" style={{ width: COLS.actions, gap: 6 }}>
+          <ActionButton action={data.action} color="#0F766E" height={36} />
           <ManageButtons data={data} />
         </View>
       </View>
@@ -281,6 +345,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           <Text className="text-[13px] text-gray-600" numberOfLines={1}>
             {data.who}
           </Text>
+          {!!data.token && <Text className="text-xs font-bold text-gray-700">{`Token ${data.token}`}</Text>}
           {data.lines?.map((line) => (
             <Text key={line} className="text-xs text-gray-600">
               {line}
@@ -304,7 +369,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
 /** What a finished job shows: token and chalan numbers, the products used and the installation. */
 function finishedLines(item: ServiceRequest, card: JobCard | undefined): string[] {
-  const ids = [ticketLabel(item.ticket_no) && `Token ${ticketLabel(item.ticket_no)}`, item.chalan_no && `Chalan no. ${item.chalan_no}`];
+  const ids = [item.chalan_no && `Chalan no. ${item.chalan_no}`];
   const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
   const products = parts.length > 0 ? `Products: ${parts.map((p) => `${p.name} × ${p.quantity}`).join(', ')}` : 'Products: none recorded';
   const installation = Number(card?.labor_cost) > 0 ? `Installation: NPR ${Number(card!.labor_cost).toLocaleString()}` : null;
@@ -328,7 +393,7 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
   const finishedStage = stage === 'completed' || stage === 'awaiting_payment' || stage === 'paid';
   const { data: jobCards } = useSupabaseQuery('job_cards', {
     filters: { service_request_id: item.id },
-    enabled: finishedStage,
+    enabled: finishedStage || wide,
   });
   const { confirmCancelWork, busyId } = useCancelWork();
   const deleting = busyId === item.id;
@@ -395,6 +460,8 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
     stage === 'in_progress' && technicianProfile
       ? `${technicianProfile.full_name ?? 'Technician'}${distance != null ? ` · ${distance.toFixed(1)} km away` : ''}`
       : (item.location_data?.address ?? null);
+  // Where the job has got to: Assigned, WIP, Hold, Completed.
+  const progress = jobStages(item, jobCards?.[0]);
 
   // Any job this reseller owns can be cancelled while it's still open (a
   // no-show app customer included); only their own walk-in jobs can be
@@ -410,7 +477,11 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
         icon: <CategoryBadge category={item.issue_type} size={wide ? 40 : 44} />,
         title: item.issue_type,
         who: customerName,
-        place,
+        customerPhone,
+        technician: technicianProfile?.full_name ?? null,
+        token: ticketLabel(item.ticket_no),
+        progress,
+        place: wide ? (item.location_data?.address ?? null) : place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
         lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
         tag,
@@ -441,7 +512,12 @@ function OrderJobRow({
   const open = () => router.push(`/(reseller)/order/${order.id}`);
 
   const first = orderItems?.[0];
-  const firstName = first ? `${productMap.get(first.product_id)?.name ?? 'Product'} × ${first.quantity}` : `Order #${order.id.slice(0, 8)}`;
+  const orderToken = ticketLabel(order.ticket_no);
+  const firstName = first
+    ? `${productMap.get(first.product_id)?.name ?? 'Product'} × ${first.quantity}`
+    : orderToken
+      ? `Token ${orderToken}`
+      : `Order #${order.id.slice(0, 8)}`;
   const title = orderItems && orderItems.length > 1 ? `${firstName} + ${orderItems.length - 1} more` : firstName;
 
   const shipping = order.shipping_address as { address?: string; city?: string } | null;
@@ -471,6 +547,7 @@ function OrderJobRow({
         who: buyer?.full_name ?? '…',
         place,
         when: null,
+        token: orderToken,
         tag: TAGS.order,
         amount: order.total_amount,
         action,
@@ -688,7 +765,7 @@ export default function ResellerRequestQueue() {
             Shop orders to deliver and on the way
           </Text>
           {isWideWeb ? (
-            <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <View style={{ gap: 8 }}>
               {stageJobs.filter((item) => item.kind === 'order').map(jobRow)}
             </View>
           ) : (
@@ -768,30 +845,33 @@ export default function ResellerRequestQueue() {
         </View>
 
         {hubView ?? (
-        <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-          <View className="flex-row items-center gap-2.5 px-[18px] py-3.5" style={{ backgroundColor: activeMeta.tint }}>
+        <View style={{ gap: 8 }}>
+          <View className="flex-row items-center gap-2.5 rounded-lg px-4 py-3" style={{ backgroundColor: activeMeta.tint }}>
             <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeMeta.color }} />
             <Text className="text-[15px] font-bold text-gray-900">{activeMeta.label}</Text>
             <Text className="text-[13px] text-gray-500">— {activeMeta.todo}</Text>
           </View>
-          <View className="flex-row px-[18px] py-2" style={{ gap: 16 }}>
+          <View className="flex-row rounded-lg px-4 py-2" style={{ gap: 14, backgroundColor: '#F3F4F6' }}>
             {(
               [
-                ['Job', { flex: COLS.job }],
-                ['Where / when', { flex: COLS.where }],
-                ['Type', { width: COLS.type }],
+                ['Token no.', { width: COLS.token }],
+                ['Date & time', { width: COLS.when }],
+                ['Job', { flexBasis: 0, flexGrow: COLS.job, minWidth: 0 }],
+                ['Customer', { flexBasis: 0, flexGrow: COLS.customer, minWidth: 0 }],
+                ['Address', { flexBasis: 0, flexGrow: COLS.where, minWidth: 0 }],
                 ['Amount', { width: COLS.amount, textAlign: 'right' }],
-                ['Next step', { width: COLS.action, textAlign: 'center' }],
-                ['', { width: COLS.manage }],
+                ['Technician', { width: COLS.tech }],
+                ['Progress', { width: COLS.status }],
+                ['Actions', { width: COLS.actions, textAlign: 'right' }],
               ] as const
             ).map(([label, style]) => (
-              <Text key={label || 'manage'} className="text-[11px] font-bold capitalize tracking-wide text-gray-400" style={style}>
+              <Text key={label} className="text-[11px] font-bold capitalize tracking-wide text-gray-500" style={style}>
                 {label}
               </Text>
             ))}
           </View>
           {stageJobs.length === 0 ? (
-            <Text className="border-t border-gray-100 px-[18px] py-6 text-sm text-gray-500">{emptyText}</Text>
+            <Text className="px-4 py-6 text-sm text-gray-500">{emptyText}</Text>
           ) : (
             stageJobs.map(jobRow)
           )}

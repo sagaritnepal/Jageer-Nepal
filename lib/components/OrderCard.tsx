@@ -1,4 +1,5 @@
 // lib/components/OrderCard.tsx
+import { ticketLabel } from '../utils/ticket';
 import { View, Text, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -62,7 +63,9 @@ export function OrderCard({
               {roleLabel && (
                 <Text className="text-[10px] font-bold capitalize tracking-wide text-gray-400">{roleLabel}</Text>
               )}
-              <Text className="text-xs text-gray-400">Order #{order.id.slice(0, 8)}</Text>
+              <Text className="text-xs text-gray-400">
+                {ticketLabel(order.ticket_no) ? `Token ${ticketLabel(order.ticket_no)}` : `Order #${order.id.slice(0, 8)}`}
+              </Text>
               <Text className="text-xs font-semibold text-gray-700" numberOfLines={1}>
                 {counterpartyRole} {counterparty?.full_name ?? '…'}
               </Text>

@@ -5,6 +5,7 @@
 // is what makes it readable. Pure functions over a request and its job card,
 // so every screen reads it the same way.
 import { formatDuration } from './duration';
+import { shortDateLabel } from './nepaliDate';
 import { STUCK_OFFER_MS } from './teamStatus';
 import type { ServiceRequest } from '../../types/database.types';
 
@@ -49,7 +50,11 @@ const ms = (iso: string | null | undefined) => {
 
 /** "Sep 27, 15:56" - 24-hour, to match the times the job list already shows. */
 export function stamp(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // The date follows the BS / AD choice ("Aswin 25" or "Oct 12"); the time stays 24-hour.
+  return `${shortDateLabel(day)}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function jobJourney(request: ServiceRequest, times: JobTimes | undefined, now: number): Journey {
@@ -132,4 +137,45 @@ export function jobJourney(request: ServiceRequest, times: JobTimes | undefined,
       : { key: 'wip', label: 'WIP', value: null, state: 'todo' };
 
   return { nodes, legs: [pending, accept, wip] };
+}
+
+export type StageStepState = 'done' | 'current' | 'todo';
+
+/** The four words a job's progress is read by in the Requests tables: Assigned, WIP, Hold, Completed.
+ * Hold is only lit while the job is on hold; the step the job is on now is `current`. */
+export function jobStages(
+  request: ServiceRequest,
+  times: JobTimes | undefined
+): { label: string; state: StageStepState }[] {
+  const cancelled = request.status === 'cancelled';
+  const resolved = request.status === 'resolved';
+  const onHold = request.hold_status === 'on_hold';
+  const working = request.status === 'in_progress';
+  const assigned =
+    !!request.technician_id || !!request.assigned_at || working || resolved || ms(times?.started_at) != null;
+  const wip = working || resolved || ms(times?.started_at) != null;
+
+  // The one step the job is on right now.
+  const current: 'assigned' | 'wip' | 'hold' | 'done' | null = cancelled
+    ? null
+    : resolved
+      ? 'done'
+      : onHold
+        ? 'hold'
+        : wip
+          ? 'wip'
+          : assigned
+            ? 'assigned'
+            : null;
+
+  const state = (key: 'assigned' | 'wip' | 'hold' | 'done', reached: boolean): StageStepState =>
+    current === key ? 'current' : reached ? 'done' : 'todo';
+
+  return [
+    { label: 'Assigned', state: state('assigned', assigned) },
+    { label: 'WIP', state: state('wip', wip) },
+    // A hold that has ended is not remembered, so it only ever shows while it lasts.
+    { label: 'Hold', state: state('hold', false) },
+    { label: 'Completed', state: state('done', resolved) },
+  ];
 }
