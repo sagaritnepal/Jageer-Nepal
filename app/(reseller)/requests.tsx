@@ -1,9 +1,11 @@
 // app/(reseller)/requests.tsx
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, Text, FlatList, ScrollView, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
+import { View, Text, TextInput, Modal, FlatList, ScrollView, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../../lib/supabase';
+import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
@@ -152,6 +154,10 @@ type JobRowData = {
   customerPhone?: string | null;
   /** The technician's name; the table shows a dash when there is none. */
   technician?: string | null;
+  /** The chalan number of a finished job, with the way to enter or fix it by hand. */
+  chalan?: { no: string | null; onEdit: () => void };
+  /** A tick box on the row, to bill several completed jobs of one customer together. */
+  select?: { checked: boolean; onToggle: () => void };
   /** The job's token number, shown in its own column. */
   token?: string | null;
   /** Assigned / WIP / Hold / Completed, drawn as four labelled segments. */
@@ -264,6 +270,18 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
     const cell = { minWidth: 0 } as const;
     return (
       <View className="flex-row items-center rounded-xl bg-white px-4 py-3" style={{ gap: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+        {data.select && (
+          <Pressable
+            onPress={data.select.onToggle}
+            hitSlop={6}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: data.select.checked }}
+            accessibilityLabel="Select for one bill"
+            style={{ width: 20 }}
+          >
+            <Ionicons name={data.select.checked ? 'checkbox' : 'square-outline'} size={20} color={data.select.checked ? '#0F766E' : '#9CA3AF'} />
+          </Pressable>
+        )}
         <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: COLS.token }} numberOfLines={1}>
           {data.token ?? '—'}
         </Text>
@@ -280,6 +298,14 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             <Text className="text-[14px] font-bold text-gray-900" numberOfLines={1}>
               {data.title}
             </Text>
+            {data.chalan && (
+              <Pressable onPress={data.chalan.onEdit} hitSlop={4} className="flex-row items-center self-start" style={{ gap: 4 }}>
+                <Text className="text-[12px] font-semibold" style={{ color: data.chalan.no ? '#374151' : '#0F766E' }}>
+                  {data.chalan.no ? `Chalan no. ${data.chalan.no}` : 'Add chalan no.'}
+                </Text>
+                <Ionicons name="create-outline" size={12} color="#6B7280" />
+              </Pressable>
+            )}
             {data.lines?.map((line) => (
               <Text key={line} className="text-[12px] text-gray-600" numberOfLines={2}>
                 {line}
@@ -347,6 +373,14 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             {data.who}
           </Text>
           {!!data.token && <Text className="text-xs font-bold text-gray-700">{`Token ${data.token}`}</Text>}
+          {data.chalan && (
+            <Pressable onPress={data.chalan.onEdit} hitSlop={4} className="flex-row items-center self-start" style={{ gap: 4 }}>
+              <Text className="text-xs font-semibold" style={{ color: data.chalan.no ? '#374151' : '#0F766E' }}>
+                {data.chalan.no ? `Chalan no. ${data.chalan.no}` : 'Add chalan no.'}
+              </Text>
+              <Ionicons name="create-outline" size={12} color="#6B7280" />
+            </Pressable>
+          )}
           {data.lines?.map((line) => (
             <Text key={line} className="text-xs text-gray-600">
               {line}
@@ -370,14 +404,30 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
 /** What a finished job shows: token and chalan numbers, the products used and the installation. */
 function finishedLines(item: ServiceRequest, card: JobCard | undefined): string[] {
-  const ids = [item.chalan_no && `Chalan no. ${item.chalan_no}`];
+  const ids: (string | null | undefined)[] = [];
   const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
   const products = parts.length > 0 ? `Products: ${parts.map((p) => `${p.name} × ${p.quantity}`).join(', ')}` : 'Products: none recorded';
   const installation = Number(card?.labor_cost) > 0 ? `Installation: NPR ${Number(card!.labor_cost).toLocaleString()}` : null;
   return [ids.filter(Boolean).join(' · '), [products, installation].filter(Boolean).join(' · ')].filter(Boolean);
 }
 
-function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Stage; wide: boolean }) {
+function RequestJobRow({
+  item,
+  stage,
+  wide,
+  onEditChalan,
+  selected,
+  onToggleSelect,
+}: {
+  item: ServiceRequest;
+  stage: Stage;
+  wide: boolean;
+  /** Finished jobs: open the box to type the chalan number by hand. */
+  onEditChalan?: (item: ServiceRequest) => void;
+  /** Completed jobs: whether this one is ticked for a combined bill. */
+  selected?: boolean;
+  onToggleSelect?: (item: ServiceRequest) => void;
+}) {
   // A "reseller" origin request's client_id is just the reseller's own id
   // (there's no real customer profile behind it), so only look up real app
   // customers.
@@ -485,6 +535,11 @@ function RequestJobRow({ item, stage, wide }: { item: ServiceRequest; stage: Sta
         place: wide ? (item.location_data?.address ?? null) : place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
         lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
+        chalan: finishedStage && onEditChalan ? { no: item.chalan_no ?? null, onEdit: () => onEditChalan(item) } : undefined,
+        select:
+          wide && stage === 'completed' && onToggleSelect
+            ? { checked: !!selected, onToggle: () => onToggleSelect(item) }
+            : undefined,
         tag,
         amount: item.quoted_price,
         action,
@@ -697,7 +752,9 @@ export default function ResellerRequestQueue() {
     STAGE_ORDER.forEach((stage) => groups.set(stage, []));
     incoming.forEach((item) => groups.get('requests')!.push({ kind: 'request', id: item.id, request: item }));
     const billedJobs = new Set(
-      (directSales ?? []).filter((t) => t.source_type === 'service_request_bill' && t.source_id).map((t) => t.source_id as string)
+      (directSales ?? [])
+        .filter((t) => t.source_type === 'service_request_bill')
+        .flatMap((t) => [...(t.source_id ? [t.source_id] : []), ...(t.source_job_ids ?? [])])
     );
     (mine ?? []).forEach((item) => groups.get(stageOf(item, billedJobs))!.push({ kind: 'request', id: item.id, request: item }));
     (sellingOrders ?? []).forEach((order) =>
@@ -739,9 +796,64 @@ export default function ResellerRequestQueue() {
     }
   }, [activeStage]);
 
+  // Completed jobs ticked to go on one bill together (same customer / company, one bill number).
+  const [pickedJobs, setPickedJobs] = useState<Set<string>>(new Set());
+  const togglePicked = (job: ServiceRequest) =>
+    setPickedJobs((prev) => {
+      const next = new Set(prev);
+      if (next.has(job.id)) next.delete(job.id);
+      else next.add(job.id);
+      return next;
+    });
+  useEffect(() => setPickedJobs(new Set()), [activeStage]);
+
+  // The chalan number can be typed in by hand on a finished job - until the field staff do it live.
+  const [chalanTarget, setChalanTarget] = useState<ServiceRequest | null>(null);
+  const [chalanInput, setChalanInput] = useState('');
+  const [chalanSaving, setChalanSaving] = useState(false);
+  const openChalan = (job: ServiceRequest) => {
+    setChalanTarget(job);
+    setChalanInput(job.chalan_no ?? '');
+  };
+  async function saveChalan() {
+    if (!chalanTarget || chalanSaving) return;
+    setChalanSaving(true);
+    try {
+      const { error } = await (supabase.from('service_requests') as any)
+        .update({ chalan_no: chalanInput.trim() || null })
+        .eq('id', chalanTarget.id);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+      setChalanTarget(null);
+    } catch (err) {
+      showAlert('Could not save the chalan number', getErrorMessage(err));
+    } finally {
+      setChalanSaving(false);
+    }
+  }
+
+  function billPickedJobs() {
+    const jobs = stageJobs.flatMap((j) => (j.kind === 'request' && pickedJobs.has(j.id) ? [j.request] : []));
+    if (jobs.length === 0) return;
+    const customers = new Set(jobs.map((j) => j.customer_id ?? `name:${(j.customer_name ?? '').trim().toLowerCase()}`));
+    if (customers.size > 1) {
+      showAlert('One customer per bill', 'The ticked jobs belong to different customers. Tick jobs of the same customer or company.');
+      return;
+    }
+    router.push(`/(reseller)/transactions?type=sale&add=1&fromJobs=${jobs.map((j) => j.id).join(',')}` as any);
+  }
+
   const jobRow = (item: JobItem) =>
     item.kind === 'request' ? (
-      <RequestJobRow key={`r-${item.id}`} item={item.request} stage={activeStage} wide={isWideWeb} />
+      <RequestJobRow
+        key={`r-${item.id}`}
+        item={item.request}
+        stage={activeStage}
+        wide={isWideWeb}
+        onEditChalan={openChalan}
+        selected={pickedJobs.has(item.id)}
+        onToggleSelect={togglePicked}
+      />
     ) : item.kind === 'sale' ? (
       <SaleBillRow key={`s-${item.id}`} sale={item.sale} stage={item.stage} wide={isWideWeb} />
     ) : (
@@ -777,6 +889,41 @@ export default function ResellerRequestQueue() {
       )}
     </>
   ) : null;
+
+  const chalanModal = (
+    <Modal visible={!!chalanTarget} transparent animationType="fade" onRequestClose={() => setChalanTarget(null)}>
+          <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={() => setChalanTarget(null)}>
+            <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-4">
+              <Text className="text-base font-bold text-gray-900">Chalan number</Text>
+              <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
+                {chalanTarget ? `${ticketLabel(chalanTarget.ticket_no) ?? ''} ${chalanTarget.issue_type}` : ''}
+              </Text>
+              <TextInput
+                value={chalanInput}
+                onChangeText={setChalanInput}
+                onSubmitEditing={saveChalan}
+                autoFocus
+                placeholder="Number written on the chalan"
+                placeholderTextColor="#9CA3AF"
+                className="mt-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+              />
+              <View className="mt-4 flex-row justify-end" style={{ gap: 10 }}>
+                <Pressable onPress={() => setChalanTarget(null)} className="h-10 items-center justify-center rounded-lg border border-gray-300 px-4">
+                  <Text className="text-sm font-semibold text-gray-700">Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={saveChalan}
+                  disabled={chalanSaving}
+                  className="h-10 items-center justify-center rounded-lg px-5 disabled:opacity-50"
+                  style={{ backgroundColor: '#0F766E' }}
+                >
+                  <Text className="text-sm font-semibold text-white">{chalanSaving ? 'Saving…' : 'Save'}</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+    </Modal>
+  );
 
   if (isWideWeb) {
     const sidePill = (stage: Stage) => {
@@ -853,7 +1000,22 @@ export default function ResellerRequestQueue() {
             <Text className="text-[15px] font-bold text-gray-900">{activeMeta.label}</Text>
             <Text className="text-[13px] text-gray-500">— {activeMeta.todo}</Text>
           </View>
+          {activeStage === 'completed' && pickedJobs.size > 0 && (
+            <View className="flex-row flex-wrap items-center rounded-lg px-4 py-2.5" style={{ gap: 10, backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' }}>
+              <Text className="flex-1 text-[13px] font-semibold text-gray-800">
+                {pickedJobs.size} {pickedJobs.size === 1 ? 'job' : 'jobs'} ticked - bill them together under one bill number
+              </Text>
+              <Pressable onPress={() => setPickedJobs(new Set())} hitSlop={6}>
+                <Text className="text-[12.5px] font-semibold text-gray-600">Clear</Text>
+              </Pressable>
+              <Pressable onPress={billPickedJobs} className="h-9 flex-row items-center gap-1.5 rounded-lg px-3.5" style={{ backgroundColor: '#0F766E' }}>
+                <Ionicons name="document-text-outline" size={15} color="#FFFFFF" />
+                <Text className="text-[13px] font-semibold text-white">Create one bill</Text>
+              </Pressable>
+            </View>
+          )}
           <View className="flex-row rounded-lg px-4 py-2" style={{ gap: 14, backgroundColor: '#F3F4F6' }}>
+            {activeStage === 'completed' && <View style={{ width: 20 }} />}
             {(
               [
                 ['Token no.', { width: COLS.token }],
@@ -879,6 +1041,7 @@ export default function ResellerRequestQueue() {
           )}
         </View>
         )}
+        {chalanModal}
       </ScrollView>
     );
   }
@@ -950,6 +1113,7 @@ export default function ResellerRequestQueue() {
       >
         <Ionicons name="add" size={28} color="white" />
       </Pressable>
+      {chalanModal}
     </View>
   );
 }

@@ -392,6 +392,8 @@ export interface BusinessTransaction {
   vat_amount: number;
   /** A Sale's installation charge: direct income on top of the items (0 when none). */
   installation_charge?: number;
+  /** Every job a bill made from jobs covers (one bill number for several chalans). */
+  source_job_ids?: string[];
   /** The service lines behind it: [{ name, amount }] - installation, wiring, configuration ... */
   service_charges?: { name: string; amount: number }[];
   expense_category_id: string | null;
