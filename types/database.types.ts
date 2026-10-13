@@ -388,6 +388,8 @@ export interface BusinessTransaction {
   items: BillItem[];
   discount_amount: number;
   vat_amount: number;
+  /** A Sale's installation charge: direct income on top of the items (0 when none). */
+  installation_charge?: number;
   expense_category_id: string | null;
   payment_mode: PaymentMode;
   bank_account_id: string | null;
