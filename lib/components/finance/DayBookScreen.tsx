@@ -1407,15 +1407,20 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     };
   });
 
-  // The Filter button and New entry live in the top bar on a wide screen, and as
-  // a plain row above the tiles on a narrow one.
+  // The date filter, Print and Excel always live in the top bar (a plain row above the tiles only on
+  // a narrow window). The New entry buttons - Received, Paid, Sales, Purchase, Expenses, Voucher,
+  // Contra - join them there when the window is wide enough for all of it, and otherwise sit in a row
+  // of their own under the heading.
+  const entriesInBar = wide && windowWidth >= 1640;
+  const newEntryButtons = (
+    <NewEntryButtons basePath={basePath} onVoucher={() => setShowVoucher(true)} onContra={() => setShowContra(true)} />
+  );
   const toolbar = useBookToolbar(
     {
       wide,
-      inBarMinWidth: 1640,
       right: () => (
         <>
-          <NewEntryButtons basePath={basePath} onVoucher={() => setShowVoucher(true)} onContra={() => setShowContra(true)} />
+          {entriesInBar && newEntryButtons}
           <View className="flex-row items-center" style={{ gap: 6 }}>
             <DayStepButton direction="back" onPress={() => stepDays(-1)} />
             <DateFilterButton
@@ -1432,7 +1437,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         </>
       ),
     },
-    [range, isToday, today, basePath, canStepForward]
+    [range, isToday, today, basePath, canStepForward, entriesInBar]
   );
 
   const loaded = !(isLoading && !transactions);
@@ -1444,6 +1449,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       contentContainerStyle={{ padding: wide ? 24 : 12, paddingTop: wide ? 24 : 12, paddingBottom: 96, gap: 14 }}
     >
       {toolbar}
+      {!entriesInBar && newEntryButtons}
 
       {isLoading && !transactions ? (
         <Text className="px-1 text-sm text-gray-500">Loading…</Text>
