@@ -70,26 +70,37 @@ interface ServiceRowState {
   amount: string;
 }
 
-/** The Services table of a Sale, a second table under the Items one: one line per service
- * (installation, wiring, configuration ...), each with its own amount. Optional, and direct income -
- * no item or stock behind it. Lines left empty are not saved. */
+/** The Services table of a Sale, a second table under the Items one and as wide as it: one line per
+ * service (every installation and repair service you offer can be picked, or any name typed), each
+ * with its own amount. Optional, and direct income - no item or stock behind it. Lines left empty
+ * are not saved. */
 function ServiceChargesTable({
   rows,
   onChange,
   accent,
+  serviceNames,
 }: {
   rows: ServiceRowState[];
   onChange: (rows: ServiceRowState[]) => void;
   accent: string;
+  /** Every service that can be picked ("CCTV & Surveillance - Installation", "... - Repair" ...). */
+  serviceNames: string[];
 }) {
+  const [focusedRow, setFocusedRow] = useState<number | null>(null);
   const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const filled = rows.filter((r) => Number(r.amount) > 0).length;
   const update = (index: number, patch: Partial<ServiceRowState>) =>
     onChange(rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   const head = 'px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500';
+  const optionsFor = (text: string): SuggestOption[] => {
+    const q = text.trim().toLowerCase();
+    return serviceNames
+      .filter((n) => !q || n.toLowerCase().includes(q))
+      .map((n) => ({ key: n, label: n }));
+  };
   return (
-    <View className="rounded-xl border border-gray-200 bg-white" style={{ overflow: 'hidden' }}>
-      <View className="flex-row items-center justify-between px-4 py-2.5">
+    <View className="border-t border-gray-200 bg-white" style={{ zIndex: focusedRow != null ? 30 : 0 }}>
+      <View className="flex-row items-center justify-between px-5 pb-3 pt-4">
         <View className="flex-row items-center gap-2">
           <Ionicons name="construct-outline" size={14} color="#6B7280" />
           <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Services (optional)</Text>
@@ -106,34 +117,44 @@ function ServiceChargesTable({
         <Text className={head} style={{ flex: 1 }}>
           Service
         </Text>
-        <Text className={`${head} text-right`} style={{ width: 150 }}>
-          Amount (Rs)
+        <Text className={`${head} text-right`} style={{ width: 130 }}>
+          Amount
         </Text>
         <View style={{ width: 36 }} />
       </View>
       {rows.map((row, index) => (
-        <View key={index} className="flex-row items-center border-b border-gray-100 px-2 py-0.5">
+        <View
+          key={index}
+          className="flex-row items-center border-b border-gray-100 px-2 py-0.5"
+          style={{ zIndex: focusedRow === index ? 5 : 0 }}
+        >
           <Text className="text-center text-[13px] font-semibold text-gray-400" style={{ width: 36 }}>
             {index + 1}
           </Text>
-          <View style={{ flex: 1 }}>
-            <TextInput
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <SuggestInput
               value={row.name}
               onChangeText={(v) => update(index, { name: v })}
-              placeholder="Service, e.g. Installation, Wiring, Configuration"
-              placeholderTextColor="#B2B8C1"
+              options={focusedRow === index ? optionsFor(row.name) : []}
+              onSelectOption={(opt) => update(index, { name: opt.label })}
+              onFocus={() => setFocusedRow(index)}
+              onBlur={() => setFocusedRow((cur) => (cur === index ? null : cur))}
+              showWhenEmpty
+              placeholder="Pick or type a service - installation, repair, wiring ..."
               accessibilityLabel={`Service name, row ${index + 1}`}
-              className="rounded-lg px-2.5 py-2.5 text-sm text-gray-900"
-              style={{ borderWidth: 1.5, borderColor: '#F1F2F4', outlineStyle: 'none' } as object}
+              accent={accent}
+              inputClassName="rounded-lg px-2.5 py-2.5 text-sm text-gray-900"
+              inputStyle={{ borderWidth: 1.5, borderColor: '#F1F2F4', outlineStyle: 'none' } as object}
             />
           </View>
-          <View style={{ width: 150 }}>
+          <View style={{ width: 130 }}>
             <TextInput
               value={row.amount}
               onChangeText={(v) => update(index, { amount: v.replace(/[^0-9.]/g, '') })}
               placeholder="0"
               placeholderTextColor="#B2B8C1"
               keyboardType="numeric"
+              selectTextOnFocus
               accessibilityLabel={`Service amount, row ${index + 1}`}
               className="rounded-lg px-2.5 py-2.5 text-right text-sm font-semibold text-gray-900"
               style={{ borderWidth: 1.5, borderColor: '#F1F2F4', outlineStyle: 'none' } as object}
@@ -158,7 +179,7 @@ function ServiceChargesTable({
       ))}
       <Pressable
         onPress={() => onChange([...rows, { name: '', amount: '' }])}
-        className="flex-row items-center px-4 py-2.5"
+        className="flex-row items-center px-5 py-3"
         style={{ gap: 6 }}
       >
         <Ionicons name="add-circle" size={16} color={accent} />
@@ -793,6 +814,16 @@ function TransactionForm({
       : '0'
   );
   // Installation: a service charged to the customer on a Sale - direct income, no item or stock behind it.
+  // Every service on offer, as "Category - Installation" / "Category - Repair", to pick from in the Services table.
+  const { data: serviceCategories } = useSupabaseQuery('service_categories', {
+    filters: { is_active: true },
+    orderBy: { column: 'sort_order' },
+    enabled: type === 'sale',
+  });
+  const serviceNames = useMemo(
+    () => (serviceCategories ?? []).flatMap((c) => [`${c.label} - Installation`, `${c.label} - Repair`]),
+    [serviceCategories]
+  );
   const [serviceRows, setServiceRows] = useState<ServiceRowState[]>(() => {
     if (initial?.service_charges?.length) return initial.service_charges.map((s) => ({ name: s.name, amount: String(s.amount) }));
     // A bill saved before the table existed carried one lump installation charge.
@@ -1760,15 +1791,14 @@ function TransactionForm({
               onRequestSave={handleSave}
               onExit={() => discountRef.current?.focus()}
               footer={
+                <>
+                {type === 'sale' && (
+                  <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} serviceNames={serviceNames} />
+                )}
                 <View
                   className="flex-row flex-wrap border-t border-gray-200 bg-gray-50 px-5 py-4"
                   style={{ columnGap: 28, rowGap: 14, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}
                 >
-                  {type === 'sale' && (
-                    <View style={{ flexBasis: '100%' }}>
-                      <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} />
-                    </View>
-                  )}
                   <View style={{ flex: 1, minWidth: 240 }}>
                     <Text className="mb-1.5 text-xs font-semibold text-gray-600">Remarks</Text>
                     <KeyInput
@@ -1890,6 +1920,7 @@ function TransactionForm({
                     </View>
                   </View>
                 </View>
+                </>
               }
             />
 
@@ -2122,7 +2153,7 @@ function TransactionForm({
             </View>
             {type === 'sale' && (
               <View className="mt-3">
-                <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent="#EA580C" />
+                <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent="#EA580C" serviceNames={serviceNames} />
               </View>
             )}
             <TextInput
