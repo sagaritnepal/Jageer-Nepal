@@ -689,7 +689,7 @@ function JobCompactHeader() {
       <Text className={head} style={{ width: 170 }}>
         Progress
       </Text>
-      <Text className={`${head} text-right`} style={{ width: 114 }}>
+      <Text className={`${head} text-right`} style={{ width: 176 }}>
         Actions
       </Text>
     </View>
@@ -833,7 +833,7 @@ function JobCompactRow({
         </Text>
       </View>
 
-      <View className="flex-row items-center" style={{ gap: 6 }}>
+      <View className="flex-row items-center justify-end" style={{ gap: 6, width: 176 }}>
         <Pressable
           onPress={mainPress}
           disabled={busy}
