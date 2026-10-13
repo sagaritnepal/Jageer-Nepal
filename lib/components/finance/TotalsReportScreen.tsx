@@ -682,7 +682,11 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
       else next.add(key);
       return next;
     });
-  const openableKeys = (grouped?.groups ?? []).filter((g) => g.rows.length > 0).map((g) => g.key);
+  // A heading opens in place only when there are names inside it to choose from (more than one, in the
+  // Expenses Report). One with none - or a single one - is the end of the line: tapping it is the popup.
+  const openableKeys = (grouped?.groups ?? [])
+    .filter((g) => kind === 'expense' && subjectsOf(g.rows).length > 1)
+    .map((g) => g.key);
   const allOpen = openableKeys.length > 0 && openableKeys.every((k) => openKeys.has(k));
   const shownEntries = yearEntries;
   // What the column that names who it was with is called.
@@ -967,8 +971,6 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         { key: 'amount', label: 'Amount', width: 96, align: 'right', render: amountCell },
         { key: 'act', label: '', width: 30, align: 'right', render: chevron },
       ];
-  // What a heading's table uses: the bill layout for Sales / Purchase, the usual one for Expense.
-  const headingColumns = kind === 'sale' || kind === 'purchase' ? billColumns : columns;
   // A payment's colour is its own direction (green in, red out), not the report's.
   const ledgerColumns = columnsFor('Type', (e) => (
     <Text className="text-[12.5px] font-bold" style={{ color: e.type.color }} numberOfLines={1}>
@@ -1026,22 +1028,24 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
         </View>
       ) : grouped !== null && kind !== 'sale' && kind !== 'purchase' ? (
         // Expenses / Total Received / Total Paid: every heading, each a card - its name, how many entries
-        // and what they add up to. Tap one to open the log of transactions inside it. A name appears once
-        // however many entries it has.
+        // and what they add up to. A heading with names inside it opens to show them, and a name's payments
+        // are a popup; one with none is itself the popup. A name appears once however many entries it has.
         <View style={{ gap: 10 }}>
           {grouped.groups.map((g) => {
             const empty = g.rows.length === 0;
-            const isOpen = !empty && openKeys.has(g.key);
-            // Expenses: inside a heading each bike / person is one line, the payments to it added up.
-            // A heading with just one subject has nothing to fold, so it lists its payments as they are.
-            const subjects = isOpen && kind === 'expense' ? subjectsOf(g.rows) : [];
+            // Expenses: inside a heading each bike / person is one line, the payments to it added up. With
+            // more than one of them the heading has children - a tap opens them, and a child's payments
+            // are the popup. With one or none (Total Received / Paid) it has no child: a tap is the popup.
+            const subjects = kind === 'expense' ? subjectsOf(g.rows) : [];
+            const hasChildren = subjects.length > 1;
+            const isOpen = !empty && hasChildren && openKeys.has(g.key);
             return (
               <View key={g.key} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
                 <Pressable
-                  onPress={() => toggleGroup(g.key)}
+                  onPress={() => (hasChildren ? toggleGroup(g.key) : setSubjectView({ name: g.label, rows: g.rows }))}
                   disabled={empty}
                   accessibilityRole="button"
-                  accessibilityState={{ expanded: isOpen }}
+                  accessibilityState={hasChildren ? { expanded: isOpen } : undefined}
                   className="flex-row items-center px-3.5 py-3"
                   style={{ gap: 10, backgroundColor: isOpen ? '#F9FAFB' : '#FFFFFF' }}
                 >
@@ -1056,7 +1060,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                     {money(g.total)}
                   </Text>
                 </Pressable>
-                {isOpen && subjects.length > 1 && (
+                {isOpen && (
                   <View className="border-t border-gray-200">
                     {subjects.map((s, i) => {
                       const single = s.rows.length === 1;
@@ -1083,11 +1087,6 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
                         </View>
                       );
                     })}
-                  </View>
-                )}
-                {isOpen && subjects.length <= 1 && (
-                  <View className="border-t border-gray-200">
-                    <BookTable bare columns={headingColumns} rows={g.rows} rowKey={(e) => e.id} onRowPress={open} />
                   </View>
                 )}
               </View>
@@ -1139,9 +1138,9 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             ? 'Tap a bill to open it; tap a payment to open this ledger, where it can be edited. Money paid to this ledger counts as an expense, and money received back is taken off. The balance above counts every entry of both ledgers.'
             : `Tap a bill to open it; tap a ${kind === 'sale' ? 'receipt' : 'payment'} to open their ledger, where it can be edited. What was ${kind === 'sale' ? 'received' : 'paid'} is listed with the bills. With bills recorded it settles them and is not added again (a bill and its payment would count twice); with none, it is the ${kind === 'sale' ? 'sale' : 'purchase'} and counts. The balance above counts every entry of both ledgers.`
           : kind === 'received'
-            ? `Each name is listed once - tap it to open everything recorded for it. Only money actually collected counts here - a sale bill on credit shows up once the customer pays. ${periodNote}`
+            ? `Each name is listed once - tap it to see everything recorded for it. Only money actually collected counts here - a sale bill on credit shows up once the customer pays. ${periodNote}`
             : kind === 'paid'
-              ? `Each name is listed once - tap it to open everything recorded for it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor. ${periodNote}`
+              ? `Each name is listed once - tap it to see everything recorded for it. Only money that actually left counts here - a purchase bill on credit shows up once you pay the vendor. ${periodNote}`
               : kind === 'expense'
                 ? `Each heading is a category - names that start with the same words (Fuel Aviator, Fuel Manish) sit under one. Tap a heading to open the names inside it, and a name to see its payments. Tap a payment to open it. Counts every expense bill, and money paid to a ledger typed Expense or Employee (listed under that ledger's name). ${periodNote}`
                 : `Tap a bill to open it with its items. Every ${kind} bill counts here, whether or not the money has moved yet - what was ${kind === 'sale' ? 'received' : 'paid'} is in Total ${kind === 'sale' ? 'Received' : 'Paid'}. ${periodNote}`}

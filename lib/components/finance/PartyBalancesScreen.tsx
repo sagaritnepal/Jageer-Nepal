@@ -16,6 +16,7 @@ import { localTodayIso } from '../../utils/localDate';
 import { entryDay } from '../../utils/ledgerStatement';
 import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
 import { MONEY } from './moneyColors';
+import { PopupCard } from './FormKit';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 
 type Direction = 'receive' | 'give';
@@ -68,7 +69,7 @@ const META: Record<
     empty: 'No customer owes you anything right now.',
     cashLabel: 'Total received',
     cashPath: '/received',
-    note: 'Each heading is a customer who owes you: everything billed to their ledger, less what they have paid. Tap a heading to open the log of entries inside it.',
+    note: 'Each heading is a customer who owes you: everything billed to their ledger, less what they have paid. Tap a heading to see the entries behind it.',
   },
   give: {
     title: 'Payable',
@@ -78,7 +79,7 @@ const META: Record<
     empty: "You don't owe any vendor right now.",
     cashLabel: 'Total paid',
     cashPath: '/paid',
-    note: 'Each heading is a vendor you owe: everything they billed you, less what you have paid. Tap a heading to open the log of entries inside it.',
+    note: 'Each heading is a vendor you owe: everything they billed you, less what you have paid. Tap a heading to see the entries behind it.',
   },
 };
 
@@ -190,24 +191,16 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
   const cash = useYearCashTotals(userId);
   const cashTotal = direction === 'receive' ? cash.received : cash.paid;
 
-  // Which headings are open to show their entries. They all start closed: the headings are the
-  // overview, and the log of one is a tap away instead of a scroll.
-  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
-  const toggle = (key: string) =>
-    setOpenKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  const allOpen = shown.length > 0 && shown.every((h) => openKeys.has(h.partyId));
+  // The heading whose entries are open in a popup. A heading has nothing inside it to choose from, so
+  // a tap on it is the popup - the log of entries behind its figure, scrollable.
+  const [view, setView] = useState<Heading | null>(null);
 
   const entryWord = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
 
-  // Print and Excel carry what is open on the page, not the whole report: the headings that are open
-  // with their entries; with nothing open, the headings and what each comes to.
-  const buildReport = (): PrintReport => {
-    const opened = shown.filter((h) => openKeys.has(h.partyId));
+  // Print and Excel carry the page - the headings and what each comes to - or, from inside the popup,
+  // that one heading's entries alone (`only`).
+  const buildReport = (only?: Heading): PrintReport => {
+    const opened = only ? [only] : [];
     const sections: PrintSection[] =
       opened.length === 0
         ? [
@@ -330,18 +323,6 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
         <BookStat label="Largest" value={`NPR ${money(largest)}`} color="#374151" />
       </BookStats>
 
-      {shown.length > 1 && (
-        <View className="flex-row items-center justify-end px-1">
-          <Pressable
-            onPress={() => setOpenKeys(allOpen ? new Set() : new Set(shown.map((h) => h.partyId)))}
-            accessibilityRole="button"
-            hitSlop={6}
-          >
-            <Text className="text-[12.5px] font-semibold text-blue-700">{allOpen ? 'Close all' : 'Open all'}</Text>
-          </Pressable>
-        </View>
-      )}
-
       {shown.length === 0 ? (
         <View className="items-center rounded-xl border border-gray-300 bg-white py-10">
           <Ionicons name={meta.icon} size={28} color="#D1D5DB" />
@@ -351,45 +332,27 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
         // Every heading, each a card - the name, how many entries and what they add up to. Tap one to
         // open the log of entries inside it.
         <View style={{ gap: 10 }}>
-          {shown.map((h) => {
-            const isOpen = openKeys.has(h.partyId);
-            return (
-              <View key={h.partyId} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
-                <Pressable
-                  onPress={() => toggle(h.partyId)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: isOpen }}
-                  className="flex-row items-center px-3.5 py-3"
-                  style={{ gap: 10, backgroundColor: isOpen ? '#F9FAFB' : '#FFFFFF' }}
-                >
-                  <Ionicons name={isOpen ? 'chevron-down' : 'chevron-forward'} size={16} color="#6B7280" />
-                  <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
-                    {nameCaps(h.name)}
-                  </Text>
-                  <Text className="text-[12px] text-gray-400">
-                    {[h.ledgerType || null, entryWord(h.entries.length)].filter(Boolean).join(' · ')}
-                  </Text>
-                  <Text className="text-right text-[14px] font-extrabold" style={{ minWidth: 84, color: meta.color }}>
-                    {money(h.balance)}
-                  </Text>
-                </Pressable>
-                {isOpen && (
-                  <View className="border-t border-gray-200">
-                    <BookTable bare columns={logColumns} rows={h.entries} rowKey={(e) => e.id} onRowPress={() => openLedger(h.partyId)} />
-                    <Pressable
-                      onPress={() => openLedger(h.partyId)}
-                      accessibilityRole="button"
-                      className="flex-row items-center justify-end border-t border-gray-200 px-3.5 py-2.5"
-                      style={{ gap: 6 }}
-                    >
-                      <Text className="text-[12.5px] font-semibold text-blue-700">Open ledger</Text>
-                      <Ionicons name="chevron-forward" size={14} color="#1D4ED8" />
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            );
-          })}
+          {shown.map((h) => (
+            <View key={h.partyId} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
+              <Pressable
+                onPress={() => setView(h)}
+                accessibilityRole="button"
+                className="flex-row items-center px-3.5 py-3"
+                style={{ gap: 10, backgroundColor: '#FFFFFF' }}
+              >
+                <Ionicons name="chevron-forward" size={16} color="#6B7280" />
+                <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
+                  {nameCaps(h.name)}
+                </Text>
+                <Text className="text-[12px] text-gray-400">
+                  {[h.ledgerType || null, entryWord(h.entries.length)].filter(Boolean).join(' · ')}
+                </Text>
+                <Text className="text-right text-[14px] font-extrabold" style={{ minWidth: 84, color: meta.color }}>
+                  {money(h.balance)}
+                </Text>
+              </Pressable>
+            </View>
+          ))}
           <View className="flex-row items-center justify-end px-1" style={{ gap: 10 }}>
             <Text className="text-[12.5px] font-bold text-gray-600">
               {`${shown.length} ${shown.length === 1 ? meta.who.toLowerCase() : `${meta.who.toLowerCase()}s`} · Total`}
@@ -402,6 +365,28 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
       )}
 
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">{meta.note}</Text>
+
+      {view && (
+        // The heading's entries - the same log it used to open inline - with Print and Excel for it alone.
+        <PopupCard title={nameCaps(view.name)} onClose={() => setView(null)} maxWidth={920}>
+          <View className="flex-row justify-end" style={{ gap: 8 }}>
+            <PrintButton onPress={() => void printReportDocument(reportHtml(buildReport(view)))} />
+            <ExcelButton onPress={() => void exportReportDocument(buildReport(view))} />
+          </View>
+          <BookTable
+            stickyHeader
+            columns={logColumns}
+            rows={view.entries}
+            rowKey={(e) => e.id}
+            onRowPress={() => {
+              // An entry is edited on the ledger, so the card goes with the tap.
+              const id = view.partyId;
+              setView(null);
+              openLedger(id);
+            }}
+          />
+        </PopupCard>
+      )}
     </BookPage>
   );
 }
