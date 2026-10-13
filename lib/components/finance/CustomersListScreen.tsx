@@ -771,9 +771,15 @@ function LedgerList({ basePath }: { basePath: string }) {
     return { receivable, payable, net: receivable - payable };
   }, [itemsByParty]);
 
+  // An app user with no saved ledger is a customer: they sit under the Ledger type called Customer.
+  const appUserType = useMemo(() => partyTypes.find((t) => /^customers?$/i.test(t.name.trim())), [partyTypes]);
+  // The Ledger type a row is listed under, as a word to search by (nothing for a party with none).
+  const typeOf = (d: PartyRowData) => (d.row.kind === 'customer' ? d.typeName ?? '' : appUserType?.name ?? 'Customer');
+
   // In name order (A-Z): `merged` is already sorted that way and filtering keeps the order. With
-  // something typed in the search, a party shows when its name or phone contains it - and the ones
-  // whose name (or any word of it) starts with it come first, then the rest, each still A-Z.
+  // something typed in the search, a party shows when its name, phone or Ledger type contains it -
+  // typing "vendor" lists everyone filed under Vendor. The ones whose name (or any word of it) starts
+  // with it come first, then the rest, each still A-Z.
   const filtered = useMemo(() => {
     const byStatus =
       filter === 'all'
@@ -785,12 +791,18 @@ function LedgerList({ basePath }: { basePath: string }) {
     if (!q) return byStatus;
     const rank = (d: PartyRowData) => {
       const name = d.row.name.toLowerCase();
-      return name.startsWith(q) ? 0 : name.split(/\s+/).some((word) => word.startsWith(q)) ? 1 : 2;
+      if (name.startsWith(q)) return 0;
+      if (name.split(/\s+/).some((word) => word.startsWith(q))) return 1;
+      return name.includes(q) || (d.row.phone ?? '').includes(q) ? 2 : 3;
     };
     return byStatus
-      .filter((d) => d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q))
+      .filter(
+        (d) =>
+          d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q) || typeOf(d).toLowerCase().includes(q)
+      )
       .sort((a, b) => rank(a) - rank(b));
-  }, [analysed, filter, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysed, filter, search, appUserType]);
 
   // The Ledger is laid out by Ledger type - Customer, Vendor, Employee, Expense ... - each header with
   // how many parties it holds and what they add up to, and the parties inside it. Only a type with
@@ -808,13 +820,12 @@ function LedgerList({ basePath }: { basePath: string }) {
       return g;
     };
     // An app user with no saved ledger is a customer: they go under Customer, with their APP badge.
-    const customerType = partyTypes.find((t) => /^customers?$/i.test(t.name.trim()));
     for (const d of filtered) {
       const typeId = d.row.kind === 'customer' ? d.row.customer.party_type_id ?? null : null;
       const g =
         d.row.kind !== 'customer'
-          ? customerType
-            ? slot(customerType.id, customerType.name)
+          ? appUserType
+            ? slot(appUserType.id, appUserType.name)
             : slot(CUSTOMER_GROUP, 'Customer')
           : typeId
             ? slot(typeId, partyTypeName.get(typeId) ?? 'No ledger type')
@@ -826,7 +837,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
     const last = (k: string) => (k === NO_TYPE ? 1 : 0);
     return [...byKey.values()].sort((a, b) => last(a.key) - last(b.key) || a.label.localeCompare(b.label));
-  }, [filtered, partyTypes, partyTypeName]);
+  }, [filtered, appUserType, partyTypeName]);
   const groupKeys = groups.map((g) => g.key);
   const allOpen = groupKeys.length > 0 && groupKeys.every((k) => openKeys.has(k));
   const toggleGroup = (key: string) =>
@@ -918,7 +929,7 @@ function LedgerList({ basePath }: { basePath: string }) {
       // Drawn in the app's top bar, outside this page's own tree - so it carries the capitals with it.
       right: (inBar) => (
         <CapsProvider>
-          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name or phone" wide={inBar} />
+          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name, phone or type" wide={inBar} />
           <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
           <ToolbarButton icon="add" label="New party" onPress={openNewParty} />
         </CapsProvider>
@@ -1205,7 +1216,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     <View className="flex-1 bg-gray-50">
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }} keyboardShouldPersistTaps="handled">
         <View className="flex-row items-center gap-2">
-          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name or phone" wide={false} />
+          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name, phone or type" wide={false} />
           <Pressable onPress={openNewParty} className="h-11 w-11 items-center justify-center rounded-2xl bg-orange-500">
             <Ionicons name="add" size={22} color="white" />
           </Pressable>
