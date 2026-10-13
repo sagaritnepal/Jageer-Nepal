@@ -924,14 +924,14 @@ function JobList({
 /** What each stage that uses the panel calls itself. */
 const STAGE_COPY = {
   my_jobs: {
-    title: (n: number) => `${n} job${n === 1 ? '' : 's'} to assign`,
-    empty: 'Every job has a technician.',
-    note: 'Jobs nobody has been given yet - one moves on to Job in progress once a technician accepts it.',
+    title: (n: number) => `${n} job${n === 1 ? '' : 's'}`,
+    empty: 'No jobs right now.',
+    note: 'Every job you are working - ones nobody has been given yet to assign, and ones a technician has accepted to follow.',
   },
   in_progress: {
     title: (n: number) => `${n} job${n === 1 ? '' : 's'} in progress`,
     empty: 'No jobs in progress right now.',
-    note: 'Jobs a technician has been given. Ones nobody has taken yet are under My Jobs, and on the board below.',
+    note: 'Jobs a technician has been given.',
   },
 } as const;
 

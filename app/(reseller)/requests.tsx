@@ -41,7 +41,6 @@ const STAGE_ORDER: Stage[] = [
   'requests',
   'waiting_customer',
   'my_jobs',
-  'in_progress',
   'completed',
   'awaiting_payment',
   'paid',
@@ -50,7 +49,7 @@ const STAGE_ORDER: Stage[] = [
 // The numbered pipeline is the job itself, finishing at Completed. What
 // happens to the money after that - part paid, settled - sits in the row
 // of chips underneath, where Cancelled already lived.
-const WORKING_STAGES: Stage[] = ['requests', 'waiting_customer', 'my_jobs', 'in_progress', 'completed'];
+const WORKING_STAGES: Stage[] = ['requests', 'waiting_customer', 'my_jobs', 'completed'];
 const SIDE_STAGES: Stage[] = ['awaiting_payment', 'paid', 'cancelled'];
 
 const STAGE_META: Record<
@@ -59,7 +58,7 @@ const STAGE_META: Record<
 > = {
   requests: { label: 'Requests', todo: 'Accept or confirm', icon: 'download-outline', color: '#EA580C', tint: '#FFF7ED' },
   waiting_customer: { label: 'Waiting on customer', todo: 'Quote & wait for approval', icon: 'time-outline', color: '#D97706', tint: '#FFFBEB' },
-  my_jobs: { label: 'My Jobs', todo: 'Assign a technician', icon: 'briefcase', color: '#2563EB', tint: '#EFF6FF' },
+  my_jobs: { label: 'My Jobs', todo: 'Assign a technician and follow the work', icon: 'briefcase', color: '#2563EB', tint: '#EFF6FF' },
   in_progress: { label: 'Job in progress', todo: 'Technician is working', icon: 'build', color: '#2563EB', tint: '#EFF6FF' },
   completed: { label: 'Completed', todo: 'Work done - collect payment', icon: 'checkmark-circle', color: '#16A34A', tint: '#F0FDF4' },
   awaiting_payment: { label: 'Awaiting payment', todo: 'Part paid - collect the rest', icon: 'cash-outline', color: '#DC2626', tint: '#FEF2F2' },
@@ -82,7 +81,9 @@ function stageOf(item: ServiceRequest): Stage {
       return 'my_jobs';
     case 'assigned':
     case 'in_progress':
-      return 'in_progress';
+      // Jobs a technician has been given sit in the same tab as the ones still
+      // waiting for one - "My Jobs" is every job being worked, start to finish.
+      return 'my_jobs';
     case 'resolved':
       // Finished and settled leaves the pipeline; part paid is the one
       // still worth chasing; anything else is simply done but unpaid.
@@ -101,7 +102,7 @@ function orderStageOf(order: Order): Stage {
     case 'confirmed':
       return 'my_jobs';
     case 'shipped':
-      return 'in_progress';
+      return 'my_jobs';
     case 'delivered':
       return 'paid';
     case 'cancelled':
@@ -567,7 +568,7 @@ export default function ResellerRequestQueue() {
       {stageJobs.some((item) => item.kind === 'order') && (
         <View style={{ gap: 8 }}>
           <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-500">
-            {hubStage === 'my_jobs' ? 'Shop orders to deliver' : 'Shop orders on the way'}
+            Shop orders to deliver and on the way
           </Text>
           {isWideWeb ? (
             <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
