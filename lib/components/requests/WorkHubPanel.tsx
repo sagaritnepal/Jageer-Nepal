@@ -1032,16 +1032,33 @@ export function WorkHubPanel({
     userId
   );
 
+  // A job keeps its own copy of the customer's name; when it is linked to a saved customer, the
+  // Ledger's current name wins, so renaming someone in the Ledger shows here straight away.
+  const { data: savedCustomers } = useSupabaseQuery('customers', {
+    filters: userId ? { owner_id: userId } : {},
+    enabled: !!userId,
+  });
+  const withLedgerName = useMemo(() => {
+    const names = new Map((savedCustomers ?? []).map((c) => [c.id, c.name]));
+    return (r: ServiceRequest): ServiceRequest => {
+      const name = r.customer_id ? names.get(r.customer_id) : undefined;
+      return name && name !== r.customer_name ? { ...r, customer_name: name } : r;
+    };
+  }, [savedCustomers]);
+
   // The list is this stage's jobs: overdue ones first, then by when they were due.
   const shown = useMemo(
-    () => [...jobs].sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a)) || dueAt(a) - dueAt(b)),
-    [jobs]
+    () => jobs.map(withLedgerName).sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a)) || dueAt(a) - dueAt(b)),
+    [jobs, withLedgerName]
   );
   const shownOverdue = shown.filter(isOverdue).length;
 
   // The board is about who is carrying work right now - all of it, not just
   // the jobs the list shows.
-  const live = useMemo(() => requests.filter((r) => LIVE_STATUSES.includes(r.status)), [requests]);
+  const live = useMemo(
+    () => requests.filter((r) => LIVE_STATUSES.includes(r.status)).map(withLedgerName),
+    [requests, withLedgerName]
+  );
   const overdueCount = useMemo(() => live.filter(isOverdue).length, [live]);
 
   const byTechnician = useMemo(() => {
