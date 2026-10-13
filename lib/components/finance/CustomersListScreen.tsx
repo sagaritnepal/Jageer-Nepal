@@ -17,6 +17,8 @@ import { PartyTypeField } from './PartyTypeField';
 import { LedgerTypeMenuModal } from './LedgerTypeMenuModal';
 import { Field, FieldRow, FormActions, INPUT, PopupCard } from './FormKit';
 import { CapsProvider, Text } from './CapsText';
+import { PrintButton, printReportDocument } from './PrintButton';
+import { reportHtml, type PrintReport, type PrintSection } from '../../utils/printReport';
 import { Checkbox, LEDGER_TONE, StatusBadges, SummaryCard } from './ledger/LedgerUi';
 import { partyPosition, type PartyPosition } from '../../utils/partyBalance';
 import {
@@ -659,6 +661,7 @@ function LedgerList({ basePath }: { basePath: string }) {
   useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const { add } = useLocalSearchParams<{ add?: string }>();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const profile = useAuthStore((state) => state.profile);
   const queryClient = useQueryClient();
   // The search box filters the table as you type: every party whose name or phone contains what is
   // typed, those whose name starts with it first.
@@ -919,6 +922,61 @@ function LedgerList({ basePath }: { basePath: string }) {
   // list as it is now through a ref.
   const exportNow = useRef(exportRows);
   exportNow.current = exportRows;
+
+  // Print: the list as it is on screen - one table for each Ledger type header, with what it adds up
+  // to. (Export, beside it, is the same list as a spreadsheet.) The figures at the top are for every
+  // party, so they print only when nothing narrows the list.
+  const buildReport = (): PrintReport => {
+    const balanceText = (value: number) => {
+      const side = Math.round(value) > 0 ? ' Dr' : Math.round(value) < 0 ? ' Cr' : '';
+      return `${dash(Math.abs(value))}${side}`;
+    };
+    const sections: PrintSection[] = groups.map((g) => ({
+      heading: `${g.label} - ${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`,
+      columns: [
+        { label: 'SN' },
+        { label: 'Party' },
+        { label: 'Phone' },
+        { label: 'Last transaction' },
+        { label: 'Sales', align: 'right' },
+        { label: 'Purchases', align: 'right' },
+        { label: 'Payments', align: 'right' },
+        { label: 'Balance (NPR)', align: 'right' },
+      ],
+      rows: g.rows.map((d, i) => [
+        String(i + 1),
+        nameCaps(d.row.name),
+        d.row.phone ?? '',
+        d.totals.lastDay ? toBsHistoryLabel(d.totals.lastDay) : '',
+        dash(d.sales),
+        dash(d.purchases),
+        dash(d.payments),
+        balanceText(d.balance),
+      ]),
+      footer: ['', 'Total', '', '', '', '', '', balanceText(g.net)],
+    }));
+    return {
+      title: 'Ledger',
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      subtitle: search.trim() ? `Matching "${search.trim()}"` : filter !== 'all' ? 'Filtered list' : 'All parties',
+      printedOn: toBsHistoryLabel(today),
+      summary: narrowed
+        ? undefined
+        : [
+            { label: 'Net balance', value: `${cards.net < 0 ? '-' : ''}NPR ${bookMoney(Math.abs(cards.net))}` },
+            { label: 'Total receivable', value: `NPR ${bookMoney(cards.receivable)}` },
+            { label: 'Total payable', value: `NPR ${bookMoney(cards.payable)}` },
+            { label: 'Parties', value: String(merged.length) },
+          ],
+      sections:
+        sections.length > 0
+          ? sections
+          : [{ columns: [{ label: 'Party' }], rows: [], emptyText: 'No parties match what is on screen.' }],
+      note: 'Dr = they owe you, Cr = you owe them.',
+    };
+  };
+  const printNow = useRef<() => void>(() => {});
+  printNow.current = () => void printReportDocument(reportHtml(buildReport()));
   const openNewParty = () => {
     setNewPartyName('');
     setShowAddForm(true);
@@ -931,6 +989,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         <CapsProvider>
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name, phone or type" wide={inBar} />
           <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
+          <PrintButton onPress={() => printNow.current()} />
           <ToolbarButton icon="add" label="New party" onPress={openNewParty} />
         </CapsProvider>
       ),
@@ -1236,6 +1295,7 @@ function LedgerList({ basePath }: { basePath: string }) {
             <Text className={`text-[13px] font-semibold ${selecting ? 'text-blue-700' : 'text-gray-700'}`}>{selecting ? 'Done' : 'Select'}</Text>
           </Pressable>
           <ExportButton onPress={() => exportRows(false)} busy={exporting} />
+          <PrintButton onPress={() => printNow.current()} />
         </View>
 
         {addForm}

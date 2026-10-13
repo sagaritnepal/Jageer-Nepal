@@ -8,6 +8,10 @@ import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { DateFilterButton } from './DateRangeFilter';
 import { MONEY } from './moneyColors';
+import { useAuthStore } from '../../hooks/useAuth';
+import { localTodayIso } from '../../utils/localDate';
+import type { PrintReport } from '../../utils/printReport';
+import { useReportActions } from './PrintButton';
 import type { FeedItem } from './TransactionsScreen';
 import type { AccountTransfer, BusinessTransaction, BusinessTransactionType } from '../../../types/database.types';
 
@@ -119,6 +123,7 @@ export function TransactionsBook({
 }) {
   const [calendarMode] = useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const layout = useBookLayout();
+  const profile = useAuthStore((state) => state.profile);
 
   // The date range filters everything on the page - the table, its totals and
   // the tiles. Empty on either side means no limit there.
@@ -142,16 +147,21 @@ export function TransactionsBook({
   live.current = { onFilter, onBack };
   const showTabs = !locked;
   const hasBack = !!onBack;
+  // Print and Excel: the statement as it stands (see buildReport, below).
+  const reportButtons = useReportActions(() => buildReport());
   const toolbar = useBookToolbar(
     {
       title,
       resetTitle: 'Statement',
       wide: layout.wide,
+      // The type tabs, the date filter, Print and Excel are more than a narrow bar holds.
+      inBarMinWidth: 1240,
       left: hasBack ? () => <BackButton onPress={() => live.current.onBack?.()} /> : undefined,
       right: () => (
         <>
           {showTabs && <FilterTabs options={filters} value={filter} onChange={(f) => live.current.onFilter(f)} />}
           <DateFilterButton from={from} to={to} onApply={setRange} />
+          {reportButtons}
         </>
       ),
     },
@@ -388,6 +398,61 @@ export function TransactionsBook({
   const lockedType = locked && filter !== 'all' ? filter : null;
   const lockedTotal = lockedType ? stats.sums[lockedType] : 0;
   const lockedCount = lockedType ? stats.counts[lockedType] : 0;
+
+  // The statement as a document: the type and period on screen, every entry with its invoice no.,
+  // amounts and cash in / out, and the totals.
+  function buildReport(): PrintReport {
+    const cell = (v: number | null) => (v == null ? '' : money(v));
+    const typeLabel = !locked && filter !== 'all' ? filters.find((f) => f.key === filter)?.label : undefined;
+    const period = from || to ? `${from ? toBsHistoryLabel(from) : 'Start'} - ${to ? toBsHistoryLabel(to) : 'Today'}` : 'All dates';
+    return {
+      title,
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      subtitle: [typeLabel, period].filter(Boolean).join(' · '),
+      printedOn: toBsHistoryLabel(localTodayIso()),
+      summary: lockedType
+        ? [
+            { label: 'Total', value: `NPR ${money(lockedTotal)}` },
+            { label: 'Entries', value: String(lockedCount) },
+            { label: 'Average', value: `NPR ${money(lockedCount ? lockedTotal / lockedCount : 0)}` },
+            { label: 'Largest', value: `NPR ${money(stats.largest)}` },
+          ]
+        : [
+            { label: 'Sales', value: `NPR ${money(stats.sums.sale)}` },
+            { label: 'Purchases', value: `NPR ${money(stats.sums.purchase)}` },
+            { label: 'Expenses', value: `NPR ${money(stats.sums.expense)}` },
+            { label: 'Entries', value: String(rows.length) },
+          ],
+      sections: [
+        {
+          columns: [
+            { label: 'SN' },
+            { label: 'Date' },
+            { label: 'Invoice no.' },
+            { label: 'Transaction details' },
+            { label: 'Type' },
+            { label: 'Discount', align: 'right' },
+            { label: 'Bill amount', align: 'right' },
+            { label: 'Cash in', align: 'right' },
+            { label: 'Cash out', align: 'right' },
+          ],
+          rows: rows.map((r, i) => [
+            String(i + 1),
+            `${toBsHistoryLabel(r.date)} ${r.time}`,
+            r.invoiceNo ?? '',
+            [r.details, r.sub].filter(Boolean).join(' · '),
+            r.pill.label,
+            cell(r.discount || null),
+            cell(r.amount),
+            cell(r.cashIn),
+            cell(r.cashOut),
+          ]),
+          footer: ['', '', '', `${rows.length} ${rows.length === 1 ? 'entry' : 'entries'} · Totals`, '', '', money(totals.amount), money(totals.cashIn), money(totals.cashOut)],
+          emptyText: from || to ? 'Nothing in this date range.' : 'Nothing in the statement yet.',
+        },
+      ],
+    };
+  }
 
   return (
     <BookPage wide={layout.wide}>

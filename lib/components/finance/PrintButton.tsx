@@ -1,8 +1,9 @@
 // lib/components/finance/PrintButton.tsx
+import { useRef, type ReactNode } from 'react';
 import { Pressable, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { printWithPreview } from '../../utils/exportWorkRecord';
-import { exportReportXlsx, type PrintReport } from '../../utils/printReport';
+import { exportReportXlsx, reportHtml, type PrintReport } from '../../utils/printReport';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 
 /** A report's Print button. Pressing it opens the system's print preview (see printReportDocument)
@@ -55,4 +56,18 @@ export async function exportReportDocument(report: PrintReport) {
   } catch (err) {
     showAlert('Could not export', getErrorMessage(err));
   }
+}
+
+/** Print and Excel for a page - the pair every report carries in the top bar. The bar keeps the
+ * callbacks it was first given, so `build` is read through a ref when a button is pressed: it always
+ * prints the page as it is now. Put the returned buttons in the bar's `right`. */
+export function useReportActions(build: () => PrintReport): ReactNode {
+  const latest = useRef(build);
+  latest.current = build;
+  return (
+    <>
+      <PrintButton onPress={() => void printReportDocument(reportHtml(latest.current()))} />
+      <ExcelButton onPress={() => void exportReportDocument(latest.current())} />
+    </>
+  );
 }

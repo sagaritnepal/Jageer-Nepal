@@ -6,6 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill, ToolbarSearch, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { useReportActions } from './PrintButton';
+import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { localTodayIso } from '../../utils/localDate';
+import type { PrintReport } from '../../utils/printReport';
 
 type StockStatus = 'ok' | 'out' | 'untracked';
 type StatusFilter = 'all' | 'out';
@@ -51,6 +55,7 @@ const rs = (n: number | null) => (n == null ? '—' : n.toLocaleString(undefined
 export function InventoryScreen() {
   const layout = useBookLayout();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const profile = useAuthStore((state) => state.profile);
   const role = useRole();
   const { data: products } = useSupabaseQuery('products', {
     filters: userId && role ? { seller_id: userId, seller_role: role } : {},
@@ -68,16 +73,21 @@ export function InventoryScreen() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<StatusFilter>('all');
 
-  // Search and the All / Out filter live in the top bar on a wide screen (a
+  // Print and Excel: the list as it is on screen (see buildReport, below).
+  const reportButtons = useReportActions(() => buildReport());
+
+  // Search, the All / Out filter, Print and Excel live in the top bar on a wide screen (a
   // plain row above the tiles on a phone).
   const toolbar = useBookToolbar(
     {
       wide: layout.wide,
+      inBarMinWidth: 1200,
       left: layout.wide ? undefined : () => <BackButton onPress={() => router.back()} />,
       right: (inBar) => (
         <>
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search your products" wide={inBar} />
           <FilterTabs options={FILTERS} value={filter} onChange={setFilter} />
+          {reportButtons}
         </>
       ),
     },
@@ -226,6 +236,53 @@ export function InventoryScreen() {
     : undefined;
 
   const toggleOut = () => setFilter((f) => (f === 'out' ? 'all' : 'out'));
+
+  // The stock list as a document: the items on screen with their stock, prices and what moved.
+  function buildReport(): PrintReport {
+    const cell = (v: number | null) => (v == null ? '' : rs(v));
+    return {
+      title: 'Inventory',
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      subtitle: [filter === 'out' ? 'Out of stock' : null, search.trim() ? `Matching "${search.trim()}"` : null].filter(Boolean).join(' · ') || undefined,
+      printedOn: toBsHistoryLabel(localTodayIso()),
+      summary: [
+        { label: 'Items', value: String(stats.items) },
+        { label: 'Stock value (cost)', value: `NPR ${money(stats.value)}` },
+        { label: 'Out of stock', value: String(stats.out) },
+      ],
+      sections: [
+        {
+          columns: [
+            { label: 'SN' },
+            { label: 'Item' },
+            { label: 'Category' },
+            { label: 'In stock', align: 'right' },
+            { label: 'Status' },
+            { label: 'Cost price', align: 'right' },
+            { label: 'Selling price', align: 'right' },
+            { label: 'Sold', align: 'right' },
+            { label: 'Purchased', align: 'right' },
+            { label: 'Stock value', align: 'right' },
+          ],
+          rows: filteredRows.map((r, n) => [
+            String(n + 1),
+            r.name,
+            r.category ?? '',
+            r.stockLevel != null ? qty(r.stockLevel) : '',
+            STATUS[r.status].label,
+            cell(r.cost),
+            cell(r.price),
+            qty(r.sold),
+            qty(r.purchased),
+            r.value != null ? money(r.value) : '',
+          ]),
+          footer: ['', `${filteredRows.length} ${filteredRows.length === 1 ? 'item' : 'items'} · Totals`, '', '', '', '', '', qty(totals.sold), qty(totals.purchased), money(totals.value)],
+          emptyText: rows.length > 0 ? 'No matches.' : 'Nothing bought or sold yet.',
+        },
+      ],
+      note: 'Sold and Purchased count the units on Sale and Purchase bills, matched to products by item name.',
+    };
+  }
 
   return (
     <BookPage wide={layout.wide}>

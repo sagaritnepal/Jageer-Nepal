@@ -14,6 +14,8 @@ import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { ToolbarButton, useBarActions, useBookLayout } from './BookKit';
 import { localTodayIso } from '../../utils/localDate';
+import { useReportActions } from './PrintButton';
+import type { PrintReport, PrintSection } from '../../utils/printReport';
 
 // Local date, not UTC - see localTodayIso.
 const todayIso = localTodayIso;
@@ -192,6 +194,7 @@ function TransferForm({ userId, onDone }: { userId: string; onDone: () => void }
 export function BankBalancesScreen({ basePath }: { basePath: string }) {
   const layout = useBookLayout();
   const userId = useAuthStore((state) => state.session?.user.id);
+  const profile = useAuthStore((state) => state.profile);
   const balances = useAccountBalances(userId);
   const deleteTransfer = useSupabaseDelete('account_transfers');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -206,11 +209,57 @@ export function BankBalancesScreen({ basePath }: { basePath: string }) {
     });
   }
 
-  // The name, the back button (phones) and Transfer live in the top bar.
+  // Print and Excel: what each account holds, and - for the one opened - what makes up its balance.
+  const reportButtons = useReportActions((): PrintReport => {
+    const activityOf = (name: string, items: AccountActivityItem[]): PrintSection => ({
+      heading: `${name} - activity`,
+      columns: [{ label: 'Date' }, { label: 'Details' }, { label: 'Amount (NPR)', align: 'right' }],
+      rows: items.map((item) => [
+        toBsHistoryLabel(item.date),
+        [item.label, item.sub].filter(Boolean).join(' · '),
+        `${item.isInflow ? '+' : '-'}${item.amount.toLocaleString()}`,
+      ]),
+      emptyText: 'No activity yet.',
+    });
+    const opened =
+      expandedKey === 'cash'
+        ? activityOf('Cash', balances.cashActivity)
+        : balances.perAccount.filter((a) => a.id === expandedKey).map((a) => activityOf(a.name, a.activity))[0];
+    return {
+      title: 'Bank Balances',
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      printedOn: toBsHistoryLabel(localTodayIso()),
+      summary: [
+        { label: 'Available balance (Cash + Banks)', value: `NPR ${balances.total.toLocaleString()}` },
+        { label: 'Bank total', value: `NPR ${bankTotal.toLocaleString()}` },
+        { label: 'Cash', value: `NPR ${balances.cash.toLocaleString()}` },
+      ],
+      sections: [
+        {
+          columns: [{ label: 'SN' }, { label: 'Account' }, { label: 'Balance (NPR)', align: 'right' }],
+          rows: [
+            ['1', 'Cash', balances.cash.toLocaleString()],
+            ...balances.perAccount.map((a, i) => [String(i + 2), a.name, a.balance.toLocaleString()]),
+          ],
+          footer: ['', 'Total', balances.total.toLocaleString()],
+        },
+        ...(opened ? [opened] : []),
+      ],
+    };
+  });
+
+  // The name, the back button (phones), Print / Excel and Transfer live in the top bar.
   useBarActions(
     {
       wide: layout.wide,
-      right: !showTransfer && userId ? () => <ToolbarButton icon="swap-horizontal" label="Transfer" onPress={() => setShowTransfer(true)} /> : undefined,
+      right: userId
+        ? () => (
+            <>
+              {reportButtons}
+              {!showTransfer && <ToolbarButton icon="swap-horizontal" label="Transfer" onPress={() => setShowTransfer(true)} />}
+            </>
+          )
+        : undefined,
     },
     [showTransfer, userId]
   );

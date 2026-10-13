@@ -14,12 +14,14 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { ContactPickerModal } from '../ContactPickerModal';
 import { useWideDetail } from '../detail/DetailLayout';
 import { dateLabels, useCalendarMode } from '../../hooks/useCalendarMode';
-import { shortDateLabel } from '../../utils/nepaliDate';
+import { shortDateLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
 import { DateFilterButton, DayStepButton } from './DateRangeFilter';
 import { useBookToolbar } from './BookKit';
 import { MONEY } from './moneyColors';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { ENTRY_KINDS } from './entryKinds';
+import { useReportActions } from './PrintButton';
+import type { PrintReport } from '../../utils/printReport';
 import { TransactionDetailModal } from './TransactionsScreen';
 import type { BusinessTransaction } from '../../../types/database.types';
 
@@ -862,6 +864,7 @@ function AccountPicker({ options, selected, onSelect }: {
  * Available Balance (useAccountBalances), so the two always agree. */
 export function DayBookScreen({ basePath }: { basePath: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
+  const profile = useAuthStore((state) => state.profile);
   const wide = useWideDetail();
   const { width: windowWidth } = useWindowDimensions();
   const fullTable = wide && windowWidth >= FULL_TABLE_MIN_WINDOW;
@@ -1235,12 +1238,67 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       return { from: r.from ? addDays(r.from, delta) : '', to };
     });
 
+  // Print and Excel carry the book as it stands: the period and account picked, the opening balance,
+  // every entry with its cash in / out and the running balance, and the totals.
+  const reportButtons = useReportActions((): PrintReport => {
+    const period = singleDay
+      ? dateLabels(day, calendarMode)[0]
+      : `${from ? toBsHistoryLabel(from) : 'Start'} - ${toBsHistoryLabel(day)}`;
+    const cell = (v: number | null) => (v == null ? '' : money(v));
+    const entries = book.rows.filter((r) => r.kind !== 'opening');
+    return {
+      title: 'Day Book',
+      businessName: profile?.business_name ?? profile?.full_name ?? '',
+      subtitle: [period, book.selected?.name].filter(Boolean).join(' · '),
+      printedOn: toBsHistoryLabel(today),
+      summary: [
+        { label: 'Opening balance', value: `NPR ${money(book.opening)}` },
+        { label: 'Cash in', value: `NPR ${money(book.totalIn)}` },
+        { label: 'Cash out', value: `NPR ${money(book.totalOut)}` },
+        { label: 'Closing balance', value: `NPR ${money(book.closing)}` },
+        { label: 'Entries', value: String(book.entryCount) },
+      ],
+      sections: [
+        {
+          columns: [
+            { label: 'SN' },
+            { label: 'Date' },
+            { label: 'Invoice no.' },
+            { label: 'Transaction details' },
+            { label: 'Type' },
+            { label: 'Discount', align: 'right' },
+            { label: 'Bill amount', align: 'right' },
+            { label: 'Cash in', align: 'right' },
+            { label: 'Cash out', align: 'right' },
+            { label: 'Balance', align: 'right' },
+          ],
+          rows: [
+            ['', '', '', 'Opening balance', '', '', '', '', '', money(book.opening)],
+            ...entries.map((r, i) => [
+              String(i + 1),
+              `${toBsHistoryLabel(r.date)} ${r.time}`,
+              r.invoiceNo ?? '',
+              [r.details, r.sub].filter(Boolean).join(' · '),
+              [KIND[r.kind].label, r.account].filter(Boolean).join(' · '),
+              cell(r.discount || null),
+              cell(r.amount),
+              cell(r.cashIn),
+              cell(r.cashOut),
+              cell(r.balance),
+            ]),
+          ],
+          footer: ['', '', '', 'Totals', '', '', '', money(book.totalIn), money(book.totalOut), money(book.closing)],
+        },
+      ],
+    };
+  });
+
   // The Filter button and New entry live in the top bar on a wide screen, and as
   // a plain row above the tiles on a narrow one.
   const toolbar = useBookToolbar(
     {
       wide,
-      inBarMinWidth: 1240,
+      inBarMinWidth: 1400,
       right: () => (
         <>
           <NewEntryButtons basePath={basePath} />
@@ -1256,6 +1314,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
             />
             <DayStepButton direction="forward" disabled={!canStepForward} onPress={() => stepDays(1)} />
           </View>
+          {reportButtons}
         </>
       ),
     },
