@@ -34,7 +34,6 @@ import {
   ROW_PAD_Y,
   TIER_COLUMNS,
   TIER_GAP,
-  TIER_GROW,
   TIER_WIDTH,
   tierFor,
   type ColKey,
@@ -704,7 +703,6 @@ function JobCompactRow({
 
   const has = (key: ColKey) => TIER_COLUMNS[tier].includes(key);
   const w = TIER_WIDTH[tier];
-  const grow = TIER_GROW[tier];
   const cell = { minWidth: 0 } as const;
   const stages = jobStages(r, times);
   const statusLine = [chip.label, hold?.label, overdue ? `Overdue by ${overdueBy(r)}` : null, pay.label].filter(Boolean).join(' · ');
@@ -715,23 +713,24 @@ function JobCompactRow({
       className="flex-row items-center rounded-lg bg-white"
       style={{
         gap: TIER_GAP[tier],
+        justifyContent: 'space-between',
         paddingHorizontal: ROW_PAD_X,
         paddingVertical: ROW_PAD_Y,
         borderWidth: 1,
         borderColor: '#E5E7EB',
       }}
     >
-      <Text className="text-[12px] font-bold text-gray-800" style={{ width: w.token }} numberOfLines={1}>
+      <Text className="text-[12px] font-bold text-gray-800" style={{ width: w.token, flexShrink: 0 }} numberOfLines={1}>
         {ticketLabel(r.ticket_no) ?? '—'}
       </Text>
 
       {has('when') && (
-        <Text className="text-[12px] text-gray-800" style={{ width: w.when }} numberOfLines={1}>
+        <Text className="text-[12px] text-gray-800" style={{ width: w.when, flexShrink: 0 }} numberOfLines={1}>
           {dateText || '—'}
         </Text>
       )}
 
-      <Pressable onPress={open} className="flex-row items-center" style={{ gap: 8, flexBasis: 0, flexGrow: grow.job, ...cell }}>
+      <Pressable onPress={open} className="flex-row items-center" style={{ gap: 8, width: w.job, flexShrink: 1, ...cell }}>
         <CategoryBadge category={r.issue_type} size={30} />
         <View style={{ flex: 1, gap: 1, ...cell }}>
           {!!issue.eyebrow && (
@@ -745,7 +744,7 @@ function JobCompactRow({
         </View>
       </Pressable>
 
-      <View style={{ flexBasis: 0, flexGrow: grow.customer, ...cell }}>
+      <View style={{ width: w.customer, flexShrink: 1, ...cell }}>
         <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
           {r.customer_name ?? 'Customer'}
         </Text>
@@ -770,7 +769,7 @@ function JobCompactRow({
       </View>
 
       {has('where') && (
-        <View style={{ flexBasis: 0, flexGrow: grow.where, ...cell }}>
+        <View style={{ width: w.where, flexShrink: 1, ...cell }}>
           <Text className="text-[12px] text-gray-800" numberOfLines={1}>
             {address ?? 'No address'}
           </Text>
@@ -791,7 +790,7 @@ function JobCompactRow({
       />
 
       {has('tech') && (
-        <View className="flex-row items-center" style={{ width: w.tech, gap: 6, ...cell }}>
+        <View className="flex-row items-center" style={{ width: w.tech, flexShrink: 0, gap: 6, ...cell }}>
           {r.technician_id ? (
             <>
               <View className="items-center justify-center rounded-full" style={{ width: 22, height: 22, backgroundColor: '#374151' }}>
@@ -810,11 +809,11 @@ function JobCompactRow({
       )}
 
       {/* Assigned / WIP / Hold / Completed, and under them how the job stands. */}
-      <View style={{ width: w.status }}>
+      <View style={{ width: w.status, flexShrink: 0 }}>
         <JobProgressBars steps={stages} note={statusLine} />
       </View>
 
-      <View className="flex-row items-center justify-end" style={{ gap: 4, width: w.actions }}>
+      <View className="flex-row items-center justify-end" style={{ gap: 4, width: w.actions, flexShrink: 0 }}>
         <Pressable
           onPress={mainPress}
           disabled={busy}

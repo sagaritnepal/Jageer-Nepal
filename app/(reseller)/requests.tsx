@@ -31,7 +31,6 @@ import {
   ROW_PAD_Y,
   TIER_COLUMNS,
   TIER_GAP,
-  TIER_GROW,
   TIER_WIDTH,
   TierContext,
   tierFor,
@@ -280,13 +279,13 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
     const cell = { minWidth: 0 } as const;
     const has = (key: ColKey) => TIER_COLUMNS[tier].includes(key);
     const w = TIER_WIDTH[tier];
-    const grow = TIER_GROW[tier];
     // One short line per cell - a long name or address is cut with an ellipsis, not wrapped.
     return (
       <View
         className="flex-row items-center rounded-lg bg-white"
         style={{
           gap: TIER_GAP[tier],
+          justifyContent: 'space-between',
           paddingHorizontal: ROW_PAD_X,
           paddingVertical: ROW_PAD_Y,
           borderWidth: 1,
@@ -305,17 +304,17 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             <Ionicons name={data.select.checked ? 'checkbox' : 'square-outline'} size={19} color={data.select.checked ? '#0F766E' : '#9CA3AF'} />
           </Pressable>
         )}
-        <Text className="text-[12px] font-bold text-gray-800" style={{ width: w.token }} numberOfLines={1}>
+        <Text className="text-[12px] font-bold text-gray-800" style={{ width: w.token, flexShrink: 0 }} numberOfLines={1}>
           {data.token ?? '—'}
         </Text>
 
         {has('when') && (
-          <Text className="text-[12px] text-gray-800" style={{ width: w.when }} numberOfLines={1}>
+          <Text className="text-[12px] text-gray-800" style={{ width: w.when, flexShrink: 0 }} numberOfLines={1}>
             {dateText || '—'}
           </Text>
         )}
 
-        <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 8, flexBasis: 0, flexGrow: grow.job, ...cell }}>
+        <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 8, width: w.job, flexShrink: 1, ...cell }}>
           {data.icon}
           <View style={{ flex: 1, gap: 1, ...cell }}>
             <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>
@@ -337,7 +336,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           </View>
         </Pressable>
 
-        <View style={{ flexBasis: 0, flexGrow: grow.customer, ...cell }}>
+        <View style={{ width: w.customer, flexShrink: 1, ...cell }}>
           <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
             {data.who}
           </Text>
@@ -360,7 +359,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
         </View>
 
         {has('where') && (
-          <View style={{ flexBasis: 0, flexGrow: grow.where, ...cell }}>
+          <View style={{ width: w.where, flexShrink: 1, ...cell }}>
             <Text className="text-[12px] text-gray-800" numberOfLines={1}>
               {data.place ?? '—'}
             </Text>
@@ -375,14 +374,14 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
         />
 
         {has('tech') && (
-          <View style={{ width: w.tech, ...cell }}>
+          <View style={{ width: w.tech, flexShrink: 0, ...cell }}>
             <Text className="text-[12px] font-semibold text-gray-900" numberOfLines={1}>
               {data.technician ?? '—'}
             </Text>
           </View>
         )}
 
-        <View style={{ width: w.status }}>
+        <View style={{ width: w.status, flexShrink: 0 }}>
           {data.progress ? (
             <JobProgressBars steps={data.progress} />
           ) : (
@@ -392,7 +391,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           )}
         </View>
 
-        <View className="flex-row items-center justify-end" style={{ width: w.actions, gap: 4 }}>
+        <View className="flex-row items-center justify-end" style={{ width: w.actions, flexShrink: 0, gap: 4 }}>
           <ActionButton action={data.action} color="#0F766E" height={ROW_BUTTON_HEIGHT} />
           <ManageButtons data={data} small />
         </View>

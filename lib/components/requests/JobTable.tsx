@@ -24,17 +24,22 @@ export const TIER_COLUMNS: Record<Tier, ColKey[]> = {
   compact: ['token', 'when', 'job', 'customer', 'amount', 'tech', 'status', 'actions'],
   tight: ['token', 'when', 'job', 'customer', 'amount', 'status', 'actions'],
 };
-/** Fixed widths; the columns without one (job, customer, where) share what is left, by TIER_GROW. */
+/** Every column has a fixed width. Room left over is not given to one column but shared out as
+ * equal gaps between all of them (the rows are `space-between`), so the space from one column to
+ * the next is the same all along the table. Job, Customer and Address are the only ones that give
+ * a little width back when the table is narrower than the sum. */
 export const TIER_WIDTH: Record<Tier, Partial<Record<ColKey, number>>> = {
-  full: { token: 64, when: 84, amount: 116, tech: 144, status: 228, actions: 176 },
-  compact: { token: 64, when: 84, amount: 112, tech: 128, status: 212, actions: 168 },
-  tight: { token: 56, when: 78, amount: 100, status: 190, actions: 160 },
+  full: { token: 64, when: 84, job: 240, customer: 210, where: 170, amount: 116, tech: 144, status: 228, actions: 176 },
+  compact: { token: 64, when: 84, job: 220, customer: 230, amount: 112, tech: 128, status: 212, actions: 168 },
+  tight: { token: 56, when: 78, job: 210, customer: 220, amount: 100, status: 190, actions: 160 },
 };
-export const TIER_GROW: Record<Tier, { job: number; customer: number; where: number }> = {
-  full: { job: 2, customer: 1.2, where: 1 },
-  compact: { job: 2, customer: 1.4, where: 1 },
-  tight: { job: 1.8, customer: 1.2, where: 1 },
-};
+/** The columns that may shrink a little to fit; every other one keeps its width. */
+const SHRINKS: ColKey[] = ['job', 'customer', 'where'];
+/** A column's width and whether it may give some back - for the header and every row alike. */
+export function columnStyle(tier: Tier, key: ColKey) {
+  const width = TIER_WIDTH[tier][key];
+  return SHRINKS.includes(key) ? ({ width, flexShrink: 1, minWidth: 0 } as const) : ({ width, flexShrink: 0 } as const);
+}
 export const TIER_GAP: Record<Tier, number> = { full: 12, compact: 10, tight: 8 };
 /** The amount is left-aligned, under its header; this much empty room on its right keeps it from
  * running into the technician beside it. It is part of the column's width, in the header and every
@@ -77,6 +82,7 @@ export function JobTableHeader({ tier, leading }: { tier: Tier; leading?: boolea
       className="flex-row items-center rounded-md"
       style={{
         gap: TIER_GAP[tier],
+        justifyContent: 'space-between',
         paddingHorizontal: ROW_PAD_X,
         paddingVertical: 6,
         borderWidth: 1,
@@ -86,15 +92,11 @@ export function JobTableHeader({ tier, leading }: { tier: Tier; leading?: boolea
     >
       {leading && <View style={{ width: 20 }} />}
       {TIER_COLUMNS[tier].map((key) => {
-        const fixed = TIER_WIDTH[tier][key];
-        const style =
-          fixed != null
-            ? {
-                width: fixed,
-                textAlign: key === 'actions' ? ('right' as const) : undefined,
-                paddingRight: key === 'amount' ? AMOUNT_PAD : undefined,
-              }
-            : { flexBasis: 0, flexGrow: TIER_GROW[tier][key as 'job' | 'customer' | 'where'], minWidth: 0 };
+        const style = {
+          ...columnStyle(tier, key),
+          textAlign: key === 'actions' ? ('right' as const) : undefined,
+          paddingRight: key === 'amount' ? AMOUNT_PAD : undefined,
+        };
         return (
           <Text key={key} className="text-[10.5px] font-bold capitalize tracking-wide text-gray-500" style={style} numberOfLines={1}>
             {HEAD_LABEL[key]}
