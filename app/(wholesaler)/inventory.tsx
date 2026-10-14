@@ -2,5 +2,5 @@
 import { InventoryScreen } from '../../lib/components/finance/InventoryScreen';
 
 export default function WholesalerInventory() {
-  return <InventoryScreen />;
+  return <InventoryScreen basePath="/(wholesaler)" />;
 }

@@ -78,16 +78,13 @@ export function shortcuts(basePath: string): {
     })),
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
     { key: 'import-statement', label: 'Import Statement', icon: 'document-attach', href: `${basePath}/import-statement` },
-    { key: 'inventory', label: 'Inventory', icon: 'cube', href: `${basePath}/inventory` },
+    { key: 'inventory', label: 'Stock and Inventory', icon: 'cube', href: `${basePath}/inventory` },
     { key: 'report', label: 'Report', icon: 'bar-chart', href: `${basePath}/report` },
-    // Quotation and Buy Stock only exist under (reseller) for now - a
-    // wholesaler basePath has no matching routes, so these would be dead
-    // links there.
+    // Quotation only exists under (reseller) for now - a wholesaler basePath has no matching
+    // route, so it would be a dead link there. Buying stock is not a page of its own here any more:
+    // it is the Buy Stock button on Stock and Inventory.
     ...(basePath === '/(reseller)'
-      ? [
-          { key: 'quotation', label: 'Quotation', icon: 'document-text' as const, href: `${basePath}/quotation/new` },
-          { key: 'buy-stock', label: 'Buy Stock', icon: 'storefront' as const, href: `${basePath}/wholesale` },
-        ]
+      ? [{ key: 'quotation', label: 'Quotation', icon: 'document-text' as const, href: `${basePath}/quotation/new` }]
       : []),
   ];
 }
@@ -109,7 +106,6 @@ const SHORTCUT_COLORS: Record<string, { bg: string; fg: string }> = {
   inventory: { bg: '#F5F3FF', fg: '#7C3AED' },
   report: { bg: '#EFF6FF', fg: '#2563EB' },
   quotation: { bg: '#FDF4FF', fg: '#A21CAF' },
-  'buy-stock': { bg: '#FFF7ED', fg: '#EA580C' },
 };
 
 function CircularProgress({
