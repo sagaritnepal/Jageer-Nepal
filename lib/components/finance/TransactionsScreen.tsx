@@ -2688,20 +2688,16 @@ function ReadBox({ children, icon }: { children: ReactNode; icon?: keyof typeof 
 }
 
 /** A Sale / Purchase laid out like BillEditPopup, but to read - nothing in it is typed. Edit, where
- * Save would be, goes to the bill's own edit page (the one New is) with the bill loaded.
- *
- * The Payment Method is the one thing that changes with a tap: it is a dropdown of Cash and the
- * accounts, and choosing one is saved at once - a bill that was settled through Esewa should say so
- * without a trip to the edit page. */
+ * Save would be, goes to the bill's own edit page (the one New is) with the bill loaded. It is the
+ * bill as a document - who, when, how much, what was on it - so it has no payment method: how the
+ * money moved is in the payment entries, not on the bill. */
 function BillViewPopup({
   tx,
-  bankAccountName,
   onClose,
   onEdit,
   onDelete,
 }: {
   tx: BusinessTransaction;
-  bankAccountName: string | null;
   onClose: () => void;
   onEdit: () => void;
   /** Shown as Remove, left of Cancel / Edit, only where the caller can remove the bill. */
@@ -2711,36 +2707,6 @@ function BillViewPopup({
   const [dateMain, dateOther] = dateLabels(entryDay(tx.bill_date, tx.created_at), calendarMode);
   const meta = TYPE_META[tx.type];
   const tone = tx.type === 'purchase' ? MONEY.out : MONEY.in;
-  // The payment method, changed in place: what is shown follows the tap at once, and is put back if
-  // saving fails.
-  const updateTx = useSupabaseUpdate('business_transactions');
-  const bankAccounts = useBankAccounts(tx.owner_id);
-  const [bankAccountId, setBankAccountId] = useState<string | null>(tx.bank_account_id);
-  const [showAccountPicker, setShowAccountPicker] = useState(false);
-  const method = bankAccountId ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? bankAccountName ?? 'Bank' : 'Cash';
-  async function applyMethod(id: string | null) {
-    const before = bankAccountId;
-    setBankAccountId(id);
-    try {
-      await updateTx.mutateAsync({ id: tx.id, values: { bank_account_id: id, payment_mode: id ? ('bank' as const) : ('cash' as const) } });
-    } catch (err) {
-      setBankAccountId(before);
-      showAlert('Could not change the payment method', getErrorMessage(err));
-    }
-  }
-  // Nothing changes until it is confirmed: the choice is put to the person first, naming both methods.
-  function chooseMethod(id: string | null) {
-    if (id === bankAccountId) return;
-    const nameOf = (key: string | null) => (key ? bankAccounts.accounts.find((a) => a.id === key)?.name ?? 'Bank' : 'Cash');
-    showAlert(
-      'Change the payment method?',
-      `This ${meta.label.toLowerCase()} bill will change from ${nameOf(bankAccountId)} to ${nameOf(id)}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Change', onPress: () => void applyMethod(id) },
-      ]
-    );
-  }
   return (
     <PopupCard title={`${meta.label} bill`} onClose={onClose} closeOnOutside>
       <View className="self-start rounded-lg border px-4 py-2" style={{ borderColor: tone.base, backgroundColor: tone.bg }}>
@@ -2771,24 +2737,12 @@ function BillViewPopup({
         <Field label="Amount (NPR)" basis={160}>
           <ReadBox>{tx.amount.toLocaleString()}</ReadBox>
         </Field>
-        <Field label="Payment Method" basis={200}>
-          <PaymentMethodButton name={method} isBank={!!bankAccountId} onPress={() => setShowAccountPicker(true)} />
-        </Field>
         <Field label="Remarks" basis={260}>
           <ReadBox>{tx.note || '—'}</ReadBox>
         </Field>
       </FieldRow>
       {tx.items.length > 0 && <BillItemsReadOnly tx={tx} />}
       <FormActions onCancel={onClose} onSave={onEdit} saveLabel="Edit" onRemove={onDelete} />
-      <BankAccountPickerModal
-        visible={showAccountPicker}
-        accounts={bankAccounts.accounts}
-        selectedId={bankAccountId}
-        onSelect={chooseMethod}
-        onClose={() => setShowAccountPicker(false)}
-        onRename={bankAccounts.rename}
-        onDelete={bankAccounts.remove}
-      />
     </PopupCard>
   );
 }
@@ -2826,7 +2780,7 @@ export function TransactionDetailModal({
   // on from there. An Expense keeps the sheet.
   if (tx.type !== 'expense') {
     if (editOnPage) {
-      return <BillViewPopup key={tx.id} tx={tx} bankAccountName={bankAccountName} onClose={onClose} onEdit={onEdit} onDelete={onDelete} />;
+      return <BillViewPopup key={tx.id} tx={tx} onClose={onClose} onEdit={onEdit} onDelete={onDelete} />;
     }
     return <BillEditPopup key={tx.id} tx={tx} onClose={onClose} onEditItems={onEdit} onDelete={onDelete} />;
   }
