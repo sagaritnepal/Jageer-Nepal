@@ -52,7 +52,8 @@ const REPORT_FAMILY: WebNavItem[] = [
 ];
 
 const NAV_ITEMS: WebNavItem[] = [
-  { href: '/(reseller)/dashboard', label: 'Home', icon: 'home' },
+  { href: '/(reseller)/company-dashboard', label: 'Dashboard', icon: 'grid' },
+  { href: '/(reseller)/dashboard', label: 'Services', icon: 'construct' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
   {
@@ -70,6 +71,7 @@ const NAV_ITEMS: WebNavItem[] = [
 // pages), so there is no empty strip beside them on a big screen - see
 // WebSidebarShell's `wideRoutes`.
 const MAIN_WIDE_ROUTES = [
+  '/company-dashboard',
   '/dashboard',
   '/shop',
   '/requests',
@@ -118,8 +120,15 @@ export default function ResellerLayout() {
       }}
     >
         <Tabs.Screen
+          name="company-dashboard"
+          options={{
+            title: 'Dashboard',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
           name="dashboard"
-          options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <TabIcon name="home" color={color} focused={focused} /> }}
+          options={{ title: 'Services', tabBarIcon: ({ color, focused }) => <TabIcon name="construct" color={color} focused={focused} /> }}
         />
         <Tabs.Screen
           name="shop"

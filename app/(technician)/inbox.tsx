@@ -69,7 +69,7 @@ function WorkDetails({ item }: { item: ServiceRequest }) {
   );
 }
 
-function NewJobCard({ item }: { item: ServiceRequest }) {
+function NewJobCard({ item, locked }: { item: ServiceRequest; locked?: boolean }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
 
@@ -121,7 +121,7 @@ function NewJobCard({ item }: { item: ServiceRequest }) {
         <PressScale
           wrapStyle={{ flex: 1 }}
           onPress={() => onAnswer(true)}
-          disabled={busy}
+          disabled={busy || locked}
           className="flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 disabled:opacity-60"
           style={{ backgroundColor: '#16A34A' }}
         >
@@ -199,7 +199,7 @@ function ActiveJobCard({ item }: { item: ServiceRequest }) {
 /** Work the employer put in front of the whole team. Nobody owns it yet,
  * so the only action is to take it - and whoever taps first gets it (the
  * server settles ties, see claim_open_job). */
-function OpenJobCard({ item }: { item: ServiceRequest }) {
+function OpenJobCard({ item, locked }: { item: ServiceRequest; locked?: boolean }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
 
@@ -242,7 +242,7 @@ function OpenJobCard({ item }: { item: ServiceRequest }) {
       <PressScale
         wrapStyle={{ marginTop: 'auto', paddingTop: 12 }}
         onPress={take}
-        disabled={busy}
+        disabled={busy || locked}
         className="flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 disabled:opacity-60"
         style={{ backgroundColor: '#16A34A' }}
       >
@@ -302,6 +302,9 @@ export default function TechnicianInbox() {
   const newJobs = useMemo(() => (jobs ?? []).filter((j) => j.status === 'assigned'), [jobs]);
   const openJobs = useOpenTeamJobs(userId);
   const activeJobs = useMemo(() => (jobs ?? []).filter((j) => j.status === 'in_progress'), [jobs]);
+  // One job at a time: another can only be started once this one is finished,
+  // or on hold with the reseller's approval (migration 0095).
+  const busyJob = useMemo(() => activeJobs.find((j) => j.hold_status !== 'on_hold'), [activeJobs]);
   const averageRating = useMemo(() => {
     if (!reviews || reviews.length === 0) return null;
     return reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
@@ -400,11 +403,21 @@ export default function TechnicianInbox() {
           <WideCardGrid cardWidth={440}>
             {openJobs.map((job) => (
               <Rise key={job.id} index={next()} style={wide ? { flex: 1 } : undefined}>
-                <OpenJobCard item={job} />
+                <OpenJobCard item={job} locked={!!busyJob} />
               </Rise>
             ))}
           </WideCardGrid>
         </>
+      )}
+
+      {busyJob && (newJobs.length > 0 || openJobs.length > 0) && (
+        <View className="mb-3 flex-row items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <Ionicons name="pause-circle-outline" size={18} color="#B45309" />
+          <Text className="flex-1 text-xs leading-[17px] text-amber-900">
+            You are working on "{busyJob.issue_type}". To take another job, finish it or request a hold and get your
+            reseller's approval first.
+          </Text>
+        </View>
       )}
 
       {jobsLoading && (
@@ -435,7 +448,7 @@ export default function TechnicianInbox() {
           <WideCardGrid cardWidth={440}>
             {newJobs.map((job) => (
               <Rise key={job.id} index={next()} style={wide ? { flex: 1 } : undefined}>
-                <NewJobCard item={job} />
+                <NewJobCard item={job} locked={!!busyJob} />
               </Rise>
             ))}
           </WideCardGrid>
