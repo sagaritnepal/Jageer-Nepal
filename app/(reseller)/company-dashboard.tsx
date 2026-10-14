@@ -5,17 +5,18 @@
 // every job stands, who the best customers are and how the team is doing. Everything is read from
 // data the app already keeps - nothing is typed on this page. Months follow the AD / BS toggle.
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Image, useWindowDimensions, Platform } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image, Modal, useWindowDimensions, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Path, Polyline, Polygon, Line, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient as SvgGradient, Path, Polyline, Polygon, Line, Stop, Text as SvgText } from 'react-native-svg';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useAccountBalances } from '../../lib/hooks/useAccountBalances';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
-import { adStringToBs, bsToAdString, bsDaysInMonth, BS_MONTHS } from '../../lib/utils/nepaliDate';
+import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
+import { adStringToBs, bsToAdString, bsDaysInMonth, numericDateLabel, BS_MONTHS } from '../../lib/utils/nepaliDate';
 import { localTodayIso } from '../../lib/utils/localDate';
 import { supabase } from '../../lib/supabase';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
@@ -190,6 +191,44 @@ function Kpi({
   );
 }
 
+type TableRow = { label: string; amount: number; share: number | null; color: string; count?: number; note?: string };
+/** The table style used by Top customers: header, a row per item with a share bar, and a total line. */
+function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: { firstHead: string; rows: TableRow[]; total?: { label: string; amount: number; count?: number; share?: string }; showCount?: boolean; shareHead?: string }) {
+  return (
+    <View>
+      <View className="flex-row border-b border-gray-200 pb-2" style={{ gap: 8 }}>
+        <Text className="flex-1 text-[11px] font-bold uppercase text-gray-500">{firstHead}</Text>
+        {showCount && <Text className="w-12 text-right text-[11px] font-bold uppercase text-gray-500">Jobs</Text>}
+        <Text className="w-28 text-right text-[11px] font-bold uppercase text-gray-500">Amount</Text>
+        <Text className="w-14 text-right text-[11px] font-bold uppercase text-gray-500">{shareHead}</Text>
+      </View>
+      {rows.map((r) => (
+        <View key={r.label} className="border-b border-gray-100 py-2.5">
+          <View className="flex-row items-center" style={{ gap: 8 }}>
+            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: r.color }} />
+            <Text className="flex-1 text-[13px] font-semibold text-gray-800" numberOfLines={1}>{r.label}</Text>
+            {showCount && <Text className="w-12 text-right text-[13px] text-gray-600">{r.count ?? 0}</Text>}
+            <Text className="w-28 text-right text-[13px] font-semibold text-gray-900">{npr(r.amount)}</Text>
+            <Text className="w-14 text-right text-[13px] font-bold text-blue-700">{r.share == null ? '–' : `${r.share.toFixed(1)}%`}</Text>
+          </View>
+          <View className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100" style={{ marginLeft: 17 }}>
+            <View style={{ width: `${Math.min(100, Math.max(r.share ? 2 : 0, r.share ?? 0))}%`, height: 6, backgroundColor: r.color }} />
+          </View>
+          {!!r.note && <Text className="mt-1 text-[11px] text-gray-500" style={{ marginLeft: 17 }}>{r.note}</Text>}
+        </View>
+      ))}
+      {total && (
+        <View className="flex-row pt-2.5" style={{ gap: 8 }}>
+          <Text className="flex-1 text-[12px] font-bold text-gray-600">{total.label}</Text>
+          {showCount && <Text className="w-12 text-right text-[12px] font-bold text-gray-700">{total.count ?? 0}</Text>}
+          <Text className="w-28 text-right text-[12px] font-bold text-gray-900">{npr(total.amount)}</Text>
+          <Text className="w-14 text-right text-[12px] font-bold text-gray-600">{total.share ?? '100%'}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function Panel({ title, subtitle, children, right }: { title: string; subtitle?: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <View className="rounded-2xl bg-white p-5" style={[{ minWidth: 0 }, CARD_SHADOW]}>
@@ -220,28 +259,99 @@ function Legend({ items }: { items: { label: string; color: string }[] }) {
 
 /** Two lines over twelve months, sales filled. */
 function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: number[]; purchases: number[] }) {
-  const W = 660;
-  const H = 240;
-  const top = 16;
-  const bottom = 30;
-  const max = Math.max(...sales, ...purchases, 1);
-  const x = (i: number) => 20 + (i / Math.max(labels.length - 1, 1)) * (W - 40);
+  const W = 760;
+  const H = 320;
+  const left = 46;
+  const right = 18;
+  const top = 26;
+  const bottom = 32;
+  const rawMax = Math.max(...sales, ...purchases, 1);
+  // round the top of the scale up to a tidy number so the grid labels read cleanly
+  const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
+  const max = Math.ceil(rawMax / mag / 2) * 2 * (mag / 2) || 1;
+  const n = Math.max(labels.length - 1, 1);
+  const x = (i: number) => left + (i / n) * (W - left - right);
   const y = (v: number) => top + (1 - v / max) * (H - top - bottom);
-  const line = (vs: number[]) => vs.map((v, i) => `${x(i)},${y(v)}`).join(' ');
-  const area = `${x(0)},${H - bottom} ${line(sales)} ${x(sales.length - 1)},${H - bottom}`;
+  const pts = (vs: number[]) => vs.map((v, i) => ({ x: x(i), y: y(v) }));
+  // smooth curve through the points (Catmull-Rom turned into cubic beziers)
+  const smooth = (vs: number[]) => {
+    const p = pts(vs);
+    if (p.length < 2) return '';
+    let d = `M${p[0].x},${p[0].y}`;
+    for (let i = 0; i < p.length - 1; i++) {
+      const p0 = p[i - 1] ?? p[i];
+      const p1 = p[i];
+      const p2 = p[i + 1];
+      const p3 = p[i + 2] ?? p2;
+      const c1x = p1.x + (p2.x - p0.x) / 6;
+      const c1y = Math.min(H - bottom, Math.max(top, p1.y + (p2.y - p0.y) / 6));
+      const c2x = p2.x - (p3.x - p1.x) / 6;
+      const c2y = Math.min(H - bottom, Math.max(top, p2.y - (p3.y - p1.y) / 6));
+      d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+    }
+    return d;
+  };
+  const salesLine = smooth(sales);
+  const purchaseLine = smooth(purchases);
+  const area = salesLine ? `${salesLine} L${x(sales.length - 1)},${H - bottom} L${x(0)},${H - bottom} Z` : '';
+  const grid = [0, 1, 2, 3, 4];
+  const bestIdx = sales.indexOf(Math.max(...sales));
   return (
     <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
-      {[0, 1, 2, 3].map((g) => {
-        const gy = top + (g / 3) * (H - top - bottom);
-        return <Line key={g} x1={20} x2={W - 20} y1={gy} y2={gy} stroke="#E5E7EB" strokeWidth={1} />;
+      <Defs>
+        <SvgGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#2563EB" stopOpacity={0.35} />
+          <Stop offset="1" stopColor="#2563EB" stopOpacity={0.02} />
+        </SvgGradient>
+      </Defs>
+      {grid.map((g) => {
+        const gy = top + (g / 4) * (H - top - bottom);
+        return (
+          <G key={g}>
+            <Line x1={left} x2={W - right} y1={gy} y2={gy} stroke={g === 4 ? '#CBD5E1' : '#E5E7EB'} strokeWidth={1} strokeDasharray={g === 4 ? undefined : '4 5'} />
+            <SvgText x={left - 8} y={gy + 4} fontSize={11} fill="#6B7280" textAnchor="end">{lakh(max * (1 - g / 4))}</SvgText>
+          </G>
+        );
       })}
-      <SvgText x={20} y={top - 4} fontSize={11} fill="#6B7280">{lakh(max)}</SvgText>
-      <Polygon points={area} fill="#2563EB" fillOpacity={0.12} />
-      <Polyline points={line(sales)} fill="none" stroke="#2563EB" strokeWidth={3} strokeLinejoin="round" />
-      <Polyline points={line(purchases)} fill="none" stroke="#F59E0B" strokeWidth={3} strokeLinejoin="round" />
-      <Circle cx={x(sales.length - 1)} cy={y(sales[sales.length - 1] ?? 0)} r={5} fill="#2563EB" />
+      {area ? <Path d={area} fill="url(#salesFill)" /> : null}
+      <Path d={purchaseLine} fill="none" stroke="#F59E0B" strokeWidth={2.5} strokeLinecap="round" strokeDasharray="1 0" />
+      <Path d={salesLine} fill="none" stroke="#2563EB" strokeWidth={3.5} strokeLinecap="round" />
+      {purchases.map((v, i) => (
+        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={3.5} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2} />
+      ))}
+      {sales.map((v, i) => {
+        const best = i === bestIdx && v > 0;
+        const lastPoint = i === sales.length - 1;
+        const pv = purchases[i] ?? 0;
+        // whichever line is higher keeps its figure above the dot, the other goes below it
+        const purchaseHigher = pv > v;
+        const salesY = purchaseHigher ? y(v) + 19 : y(v) - 11;
+        const purchaseY = purchaseHigher ? y(pv) - 11 : y(pv) + 19;
+        return (
+          <G key={`s${i}`}>
+            <Circle cx={x(i)} cy={y(v)} r={best || lastPoint ? 6 : 4.5} fill="#FFFFFF" stroke="#2563EB" strokeWidth={3} />
+            {v > 0 && (
+              <SvgText
+                x={x(i)}
+                y={salesY}
+                fontSize={best || lastPoint ? 12 : 10.5}
+                fontWeight={best || lastPoint ? '700' : '600'}
+                fill={best || lastPoint ? '#1D4ED8' : '#374151'}
+                textAnchor="middle"
+              >
+                {lakh(v)}
+              </SvgText>
+            )}
+            {pv > 0 && (
+              <SvgText x={x(i)} y={purchaseY} fontSize={10.5} fontWeight="600" fill="#B45309" textAnchor="middle">
+                {lakh(pv)}
+              </SvgText>
+            )}
+          </G>
+        );
+      })}
       {labels.map((l, i) => (
-        <SvgText key={`${l}${i}`} x={x(i)} y={H - 10} fontSize={11} fill="#6B7280" textAnchor="middle">
+        <SvgText key={`${l}${i}`} x={x(i)} y={H - 10} fontSize={11.5} fill="#6B7280" textAnchor="middle">
           {l}
         </SvgText>
       ))}
@@ -278,26 +388,6 @@ function Donut({ parts, centre, caption }: { parts: { value: number; color: stri
       })}
       <SvgText x={85} y={82} fontSize={11} fill="#6B7280" textAnchor="middle">{caption}</SvgText>
       <SvgText x={85} y={103} fontSize={17} fontWeight="700" fill="#0F172A" textAnchor="middle">{centre}</SvgText>
-    </Svg>
-  );
-}
-
-function Gauge({ percent, label }: { percent: number; label: string }) {
-  const p = Math.max(0, Math.min(100, percent));
-  const arc = 251.3; // length of the half circle, r = 80
-  return (
-    <Svg width="100%" height={150} viewBox="0 0 220 130">
-      <Path d="M30 110 A80 80 0 0 1 190 110" fill="none" stroke="#E5E7EB" strokeWidth={16} strokeLinecap="round" />
-      <Path
-        d="M30 110 A80 80 0 0 1 190 110"
-        fill="none"
-        stroke={p >= 70 ? '#16A34A' : p >= 40 ? '#F59E0B' : '#DC2626'}
-        strokeWidth={16}
-        strokeLinecap="round"
-        strokeDasharray={`${(p / 100) * arc} ${arc}`}
-      />
-      <SvgText x={110} y={100} fontSize={32} fontWeight="700" fill="#0F172A" textAnchor="middle">{`${Math.round(p)}%`}</SvgText>
-      <SvgText x={110} y={122} fontSize={12} fill="#6B7280" textAnchor="middle">{label}</SvgText>
     </Svg>
   );
 }
@@ -347,9 +437,9 @@ export default function CompanyDashboard() {
   const wide = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const twoColumns = width >= 1100;
   const [mode] = useCalendarMode();
-  const [period, setPeriod] = useState<PeriodKey>('today');
+  const [period, setPeriod] = useState<PeriodKey>('this_fy');
   const [periodOpen, setPeriodOpen] = useState(false);
-  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? 'Today';
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? 'This fiscal year';
   const range = useMemo(() => periodRange(period, mode), [period, mode]);
   const prevRange = useMemo(() => periodRange(period, mode, 1), [period, mode]);
 
@@ -483,6 +573,7 @@ export default function CompanyDashboard() {
     let assigned = 0;
     let working = 0;
     let overdue = 0;
+    const money = { newRequests: 0, waiting: 0, assigned: 0, working: 0, toBill: 0, unpaid: 0 };
     let toBill = 0;
     let unpaid = 0;
     const done = new Map<string, number>();
@@ -492,18 +583,21 @@ export default function CompanyDashboard() {
         ? new Date(`${j.scheduled_date}T${j.scheduled_time?.slice(0, 5) ?? '23:59'}`).getTime()
         : new Date(j.created_at).getTime();
       if (j.status !== 'resolved' && now - slot > DAY_MS) overdue += 1;
-      if (j.status === 'approved' || (j.status === 'pending' && j.origin === 'reseller')) waiting += 1;
-      if (j.status === 'assigned') assigned += 1;
-      if (j.status === 'in_progress') working += 1;
-      if (j.status === 'resolved' && j.payment_status !== 'paid') unpaid += 1;
-      if (j.status === 'resolved' && j.payment_status === 'unpaid') toBill += 1;
+      const price = Number(j.quoted_price) || 0;
+      if (j.status === 'approved' || (j.status === 'pending' && j.origin === 'reseller')) { waiting += 1; money.waiting += price; }
+      if (j.status === 'assigned') { assigned += 1; money.assigned += price; }
+      if (j.status === 'in_progress') { working += 1; money.working += price; }
+      if (j.status === 'resolved' && j.payment_status !== 'paid') { unpaid += 1; money.unpaid += price; }
+      if (j.status === 'resolved' && j.payment_status === 'unpaid') { toBill += 1; money.toBill += price; }
       if (j.status === 'resolved' && j.technician_id && inRange(j.updated_at, range)) {
         done.set(j.technician_id, (done.get(j.technician_id) ?? 0) + 1);
       }
     }
-    const newRequests = (incomingRaw ?? []).filter((r) => !r.reseller_id).length;
+    const incoming = (incomingRaw ?? []).filter((r) => !r.reseller_id);
+    const newRequests = incoming.length;
+    money.newRequests = incoming.reduce((sum, r) => sum + (Number(r.quoted_price) || 0), 0);
     const shopOrders = (orders ?? []).filter((o) => o.status === 'pending' || o.status === 'confirmed').length;
-    return { waiting, assigned, working, overdue, toBill, unpaid, newRequests, shopOrders, done };
+    return { waiting, assigned, working, overdue, toBill, unpaid, newRequests, shopOrders, done, money };
   }, [jobs, incomingRaw, orders, range]);
 
   const team = useMemo(() => {
@@ -539,13 +633,15 @@ export default function CompanyDashboard() {
   const net = balances.total + owed.receivable - owed.payable;
 
   const stageRows = [
-    { label: 'New app requests', value: jobStats.newRequests, color: '#F59E0B' },
-    { label: 'Waiting for a technician', value: jobStats.waiting, color: '#2563EB' },
-    { label: 'Assigned', value: jobStats.assigned, color: '#0EA5E9' },
-    { label: 'In progress', value: jobStats.working, color: '#16A34A' },
-    { label: 'Done, to be billed', value: jobStats.toBill, color: '#7C3AED' },
-    { label: 'Awaiting payment', value: jobStats.unpaid, color: '#B45309' },
+    { label: 'New app requests', value: jobStats.newRequests, amount: jobStats.money.newRequests, color: '#F59E0B' },
+    { label: 'Waiting for a technician', value: jobStats.waiting, amount: jobStats.money.waiting, color: '#2563EB' },
+    { label: 'Assigned', value: jobStats.assigned, amount: jobStats.money.assigned, color: '#0EA5E9' },
+    { label: 'In progress', value: jobStats.working, amount: jobStats.money.working, color: '#16A34A' },
+    { label: 'Done, to be billed', value: jobStats.toBill, amount: jobStats.money.toBill, color: '#7C3AED' },
+    { label: 'Awaiting payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' },
   ];
+  const stageTotal = stageRows.reduce((s_, r) => s_ + r.value, 0);
+  const stageAmount = stageRows.reduce((s_, r) => s_ + r.amount, 0);
 
   const hero = (
     <LinearGradient colors={['#0F172A', '#1E3A8A', '#2563EB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 20, padding: wide ? 28 : 20 }}>
@@ -590,32 +686,45 @@ export default function CompanyDashboard() {
     </LinearGradient>
   );
 
-  const periodBar = (
-    <View className="flex-row items-center justify-end" style={{ gap: 10, zIndex: 20 }}>
-      <Text className="text-[12px] text-gray-500">{range.from === range.to ? range.from : `${range.from} → ${range.to}`}</Text>
-      <View style={{ position: 'relative' }}>
-        <Pressable onPress={() => setPeriodOpen((o) => !o)} className="flex-row items-center rounded-xl border border-gray-200 bg-white px-3.5 py-2.5" style={{ gap: 8, minWidth: 170 }}>
-          <Ionicons name="calendar-outline" size={16} color="#1E3A8A" />
-          <Text className="flex-1 text-[13px] font-semibold text-gray-800">{periodLabel}</Text>
-          <Ionicons name={periodOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#6B7280" />
+  // The dropdown lives in the top bar beside the AD / BS switch; its list opens in a modal so no
+  // card can paint over it.
+  useScreenHeader(
+    {
+      headerRight: () => (
+        <Pressable onPress={() => setPeriodOpen(true)} className="flex-row items-center rounded-lg border border-gray-200 bg-white px-3 py-1.5" style={{ gap: 6 }}>
+          <Ionicons name="calendar-outline" size={15} color="#1E3A8A" />
+          <Text className="text-[12.5px] font-semibold text-gray-800">{periodLabel}</Text>
+          <Ionicons name="chevron-down" size={13} color="#6B7280" />
         </Pressable>
-        {periodOpen && (
-          <View className="rounded-xl border border-gray-200 bg-white py-1" style={[{ position: 'absolute', top: 46, right: 0, minWidth: 190, zIndex: 30 }, CARD_SHADOW]}>
-            {PERIODS.map((p) => (
-              <Pressable
-                key={p.key}
-                onPress={() => { setPeriod(p.key); setPeriodOpen(false); }}
-                className="flex-row items-center px-3.5 py-2.5"
-                style={{ gap: 8, backgroundColor: p.key === period ? '#EFF6FF' : undefined }}
-              >
-                <Text className="flex-1 text-[13px]" style={{ color: p.key === period ? '#1D4ED8' : '#1F2937', fontWeight: p.key === period ? '700' : '500' }}>{p.label}</Text>
-                {p.key === period && <Ionicons name="checkmark" size={15} color="#1D4ED8" />}
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </View>
-    </View>
+      ),
+    },
+    [periodLabel]
+  );
+
+  const periodMenu = (
+    <Modal visible={periodOpen} transparent animationType="fade" onRequestClose={() => setPeriodOpen(false)}>
+      <Pressable style={{ flex: 1 }} onPress={() => setPeriodOpen(false)}>
+        <View className="rounded-xl border border-gray-200 bg-white py-1" style={[{ position: 'absolute', top: 64, right: wide ? 150 : 12, minWidth: 200 }, CARD_SHADOW]}>
+          {PERIODS.map((p) => (
+            <Pressable
+              key={p.key}
+              onPress={() => { setPeriod(p.key); setPeriodOpen(false); }}
+              className="flex-row items-center px-3.5 py-2.5"
+              style={{ gap: 8, backgroundColor: p.key === period ? '#EFF6FF' : undefined }}
+            >
+              <Text className="flex-1 text-[13px]" style={{ color: p.key === period ? '#1D4ED8' : '#1F2937', fontWeight: p.key === period ? '700' : '500' }}>{p.label}</Text>
+              {p.key === period && <Ionicons name="checkmark" size={15} color="#1D4ED8" />}
+            </Pressable>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  const periodBar = (
+    <Text className="text-right text-[12px] text-gray-500">
+      {periodLabel} · {range.from === range.to ? numericDateLabel(range.from) : `${numericDateLabel(range.from)} → ${numericDateLabel(range.to)}`}
+    </Text>
   );
 
   const kpis = (
@@ -668,37 +777,35 @@ export default function CompanyDashboard() {
     </Panel>
   );
 
+  const cashAll = Math.max(0, balances.total);
+  const moneyRows: TableRow[] = [
+    ...cashParts.map((p) => ({ label: p.label === 'Cash' ? 'Cash in hand' : `Bank · ${p.label}`, amount: p.value, color: p.color, share: cashTotal > 0 ? (p.value / cashTotal) * 100 : null })),
+  ];
   const money = (
-    <Panel title="Money position" subtitle="What you hold, are owed and owe">
-      <View className="flex-row flex-wrap" style={{ gap: 18 }}>
-        <View style={{ flexGrow: 1, flexBasis: 200 }}>
-          <Text className="mb-1 text-[12px] font-semibold text-gray-500">Collected · {periodLabel}</Text>
-          {collection.percent == null ? (
-            <Text className="py-10 text-center text-sm text-gray-400">No sales billed in this period</Text>
-          ) : (
-            <Gauge percent={collection.percent} label={`${lakh(collection.received)} of ${lakh(collection.billed)}`} />
-          )}
-        </View>
-        <View style={{ flexGrow: 1, flexBasis: 240, gap: 10 }}>
-          <Text className="text-[12px] font-semibold text-gray-500">Where the cash is</Text>
-          {cashTotal <= 0 ? (
-            <Text className="py-6 text-sm text-gray-400">No balance on any account</Text>
-          ) : (
-            <>
-              <View className="flex-row overflow-hidden" style={{ height: 16, borderRadius: 8 }}>
-                {cashParts.map((p) => <View key={p.label} style={{ width: `${(p.value / cashTotal) * 100}%`, backgroundColor: p.color }} />)}
-              </View>
-              {cashParts.map((p) => (
-                <View key={p.label} className="flex-row items-center" style={{ gap: 8 }}>
-                  <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: p.color }} />
-                  <Text className="flex-1 text-[13px] text-gray-800" numberOfLines={1}>{p.label}</Text>
-                  <Text className="text-[13px] font-bold text-gray-900">{lakh(p.value)}</Text>
-                </View>
-              ))}
-            </>
-          )}
-        </View>
-      </View>
+    <Panel title="Money position" subtitle={`What you hold, are owed and owe · received for ${periodLabel}`}>
+      <Text className="mb-1 text-[12px] font-bold uppercase text-gray-500">Cash &amp; bank balance</Text>
+      {moneyRows.length === 0 ? (
+        <Text className="py-3 text-sm text-gray-400">No balance on any account</Text>
+      ) : (
+        <ShareTable firstHead="Account" rows={moneyRows} total={{ label: 'Total cash & bank', amount: cashAll }} shareHead="Share" />
+      )}
+      <Text className="mb-1 mt-5 text-[12px] font-bold uppercase text-gray-500">Receivable, payable and received</Text>
+      <ShareTable
+        firstHead="Item"
+        shareHead="% of cash"
+        rows={[
+          { label: `To receive · ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`, amount: owed.receivable, color: '#2563EB', share: cashAll > 0 ? (owed.receivable / cashAll) * 100 : null },
+          { label: 'To pay · vendors', amount: owed.payable, color: '#DC2626', share: cashAll > 0 ? (owed.payable / cashAll) * 100 : null },
+          {
+            label: `Received · ${periodLabel}`,
+            amount: collection.received,
+            color: '#16A34A',
+            share: collection.percent,
+            note: collection.percent == null ? 'No sales billed in this period' : `${npr(collection.received)} collected of ${npr(collection.billed)} billed (share = % of billed)`,
+          },
+        ]}
+        total={{ label: 'Net position (cash + receivable − payable)', amount: net, share: '' }}
+      />
     </Panel>
   );
 
@@ -725,7 +832,12 @@ export default function CompanyDashboard() {
 
   const stages = (
     <Panel title="Jobs by stage" right={<Pressable onPress={() => go('/(reseller)/requests')} hitSlop={6}><Text className="text-[12.5px] font-semibold" style={{ color: '#2563EB' }}>Open requests</Text></Pressable>}>
-      <HBars color="#2563EB" rows={stageRows.map((r) => ({ label: r.label, value: r.value, display: String(r.value), color: r.color }))} />
+      <ShareTable
+        firstHead="Stage"
+        showCount
+        rows={stageRows.map((r) => ({ label: r.label, amount: r.amount, count: r.value, color: r.color, share: stageAmount > 0 ? (r.amount / stageAmount) * 100 : null }))}
+        total={{ label: 'All stages', amount: stageAmount, count: stageTotal }}
+      />
       {jobStats.overdue > 0 && (
         <Pressable onPress={() => go('/(reseller)/requests')} className="mt-3.5 flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2' }}>
           <Ionicons name="time-outline" size={16} color="#B91C1C" />
@@ -812,6 +924,7 @@ export default function CompanyDashboard() {
       {hero}
       {periodBar}
       {kpis}
+      {periodMenu}
       {row([trend, expenses], [1.6, 1])}
       {row([money, ageing], [1.3, 1])}
       {row([stages, teamCard], [1, 1])}
