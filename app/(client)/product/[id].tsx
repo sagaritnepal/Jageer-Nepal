@@ -33,8 +33,10 @@ export default function ClientProductDetail() {
     );
   }
 
-  function handleAddToCart() {
-    const added = addToCart(product!);
+  /** Adds the chosen quantity. False when the cart has another seller's items and the question about
+   * clearing it is being asked instead. */
+  function handleAddToCart(quantity: number): boolean {
+    const added = addToCart(product!, quantity);
     if (!added) {
       showAlert(
         'Cart has items from another seller',
@@ -46,19 +48,20 @@ export default function ClientProductDetail() {
             style: 'destructive',
             onPress: () => {
               clearCart();
-              addToCart(product!);
+              addToCart(product!, quantity);
             },
           },
         ]
       );
-      return;
+      return false;
     }
+    return true;
   }
 
   return (
     <View className="flex-1">
     <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ paddingBottom: cartCount > 0 ? 100 : 40 }}>
-      <ProductDetailContent product={product} onAddToCart={handleAddToCart} />
+      <ProductDetailContent product={product} onAddToCart={handleAddToCart} productPath="/(client)/product" />
       </ScrollView>
 
       <CartBar
