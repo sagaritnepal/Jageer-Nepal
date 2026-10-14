@@ -22,7 +22,22 @@ import { formatScheduledWhen } from '../../utils/scheduledTime';
 import { numericDateLabel } from '../../utils/nepaliDate';
 import { entryDay } from '../../utils/ledgerStatement';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
-import { JobProgress } from './JobProgress';
+import {
+  FULL_TABLE_WIDTH,
+  JobProgressBars,
+  JobTableHeader,
+  JobTableScroll,
+  ROW_BUTTON_HEIGHT,
+  ROW_PAD_X,
+  ROW_PAD_Y,
+  TIER_COLUMNS,
+  TIER_GAP,
+  TIER_GROW,
+  TIER_WIDTH,
+  tierFor,
+  type ColKey,
+  type Tier,
+} from './JobTable';
 import { exportWorkPdf, exportWorkXlsx, type WorkRecordRow } from '../../utils/exportWorkRecord';
 import type { Profile, ServiceRequest } from '../../../types/database.types';
 
@@ -645,193 +660,184 @@ function JobRowCard({
   );
 }
 
-/** The column names above the compact rows - the same widths as the cells under them. */
-function JobCompactHeader() {
-  const head = 'text-[11px] font-bold capitalize tracking-wide text-gray-500';
-  const grow = (g: number) => ({ flexBasis: 0, flexGrow: g, minWidth: 0 }) as const;
-  return (
-    <View className="flex-row items-center rounded-lg px-4 py-2" style={{ gap: 14, backgroundColor: '#F3F4F6' }}>
-      <Text className={head} style={{ width: 84 }}>
-        Token no.
-      </Text>
-      <Text className={head} style={{ width: 100 }}>
-        Date
-      </Text>
-      <Text className={head} style={grow(1.5)}>
-        Job
-      </Text>
-      <Text className={head} style={grow(1.1)}>
-        Customer
-      </Text>
-      <Text className={head} style={grow(1)}>
-        Address
-      </Text>
-      <Text className={`${head} text-right`} style={{ width: 104 }}>
-        Amount
-      </Text>
-      <Text className={head} style={{ width: 130 }}>
-        Technician
-      </Text>
-      <Text className={head} style={{ width: 210 }}>
-        Progress
-      </Text>
-      <Text className={`${head} text-right`} style={{ width: 176 }}>
-        Actions
-      </Text>
-    </View>
-  );
-}
-
 /** One job on one short row, so a whole page of work fits on the screen at once: what and who,
- * where and when, the technician, the amount, how far along it is, and the actions as buttons. */
+ * where and when, the technician, the amount, how far along it is, and the actions as buttons.
+ * Every cell is one line, cut with an ellipsis when it is long. The columns (and the header over
+ * them) come from JobTable.tsx; a narrower table folds Address and Technician under the customer
+ * and the date under the job. */
 function JobCompactRow({
   request: r,
   times,
-  now,
   technicianName,
+  tier,
   onAssign,
   onRequest,
   onCancelWork,
-  onOpenToTeam,
   busy,
 }: {
   request: ServiceRequest;
   times: JobTimes | undefined;
-  now: number;
   technicianName: (id: string) => string;
+  tier: Tier;
   onAssign: (request: ServiceRequest) => void;
   onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
-  onOpenToTeam: (request: ServiceRequest, open: boolean) => void;
   busy: boolean;
 }) {
+  useCalendarMode(); // draws the date again when the AD / BS toggle changes
   const open = () => router.push(`/(reseller)/request/${r.id}` as any);
   const chip = r.status === 'in_progress' ? { label: 'Working on it', color: '#166534', bg: '#DCFCE7' } : statusChip(r);
   const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
   const hold = r.hold_status === 'requested' ? HOLD_CHIP.requested : r.hold_status === 'on_hold' ? HOLD_CHIP.on_hold : null;
   const issue = splitIssue(r.issue_type);
   const overdue = isOverdue(r);
-  const { nodes, legs } = jobJourney(r, times, now);
-  let current = -1;
-  nodes.forEach((n, i) => {
-    if (n.reached) current = i;
-  });
-  const finished = nodes[nodes.length - 1].reached;
-  const step = finished ? nodes.length : current + 1;
-  const live = current >= 0 && !finished ? legs[current] : undefined;
+  const dateText = numericDateLabel(r.scheduled_date ?? entryDay(null, r.created_at));
 
   // The one action that moves the job on, then Request Outsource; a hold waiting on you comes first.
   const mainLabel = r.hold_status === 'requested' ? 'Review hold' : r.technician_id ? 'Reassign' : 'Assign';
   const mainIcon: keyof typeof Ionicons.glyphMap = r.hold_status === 'requested' ? 'pause-circle-outline' : 'person-add-outline';
   const mainPress = r.hold_status === 'requested' ? open : () => onAssign(r);
 
-  useCalendarMode(); // draws the date again when the AD / BS toggle changes
+  const has = (key: ColKey) => TIER_COLUMNS[tier].includes(key);
+  const w = TIER_WIDTH[tier];
+  const grow = TIER_GROW[tier];
   const cell = { minWidth: 0 } as const;
   const stages = jobStages(r, times);
   const statusLine = [chip.label, hold?.label, overdue ? `Overdue by ${overdueBy(r)}` : null, pay.label].filter(Boolean).join(' · ');
+  const techText = r.technician_id ? technicianName(r.technician_id) : r.open_to_team ? 'Open to the team' : 'Nobody yet';
+  const address = r.location_data?.address ?? null;
   return (
     <View
-      className="flex-row items-center rounded-xl bg-white px-4 py-3"
-      style={{ gap: 14, borderWidth: 1, borderColor: '#E5E7EB' }}
+      className="flex-row items-center rounded-lg bg-white"
+      style={{
+        gap: TIER_GAP[tier],
+        paddingHorizontal: ROW_PAD_X,
+        paddingVertical: ROW_PAD_Y,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+      }}
     >
-      <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: 84 }} numberOfLines={1}>
+      <Text className="text-[12px] font-bold text-gray-800" style={{ width: w.token }} numberOfLines={1}>
         {ticketLabel(r.ticket_no) ?? '—'}
       </Text>
 
-      <View style={{ width: 100, ...cell }}>
-        <Text className="text-[12.5px] text-gray-800" numberOfLines={1}>
-          {numericDateLabel(r.scheduled_date ?? entryDay(null, r.created_at)) || '—'}
+      {has('when') && (
+        <Text className="text-[12px] text-gray-800" style={{ width: w.when }} numberOfLines={1}>
+          {dateText || '—'}
         </Text>
-      </View>
+      )}
 
-      <Pressable onPress={open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: 1.5, ...cell }}>
-        <CategoryBadge category={r.issue_type} size={34} />
-        <View style={{ flex: 1, gap: 2, ...cell }}>
+      <Pressable onPress={open} className="flex-row items-center" style={{ gap: 8, flexBasis: 0, flexGrow: grow.job, ...cell }}>
+        <CategoryBadge category={r.issue_type} size={30} />
+        <View style={{ flex: 1, gap: 1, ...cell }}>
           {!!issue.eyebrow && (
-            <Text className="text-[11px] font-semibold text-gray-500" numberOfLines={1}>
+            <Text className="text-[10.5px] font-semibold text-gray-500" numberOfLines={1}>
               {issue.eyebrow}
             </Text>
           )}
-          <Text className="text-[14px] font-bold text-gray-900" numberOfLines={1}>
+          <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>
             {issue.title}
           </Text>
+          {/* The tight table has no Date column: it is under the job. */}
+          {!has('when') && !!dateText && (
+            <Text className="text-[11px] text-gray-500" numberOfLines={1}>
+              {dateText}
+            </Text>
+          )}
         </View>
       </Pressable>
 
-      <View style={{ flexBasis: 0, flexGrow: 1.1, ...cell }}>
-        <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+      <View style={{ flexBasis: 0, flexGrow: grow.customer, ...cell }}>
+        <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
           {r.customer_name ?? 'Customer'}
         </Text>
         {!!r.customer_phone && (
           <Pressable onPress={() => Linking.openURL(`tel:${r.customer_phone}`)} className="self-start">
-            <Text className="text-[12px] font-medium" style={{ color: '#0F766E' }} numberOfLines={1}>
+            <Text className="text-[11px] font-medium" style={{ color: '#0F766E' }} numberOfLines={1}>
               {r.customer_phone}
             </Text>
           </Pressable>
         )}
-      </View>
-
-      <View style={{ flexBasis: 0, flexGrow: 1, ...cell }}>
-        <Text className="text-[13px] text-gray-800" numberOfLines={2}>
-          {r.location_data?.address ?? 'No address'}
-        </Text>
-      </View>
-
-      <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: 104 }}>
-        {money(r.quoted_price)}
-      </Text>
-
-      <View className="flex-row items-center" style={{ width: 130, gap: 8, ...cell }}>
-        {r.technician_id ? (
-          <>
-            <View className="items-center justify-center rounded-full" style={{ width: 26, height: 26, backgroundColor: '#374151' }}>
-              <Text className="text-[10.5px] font-bold text-white">{initialsOf(technicianName(r.technician_id))}</Text>
-            </View>
-            <Text className="flex-1 text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
-              {technicianName(r.technician_id)}
-            </Text>
-          </>
-        ) : (
-          <Text className="text-[12.5px] font-semibold" style={{ color: r.open_to_team ? '#047857' : '#4B5563' }}>
-            {r.open_to_team ? 'Open to the team' : 'Nobody yet'}
+        {/* A narrower table has no Address / Technician column: they are under the customer. */}
+        {!has('where') && !!address && (
+          <Text className="text-[11px] text-gray-600" numberOfLines={1}>
+            {address}
+          </Text>
+        )}
+        {!has('tech') && (
+          <Text className="text-[11px] text-gray-500" numberOfLines={1}>
+            {r.technician_id ? `Technician: ${techText}` : techText}
           </Text>
         )}
       </View>
 
-      {/* Assigned / WIP / Hold / Completed: the step the job is on, the others folded away until tapped. */}
-      <View style={{ width: 210 }}>
-        <JobProgress steps={stages} note={statusLine} />
+      {has('where') && (
+        <View style={{ flexBasis: 0, flexGrow: grow.where, ...cell }}>
+          <Text className="text-[12px] text-gray-800" numberOfLines={1}>
+            {address ?? 'No address'}
+          </Text>
+        </View>
+      )}
+
+      <Text className="text-right text-[13px] font-extrabold text-gray-900" style={{ width: w.amount }} numberOfLines={1}>
+        {money(r.quoted_price)}
+      </Text>
+
+      {has('tech') && (
+        <View className="flex-row items-center" style={{ width: w.tech, gap: 6, ...cell }}>
+          {r.technician_id ? (
+            <>
+              <View className="items-center justify-center rounded-full" style={{ width: 22, height: 22, backgroundColor: '#374151' }}>
+                <Text className="text-[9.5px] font-bold text-white">{initialsOf(techText)}</Text>
+              </View>
+              <Text className="flex-1 text-[12px] font-semibold text-gray-900" numberOfLines={1}>
+                {techText}
+              </Text>
+            </>
+          ) : (
+            <Text className="text-[12px] font-semibold" style={{ color: r.open_to_team ? '#047857' : '#4B5563' }} numberOfLines={1}>
+              {techText}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Assigned / WIP / Hold / Completed, and under them how the job stands. */}
+      <View style={{ width: w.status }}>
+        <JobProgressBars steps={stages} note={statusLine} />
       </View>
 
-      <View className="flex-row items-center justify-end" style={{ gap: 6, width: 176 }}>
+      <View className="flex-row items-center justify-end" style={{ gap: 4, width: w.actions }}>
         <Pressable
           onPress={mainPress}
           disabled={busy}
           accessibilityLabel={mainLabel}
-          className="h-9 flex-row items-center justify-center gap-1.5 rounded-lg px-3 disabled:opacity-50"
-          style={{ backgroundColor: '#0F766E' }}
+          className="flex-row items-center justify-center rounded-lg disabled:opacity-50"
+          style={{ height: ROW_BUTTON_HEIGHT, paddingHorizontal: 9, gap: 5, flexShrink: 1, minWidth: 0, backgroundColor: '#0F766E' }}
         >
-          <Ionicons name={mainIcon} size={15} color="#FFFFFF" />
-          <Text className="text-[12.5px] font-semibold text-white">{mainLabel}</Text>
+          <Ionicons name={mainIcon} size={14} color="#FFFFFF" />
+          <Text className="text-[12px] font-semibold text-white" style={{ flexShrink: 1 }} numberOfLines={1}>
+            {mainLabel}
+          </Text>
         </Pressable>
         <Pressable
           onPress={() => onRequest(r)}
           disabled={busy}
           accessibilityLabel="Request Outsource"
-          className="h-9 w-9 items-center justify-center rounded-lg disabled:opacity-50"
-          style={{ borderWidth: 1, borderColor: '#A78BFA' }}
+          className="items-center justify-center rounded-lg disabled:opacity-50"
+          style={{ width: ROW_BUTTON_HEIGHT, height: ROW_BUTTON_HEIGHT, flexShrink: 0, borderWidth: 1, borderColor: '#A78BFA' }}
         >
-          <Ionicons name="paper-plane-outline" size={16} color="#5B21B6" />
+          <Ionicons name="paper-plane-outline" size={15} color="#5B21B6" />
         </Pressable>
         {canCancelWork(r) && (
           <Pressable
             onPress={() => onCancelWork(r)}
             disabled={busy}
             accessibilityLabel="Cancel job"
-            className="h-9 w-9 items-center justify-center rounded-lg disabled:opacity-50"
-            style={{ borderWidth: 1, borderColor: '#FECACA' }}
+            className="items-center justify-center rounded-lg disabled:opacity-50"
+            style={{ width: ROW_BUTTON_HEIGHT, height: ROW_BUTTON_HEIGHT, flexShrink: 0, borderWidth: 1, borderColor: '#FECACA' }}
           >
-            <Ionicons name="close-circle-outline" size={17} color="#B91C1C" />
+            <Ionicons name="close-circle-outline" size={16} color="#B91C1C" />
           </Pressable>
         )}
       </View>
@@ -876,8 +882,10 @@ function JobList({
 }) {
   const [boxWidth, setBoxWidth] = useState(0);
   const roomy = wide && !(boxWidth > 0 && boxWidth < 640);
-  // The row needs the room of a table: below this the stacked card reads better.
-  const compact = !!dense && wide && boxWidth >= 1000;
+  // Compact rows go by the table's columns; in a box narrower than the smallest size they keep
+  // that size and the table scrolls sideways (JobTableScroll) instead of squeezing.
+  const compact = !!dense && wide;
+  const tier = tierFor(boxWidth > 0 ? boxWidth : FULL_TABLE_WIDTH);
 
   if (jobs.length === 0) {
     return (
@@ -889,11 +897,27 @@ function JobList({
   }
 
   return (
-    <View style={{ gap: compact ? 8 : 12 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
-      {compact && <JobCompactHeader />}
-      {jobs.map((r) =>
-        compact ? (
-          <JobCompactRow
+    <View style={{ gap: compact ? 6 : 12 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
+      {compact ? (
+        <JobTableScroll available={boxWidth}>
+          <JobTableHeader tier={tier} />
+          {jobs.map((r) => (
+            <JobCompactRow
+              key={r.id}
+              request={r}
+              times={times?.get(r.id)}
+              technicianName={technicianName}
+              tier={tier}
+              onAssign={onAssign}
+              onRequest={onRequest}
+              onCancelWork={onCancelWork}
+              busy={busyId === r.id}
+            />
+          ))}
+        </JobTableScroll>
+      ) : (
+        jobs.map((r) => (
+          <JobRowCard
             key={r.id}
             request={r}
             times={times?.get(r.id)}
@@ -904,23 +928,10 @@ function JobList({
             onCancelWork={onCancelWork}
             onOpenToTeam={onOpenToTeam}
             busy={busyId === r.id}
+            roomy={roomy}
+            expanded={expanded}
           />
-        ) : (
-        <JobRowCard
-          key={r.id}
-          request={r}
-          times={times?.get(r.id)}
-          now={now}
-          technicianName={technicianName}
-          onAssign={onAssign}
-          onRequest={onRequest}
-          onCancelWork={onCancelWork}
-          onOpenToTeam={onOpenToTeam}
-          busy={busyId === r.id}
-          roomy={roomy}
-          expanded={expanded}
-        />
-        )
+        ))
       )}
     </View>
   );

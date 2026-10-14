@@ -1,5 +1,5 @@
 // app/(reseller)/requests.tsx
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, TextInput, Modal, FlatList, ScrollView, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -17,10 +17,24 @@ import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { ticketLabel } from '../../lib/utils/ticket';
 import { jobStages, type StageStepState } from '../../lib/utils/jobTimeline';
-import { JobProgress } from '../../lib/components/requests/JobProgress';
 import { numericDateLabel } from '../../lib/utils/nepaliDate';
 import { entryDay } from '../../lib/utils/ledgerStatement';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
+import {
+  JobProgressBars,
+  JobTableHeader,
+  JobTableScroll,
+  ROW_BUTTON_HEIGHT,
+  ROW_PAD_X,
+  ROW_PAD_Y,
+  TIER_COLUMNS,
+  TIER_GAP,
+  TIER_GROW,
+  TIER_WIDTH,
+  TierContext,
+  tierFor,
+  type ColKey,
+} from '../../lib/components/requests/JobTable';
 import { useRequestsStageStore } from '../../lib/hooks/useRequestsStage';
 import type { BusinessTransaction, JobCard, Order, Product, ServiceRequest } from '../../types/database.types';
 
@@ -132,6 +146,8 @@ type JobAction = {
   icon: keyof typeof Ionicons.glyphMap;
   primary: boolean;
   onPress: () => void;
+  /** A shorter name for the small button in a table row. */
+  short?: string;
 };
 
 type Tag = { label: string; bg: string; fg: string };
@@ -177,79 +193,36 @@ type JobRowData = {
   deleting?: boolean;
 };
 
-// Web table columns - the same ones My Jobs uses (see JobCompactRow in WorkHubPanel), shared by
-// the header row and every job row of every tab.
-//
-// The table is only as wide as the window leaves it (the side panel takes 240px), and nine columns
-// need about 1750px to read well - on a laptop the Job and Customer columns were squeezed to a few
-// letters and wrapped on top of each other. So it comes in three sizes, picked from the width the
-// table actually has (see tierFor), and below that the jobs are cards, as on a phone:
-//   full     every column;
-//   compact  the Address goes under the customer;
-//   tight    the date goes under the job and the technician under the customer as well.
-type Tier = 'full' | 'compact' | 'tight';
-type ColKey = 'token' | 'when' | 'job' | 'customer' | 'where' | 'amount' | 'tech' | 'status' | 'actions';
-
-const TIER_COLUMNS: Record<Tier, ColKey[]> = {
-  full: ['token', 'when', 'job', 'customer', 'where', 'amount', 'tech', 'status', 'actions'],
-  compact: ['token', 'when', 'job', 'customer', 'amount', 'tech', 'status', 'actions'],
-  tight: ['token', 'job', 'customer', 'amount', 'status', 'actions'],
-};
-/** Fixed widths; the columns without one (job, customer, where) share what is left, by TIER_GROW. */
-const TIER_WIDTH: Record<Tier, Partial<Record<ColKey, number>>> = {
-  full: { token: 84, when: 100, amount: 104, tech: 130, status: 210, actions: 176 },
-  compact: { token: 84, when: 100, amount: 104, tech: 120, status: 190, actions: 180 },
-  tight: { token: 78, amount: 100, status: 180, actions: 190 },
-};
-const TIER_GROW: Record<Tier, { job: number; customer: number; where: number }> = {
-  full: { job: 2, customer: 1.2, where: 1 },
-  compact: { job: 2, customer: 1.4, where: 1 },
-  tight: { job: 1.8, customer: 1.2, where: 1 },
-};
-const TIER_GAP: Record<Tier, number> = { full: 14, compact: 12, tight: 12 };
-const HEAD_LABEL: Record<ColKey, string> = {
-  token: 'Token no.',
-  when: 'Date',
-  job: 'Job',
-  customer: 'Customer',
-  where: 'Address',
-  amount: 'Amount',
-  tech: 'Technician',
-  status: 'Progress',
-  actions: 'Actions',
-};
-
-/** The table's width (px) from which each size reads well; narrower than the last is cards. */
-const FULL_TABLE_WIDTH = 1750;
-const COMPACT_TABLE_WIDTH = 1400;
-const MIN_TABLE_WIDTH = 1100;
-function tierFor(width: number): Tier {
-  return width >= FULL_TABLE_WIDTH ? 'full' : width >= COMPACT_TABLE_WIDTH ? 'compact' : 'tight';
-}
-
-/** The size the table is drawn at, for the header row and every job row to agree on. */
-const TierContext = createContext<Tier>('full');
+// The web table's columns, sizes and header row are shared with My Jobs - see JobTable.tsx.
 
 function formatAmount(amount: number | null): string {
   return amount != null ? `NPR ${Number(amount).toLocaleString()}` : '';
 }
 
 function ActionButton({ action, color, height }: { action: JobAction; color: string; height: number }) {
+  // In a table row the button is small and never wider than its cell - a long name is cut short.
+  const small = height < 40;
   return (
     <Pressable
       onPress={action.onPress}
-      className="flex-row items-center justify-center gap-1.5 rounded-lg"
+      className="flex-row items-center justify-center rounded-lg"
       style={{
         height,
-        paddingHorizontal: 12,
+        paddingHorizontal: small ? 9 : 12,
+        gap: small ? 5 : 6,
         backgroundColor: action.primary ? color : '#FFFFFF',
         borderWidth: action.primary ? 0 : 1,
         borderColor: '#D1D5DB',
+        ...(small ? { flexShrink: 1, minWidth: 0 } : null),
       }}
     >
-      <Ionicons name={action.icon} size={15} color={action.primary ? '#FFFFFF' : '#374151'} />
-      <Text className={`font-semibold ${action.primary ? 'text-white' : 'text-gray-700'}`} style={{ fontSize: height >= 44 ? 14.5 : 13 }}>
-        {action.label}
+      <Ionicons name={action.icon} size={small ? 14 : 15} color={action.primary ? '#FFFFFF' : '#374151'} />
+      <Text
+        className={`font-semibold ${action.primary ? 'text-white' : 'text-gray-700'}`}
+        style={{ fontSize: small ? 12 : height >= 44 ? 14.5 : 13, ...(small ? { flexShrink: 1 } : null) }}
+        numberOfLines={small ? 1 : undefined}
+      >
+        {small ? (action.short ?? action.label) : action.label}
       </Text>
     </Pressable>
   );
@@ -265,13 +238,14 @@ function TagPill({ tag }: { tag: Tag }) {
   );
 }
 
-function ManageButtons({ data }: { data: JobRowData }) {
+function ManageButtons({ data, small }: { data: JobRowData; small?: boolean }) {
   if (!data.onEdit && !data.onDelete) return null;
+  const box = small ? 'h-7 w-7' : 'h-8 w-8';
   return (
-    <View className="flex-row gap-1">
+    <View className="flex-row" style={{ gap: small ? 0 : 4 }}>
       {data.onEdit && (
-        <Pressable onPress={data.onEdit} hitSlop={6} className="h-8 w-8 items-center justify-center rounded-lg">
-          <Ionicons name="create-outline" size={17} color="#6B7280" />
+        <Pressable onPress={data.onEdit} hitSlop={6} className={`${box} items-center justify-center rounded-lg`}>
+          <Ionicons name="create-outline" size={small ? 16 : 17} color="#6B7280" />
         </Pressable>
       )}
       {data.onDelete && (
@@ -281,9 +255,9 @@ function ManageButtons({ data }: { data: JobRowData }) {
           hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel="Cancel work"
-          className="h-8 w-8 items-center justify-center rounded-lg disabled:opacity-40"
+          className={`${box} items-center justify-center rounded-lg disabled:opacity-40`}
         >
-          <Ionicons name="close-circle-outline" size={19} color="#DC2626" />
+          <Ionicons name="close-circle-outline" size={small ? 18 : 19} color="#DC2626" />
         </Pressable>
       )}
     </View>
@@ -303,8 +277,18 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
     const has = (key: ColKey) => TIER_COLUMNS[tier].includes(key);
     const w = TIER_WIDTH[tier];
     const grow = TIER_GROW[tier];
+    // One short line per cell - a long name or address is cut with an ellipsis, not wrapped.
     return (
-      <View className="flex-row items-center rounded-xl bg-white px-4 py-3" style={{ gap: TIER_GAP[tier], borderWidth: 1, borderColor: '#E5E7EB' }}>
+      <View
+        className="flex-row items-center rounded-lg bg-white"
+        style={{
+          gap: TIER_GAP[tier],
+          paddingHorizontal: ROW_PAD_X,
+          paddingVertical: ROW_PAD_Y,
+          borderWidth: 1,
+          borderColor: '#E5E7EB',
+        }}
+      >
         {data.select && (
           <Pressable
             onPress={data.select.onToggle}
@@ -314,43 +298,41 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             accessibilityLabel="Select for one bill"
             style={{ width: 20 }}
           >
-            <Ionicons name={data.select.checked ? 'checkbox' : 'square-outline'} size={20} color={data.select.checked ? '#0F766E' : '#9CA3AF'} />
+            <Ionicons name={data.select.checked ? 'checkbox' : 'square-outline'} size={19} color={data.select.checked ? '#0F766E' : '#9CA3AF'} />
           </Pressable>
         )}
-        <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: w.token }} numberOfLines={1}>
+        <Text className="text-[12px] font-bold text-gray-800" style={{ width: w.token }} numberOfLines={1}>
           {data.token ?? '—'}
         </Text>
 
         {has('when') && (
-          <View style={{ width: w.when, ...cell }}>
-            <Text className="text-[12.5px] text-gray-800" numberOfLines={1}>
-              {dateText || '—'}
-            </Text>
-          </View>
+          <Text className="text-[12px] text-gray-800" style={{ width: w.when }} numberOfLines={1}>
+            {dateText || '—'}
+          </Text>
         )}
 
-        <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: grow.job, ...cell }}>
+        <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 8, flexBasis: 0, flexGrow: grow.job, ...cell }}>
           {data.icon}
-          <View style={{ flex: 1, gap: 2, ...cell }}>
-            <Text className="text-[14px] font-bold text-gray-900" numberOfLines={2}>
+          <View style={{ flex: 1, gap: 1, ...cell }}>
+            <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>
               {data.title}
             </Text>
             {data.chalan && (
               <Pressable onPress={data.chalan.onEdit} hitSlop={4} className="flex-row items-center self-start" style={{ gap: 4 }}>
-                <Text className="text-[12px] font-semibold" style={{ color: data.chalan.no ? '#374151' : '#0F766E' }}>
+                <Text className="text-[11px] font-semibold" style={{ color: data.chalan.no ? '#374151' : '#0F766E' }} numberOfLines={1}>
                   {data.chalan.no ? `Chalan no. ${data.chalan.no}` : 'Add chalan no.'}
                 </Text>
-                <Ionicons name="create-outline" size={12} color="#6B7280" />
+                <Ionicons name="create-outline" size={11} color="#6B7280" />
               </Pressable>
             )}
             {data.lines?.map((line) => (
-              <Text key={line} className="text-[12px] text-gray-600" numberOfLines={2}>
+              <Text key={line} className="text-[11px] text-gray-600" numberOfLines={1}>
                 {line}
               </Text>
             ))}
             {/* The tight table has no Date column: it is under the job. */}
             {!has('when') && !!dateText && (
-              <Text className="text-[12px] text-gray-500" numberOfLines={1}>
+              <Text className="text-[11px] text-gray-500" numberOfLines={1}>
                 {dateText}
               </Text>
             )}
@@ -358,22 +340,22 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
         </Pressable>
 
         <View style={{ flexBasis: 0, flexGrow: grow.customer, ...cell }}>
-          <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+          <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
             {data.who}
           </Text>
           {!!data.customerPhone && (
-            <Text className="text-[12px] font-medium" style={{ color: '#0F766E' }} numberOfLines={1}>
+            <Text className="text-[11px] font-medium" style={{ color: '#0F766E' }} numberOfLines={1}>
               {data.customerPhone}
             </Text>
           )}
           {/* A narrower table has no Address / Technician column: they are under the customer. */}
           {!has('where') && !!data.place && (
-            <Text className="text-[12px] text-gray-600" numberOfLines={2}>
+            <Text className="text-[11px] text-gray-600" numberOfLines={1}>
               {data.place}
             </Text>
           )}
           {!has('tech') && !!data.technician && (
-            <Text className="text-[12px] text-gray-500" numberOfLines={1}>
+            <Text className="text-[11px] text-gray-500" numberOfLines={1}>
               {`Technician: ${data.technician}`}
             </Text>
           )}
@@ -381,19 +363,19 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
         {has('where') && (
           <View style={{ flexBasis: 0, flexGrow: grow.where, ...cell }}>
-            <Text className="text-[13px] text-gray-800" numberOfLines={2}>
+            <Text className="text-[12px] text-gray-800" numberOfLines={1}>
               {data.place ?? '—'}
             </Text>
           </View>
         )}
 
-        <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: w.amount }} numberOfLines={1}>
+        <Text className="text-right text-[13px] font-extrabold text-gray-900" style={{ width: w.amount }} numberOfLines={1}>
           {formatAmount(data.amount) || '—'}
         </Text>
 
         {has('tech') && (
           <View style={{ width: w.tech, ...cell }}>
-            <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
+            <Text className="text-[12px] font-semibold text-gray-900" numberOfLines={1}>
               {data.technician ?? '—'}
             </Text>
           </View>
@@ -401,17 +383,17 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
         <View style={{ width: w.status }}>
           {data.progress ? (
-            <JobProgress steps={data.progress} />
+            <JobProgressBars steps={data.progress} />
           ) : (
-            <Text className="text-[12px] font-semibold text-gray-700" numberOfLines={1}>
+            <Text className="text-[11.5px] font-semibold text-gray-700" numberOfLines={1}>
               {data.tag.label}
             </Text>
           )}
         </View>
 
-        <View className="flex-row items-center justify-end" style={{ width: w.actions, gap: 6 }}>
-          <ActionButton action={data.action} color="#0F766E" height={36} />
-          <ManageButtons data={data} />
+        <View className="flex-row items-center justify-end" style={{ width: w.actions, gap: 4 }}>
+          <ActionButton action={data.action} color="#0F766E" height={ROW_BUTTON_HEIGHT} />
+          <ManageButtons data={data} small />
         </View>
       </View>
     );
@@ -533,9 +515,9 @@ function RequestJobRow({
       ? { label: 'Call customer', icon: 'call-outline', primary: false, onPress: () => Linking.openURL(`tel:${customerPhone}`) }
       : { label: 'View request', icon: 'eye-outline', primary: false, onPress: open };
   } else if (stage === 'my_jobs') {
-    action = { label: 'Assign technician', icon: 'person-add-outline', primary: true, onPress: open };
+    action = { label: 'Assign technician', short: 'Assign', icon: 'person-add-outline', primary: true, onPress: open };
   } else if (stage === 'in_progress' && item.hold_status === 'requested') {
-    action = { label: 'Review hold request', icon: 'pause-circle-outline', primary: true, onPress: open };
+    action = { label: 'Review hold request', short: 'Review hold', icon: 'pause-circle-outline', primary: true, onPress: open };
   } else if (stage === 'in_progress') {
     action = { label: 'View job', icon: 'eye-outline', primary: false, onPress: open };
   } else if (stage === 'completed') {
@@ -583,7 +565,7 @@ function RequestJobRow({
       stage={stage}
       wide={wide}
       data={{
-        icon: <CategoryBadge category={item.issue_type} size={wide ? 40 : 44} />,
+        icon: <CategoryBadge category={item.issue_type} size={wide ? 30 : 44} />,
         title: item.issue_type,
         who: customerName,
         customerPhone,
@@ -653,9 +635,9 @@ function OrderJobRow({
         icon: (
           <View
             className="items-center justify-center bg-emerald-500"
-            style={{ width: wide ? 40 : 44, height: wide ? 40 : 44, borderRadius: 12 }}
+            style={{ width: wide ? 30 : 44, height: wide ? 30 : 44, borderRadius: wide ? 9 : 12 }}
           >
-            <Ionicons name="gift" size={wide ? 18 : 20} color="white" />
+            <Ionicons name="gift" size={wide ? 15 : 20} color="white" />
           </View>
         ),
         title,
@@ -681,7 +663,7 @@ function SaleBillRow({ sale, stage, wide }: { sale: BusinessTransaction; stage: 
   const editPath = `/(reseller)/transactions?type=sale&add=1&edit=${sale.id}`;
   const open = () => router.push(editPath as any);
   const action: JobAction = !hasBillNo
-    ? { label: 'Add bill number', icon: 'document-text-outline', primary: true, onPress: open }
+    ? { label: 'Add bill number', short: 'Add bill no.', icon: 'document-text-outline', primary: true, onPress: open }
     : stage === 'paid'
       ? { label: 'View bill', icon: 'eye-outline', primary: false, onPress: open }
       : { label: 'Record payment', icon: 'cash-outline', primary: true, onPress: () => router.push('/(reseller)/quick-payment?type=in' as any) };
@@ -698,9 +680,9 @@ function SaleBillRow({ sale, stage, wide }: { sale: BusinessTransaction; stage: 
         icon: (
           <View
             className="items-center justify-center bg-emerald-500"
-            style={{ width: wide ? 40 : 44, height: wide ? 40 : 44, borderRadius: 12 }}
+            style={{ width: wide ? 30 : 44, height: wide ? 30 : 44, borderRadius: wide ? 9 : 12 }}
           >
-            <Ionicons name="receipt" size={wide ? 18 : 20} color="white" />
+            <Ionicons name="receipt" size={wide ? 15 : 20} color="white" />
           </View>
         ),
         title: hasBillNo ? `Sale · Bill #${sale.bill_no}` : 'Sale · no bill number yet',
@@ -733,10 +715,11 @@ export default function ResellerRequestQueue() {
   const { width: screenWidth } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
   // The table is measured, not guessed from the window: what is left beside the side panel decides
-  // which columns it can hold (see tierFor) - and when it holds too few, the jobs are cards.
+  // which columns it can hold (see tierFor) - and when even the smallest size does not fit, the
+  // table keeps that size and scrolls sideways (JobTableScroll).
   const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
-  const tableWidth = measuredWidth ?? screenWidth - 304;
-  const tableMode = isWideWeb && tableWidth >= MIN_TABLE_WIDTH;
+  const tableWidth = measuredWidth ?? screenWidth - 280;
+  const tableMode = isWideWeb;
   const tier = tierFor(tableWidth);
 
   const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
@@ -1013,7 +996,7 @@ export default function ResellerRequestQueue() {
 
     return (
       <TierContext.Provider value={tier}>
-      <ScrollView className="flex-1" style={{ backgroundColor: PAGE_BG }} contentContainerStyle={{ padding: 32, paddingTop: 20, gap: 16 }}>
+      <ScrollView className="flex-1" style={{ backgroundColor: PAGE_BG }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24, gap: 12 }}>
         <View className="flex-row items-stretch" style={{ gap: 6 }}>
           {WORKING_STAGES.map((stage, index) => {
             const meta = STAGE_META[stage];
@@ -1063,7 +1046,7 @@ export default function ResellerRequestQueue() {
 
         {hubView ?? (
         <View style={{ gap: 8 }} onLayout={(e) => setMeasuredWidth(e.nativeEvent.layout.width)}>
-          <View className="flex-row items-center gap-2.5 rounded-lg px-4 py-3" style={{ backgroundColor: activeMeta.tint }}>
+          <View className="flex-row items-center gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: activeMeta.tint }}>
             <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeMeta.color }} />
             <Text className="text-[15px] font-bold text-gray-900">{activeMeta.label}</Text>
             <Text className="text-[13px] text-gray-500">— {activeMeta.todo}</Text>
@@ -1082,29 +1065,16 @@ export default function ResellerRequestQueue() {
               </Pressable>
             </View>
           )}
-          {tableMode && (
-            <View className="flex-row rounded-lg px-4 py-2" style={{ gap: TIER_GAP[tier], backgroundColor: '#F3F4F6' }}>
-              {activeStage === 'completed' && <View style={{ width: 20 }} />}
-              {TIER_COLUMNS[tier].map((key) => {
-                const fixed = TIER_WIDTH[tier][key];
-                const style =
-                  fixed != null
-                    ? { width: fixed, textAlign: key === 'amount' || key === 'actions' ? ('right' as const) : undefined }
-                    : { flexBasis: 0, flexGrow: TIER_GROW[tier][key as 'job' | 'customer' | 'where'], minWidth: 0 };
-                return (
-                  <Text
-                    key={key}
-                    className="text-[11px] font-bold capitalize tracking-wide text-gray-500"
-                    style={style}
-                    numberOfLines={1}
-                  >
-                    {HEAD_LABEL[key]}
-                  </Text>
-                );
-              })}
-            </View>
-          )}
-          {stageJobs.length === 0 ? (
+          {tableMode ? (
+            <JobTableScroll available={tableWidth}>
+              <JobTableHeader tier={tier} leading={activeStage === 'completed'} />
+              {stageJobs.length === 0 ? (
+                <Text className="px-3 py-5 text-sm text-gray-500">{emptyText}</Text>
+              ) : (
+                stageJobs.map(jobRow)
+              )}
+            </JobTableScroll>
+          ) : stageJobs.length === 0 ? (
             <Text className="px-4 py-6 text-sm text-gray-500">{emptyText}</Text>
           ) : (
             stageJobs.map(jobRow)
