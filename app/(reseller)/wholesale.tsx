@@ -37,30 +37,34 @@ function ProductCard({
   const [hovered, setHovered] = useState(false);
   const [addHovered, setAddHovered] = useState(false);
 
+  // The mouse events are the DOM's: they fire for the whole card - picture, text, padding and the
+  // button alike - which Pressable's own hover does not (a Pressable inside swallows it). Typed as an
+  // object because they are web-only and not in the native View props.
+  const hoverEvents = {
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => {
+      setHovered(false);
+      setAddHovered(false);
+    },
+  } as object;
+
   return (
-    <Pressable
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => {
-        setHovered(false);
-        setAddHovered(false);
-      }}
-      // Not a button of its own: the picture and Add to Cart inside are the ones that do something.
-      accessible={false}
-      focusable={false}
+    <View
+      {...hoverEvents}
       className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border border-gray-200 bg-white p-3`}
       // `flex: 1` fills the cell (wide grid); on a phone the card is already stretched to its row.
       style={
         [
           fill ? { flex: 1 } : null,
           {
-            borderColor: hovered ? '#60A5FA' : undefined,
-            transform: [{ translateY: hovered ? -3 : 0 }],
-            shadowColor: '#2563EB',
-            shadowOpacity: hovered ? 0.18 : 0,
-            shadowRadius: hovered ? 14 : 0,
-            shadowOffset: { width: 0, height: 6 },
+            borderColor: hovered ? '#60A5FA' : '#E5E7EB',
+            transform: [{ translateY: hovered ? -4 : 0 }],
+            // Always a shadow (a faint one at rest), so it can animate between the two instead of
+            // jumping from none.
+            boxShadow: hovered ? '0 16px 32px rgba(37, 99, 235, 0.16)' : '0 1px 2px rgba(17, 24, 39, 0.05)',
             transitionProperty: 'transform, box-shadow, border-color',
-            transitionDuration: '160ms',
+            transitionDuration: '220ms',
+            transitionTimingFunction: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
           },
         ] as object
       }
@@ -68,7 +72,20 @@ function ProductCard({
       <Pressable style={{ flexGrow: 1 }} onPress={() => router.push(`/(reseller)/product/${item.id}`)}>
         <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
           {item.image_url ? (
-            <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
+            <Image
+              source={{ uri: toSafeImageUri(item.image_url)! }}
+              className="h-full w-full"
+              resizeMode="cover"
+              // The picture eases in a little on hover (the tile clips it, so it stays inside).
+              style={
+                {
+                  transform: [{ scale: hovered && !outOfStock ? 1.06 : 1 }],
+                  transitionProperty: 'transform',
+                  transitionDuration: '320ms',
+                  transitionTimingFunction: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+                } as object
+              }
+            />
           ) : (
             <Text className="text-3xl">🖥️</Text>
           )}
@@ -107,11 +124,17 @@ function ProductCard({
         onHoverOut={() => setAddHovered(false)}
         disabled={outOfStock}
         className="items-center rounded-lg bg-orange-500 py-2 disabled:opacity-40"
-        style={addHovered && !outOfStock ? { backgroundColor: '#1D4ED8' } : undefined}
+        style={
+          {
+            backgroundColor: addHovered && !outOfStock ? '#1D4ED8' : hovered && !outOfStock ? '#2563EB' : undefined,
+            transitionProperty: 'background-color',
+            transitionDuration: '160ms',
+          } as object
+        }
       >
         <Text className="text-xs font-semibold text-white">Add to Cart</Text>
       </Pressable>
-    </Pressable>
+    </View>
   );
 }
 
