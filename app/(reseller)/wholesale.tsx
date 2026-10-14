@@ -14,7 +14,12 @@ import { toSafeImageUri } from '../../lib/utils/image';
 import type { Product } from '../../types/database.types';
 
 /** `fill` makes the card take its whole cell instead of the phone layout's
- * fixed 48% (two to a row) - used by the wide web grid below. */
+ * fixed 48% (two to a row) - used by the wide web grid below.
+ *
+ * Every card is the same size and shape whatever it holds: the picture is a square, the category,
+ * the two-line name and the seller each have their line reserved (so a missing one leaves a gap
+ * rather than pulling the rest up), and the card stretches to the tallest in its row with the Add to
+ * Cart button always on its bottom edge. */
 function ProductCard({
   item,
   sellerName,
@@ -29,8 +34,12 @@ function ProductCard({
   const outOfStock = item.stock_level <= 0;
 
   return (
-    <View className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border border-gray-200 bg-white p-3`}>
-      <Pressable onPress={() => router.push(`/(reseller)/product/${item.id}`)}>
+    <View
+      className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border border-gray-200 bg-white p-3`}
+      // `flex: 1` fills the cell (wide grid); on a phone the card is already stretched to its row.
+      style={fill ? { flex: 1 } : undefined}
+    >
+      <Pressable style={{ flexGrow: 1 }} onPress={() => router.push(`/(reseller)/product/${item.id}`)}>
         <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
           {item.image_url ? (
             <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
@@ -49,10 +58,10 @@ function ProductCard({
           )}
         </View>
 
-        {item.category && (
-          <Text className="mb-0.5 text-[11px] capitalize tracking-wide text-orange-600">{item.category}</Text>
-        )}
-        <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
+        <Text className="mb-0.5 text-[11px] capitalize tracking-wide text-orange-600" numberOfLines={1} style={{ minHeight: 16 }}>
+          {item.category ?? ''}
+        </Text>
+        <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2} style={{ minHeight: 40, lineHeight: 20 }}>
           {item.name}
         </Text>
         <Text className="text-base font-bold text-gray-900">
@@ -61,11 +70,9 @@ function ProductCard({
         <Text className="mt-0.5 text-xs text-gray-400">
           {outOfStock ? 'Out of stock' : `${item.stock_level} in stock`}
         </Text>
-        {sellerName && (
-          <Text className="mb-2 mt-0.5 text-[11px] text-gray-400" numberOfLines={1}>
-            Sold by {sellerName}
-          </Text>
-        )}
+        <Text className="mb-2 mt-0.5 text-[11px] text-gray-400" numberOfLines={1} style={{ minHeight: 16 }}>
+          {sellerName ? `Sold by ${sellerName}` : ''}
+        </Text>
       </Pressable>
 
       <Pressable
