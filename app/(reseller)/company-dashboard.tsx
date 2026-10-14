@@ -5,7 +5,7 @@
 // every job stands, who the best customers are and how the team is doing. Everything is read from
 // data the app already keeps - nothing is typed on this page. Months follow the AD / BS toggle.
 import { useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Image, useWindowDimensions, Platform } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image, Modal, useWindowDimensions, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,7 +15,8 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useAccountBalances } from '../../lib/hooks/useAccountBalances';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
-import { adStringToBs, bsToAdString, bsDaysInMonth, BS_MONTHS } from '../../lib/utils/nepaliDate';
+import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
+import { adStringToBs, bsToAdString, bsDaysInMonth, numericDateLabel, BS_MONTHS } from '../../lib/utils/nepaliDate';
 import { localTodayIso } from '../../lib/utils/localDate';
 import { supabase } from '../../lib/supabase';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
@@ -590,32 +591,45 @@ export default function CompanyDashboard() {
     </LinearGradient>
   );
 
-  const periodBar = (
-    <View className="flex-row items-center justify-end" style={{ gap: 10, zIndex: 20 }}>
-      <Text className="text-[12px] text-gray-500">{range.from === range.to ? range.from : `${range.from} → ${range.to}`}</Text>
-      <View style={{ position: 'relative' }}>
-        <Pressable onPress={() => setPeriodOpen((o) => !o)} className="flex-row items-center rounded-xl border border-gray-200 bg-white px-3.5 py-2.5" style={{ gap: 8, minWidth: 170 }}>
-          <Ionicons name="calendar-outline" size={16} color="#1E3A8A" />
-          <Text className="flex-1 text-[13px] font-semibold text-gray-800">{periodLabel}</Text>
-          <Ionicons name={periodOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#6B7280" />
+  // The dropdown lives in the top bar beside the AD / BS switch; its list opens in a modal so no
+  // card can paint over it.
+  useScreenHeader(
+    {
+      headerRight: () => (
+        <Pressable onPress={() => setPeriodOpen(true)} className="flex-row items-center rounded-lg border border-gray-200 bg-white px-3 py-1.5" style={{ gap: 6 }}>
+          <Ionicons name="calendar-outline" size={15} color="#1E3A8A" />
+          <Text className="text-[12.5px] font-semibold text-gray-800">{periodLabel}</Text>
+          <Ionicons name="chevron-down" size={13} color="#6B7280" />
         </Pressable>
-        {periodOpen && (
-          <View className="rounded-xl border border-gray-200 bg-white py-1" style={[{ position: 'absolute', top: 46, right: 0, minWidth: 190, zIndex: 30 }, CARD_SHADOW]}>
-            {PERIODS.map((p) => (
-              <Pressable
-                key={p.key}
-                onPress={() => { setPeriod(p.key); setPeriodOpen(false); }}
-                className="flex-row items-center px-3.5 py-2.5"
-                style={{ gap: 8, backgroundColor: p.key === period ? '#EFF6FF' : undefined }}
-              >
-                <Text className="flex-1 text-[13px]" style={{ color: p.key === period ? '#1D4ED8' : '#1F2937', fontWeight: p.key === period ? '700' : '500' }}>{p.label}</Text>
-                {p.key === period && <Ionicons name="checkmark" size={15} color="#1D4ED8" />}
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </View>
-    </View>
+      ),
+    },
+    [periodLabel]
+  );
+
+  const periodMenu = (
+    <Modal visible={periodOpen} transparent animationType="fade" onRequestClose={() => setPeriodOpen(false)}>
+      <Pressable style={{ flex: 1 }} onPress={() => setPeriodOpen(false)}>
+        <View className="rounded-xl border border-gray-200 bg-white py-1" style={[{ position: 'absolute', top: 64, right: wide ? 150 : 12, minWidth: 200 }, CARD_SHADOW]}>
+          {PERIODS.map((p) => (
+            <Pressable
+              key={p.key}
+              onPress={() => { setPeriod(p.key); setPeriodOpen(false); }}
+              className="flex-row items-center px-3.5 py-2.5"
+              style={{ gap: 8, backgroundColor: p.key === period ? '#EFF6FF' : undefined }}
+            >
+              <Text className="flex-1 text-[13px]" style={{ color: p.key === period ? '#1D4ED8' : '#1F2937', fontWeight: p.key === period ? '700' : '500' }}>{p.label}</Text>
+              {p.key === period && <Ionicons name="checkmark" size={15} color="#1D4ED8" />}
+            </Pressable>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  const periodBar = (
+    <Text className="text-right text-[12px] text-gray-500">
+      {periodLabel} · {range.from === range.to ? numericDateLabel(range.from) : `${numericDateLabel(range.from)} → ${numericDateLabel(range.to)}`}
+    </Text>
   );
 
   const kpis = (
@@ -812,6 +826,7 @@ export default function CompanyDashboard() {
       {hero}
       {periodBar}
       {kpis}
+      {periodMenu}
       {row([trend, expenses], [1.6, 1])}
       {row([money, ageing], [1.3, 1])}
       {row([stages, teamCard], [1, 1])}
