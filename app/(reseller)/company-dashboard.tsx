@@ -191,6 +191,44 @@ function Kpi({
   );
 }
 
+type TableRow = { label: string; amount: number; share: number | null; color: string; count?: number; note?: string };
+/** The table style used by Top customers: header, a row per item with a share bar, and a total line. */
+function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: { firstHead: string; rows: TableRow[]; total?: { label: string; amount: number; count?: number; share?: string }; showCount?: boolean; shareHead?: string }) {
+  return (
+    <View>
+      <View className="flex-row border-b border-gray-200 pb-2" style={{ gap: 8 }}>
+        <Text className="flex-1 text-[11px] font-bold uppercase text-gray-500">{firstHead}</Text>
+        {showCount && <Text className="w-12 text-right text-[11px] font-bold uppercase text-gray-500">Jobs</Text>}
+        <Text className="w-28 text-right text-[11px] font-bold uppercase text-gray-500">Amount</Text>
+        <Text className="w-14 text-right text-[11px] font-bold uppercase text-gray-500">{shareHead}</Text>
+      </View>
+      {rows.map((r) => (
+        <View key={r.label} className="border-b border-gray-100 py-2.5">
+          <View className="flex-row items-center" style={{ gap: 8 }}>
+            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: r.color }} />
+            <Text className="flex-1 text-[13px] font-semibold text-gray-800" numberOfLines={1}>{r.label}</Text>
+            {showCount && <Text className="w-12 text-right text-[13px] text-gray-600">{r.count ?? 0}</Text>}
+            <Text className="w-28 text-right text-[13px] font-semibold text-gray-900">{npr(r.amount)}</Text>
+            <Text className="w-14 text-right text-[13px] font-bold text-blue-700">{r.share == null ? '–' : `${r.share.toFixed(1)}%`}</Text>
+          </View>
+          <View className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100" style={{ marginLeft: 17 }}>
+            <View style={{ width: `${Math.min(100, Math.max(r.share ? 2 : 0, r.share ?? 0))}%`, height: 6, backgroundColor: r.color }} />
+          </View>
+          {!!r.note && <Text className="mt-1 text-[11px] text-gray-500" style={{ marginLeft: 17 }}>{r.note}</Text>}
+        </View>
+      ))}
+      {total && (
+        <View className="flex-row pt-2.5" style={{ gap: 8 }}>
+          <Text className="flex-1 text-[12px] font-bold text-gray-600">{total.label}</Text>
+          {showCount && <Text className="w-12 text-right text-[12px] font-bold text-gray-700">{total.count ?? 0}</Text>}
+          <Text className="w-28 text-right text-[12px] font-bold text-gray-900">{npr(total.amount)}</Text>
+          <Text className="w-14 text-right text-[12px] font-bold text-gray-600">{total.share ?? '100%'}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function Panel({ title, subtitle, children, right }: { title: string; subtitle?: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <View className="rounded-2xl bg-white p-5" style={[{ minWidth: 0 }, CARD_SHADOW]}>
@@ -340,26 +378,6 @@ function Donut({ parts, centre, caption }: { parts: { value: number; color: stri
       })}
       <SvgText x={85} y={82} fontSize={11} fill="#6B7280" textAnchor="middle">{caption}</SvgText>
       <SvgText x={85} y={103} fontSize={17} fontWeight="700" fill="#0F172A" textAnchor="middle">{centre}</SvgText>
-    </Svg>
-  );
-}
-
-function Gauge({ percent, label }: { percent: number; label: string }) {
-  const p = Math.max(0, Math.min(100, percent));
-  const arc = 251.3; // length of the half circle, r = 80
-  return (
-    <Svg width="100%" height={150} viewBox="0 0 220 130">
-      <Path d="M30 110 A80 80 0 0 1 190 110" fill="none" stroke="#E5E7EB" strokeWidth={16} strokeLinecap="round" />
-      <Path
-        d="M30 110 A80 80 0 0 1 190 110"
-        fill="none"
-        stroke={p >= 70 ? '#16A34A' : p >= 40 ? '#F59E0B' : '#DC2626'}
-        strokeWidth={16}
-        strokeLinecap="round"
-        strokeDasharray={`${(p / 100) * arc} ${arc}`}
-      />
-      <SvgText x={110} y={100} fontSize={32} fontWeight="700" fill="#0F172A" textAnchor="middle">{`${Math.round(p)}%`}</SvgText>
-      <SvgText x={110} y={122} fontSize={12} fill="#6B7280" textAnchor="middle">{label}</SvgText>
     </Svg>
   );
 }
@@ -749,37 +767,35 @@ export default function CompanyDashboard() {
     </Panel>
   );
 
+  const cashAll = Math.max(0, balances.total);
+  const moneyRows: TableRow[] = [
+    ...cashParts.map((p) => ({ label: p.label === 'Cash' ? 'Cash in hand' : `Bank · ${p.label}`, amount: p.value, color: p.color, share: cashTotal > 0 ? (p.value / cashTotal) * 100 : null })),
+  ];
   const money = (
-    <Panel title="Money position" subtitle="What you hold, are owed and owe">
-      <View className="flex-row flex-wrap" style={{ gap: 18 }}>
-        <View style={{ flexGrow: 1, flexBasis: 200 }}>
-          <Text className="mb-1 text-[12px] font-semibold text-gray-500">Collected · {periodLabel}</Text>
-          {collection.percent == null ? (
-            <Text className="py-10 text-center text-sm text-gray-400">No sales billed in this period</Text>
-          ) : (
-            <Gauge percent={collection.percent} label={`${lakh(collection.received)} of ${lakh(collection.billed)}`} />
-          )}
-        </View>
-        <View style={{ flexGrow: 1, flexBasis: 240, gap: 10 }}>
-          <Text className="text-[12px] font-semibold text-gray-500">Where the cash is</Text>
-          {cashTotal <= 0 ? (
-            <Text className="py-6 text-sm text-gray-400">No balance on any account</Text>
-          ) : (
-            <>
-              <View className="flex-row overflow-hidden" style={{ height: 16, borderRadius: 8 }}>
-                {cashParts.map((p) => <View key={p.label} style={{ width: `${(p.value / cashTotal) * 100}%`, backgroundColor: p.color }} />)}
-              </View>
-              {cashParts.map((p) => (
-                <View key={p.label} className="flex-row items-center" style={{ gap: 8 }}>
-                  <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: p.color }} />
-                  <Text className="flex-1 text-[13px] text-gray-800" numberOfLines={1}>{p.label}</Text>
-                  <Text className="text-[13px] font-bold text-gray-900">{lakh(p.value)}</Text>
-                </View>
-              ))}
-            </>
-          )}
-        </View>
-      </View>
+    <Panel title="Money position" subtitle={`What you hold, are owed and owe · received for ${periodLabel}`}>
+      <Text className="mb-1 text-[12px] font-bold uppercase text-gray-500">Cash &amp; bank balance</Text>
+      {moneyRows.length === 0 ? (
+        <Text className="py-3 text-sm text-gray-400">No balance on any account</Text>
+      ) : (
+        <ShareTable firstHead="Account" rows={moneyRows} total={{ label: 'Total cash & bank', amount: cashAll }} shareHead="Share" />
+      )}
+      <Text className="mb-1 mt-5 text-[12px] font-bold uppercase text-gray-500">Receivable, payable and received</Text>
+      <ShareTable
+        firstHead="Item"
+        shareHead="% of cash"
+        rows={[
+          { label: `To receive · ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`, amount: owed.receivable, color: '#2563EB', share: cashAll > 0 ? (owed.receivable / cashAll) * 100 : null },
+          { label: 'To pay · vendors', amount: owed.payable, color: '#DC2626', share: cashAll > 0 ? (owed.payable / cashAll) * 100 : null },
+          {
+            label: `Received · ${periodLabel}`,
+            amount: collection.received,
+            color: '#16A34A',
+            share: collection.percent,
+            note: collection.percent == null ? 'No sales billed in this period' : `${npr(collection.received)} collected of ${npr(collection.billed)} billed (share = % of billed)`,
+          },
+        ]}
+        total={{ label: 'Net position (cash + receivable − payable)', amount: net, share: '' }}
+      />
     </Panel>
   );
 
@@ -806,11 +822,12 @@ export default function CompanyDashboard() {
 
   const stages = (
     <Panel title="Jobs by stage" right={<Pressable onPress={() => go('/(reseller)/requests')} hitSlop={6}><Text className="text-[12.5px] font-semibold" style={{ color: '#2563EB' }}>Open requests</Text></Pressable>}>
-      <HBars color="#2563EB" rows={stageRows.map((r) => ({ label: r.label, value: r.value, display: `${r.value} · ${npr(r.amount)}`, color: r.color }))} />
-      <View className="mt-3 flex-row items-center border-t border-gray-200 pt-2.5" style={{ gap: 8 }}>
-        <Text className="flex-1 text-[13px] font-bold text-gray-700">Total</Text>
-        <Text className="text-[13px] font-extrabold text-gray-900">{stageTotal} jobs · {npr(stageAmount)}</Text>
-      </View>
+      <ShareTable
+        firstHead="Stage"
+        showCount
+        rows={stageRows.map((r) => ({ label: r.label, amount: r.amount, count: r.value, color: r.color, share: stageAmount > 0 ? (r.amount / stageAmount) * 100 : null }))}
+        total={{ label: 'All stages', amount: stageAmount, count: stageTotal }}
+      />
       {jobStats.overdue > 0 && (
         <Pressable onPress={() => go('/(reseller)/requests')} className="mt-3.5 flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2' }}>
           <Ionicons name="time-outline" size={16} color="#B91C1C" />
