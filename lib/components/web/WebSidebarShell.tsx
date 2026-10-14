@@ -1,5 +1,5 @@
 // lib/components/web/WebSidebarShell.tsx
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -173,21 +173,17 @@ export function WebSidebarShell({
           paddingHorizontal: 14,
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginBottom: 20 }}>
-          <View
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
-              backgroundColor: '#2563EB',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="construct" size={17} color="#fff" />
-          </View>
+        {/* The brand mark: the app's own logo and name. Pressing it goes back to the role's first page
+            (the Dashboard for a reseller). */}
+        <Pressable
+          onPress={() => items[0] && router.push(items[0].href as never)}
+          accessibilityRole="link"
+          accessibilityLabel="Go to the dashboard"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginBottom: 20 }}
+        >
+          <Image source={require('../../../assets/jageer-logo.png')} style={{ width: 34, height: 34, borderRadius: 9 }} resizeMode="contain" />
           <Text style={{ fontSize: 15, fontWeight: '800', color: '#111827' }}>Jageer Nepal</Text>
-        </View>
+        </Pressable>
 
         {/* The nav list scrolls on its own (minHeight: 0 lets a flex child
             shrink below its content), so a long open submenu like Finance's
