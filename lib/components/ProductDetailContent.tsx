@@ -1,6 +1,6 @@
 // lib/components/ProductDetailContent.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, Image, ScrollView } from 'react-native';
+import { View, Text, Pressable, Image, ScrollView, type TextStyle } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsWideWeb } from '../hooks/useWideGrid';
@@ -10,6 +10,29 @@ import type { Product } from '../../types/database.types';
 
 /** At or below this many in stock, the page says "Only N left". */
 const LOW_STOCK = 5;
+
+// The sizes and spacing of this page are set inline, not as utility classes: a class name the style
+// compiler has not seen yet is silently ignored by a running app (the price came out small and the
+// button thin), while an inline value always applies. The numbers are the canvas design's.
+const INK = '#111827';
+const MUTED = '#6B7280';
+const SOFT = '#4B5563';
+const LINE = '#E5E7EB';
+const BLUE = '#1D4ED8';
+
+const text = (size: number, weight: TextStyle['fontWeight'], color: string, extra?: TextStyle): TextStyle => ({
+  fontSize: size,
+  fontWeight: weight,
+  color,
+  ...extra,
+});
+
+const card = {
+  backgroundColor: '#FFFFFF',
+  borderWidth: 1,
+  borderColor: LINE,
+  borderRadius: 16,
+} as const;
 
 function stockStatus(stock: number) {
   if (stock <= 0) return { short: 'Out of stock', long: 'Out of stock', color: '#4B5563', bg: '#F3F4F6' };
@@ -61,6 +84,9 @@ export function ProductDetailContent({
 
   const { data: seller } = useSupabaseRow('profiles', product.seller_id);
   const sellerName = seller?.business_name?.trim() || seller?.full_name?.trim() || null;
+  // Always something to show on the "Sold by" lines: the seller's name when it can be read, else what
+  // kind of seller it is - so the details never lose a row.
+  const sellerLabel = sellerName ?? (product.seller_role === 'wholesaler' ? 'Wholesaler' : 'Reseller');
 
   const { data: sellerProducts } = useSupabaseQuery('products', { filters: { seller_id: product.seller_id } });
   const related = useMemo(
@@ -71,13 +97,14 @@ export function ProductDetailContent({
     [sellerProducts, product.id]
   );
 
-  const decDisabled = outOfStock || qty <= Math.min(minOrder, stock);
+  const lowest = Math.min(minOrder, Math.max(stock, 1));
+  const decDisabled = outOfStock || qty <= lowest;
   const incDisabled = outOfStock || qty >= stock;
   const total = Number(product.price) * qty;
 
   function step(delta: number) {
     setAdded(false);
-    setQty((q) => Math.min(Math.max(q + delta, Math.min(minOrder, Math.max(stock, 1))), Math.max(stock, 1)));
+    setQty((q) => Math.min(Math.max(q + delta, lowest), Math.max(stock, 1)));
   }
 
   function handleAdd() {
@@ -86,20 +113,40 @@ export function ProductDetailContent({
   }
 
   const image = (
-    <View className="aspect-square items-center justify-center overflow-hidden rounded-2xl border border-blue-100 bg-blue-50">
+    <View
+      style={{
+        width: '100%',
+        aspectRatio: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#DBE6FB',
+        backgroundColor: '#EAF1FF',
+      }}
+    >
       {product.image_url ? (
-        <Image source={{ uri: toSafeImageUri(product.image_url)! }} className="h-full w-full" resizeMode="cover" />
+        <Image source={{ uri: toSafeImageUri(product.image_url)! }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       ) : (
         <Ionicons name="cube-outline" size={72} color="#93B4F5" />
       )}
       <View
-        className="absolute left-3 top-3 flex-row items-center rounded-full px-3 py-1.5"
-        style={{ backgroundColor: status.bg, gap: 6 }}
+        style={{
+          position: 'absolute',
+          left: 16,
+          top: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          paddingVertical: 6,
+          paddingHorizontal: 12,
+          borderRadius: 999,
+          backgroundColor: status.bg,
+        }}
       >
         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: status.color }} />
-        <Text className="text-[12.5px] font-bold" style={{ color: status.color }}>
-          {status.short}
-        </Text>
+        <Text style={text(12.5, '700', status.color)}>{status.short}</Text>
       </View>
     </View>
   );
@@ -107,78 +154,79 @@ export function ProductDetailContent({
   const heading = (
     <View style={{ gap: 8 }}>
       {!!product.category && (
-        <Text className="text-xs font-bold capitalize tracking-wide text-blue-600">{product.category}</Text>
+        <Text style={text(12, '700', '#2563EB', { letterSpacing: 0.7 })}>{product.category}</Text>
       )}
-      <Text className={wide ? 'text-[30px] font-extrabold leading-9 text-gray-900' : 'text-2xl font-extrabold leading-8 text-gray-900'}>
-        {product.name}
-      </Text>
-      {!!sellerName && (
-        <View className="flex-row items-center" style={{ gap: 8 }}>
-          <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-blue-100">
-            <Text className="text-[11px] font-bold text-blue-700">{initialsOf(sellerName)}</Text>
-          </View>
-          <Text className="flex-shrink text-[13.5px] text-gray-600" numberOfLines={1}>
-            Sold by <Text className="font-bold text-gray-900">{sellerName}</Text>
-          </Text>
+      <Text style={text(wide ? 30 : 24, '800', INK, { lineHeight: wide ? 36 : 30 })}>{product.name}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View
+          style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={text(11, '700', BLUE)}>{initialsOf(sellerLabel)}</Text>
         </View>
-      )}
+        <Text style={[text(13.5, '400', SOFT), { flexShrink: 1 }]} numberOfLines={1}>
+          Sold by <Text style={text(13.5, '700', INK)}>{sellerLabel}</Text>
+        </Text>
+      </View>
     </View>
   );
 
   const buyBox = (
-    <View className="rounded-2xl border border-gray-200 bg-white p-5" style={{ gap: 18 }}>
-      <View className="flex-row flex-wrap items-baseline" style={{ gap: 10 }}>
-        <Text className={`text-4xl font-extrabold ${outOfStock ? 'text-gray-500' : 'text-blue-700'}`}>
+    <View style={{ ...card, padding: 20, gap: 18 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 10 }}>
+        <Text style={text(wide ? 36 : 32, '800', outOfStock ? MUTED : BLUE, { lineHeight: wide ? 40 : 36 })}>
           {money(product.price)}
         </Text>
-        <Text className="text-[13.5px] text-gray-500">per unit</Text>
+        <Text style={text(13.5, '400', MUTED)}>per unit</Text>
       </View>
 
-      <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-        <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: status.bg }}>
-          <Text className="text-[13px] font-bold" style={{ color: status.color }}>
-            {status.long}
-          </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        <View style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: status.bg }}>
+          <Text style={text(13, '700', status.color)}>{status.long}</Text>
         </View>
-        <View className="rounded-full bg-gray-100 px-3 py-1.5">
-          <Text className="text-[13px] font-semibold text-gray-700">Minimum order: {minOrder}</Text>
+        <View style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#F3F4F6' }}>
+          <Text style={text(13, '600', '#374151')}>Minimum order: {minOrder}</Text>
         </View>
       </View>
 
-      <View className="h-px bg-gray-200" />
+      <View style={{ height: 1, backgroundColor: LINE }} />
 
-      <View className="flex-row flex-wrap items-center justify-between" style={{ gap: 14 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
         <View style={{ gap: 6 }}>
-          <Text className="text-[12.5px] font-semibold text-gray-500">Quantity</Text>
-          <View className="flex-row items-center rounded-xl border border-gray-300 bg-white">
+          <Text style={text(12.5, '600', MUTED)}>Quantity</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#D1D5DB',
+              borderRadius: 12,
+              backgroundColor: '#FFFFFF',
+            }}
+          >
             <Pressable
               onPress={() => step(-1)}
               disabled={decDisabled}
               accessibilityRole="button"
               accessibilityLabel="Decrease quantity"
-              className="h-12 w-12 items-center justify-center"
-              style={{ opacity: decDisabled ? 0.35 : 1 }}
+              style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', opacity: decDisabled ? 0.35 : 1 }}
             >
               <Ionicons name="remove" size={22} color="#374151" />
             </Pressable>
-            <Text className="min-w-[44px] text-center text-[17px] font-bold text-gray-900">{outOfStock ? 0 : qty}</Text>
+            <Text style={text(17, '700', INK, { minWidth: 44, textAlign: 'center' })}>{outOfStock ? 0 : qty}</Text>
             <Pressable
               onPress={() => step(1)}
               disabled={incDisabled}
               accessibilityRole="button"
               accessibilityLabel="Increase quantity"
-              className="h-12 w-12 items-center justify-center"
-              style={{ opacity: incDisabled ? 0.35 : 1 }}
+              style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', opacity: incDisabled ? 0.35 : 1 }}
             >
               <Ionicons name="add" size={22} color="#374151" />
             </Pressable>
           </View>
         </View>
-        <View className="items-end" style={{ gap: 2 }}>
-          <Text className="text-[12.5px] font-semibold text-gray-500">Total</Text>
-          <Text className={`text-[22px] font-extrabold ${outOfStock ? 'text-gray-400' : 'text-gray-900'}`}>
-            {money(outOfStock ? 0 : total)}
-          </Text>
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <Text style={text(12.5, '600', MUTED)}>Total</Text>
+          <Text style={text(22, '800', outOfStock ? '#9CA3AF' : INK)}>{money(outOfStock ? 0 : total)}</Text>
         </View>
       </View>
 
@@ -186,43 +234,56 @@ export function ProductDetailContent({
         onPress={handleAdd}
         disabled={outOfStock}
         accessibilityRole="button"
-        className="h-[54px] items-center justify-center rounded-2xl"
-        style={{ backgroundColor: outOfStock ? '#9CA3AF' : added ? '#15803D' : '#EA580C' }}
+        style={{
+          height: 54,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 14,
+          backgroundColor: outOfStock ? '#9CA3AF' : added ? '#15803D' : '#EA580C',
+        }}
       >
-        <Text className="text-[16.5px] font-bold text-white">
+        <Text style={text(16.5, '700', '#FFFFFF')}>
           {outOfStock ? 'Out of stock' : added ? `Added ${qty} to cart` : 'Add to cart'}
         </Text>
       </Pressable>
 
-      <Text className="text-[12.5px] leading-[18px] text-gray-500">
+      <Text style={text(12.5, '400', MUTED, { lineHeight: 19 })}>
         Your cart holds items from one seller at a time. Adding this item to a cart that has another seller&apos;s items
         will ask you to clear it first.
       </Text>
     </View>
   );
 
-  const about = !!product.description?.trim() && (
-    <View className="rounded-2xl border border-gray-200 bg-white p-5" style={{ gap: 10 }}>
-      <Text className="text-[17px] font-extrabold text-gray-900">About this product</Text>
-      <Text className="text-[14.5px] leading-[24px] text-gray-600">{product.description}</Text>
+  // Always drawn, so the About and Details cards keep the same two-card row with or without a
+  // description (a product without one says so, rather than leaving Details alone at a third).
+  const hasDescription = !!product.description?.trim();
+  const about = (
+    <View style={{ ...card, padding: 22, gap: 10, flexGrow: 1 }}>
+      <Text style={text(17, '800', INK)}>About this product</Text>
+      <Text style={text(14.5, '400', hasDescription ? SOFT : '#9CA3AF', { lineHeight: 25 })}>
+        {hasDescription ? product.description : "The seller hasn't added a description yet."}
+      </Text>
     </View>
   );
 
+  // The same four rows every time; a value that is not known says so instead of dropping the row.
   const detailRows: [string, string][] = [
-    ...(product.category ? ([['Category', product.category]] as [string, string][]) : []),
+    ['Category', product.category?.trim() || 'Not categorised'],
     ['Availability', status.short],
     ['Minimum order', `${minOrder} ${minOrder === 1 ? 'unit' : 'units'}`],
-    ...(sellerName ? ([['Sold by', sellerName]] as [string, string][]) : []),
+    ['Sold by', sellerLabel],
   ];
   const details = (
-    <View className="rounded-2xl border border-gray-200 bg-white p-5" style={{ gap: 12 }}>
-      <Text className="text-[17px] font-extrabold text-gray-900">Details</Text>
-      {detailRows.map(([label, value]) => (
-        <View key={label} className="flex-row justify-between" style={{ gap: 18 }}>
-          <Text className="text-sm text-gray-500">{label}</Text>
-          <Text className="flex-1 text-right text-sm font-semibold text-gray-900">{value}</Text>
-        </View>
-      ))}
+    <View style={{ ...card, padding: 22, gap: 12, flexGrow: 1 }}>
+      <Text style={text(17, '800', INK)}>Details</Text>
+      <View style={{ gap: 10 }}>
+        {detailRows.map(([label, value]) => (
+          <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18 }}>
+            <Text style={text(14, '400', MUTED)}>{label}</Text>
+            <Text style={[text(14, '600', INK), { flex: 1, textAlign: 'right' }]}>{value}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 
@@ -234,12 +295,9 @@ export function ProductDetailContent({
         onPress={() => router.push(`${productPath}/${item.id}` as never)}
         accessibilityRole="button"
         accessibilityLabel={item.name}
-        className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
-        style={width ? { width } : { flex: 1, maxWidth: 260, minWidth: 0 }}
+        style={[{ ...card, overflow: 'hidden' }, width ? { width } : { flex: 1, minWidth: 0 }]}
       >
-        {/* An explicit ratio: an arbitrary `aspect-[4/3]` class is not applied, which left this box with
-            no height and the picture invisible. */}
-        <View className="items-center justify-center overflow-hidden bg-blue-50" style={{ width: '100%', aspectRatio: 4 / 3 }}>
+        <View style={{ width: '100%', aspectRatio: 4 / 3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: '#EAF1FF' }}>
           {item.image_url ? (
             <Image
               source={{ uri: toSafeImageUri(item.image_url)! }}
@@ -251,14 +309,12 @@ export function ProductDetailContent({
             <Ionicons name="cube-outline" size={34} color="#93B4F5" />
           )}
         </View>
-        <View className="px-3 pb-3.5 pt-3" style={{ gap: 3 }}>
-          <Text className="text-[13.5px] font-bold text-gray-900" numberOfLines={1}>
+        <View style={{ paddingTop: 12, paddingBottom: 14, paddingHorizontal: width ? 12 : 14, gap: 4 }}>
+          <Text style={text(width ? 13 : 13.5, '700', INK)} numberOfLines={1}>
             {item.name}
           </Text>
-          <Text className="text-sm font-extrabold text-blue-700">{money(item.price)}</Text>
-          <Text className="text-xs font-semibold" style={{ color: itemStatus.color }}>
-            {itemStatus.short}
-          </Text>
+          <Text style={text(width ? 13.5 : 14, '800', BLUE)}>{money(item.price)}</Text>
+          <Text style={text(12, '600', itemStatus.color)}>{itemStatus.short}</Text>
         </View>
       </Pressable>
     );
@@ -266,12 +322,17 @@ export function ProductDetailContent({
 
   const moreFromSeller = related.length > 0 && (
     <View style={{ gap: 14 }}>
-      <Text className="text-lg font-extrabold text-gray-900" numberOfLines={1}>
+      <Text style={text(wide ? 18 : 16, '800', INK)} numberOfLines={1}>
         {sellerName ? `More from ${sellerName}` : 'More from this seller'}
       </Text>
       {wide ? (
-        <View className="flex-row" style={{ gap: 16 }}>
+        // Always four equal columns across the full width: a short list is padded with empty slots, so
+        // one or two products never stretch into huge cards.
+        <View style={{ flexDirection: 'row', gap: 16 }}>
           {related.map((item) => relatedCard(item))}
+          {Array.from({ length: Math.max(0, 4 - related.length) }, (_, i) => (
+            <View key={`slot-${i}`} style={{ flex: 1, minWidth: 0 }} />
+          ))}
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
@@ -283,33 +344,38 @@ export function ProductDetailContent({
 
   if (wide) {
     return (
-      <View style={{ gap: 28, padding: 32, paddingTop: 24, width: '100%', maxWidth: 1120 }}>
-        <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
+      // Fills the width the screen gives it (the content area beside the side panel); only on a very
+      // wide screen is it held to 1400 and centred, so it never stretches thin.
+      <View
+        style={{ gap: 28, paddingHorizontal: 32, paddingTop: 24, paddingBottom: 40, width: '100%', maxWidth: 1400, alignSelf: 'center' }}
+      >
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           <Pressable onPress={() => (router.canGoBack() ? router.back() : undefined)} hitSlop={6}>
-            <Text className="text-[13px] font-semibold text-blue-600">Shop</Text>
+            <Text style={text(13, '600', '#2563EB')}>Shop</Text>
           </Pressable>
           {!!product.category && (
             <>
-              <Text className="text-[13px] text-gray-400">/</Text>
-              <Text className="text-[13px] font-semibold text-gray-500">{product.category}</Text>
+              <Text style={text(13, '400', '#9CA3AF')}>/</Text>
+              <Text style={text(13, '600', MUTED)}>{product.category}</Text>
             </>
           )}
-          <Text className="text-[13px] text-gray-400">/</Text>
-          <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+          <Text style={text(13, '400', '#9CA3AF')}>/</Text>
+          <Text style={text(13, '600', INK)} numberOfLines={1}>
             {product.name}
           </Text>
         </View>
 
-        <View className="flex-row items-start" style={{ gap: 32 }}>
-          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 420, maxWidth: 520, minWidth: 0 }}>{image}</View>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 32 }}>
+          <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 420, maxWidth: 560, minWidth: 0 }}>{image}</View>
           <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 360, minWidth: 0, gap: 20 }}>
             {heading}
             {buyBox}
           </View>
         </View>
 
-        <View className="flex-row items-start" style={{ gap: 20 }}>
-          {about ? <View style={{ flex: 2, minWidth: 0 }}>{about}</View> : null}
+        {/* Stretched, so the two cards are the same height and Details fills its column. */}
+        <View style={{ flexDirection: 'row', gap: 20, alignItems: 'stretch' }}>
+          <View style={{ flex: 2, minWidth: 0 }}>{about}</View>
           <View style={{ flex: 1, minWidth: 0 }}>{details}</View>
         </View>
 
@@ -319,7 +385,7 @@ export function ProductDetailContent({
   }
 
   return (
-    <View className="px-4 pt-4" style={{ gap: 18 }}>
+    <View style={{ gap: 18, paddingHorizontal: 16, paddingTop: 16 }}>
       {image}
       {heading}
       {buyBox}
