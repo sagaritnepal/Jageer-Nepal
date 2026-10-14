@@ -484,6 +484,7 @@ export default function CompanyDashboard() {
     let assigned = 0;
     let working = 0;
     let overdue = 0;
+    const money = { newRequests: 0, waiting: 0, assigned: 0, working: 0, toBill: 0, unpaid: 0 };
     let toBill = 0;
     let unpaid = 0;
     const done = new Map<string, number>();
@@ -493,18 +494,21 @@ export default function CompanyDashboard() {
         ? new Date(`${j.scheduled_date}T${j.scheduled_time?.slice(0, 5) ?? '23:59'}`).getTime()
         : new Date(j.created_at).getTime();
       if (j.status !== 'resolved' && now - slot > DAY_MS) overdue += 1;
-      if (j.status === 'approved' || (j.status === 'pending' && j.origin === 'reseller')) waiting += 1;
-      if (j.status === 'assigned') assigned += 1;
-      if (j.status === 'in_progress') working += 1;
-      if (j.status === 'resolved' && j.payment_status !== 'paid') unpaid += 1;
-      if (j.status === 'resolved' && j.payment_status === 'unpaid') toBill += 1;
+      const price = Number(j.quoted_price) || 0;
+      if (j.status === 'approved' || (j.status === 'pending' && j.origin === 'reseller')) { waiting += 1; money.waiting += price; }
+      if (j.status === 'assigned') { assigned += 1; money.assigned += price; }
+      if (j.status === 'in_progress') { working += 1; money.working += price; }
+      if (j.status === 'resolved' && j.payment_status !== 'paid') { unpaid += 1; money.unpaid += price; }
+      if (j.status === 'resolved' && j.payment_status === 'unpaid') { toBill += 1; money.toBill += price; }
       if (j.status === 'resolved' && j.technician_id && inRange(j.updated_at, range)) {
         done.set(j.technician_id, (done.get(j.technician_id) ?? 0) + 1);
       }
     }
-    const newRequests = (incomingRaw ?? []).filter((r) => !r.reseller_id).length;
+    const incoming = (incomingRaw ?? []).filter((r) => !r.reseller_id);
+    const newRequests = incoming.length;
+    money.newRequests = incoming.reduce((sum, r) => sum + (Number(r.quoted_price) || 0), 0);
     const shopOrders = (orders ?? []).filter((o) => o.status === 'pending' || o.status === 'confirmed').length;
-    return { waiting, assigned, working, overdue, toBill, unpaid, newRequests, shopOrders, done };
+    return { waiting, assigned, working, overdue, toBill, unpaid, newRequests, shopOrders, done, money };
   }, [jobs, incomingRaw, orders, range]);
 
   const team = useMemo(() => {
@@ -540,13 +544,15 @@ export default function CompanyDashboard() {
   const net = balances.total + owed.receivable - owed.payable;
 
   const stageRows = [
-    { label: 'New app requests', value: jobStats.newRequests, color: '#F59E0B' },
-    { label: 'Waiting for a technician', value: jobStats.waiting, color: '#2563EB' },
-    { label: 'Assigned', value: jobStats.assigned, color: '#0EA5E9' },
-    { label: 'In progress', value: jobStats.working, color: '#16A34A' },
-    { label: 'Done, to be billed', value: jobStats.toBill, color: '#7C3AED' },
-    { label: 'Awaiting payment', value: jobStats.unpaid, color: '#B45309' },
+    { label: 'New app requests', value: jobStats.newRequests, amount: jobStats.money.newRequests, color: '#F59E0B' },
+    { label: 'Waiting for a technician', value: jobStats.waiting, amount: jobStats.money.waiting, color: '#2563EB' },
+    { label: 'Assigned', value: jobStats.assigned, amount: jobStats.money.assigned, color: '#0EA5E9' },
+    { label: 'In progress', value: jobStats.working, amount: jobStats.money.working, color: '#16A34A' },
+    { label: 'Done, to be billed', value: jobStats.toBill, amount: jobStats.money.toBill, color: '#7C3AED' },
+    { label: 'Awaiting payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' },
   ];
+  const stageTotal = stageRows.reduce((s_, r) => s_ + r.value, 0);
+  const stageAmount = stageRows.reduce((s_, r) => s_ + r.amount, 0);
 
   const hero = (
     <LinearGradient colors={['#0F172A', '#1E3A8A', '#2563EB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 20, padding: wide ? 28 : 20 }}>
@@ -739,7 +745,11 @@ export default function CompanyDashboard() {
 
   const stages = (
     <Panel title="Jobs by stage" right={<Pressable onPress={() => go('/(reseller)/requests')} hitSlop={6}><Text className="text-[12.5px] font-semibold" style={{ color: '#2563EB' }}>Open requests</Text></Pressable>}>
-      <HBars color="#2563EB" rows={stageRows.map((r) => ({ label: r.label, value: r.value, display: String(r.value), color: r.color }))} />
+      <HBars color="#2563EB" rows={stageRows.map((r) => ({ label: r.label, value: r.value, display: `${r.value} · ${npr(r.amount)}`, color: r.color }))} />
+      <View className="mt-3 flex-row items-center border-t border-gray-200 pt-2.5" style={{ gap: 8 }}>
+        <Text className="flex-1 text-[13px] font-bold text-gray-700">Total</Text>
+        <Text className="text-[13px] font-extrabold text-gray-900">{stageTotal} jobs · {npr(stageAmount)}</Text>
+      </View>
       {jobStats.overdue > 0 && (
         <Pressable onPress={() => go('/(reseller)/requests')} className="mt-3.5 flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2' }}>
           <Ionicons name="time-outline" size={16} color="#B91C1C" />
