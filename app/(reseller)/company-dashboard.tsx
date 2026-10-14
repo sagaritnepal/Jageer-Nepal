@@ -4,7 +4,7 @@
 // what is owed to it and by it, how sales, purchases and expenses have moved over the year, where
 // every job stands, who the best customers are and how the team is doing. Everything is read from
 // data the app already keeps - nothing is typed on this page. Months follow the AD / BS toggle.
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Image, useWindowDimensions, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +15,7 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useAccountBalances } from '../../lib/hooks/useAccountBalances';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
-import { adStringToBs, BS_MONTHS } from '../../lib/utils/nepaliDate';
+import { adStringToBs, bsToAdString, bsDaysInMonth, BS_MONTHS } from '../../lib/utils/nepaliDate';
 import { localTodayIso } from '../../lib/utils/localDate';
 import { supabase } from '../../lib/supabase';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
@@ -72,6 +72,58 @@ function lastMonths(count: number, mode: 'bs' | 'ad'): Bucket[] {
   }
   return out;
 }
+
+// ---------- reporting period ----------
+type PeriodKey = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_fy' | 'last_fy';
+const PERIODS: { key: PeriodKey; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'this_week', label: 'This week' },
+  { key: 'last_week', label: 'Last week' },
+  { key: 'this_month', label: 'This month' },
+  { key: 'last_month', label: 'Last month' },
+  { key: 'this_fy', label: 'This fiscal year' },
+  { key: 'last_fy', label: 'Last fiscal year' },
+];
+type Range = { from: string; to: string };
+const isoOf = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+const utc = (iso: string) => new Date(`${iso}T00:00:00Z`);
+const addDays = (iso: string, n: number) => isoOf(new Date(utc(iso).getTime() + n * DAY_MS));
+/** Date range of a period, `back` whole periods earlier (back = 1 gives the one it is compared with).
+ * Weeks run Sunday-Saturday, months follow the AD / BS toggle, a fiscal year is Shrawan-Ashadh. */
+function periodRange(key: PeriodKey, mode: 'bs' | 'ad', back = 0): Range {
+  const today = localTodayIso();
+  if (key === 'today' || key === 'yesterday') {
+    const d = addDays(today, -(key === 'yesterday' ? 1 : 0) - back);
+    return { from: d, to: d };
+  }
+  if (key === 'this_week' || key === 'last_week') {
+    const sunday = addDays(today, -utc(today).getUTCDay() - 7 * ((key === 'last_week' ? 1 : 0) + back));
+    return { from: sunday, to: addDays(sunday, 6) };
+  }
+  const bs = adStringToBs(today);
+  if (key === 'this_month' || key === 'last_month') {
+    const shift = (key === 'last_month' ? 1 : 0) + back;
+    if (mode === 'bs' && bs) {
+      let y = bs.year;
+      let m = bs.month - shift;
+      while (m < 0) { m += 12; y -= 1; }
+      return { from: bsToAdString(y, m, 1), to: bsToAdString(y, m, bsDaysInMonth(y, m)) };
+    }
+    const first = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1 - shift, 1));
+    const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+    return { from: isoOf(first), to: isoOf(lastDay) };
+  }
+  // fiscal year: Shrawan 1 (BS month index 3) to the last day of Ashadh
+  const shift = (key === 'last_fy' ? 1 : 0) + back;
+  const startYear = (bs ? (bs.month >= 3 ? bs.year : bs.year - 1) : Number(today.slice(0, 4))) - shift;
+  return { from: bsToAdString(startYear, 3, 1), to: bsToAdString(startYear + 1, 2, bsDaysInMonth(startYear + 1, 2)) };
+}
+const inRange = (date: string | null | undefined, r: Range) => {
+  if (!date) return false;
+  const d = date.slice(0, 10);
+  return d >= r.from && d <= r.to;
+};
 
 // ---------- small drawing pieces ----------
 function Spark({ values, color, width = 150, height = 34 }: { values: number[]; color: string; width?: number; height?: number }) {
@@ -295,6 +347,11 @@ export default function CompanyDashboard() {
   const wide = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const twoColumns = width >= 1100;
   const [mode] = useCalendarMode();
+  const [period, setPeriod] = useState<PeriodKey>('today');
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? 'Today';
+  const range = useMemo(() => periodRange(period, mode), [period, mode]);
+  const prevRange = useMemo(() => periodRange(period, mode, 1), [period, mode]);
 
   const balances = useAccountBalances(userId);
   const { data: employees } = useMyEmployees(userId);
@@ -326,15 +383,26 @@ export default function CompanyDashboard() {
     return { sale, purchase, expense };
   }, [transactions, months, mode]);
   const last = months.length - 1;
-  const monthName = months[last]?.label ?? '';
 
-  const change = (series_: number[]): { text?: string; color?: string } => {
-    const now = series_[last] ?? 0;
-    const before = series_[last - 1] ?? 0;
-    if (before < 1) return now > 0 ? { text: 'New this month', color: '#16A34A' } : {};
+  // ---- the chosen period against the one before it ----
+  const totals = useMemo(() => {
+    const now = { sale: 0, purchase: 0, expense: 0 };
+    const before = { sale: 0, purchase: 0, expense: 0 };
+    for (const t of transactions ?? []) {
+      if (t.type !== 'sale' && t.type !== 'purchase' && t.type !== 'expense') continue;
+      const d = t.bill_date ?? t.created_at;
+      if (inRange(d, range)) now[t.type] += t.amount;
+      else if (inRange(d, prevRange)) before[t.type] += t.amount;
+    }
+    return { now, before };
+  }, [transactions, range, prevRange]);
+
+  const change = (now: number, before: number): { text?: string; color?: string } => {
+    if (before < 1) return now > 0 ? { text: 'Nothing in the previous period', color: '#16A34A' } : {};
     const pct = Math.round(((now - before) / before) * 100);
-    if (Math.abs(pct) > 999) return { text: `${pct > 0 ? '▲' : '▼'} 999%+ vs last month`, color: pct > 0 ? '#16A34A' : '#DC2626' };
-    return { text: `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs last month`, color: pct >= 0 ? '#16A34A' : '#DC2626' };
+    const arrow = pct >= 0 ? '▲' : '▼';
+    const shown = Math.abs(pct) > 999 ? '999%+' : `${Math.abs(pct)}%`;
+    return { text: `${arrow} ${shown} vs previous period`, color: pct >= 0 ? '#16A34A' : '#DC2626' };
   };
 
   // ---- who owes whom ----
@@ -365,26 +433,23 @@ export default function CompanyDashboard() {
     return { receivable, payable, debtors, ageing };
   }, [customerEntries, vendorEntries]);
 
-  // ---- collected against billed this month ----
+  // ---- collected against billed in the period ----
   const collection = useMemo(() => {
-    const thisKey = months[last]?.key;
     let received = 0;
     (customerEntries ?? []).forEach((e) => {
-      if (e.entry_type === 'credit' && keyOf(e.entry_date ?? e.created_at, mode) === thisKey) received += e.amount;
+      if (e.entry_type === 'credit' && inRange(e.entry_date ?? e.created_at, range)) received += e.amount;
     });
-    const billed = series.sale[last] ?? 0;
+    const billed = totals.now.sale;
     return { received, billed, percent: billed > 0 ? (received / billed) * 100 : null };
-  }, [customerEntries, months, last, mode, series]);
+  }, [customerEntries, range, totals]);
 
-  // ---- expenses by category, last three months ----
+  // ---- expenses by category in the period ----
   const expenseParts = useMemo(() => {
-    const keys = new Set(months.slice(-3).map((m) => m.key));
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
     const by = new Map<string, number>();
     for (const t of transactions ?? []) {
       if (t.type !== 'expense') continue;
-      const k = keyOf(t.bill_date ?? t.created_at, mode);
-      if (k == null || !keys.has(k)) continue;
+      if (!inRange(t.bill_date ?? t.created_at, range)) continue;
       const name = (t.expense_category_id && names.get(t.expense_category_id)) || 'Uncategorised';
       by.set(name, (by.get(name) ?? 0) + t.amount);
     }
@@ -394,24 +459,22 @@ export default function CompanyDashboard() {
     if (rest > 0) top.push(['Other', rest]);
     const total = top.reduce((s, [, v]) => s + v, 0);
     return { parts: top.map(([label, value], i) => ({ label, value, color: PALETTE[i % PALETTE.length] })), total };
-  }, [transactions, categories, months, mode]);
+  }, [transactions, categories, range]);
 
-  // ---- top customers, last twelve months of sales ----
+  // ---- top customers by sales in the period ----
   const topCustomers = useMemo(() => {
-    const keys = new Set(months.map((m) => m.key));
     const names = new Map((customers ?? []).map((c) => [c.id, c.name]));
     const by = new Map<string, number>();
     for (const t of transactions ?? []) {
       if (t.type !== 'sale') continue;
-      const k = keyOf(t.bill_date ?? t.created_at, mode);
-      if (k == null || !keys.has(k)) continue;
+      if (!inRange(t.bill_date ?? t.created_at, range)) continue;
       const who = (t.customer_id && names.get(t.customer_id)) || t.party_name || 'Walk-in';
       by.set(who, (by.get(who) ?? 0) + t.amount);
     }
     const total = [...by.values()].reduce((a, b) => a + b, 0);
     const rows = [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
     return { rows, total };
-  }, [transactions, customers, months, mode]);
+  }, [transactions, customers, range]);
 
   // ---- jobs ----
   const jobStats = useMemo(() => {
@@ -423,7 +486,6 @@ export default function CompanyDashboard() {
     let toBill = 0;
     let unpaid = 0;
     const done = new Map<string, number>();
-    const thisKey = months[last]?.key;
     for (const j of jobs ?? []) {
       if (j.status === 'cancelled') continue;
       const slot = j.scheduled_date
@@ -435,14 +497,14 @@ export default function CompanyDashboard() {
       if (j.status === 'in_progress') working += 1;
       if (j.status === 'resolved' && j.payment_status !== 'paid') unpaid += 1;
       if (j.status === 'resolved' && j.payment_status === 'unpaid') toBill += 1;
-      if (j.status === 'resolved' && j.technician_id && keyOf(j.updated_at, mode) === thisKey) {
+      if (j.status === 'resolved' && j.technician_id && inRange(j.updated_at, range)) {
         done.set(j.technician_id, (done.get(j.technician_id) ?? 0) + 1);
       }
     }
     const newRequests = (incomingRaw ?? []).filter((r) => !r.reseller_id).length;
     const shopOrders = (orders ?? []).filter((o) => o.status === 'pending' || o.status === 'confirmed').length;
     return { waiting, assigned, working, overdue, toBill, unpaid, newRequests, shopOrders, done };
-  }, [jobs, incomingRaw, orders, months, last, mode]);
+  }, [jobs, incomingRaw, orders, range]);
 
   const team = useMemo(() => {
     const names = new Map((employees ?? []).map((e) => [e.employment.technician_id, e.profile.full_name ?? 'Technician']));
@@ -470,10 +532,10 @@ export default function CompanyDashboard() {
   ].filter((p) => p.value > 0);
   const cashTotal = cashParts.reduce((s, p) => s + p.value, 0);
 
-  const sc = change(series.sale);
-  const pc = change(series.purchase);
-  const ec = change(series.expense);
-  const monthResult = (series.sale[last] ?? 0) - (series.purchase[last] ?? 0) - (series.expense[last] ?? 0);
+  const sc = change(totals.now.sale, totals.before.sale);
+  const pc = change(totals.now.purchase, totals.before.purchase);
+  const ec = change(totals.now.expense, totals.before.expense);
+  const monthResult = totals.now.sale - totals.now.purchase - totals.now.expense;
   const net = balances.total + owed.receivable - owed.payable;
 
   const stageRows = [
@@ -528,12 +590,40 @@ export default function CompanyDashboard() {
     </LinearGradient>
   );
 
+  const periodBar = (
+    <View className="flex-row items-center justify-end" style={{ gap: 10, zIndex: 20 }}>
+      <Text className="text-[12px] text-gray-500">{range.from === range.to ? range.from : `${range.from} → ${range.to}`}</Text>
+      <View style={{ position: 'relative' }}>
+        <Pressable onPress={() => setPeriodOpen((o) => !o)} className="flex-row items-center rounded-xl border border-gray-200 bg-white px-3.5 py-2.5" style={{ gap: 8, minWidth: 170 }}>
+          <Ionicons name="calendar-outline" size={16} color="#1E3A8A" />
+          <Text className="flex-1 text-[13px] font-semibold text-gray-800">{periodLabel}</Text>
+          <Ionicons name={periodOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#6B7280" />
+        </Pressable>
+        {periodOpen && (
+          <View className="rounded-xl border border-gray-200 bg-white py-1" style={[{ position: 'absolute', top: 46, right: 0, minWidth: 190, zIndex: 30 }, CARD_SHADOW]}>
+            {PERIODS.map((p) => (
+              <Pressable
+                key={p.key}
+                onPress={() => { setPeriod(p.key); setPeriodOpen(false); }}
+                className="flex-row items-center px-3.5 py-2.5"
+                style={{ gap: 8, backgroundColor: p.key === period ? '#EFF6FF' : undefined }}
+              >
+                <Text className="flex-1 text-[13px]" style={{ color: p.key === period ? '#1D4ED8' : '#1F2937', fontWeight: p.key === period ? '700' : '500' }}>{p.label}</Text>
+                {p.key === period && <Ionicons name="checkmark" size={15} color="#1D4ED8" />}
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
   const kpis = (
     <View className="flex-row flex-wrap" style={{ gap: 14 }}>
-      <Kpi label={`Sales · ${monthName}`} value={npr(series.sale[last] ?? 0)} icon="trending-up-outline" color="#047857" tint="#ECFDF5" caption={sc.text} captionColor={sc.color} series={series.sale} onPress={() => go('/(reseller)/sales-report')} />
-      <Kpi label={`Purchases · ${monthName}`} value={npr(series.purchase[last] ?? 0)} icon="cart-outline" color="#B45309" tint="#FFFBEB" caption={pc.text} captionColor="#6B7280" series={series.purchase} onPress={() => go('/(reseller)/purchase-report')} />
-      <Kpi label={`Expenses · ${monthName}`} value={npr(series.expense[last] ?? 0)} icon="receipt-outline" color="#B91C1C" tint="#FEF2F2" caption={ec.text} captionColor="#6B7280" series={series.expense} onPress={() => go('/(reseller)/expense-report')} />
-      <Kpi label={`Result · ${monthName}`} value={npr(monthResult)} icon="calculator-outline" color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} tint="#F0FDFA" caption="Sales − purchases − expenses" />
+      <Kpi label={`Sales · ${periodLabel}`} value={npr(totals.now.sale)} icon="trending-up-outline" color="#047857" tint="#ECFDF5" caption={sc.text} captionColor={sc.color} series={series.sale} onPress={() => go('/(reseller)/sales-report')} />
+      <Kpi label={`Purchases · ${periodLabel}`} value={npr(totals.now.purchase)} icon="cart-outline" color="#B45309" tint="#FFFBEB" caption={pc.text} captionColor="#6B7280" series={series.purchase} onPress={() => go('/(reseller)/purchase-report')} />
+      <Kpi label={`Expenses · ${periodLabel}`} value={npr(totals.now.expense)} icon="receipt-outline" color="#B91C1C" tint="#FEF2F2" caption={ec.text} captionColor="#6B7280" series={series.expense} onPress={() => go('/(reseller)/expense-report')} />
+      <Kpi label={`Result · ${periodLabel}`} value={npr(monthResult)} icon="calculator-outline" color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} tint="#F0FDFA" caption="Sales − purchases − expenses" />
       <Kpi label="Cash & bank" value={npr(balances.total)} icon="wallet-outline" color="#047857" tint="#ECFDF5" caption={`Cash ${npr(balances.cash)}`} onPress={() => go('/(reseller)/bank-balances')} />
       <Kpi label="To receive" value={npr(owed.receivable)} icon="arrow-down-circle-outline" color="#1D4ED8" tint="#EFF6FF" caption={`From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`} onPress={() => go('/(reseller)/to-receive')} />
       <Kpi label="To pay" value={npr(owed.payable)} icon="arrow-up-circle-outline" color="#B91C1C" tint="#FEF2F2" caption="Owed to vendors" onPress={() => go('/(reseller)/to-give')} />
@@ -558,7 +648,7 @@ export default function CompanyDashboard() {
   );
 
   const expenses = (
-    <Panel title="Where the money goes" subtitle="Expenses by category · last 3 months">
+    <Panel title="Where the money goes" subtitle={`Expenses by category · ${periodLabel}`}>
       {expenseParts.total <= 0 ? (
         <Text className="py-8 text-center text-sm text-gray-400">No expenses recorded in these months</Text>
       ) : (
@@ -582,9 +672,9 @@ export default function CompanyDashboard() {
     <Panel title="Money position" subtitle="What you hold, are owed and owe">
       <View className="flex-row flex-wrap" style={{ gap: 18 }}>
         <View style={{ flexGrow: 1, flexBasis: 200 }}>
-          <Text className="mb-1 text-[12px] font-semibold text-gray-500">Collected this month</Text>
+          <Text className="mb-1 text-[12px] font-semibold text-gray-500">Collected · {periodLabel}</Text>
           {collection.percent == null ? (
-            <Text className="py-10 text-center text-sm text-gray-400">No sales billed this month</Text>
+            <Text className="py-10 text-center text-sm text-gray-400">No sales billed in this period</Text>
           ) : (
             <Gauge percent={collection.percent} label={`${lakh(collection.received)} of ${lakh(collection.billed)}`} />
           )}
@@ -647,7 +737,7 @@ export default function CompanyDashboard() {
   );
 
   const customersCard = (
-    <Panel title="Top customers" subtitle="Sales · last 12 months">
+    <Panel title="Top customers" subtitle={`Sales · ${periodLabel}`}>
       {topCustomers.rows.length === 0 ? (
         <Text className="py-8 text-center text-sm text-gray-400">No sales recorded yet</Text>
       ) : (
@@ -686,9 +776,9 @@ export default function CompanyDashboard() {
   );
 
   const teamCard = (
-    <Panel title="Team" subtitle={`Jobs finished · ${monthName}`}>
+    <Panel title="Team" subtitle={`Jobs finished · ${periodLabel}`}>
       {team.length === 0 ? (
-        <Text className="py-8 text-center text-sm text-gray-400">No finished jobs this month yet</Text>
+        <Text className="py-8 text-center text-sm text-gray-400">No finished jobs in this period</Text>
       ) : (
         <Columns rows={team} color="#2563EB" />
       )}
@@ -720,6 +810,7 @@ export default function CompanyDashboard() {
   return (
     <ScrollView className="flex-1" style={{ backgroundColor: '#F6F7FB' }} contentContainerStyle={{ padding: wide ? 28 : 14, gap: 18, paddingBottom: 60 }}>
       {hero}
+      {periodBar}
       {kpis}
       {row([trend, expenses], [1.6, 1])}
       {row([money, ageing], [1.3, 1])}
