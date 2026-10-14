@@ -98,7 +98,7 @@ function NewJobCard({ item }: { item: ServiceRequest }) {
   }
 
   return (
-    <View className="mb-3 rounded-2xl border border-orange-100 bg-white p-4">
+    <View className="mb-3 rounded-2xl border border-orange-100 bg-white p-4" style={useIsWideWeb() ? { flex: 1 } : undefined}>
       <PressScale scaleTo={0.985} onPress={() => router.push(`/(technician)/job/${item.id}`)} className="flex-row items-start gap-3">
         <View className="items-center gap-1.5">
           <CategoryBadge category={item.issue_type} />
@@ -107,7 +107,7 @@ function NewJobCard({ item }: { item: ServiceRequest }) {
         <WorkDetails item={item} />
       </PressScale>
 
-      <View className="mt-3 flex-row" style={{ gap: 8 }}>
+      <View className="mt-auto flex-row pt-3" style={{ gap: 8 }}>
         <PressScale
           wrapStyle={{ flex: 1 }}
           onPress={() => onAnswer(false)}
@@ -168,7 +168,7 @@ function ActiveJobCard({ item }: { item: ServiceRequest }) {
   const customerPhone = item.customer_phone ?? customer?.phone;
 
   return (
-    <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
+    <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4" style={useIsWideWeb() ? { flex: 1 } : undefined}>
       <PressScale scaleTo={0.985} onPress={() => router.push(`/(technician)/job/${item.id}`)} className="flex-row items-start gap-3">
         <View className="items-center gap-1.5">
           <CategoryBadge category={item.issue_type} />
@@ -185,7 +185,7 @@ function ActiveJobCard({ item }: { item: ServiceRequest }) {
       )}
 
       <PressScale
-        wrapStyle={{ marginTop: 12 }}
+        wrapStyle={{ marginTop: 'auto', paddingTop: 12 }}
         onPress={() => router.push(`/(technician)/job/${item.id}`)}
         className="flex-row items-center justify-center gap-1.5 rounded-xl bg-blue-600 py-2.5"
       >
@@ -223,7 +223,7 @@ function OpenJobCard({ item }: { item: ServiceRequest }) {
   }
 
   return (
-    <View className="mb-3 rounded-2xl border p-4" style={{ borderColor: '#A7F3D0', backgroundColor: '#F0FDF4' }}>
+    <View className="mb-3 rounded-2xl border p-4" style={[{ borderColor: '#A7F3D0', backgroundColor: '#F0FDF4' }, useIsWideWeb() ? { flex: 1 } : null]}>
       <PressScale scaleTo={0.985} onPress={() => router.push(`/(technician)/job/${item.id}`)} className="flex-row items-start gap-3">
         <View className="items-center gap-1.5">
           <CategoryBadge category={item.issue_type} />
@@ -240,7 +240,7 @@ function OpenJobCard({ item }: { item: ServiceRequest }) {
       </View>
 
       <PressScale
-        wrapStyle={{ marginTop: 12 }}
+        wrapStyle={{ marginTop: 'auto', paddingTop: 12 }}
         onPress={take}
         disabled={busy}
         className="flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 disabled:opacity-60"
@@ -399,7 +399,7 @@ export default function TechnicianInbox() {
           </Appear>
           <WideCardGrid cardWidth={440}>
             {openJobs.map((job) => (
-              <Rise key={job.id} index={next()}>
+              <Rise key={job.id} index={next()} style={wide ? { flex: 1 } : undefined}>
                 <OpenJobCard item={job} />
               </Rise>
             ))}
@@ -434,7 +434,7 @@ export default function TechnicianInbox() {
           </Appear>
           <WideCardGrid cardWidth={440}>
             {newJobs.map((job) => (
-              <Rise key={job.id} index={next()}>
+              <Rise key={job.id} index={next()} style={wide ? { flex: 1 } : undefined}>
                 <NewJobCard item={job} />
               </Rise>
             ))}
@@ -452,7 +452,7 @@ export default function TechnicianInbox() {
           </Appear>
           <WideCardGrid cardWidth={440}>
             {activeJobs.map((job) => (
-              <Rise key={job.id} index={next()}>
+              <Rise key={job.id} index={next()} style={wide ? { flex: 1 } : undefined}>
                 <ActiveJobCard item={job} />
               </Rise>
             ))}
