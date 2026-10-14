@@ -94,6 +94,16 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
         <Field label="Date" basis={220}>
           <DateField value={date} onChange={setDate} />
         </Field>
+        <Field label="Amount (NPR)" basis={160}>
+          <TextInput
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="e.g. 1000"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            className={INPUT}
+          />
+        </Field>
       </FieldRow>
       <Text className="text-[12px] text-gray-500">
         Moves an amount from one person's ledger to another's. No cash or bank account is touched.
@@ -117,16 +127,6 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
         pickerTitle="Debit which person?"
       />
       <FieldRow>
-        <Field label="Amount (NPR)" basis={160}>
-          <TextInput
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="e.g. 1000"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            className={INPUT}
-          />
-        </Field>
         <Field label="Narration" basis={260}>
           <TextInput
             value={narration}
