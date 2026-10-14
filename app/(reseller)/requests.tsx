@@ -17,6 +17,10 @@ import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { ticketLabel } from '../../lib/utils/ticket';
 import { jobStages, type StageStepState } from '../../lib/utils/jobTimeline';
+import { JobProgress } from '../../lib/components/requests/JobProgress';
+import { numericDateLabel } from '../../lib/utils/nepaliDate';
+import { entryDay } from '../../lib/utils/ledgerStatement';
+import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
 import { useRequestsStageStore } from '../../lib/hooks/useRequestsStage';
 import type { BusinessTransaction, JobCard, Order, Product, ServiceRequest } from '../../types/database.types';
 
@@ -148,6 +152,8 @@ type JobRowData = {
   who: string;
   place: string | null;
   when: string | null;
+  /** The day the job is for, 'YYYY-MM-DD' - the table's Date column shows it as 00/00/0000. */
+  date?: string | null;
   /** Extra short lines under the name - a finished job's token, chalan, products and installation. */
   lines?: string[];
   /** Customer's phone, under their name in the table. */
@@ -191,9 +197,9 @@ const TIER_COLUMNS: Record<Tier, ColKey[]> = {
 };
 /** Fixed widths; the columns without one (job, customer, where) share what is left, by TIER_GROW. */
 const TIER_WIDTH: Record<Tier, Partial<Record<ColKey, number>>> = {
-  full: { token: 84, when: 150, amount: 104, tech: 130, status: 250, actions: 176 },
-  compact: { token: 84, when: 140, amount: 104, tech: 120, status: 210, actions: 180 },
-  tight: { token: 78, amount: 100, status: 200, actions: 190 },
+  full: { token: 84, when: 100, amount: 104, tech: 130, status: 210, actions: 176 },
+  compact: { token: 84, when: 100, amount: 104, tech: 120, status: 190, actions: 180 },
+  tight: { token: 78, amount: 100, status: 180, actions: 190 },
 };
 const TIER_GROW: Record<Tier, { job: number; customer: number; where: number }> = {
   full: { job: 2, customer: 1.2, where: 1 },
@@ -203,7 +209,7 @@ const TIER_GROW: Record<Tier, { job: number; customer: number; where: number }> 
 const TIER_GAP: Record<Tier, number> = { full: 14, compact: 12, tight: 12 };
 const HEAD_LABEL: Record<ColKey, string> = {
   token: 'Token no.',
-  when: 'Date & time',
+  when: 'Date',
   job: 'Job',
   customer: 'Customer',
   where: 'Address',
@@ -284,35 +290,11 @@ function ManageButtons({ data }: { data: JobRowData }) {
   );
 }
 
-/** Assigned / WIP / Hold / Completed as four short bars with their words above: the step the job is
- * on is dark green, finished ones dark grey, the rest light. */
-function ProgressFour({ steps }: { steps: { label: string; state: StageStepState }[] }) {
-  return (
-    <View className="flex-row" style={{ gap: 6 }}>
-      {steps.map((step) => {
-        const color = step.state === 'current' ? '#15803D' : step.state === 'done' ? '#374151' : '#9CA3AF';
-        return (
-          <View key={step.label} style={{ flex: 1, gap: 4 }}>
-            <Text className="text-[10.5px] font-semibold" style={{ color }} numberOfLines={1}>
-              {step.label}
-            </Text>
-            <View
-              style={{
-                height: 5,
-                borderRadius: 3,
-                backgroundColor: step.state === 'current' ? '#16A34A' : step.state === 'done' ? '#4B5563' : '#E5E7EB',
-              }}
-            />
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 /** One job, rendered either as a table row (wide web) or a card (phone). */
 function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
   const tier = useContext(TierContext);
+  useCalendarMode(); // draws the date again when the AD / BS toggle changes
+  const dateText = numericDateLabel(data.date);
   // One brand blue for every job's button, whatever stage it is in.
   const color = '#2563EB';
 
@@ -341,8 +323,8 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
         {has('when') && (
           <View style={{ width: w.when, ...cell }}>
-            <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
-              {data.when ?? '—'}
+            <Text className="text-[12.5px] text-gray-800" numberOfLines={1}>
+              {dateText || '—'}
             </Text>
           </View>
         )}
@@ -367,9 +349,9 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
               </Text>
             ))}
             {/* The tight table has no Date column: it is under the job. */}
-            {!has('when') && !!data.when && (
+            {!has('when') && !!dateText && (
               <Text className="text-[12px] text-gray-500" numberOfLines={1}>
-                {data.when}
+                {dateText}
               </Text>
             )}
           </View>
@@ -419,7 +401,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
         <View style={{ width: w.status }}>
           {data.progress ? (
-            <ProgressFour steps={data.progress} />
+            <JobProgress steps={data.progress} />
           ) : (
             <Text className="text-[12px] font-semibold text-gray-700" numberOfLines={1}>
               {data.tag.label}
@@ -610,6 +592,7 @@ function RequestJobRow({
         progress,
         place: wide ? (item.location_data?.address ?? null) : place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
+        date: item.scheduled_date ?? entryDay(null, item.created_at),
         lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
         chalan: finishedStage && onEditChalan ? { no: item.chalan_no ?? null, onEdit: () => onEditChalan(item) } : undefined,
         select:
@@ -679,6 +662,7 @@ function OrderJobRow({
         who: buyer?.full_name ?? '…',
         place,
         when: null,
+        date: entryDay(null, order.created_at),
         token: orderToken,
         tag: TAGS.order,
         amount: order.total_amount,
@@ -723,6 +707,7 @@ function SaleBillRow({ sale, stage, wide }: { sale: BusinessTransaction; stage: 
         who: sale.party_name ?? 'Customer',
         place: null,
         when: sale.bill_date ?? sale.created_at.slice(0, 10),
+        date: entryDay(sale.bill_date, sale.created_at),
         tag,
         amount: sale.amount,
         action,

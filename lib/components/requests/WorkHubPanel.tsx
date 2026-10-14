@@ -19,6 +19,10 @@ import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { formatScheduledWhen } from '../../utils/scheduledTime';
+import { numericDateLabel } from '../../utils/nepaliDate';
+import { entryDay } from '../../utils/ledgerStatement';
+import { useCalendarMode } from '../../hooks/useCalendarMode';
+import { JobProgress } from './JobProgress';
 import { exportWorkPdf, exportWorkXlsx, type WorkRecordRow } from '../../utils/exportWorkRecord';
 import type { Profile, ServiceRequest } from '../../../types/database.types';
 
@@ -650,8 +654,8 @@ function JobCompactHeader() {
       <Text className={head} style={{ width: 84 }}>
         Token no.
       </Text>
-      <Text className={head} style={{ width: 150 }}>
-        Date &amp; time
+      <Text className={head} style={{ width: 100 }}>
+        Date
       </Text>
       <Text className={head} style={grow(1.5)}>
         Job
@@ -668,7 +672,7 @@ function JobCompactHeader() {
       <Text className={head} style={{ width: 130 }}>
         Technician
       </Text>
-      <Text className={head} style={{ width: 250 }}>
+      <Text className={head} style={{ width: 210 }}>
         Progress
       </Text>
       <Text className={`${head} text-right`} style={{ width: 176 }}>
@@ -706,7 +710,6 @@ function JobCompactRow({
   const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
   const hold = r.hold_status === 'requested' ? HOLD_CHIP.requested : r.hold_status === 'on_hold' ? HOLD_CHIP.on_hold : null;
   const issue = splitIssue(r.issue_type);
-  const scheduled = formatScheduledWhen(r.scheduled_date, r.scheduled_time);
   const overdue = isOverdue(r);
   const { nodes, legs } = jobJourney(r, times, now);
   let current = -1;
@@ -722,6 +725,7 @@ function JobCompactRow({
   const mainIcon: keyof typeof Ionicons.glyphMap = r.hold_status === 'requested' ? 'pause-circle-outline' : 'person-add-outline';
   const mainPress = r.hold_status === 'requested' ? open : () => onAssign(r);
 
+  useCalendarMode(); // draws the date again when the AD / BS toggle changes
   const cell = { minWidth: 0 } as const;
   const stages = jobStages(r, times);
   const statusLine = [chip.label, hold?.label, overdue ? `Overdue by ${overdueBy(r)}` : null, pay.label].filter(Boolean).join(' · ');
@@ -734,9 +738,9 @@ function JobCompactRow({
         {ticketLabel(r.ticket_no) ?? '—'}
       </Text>
 
-      <View style={{ width: 150, ...cell }}>
-        <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
-          {scheduled ?? 'Not scheduled'}
+      <View style={{ width: 100, ...cell }}>
+        <Text className="text-[12.5px] text-gray-800" numberOfLines={1}>
+          {numericDateLabel(r.scheduled_date ?? entryDay(null, r.created_at)) || '—'}
         </Text>
       </View>
 
@@ -794,30 +798,9 @@ function JobCompactRow({
         )}
       </View>
 
-      {/* Assigned / WIP / Hold / Completed, with the words above their bars. */}
-      <View style={{ width: 250, gap: 4 }}>
-        <View className="flex-row" style={{ gap: 6 }}>
-          {stages.map((step) => {
-            const color = step.state === 'current' ? '#15803D' : step.state === 'done' ? '#374151' : '#9CA3AF';
-            return (
-              <View key={step.label} style={{ flex: 1, gap: 4 }}>
-                <Text className="text-[10.5px] font-semibold" style={{ color }} numberOfLines={1}>
-                  {step.label}
-                </Text>
-                <View
-                  style={{
-                    height: 5,
-                    borderRadius: 3,
-                    backgroundColor: step.state === 'current' ? '#16A34A' : step.state === 'done' ? '#4B5563' : '#E5E7EB',
-                  }}
-                />
-              </View>
-            );
-          })}
-        </View>
-        <Text className="text-[11px] text-gray-600" numberOfLines={1}>
-          {statusLine}
-        </Text>
+      {/* Assigned / WIP / Hold / Completed: the step the job is on, the others folded away until tapped. */}
+      <View style={{ width: 210 }}>
+        <JobProgress steps={stages} note={statusLine} />
       </View>
 
       <View className="flex-row items-center justify-end" style={{ gap: 6, width: 176 }}>

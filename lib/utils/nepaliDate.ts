@@ -107,6 +107,19 @@ export function shortDateLabel(adDateStr: string): string {
   return bs ? `${BS_MONTHS[bs.month]} ${bs.date}` : '';
 }
 
+/** A date as 00/00/0000 - day / month / year - in the calendar the app is read in: BS ("27/06/2083") or
+ * AD ("13/10/2026"). Short and a fixed width, for a table column that has no room for a month name. */
+export function numericDateLabel(adDateStr: string | null | undefined): string {
+  if (!adDateStr) return '';
+  const day = adDateStr.slice(0, 10);
+  const [y, m, d] = day.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const two = (v: number) => String(v).padStart(2, '0');
+  if (labelMode === 'ad') return `${two(d)}/${two(m)}/${y}`;
+  const bs = adStringToBs(day);
+  return bs ? `${two(bs.date)}/${two(bs.month + 1)}/${bs.year}` : `${two(d)}/${two(m)}/${y}`;
+}
+
 /** The month a date is in, as a row heading: "Aswin 2083" read in BS, "Oct 2026" in AD. */
 export function monthGroupLabel(adDateStr: string): string {
   const [y, m, d] = adDateStr.split('-').map(Number);
