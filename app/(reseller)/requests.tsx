@@ -1,5 +1,5 @@
 // app/(reseller)/requests.tsx
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, TextInput, Modal, FlatList, ScrollView, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -173,7 +173,56 @@ type JobRowData = {
 
 // Web table columns - the same ones My Jobs uses (see JobCompactRow in WorkHubPanel), shared by
 // the header row and every job row of every tab.
-const COLS = { token: 84, when: 150, job: 1.5, customer: 1.1, where: 1, amount: 104, tech: 130, status: 250, actions: 176 };
+//
+// The table is only as wide as the window leaves it (the side panel takes 240px), and nine columns
+// need about 1750px to read well - on a laptop the Job and Customer columns were squeezed to a few
+// letters and wrapped on top of each other. So it comes in three sizes, picked from the width the
+// table actually has (see tierFor), and below that the jobs are cards, as on a phone:
+//   full     every column;
+//   compact  the Address goes under the customer;
+//   tight    the date goes under the job and the technician under the customer as well.
+type Tier = 'full' | 'compact' | 'tight';
+type ColKey = 'token' | 'when' | 'job' | 'customer' | 'where' | 'amount' | 'tech' | 'status' | 'actions';
+
+const TIER_COLUMNS: Record<Tier, ColKey[]> = {
+  full: ['token', 'when', 'job', 'customer', 'where', 'amount', 'tech', 'status', 'actions'],
+  compact: ['token', 'when', 'job', 'customer', 'amount', 'tech', 'status', 'actions'],
+  tight: ['token', 'job', 'customer', 'amount', 'status', 'actions'],
+};
+/** Fixed widths; the columns without one (job, customer, where) share what is left, by TIER_GROW. */
+const TIER_WIDTH: Record<Tier, Partial<Record<ColKey, number>>> = {
+  full: { token: 84, when: 150, amount: 104, tech: 130, status: 250, actions: 176 },
+  compact: { token: 84, when: 140, amount: 104, tech: 120, status: 210, actions: 180 },
+  tight: { token: 78, amount: 100, status: 200, actions: 190 },
+};
+const TIER_GROW: Record<Tier, { job: number; customer: number; where: number }> = {
+  full: { job: 2, customer: 1.2, where: 1 },
+  compact: { job: 2, customer: 1.4, where: 1 },
+  tight: { job: 1.8, customer: 1.2, where: 1 },
+};
+const TIER_GAP: Record<Tier, number> = { full: 14, compact: 12, tight: 12 };
+const HEAD_LABEL: Record<ColKey, string> = {
+  token: 'Token no.',
+  when: 'Date & time',
+  job: 'Job',
+  customer: 'Customer',
+  where: 'Address',
+  amount: 'Amount',
+  tech: 'Technician',
+  status: 'Progress',
+  actions: 'Actions',
+};
+
+/** The table's width (px) from which each size reads well; narrower than the last is cards. */
+const FULL_TABLE_WIDTH = 1750;
+const COMPACT_TABLE_WIDTH = 1400;
+const MIN_TABLE_WIDTH = 1100;
+function tierFor(width: number): Tier {
+  return width >= FULL_TABLE_WIDTH ? 'full' : width >= COMPACT_TABLE_WIDTH ? 'compact' : 'tight';
+}
+
+/** The size the table is drawn at, for the header row and every job row to agree on. */
+const TierContext = createContext<Tier>('full');
 
 function formatAmount(amount: number | null): string {
   return amount != null ? `NPR ${Number(amount).toLocaleString()}` : '';
@@ -263,13 +312,17 @@ function ProgressFour({ steps }: { steps: { label: string; state: StageStepState
 
 /** One job, rendered either as a table row (wide web) or a card (phone). */
 function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
+  const tier = useContext(TierContext);
   // One brand blue for every job's button, whatever stage it is in.
   const color = '#2563EB';
 
   if (wide) {
     const cell = { minWidth: 0 } as const;
+    const has = (key: ColKey) => TIER_COLUMNS[tier].includes(key);
+    const w = TIER_WIDTH[tier];
+    const grow = TIER_GROW[tier];
     return (
-      <View className="flex-row items-center rounded-xl bg-white px-4 py-3" style={{ gap: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+      <View className="flex-row items-center rounded-xl bg-white px-4 py-3" style={{ gap: TIER_GAP[tier], borderWidth: 1, borderColor: '#E5E7EB' }}>
         {data.select && (
           <Pressable
             onPress={data.select.onToggle}
@@ -282,20 +335,22 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             <Ionicons name={data.select.checked ? 'checkbox' : 'square-outline'} size={20} color={data.select.checked ? '#0F766E' : '#9CA3AF'} />
           </Pressable>
         )}
-        <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: COLS.token }} numberOfLines={1}>
+        <Text className="text-[12.5px] font-bold text-gray-800" style={{ width: w.token }} numberOfLines={1}>
           {data.token ?? '—'}
         </Text>
 
-        <View style={{ width: COLS.when, ...cell }}>
-          <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
-            {data.when ?? '—'}
-          </Text>
-        </View>
+        {has('when') && (
+          <View style={{ width: w.when, ...cell }}>
+            <Text className="text-[12.5px] text-gray-800" numberOfLines={2}>
+              {data.when ?? '—'}
+            </Text>
+          </View>
+        )}
 
-        <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: COLS.job, ...cell }}>
+        <Pressable onPress={data.open} className="flex-row items-center" style={{ gap: 10, flexBasis: 0, flexGrow: grow.job, ...cell }}>
           {data.icon}
           <View style={{ flex: 1, gap: 2, ...cell }}>
-            <Text className="text-[14px] font-bold text-gray-900" numberOfLines={1}>
+            <Text className="text-[14px] font-bold text-gray-900" numberOfLines={2}>
               {data.title}
             </Text>
             {data.chalan && (
@@ -311,10 +366,16 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
                 {line}
               </Text>
             ))}
+            {/* The tight table has no Date column: it is under the job. */}
+            {!has('when') && !!data.when && (
+              <Text className="text-[12px] text-gray-500" numberOfLines={1}>
+                {data.when}
+              </Text>
+            )}
           </View>
         </Pressable>
 
-        <View style={{ flexBasis: 0, flexGrow: COLS.customer, ...cell }}>
+        <View style={{ flexBasis: 0, flexGrow: grow.customer, ...cell }}>
           <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
             {data.who}
           </Text>
@@ -323,25 +384,40 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
               {data.customerPhone}
             </Text>
           )}
+          {/* A narrower table has no Address / Technician column: they are under the customer. */}
+          {!has('where') && !!data.place && (
+            <Text className="text-[12px] text-gray-600" numberOfLines={2}>
+              {data.place}
+            </Text>
+          )}
+          {!has('tech') && !!data.technician && (
+            <Text className="text-[12px] text-gray-500" numberOfLines={1}>
+              {`Technician: ${data.technician}`}
+            </Text>
+          )}
         </View>
 
-        <View style={{ flexBasis: 0, flexGrow: COLS.where, ...cell }}>
-          <Text className="text-[13px] text-gray-800" numberOfLines={2}>
-            {data.place ?? '—'}
-          </Text>
-        </View>
+        {has('where') && (
+          <View style={{ flexBasis: 0, flexGrow: grow.where, ...cell }}>
+            <Text className="text-[13px] text-gray-800" numberOfLines={2}>
+              {data.place ?? '—'}
+            </Text>
+          </View>
+        )}
 
-        <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: COLS.amount }}>
+        <Text className="text-right text-[14px] font-extrabold text-gray-900" style={{ width: w.amount }} numberOfLines={1}>
           {formatAmount(data.amount) || '—'}
         </Text>
 
-        <View style={{ width: COLS.tech, ...cell }}>
-          <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
-            {data.technician ?? '—'}
-          </Text>
-        </View>
+        {has('tech') && (
+          <View style={{ width: w.tech, ...cell }}>
+            <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
+              {data.technician ?? '—'}
+            </Text>
+          </View>
+        )}
 
-        <View style={{ width: COLS.status }}>
+        <View style={{ width: w.status }}>
           {data.progress ? (
             <ProgressFour steps={data.progress} />
           ) : (
@@ -351,7 +427,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           )}
         </View>
 
-        <View className="flex-row items-center justify-end" style={{ width: COLS.actions, gap: 6 }}>
+        <View className="flex-row items-center justify-end" style={{ width: w.actions, gap: 6 }}>
           <ActionButton action={data.action} color="#0F766E" height={36} />
           <ManageButtons data={data} />
         </View>
@@ -671,6 +747,12 @@ export default function ResellerRequestQueue() {
   // viewport is wide enough - same breakpoint as the sidebar shell.
   const { width: screenWidth } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
+  // The table is measured, not guessed from the window: what is left beside the side panel decides
+  // which columns it can hold (see tierFor) - and when it holds too few, the jobs are cards.
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+  const tableWidth = measuredWidth ?? screenWidth - 304;
+  const tableMode = isWideWeb && tableWidth >= MIN_TABLE_WIDTH;
+  const tier = tierFor(tableWidth);
 
   const { data: incomingRaw, isLoading: loadingIncoming } = useSupabaseQuery('service_requests', {
     filters: { status: 'pending', origin: 'app' },
@@ -849,15 +931,15 @@ export default function ResellerRequestQueue() {
         key={`r-${item.id}`}
         item={item.request}
         stage={activeStage}
-        wide={isWideWeb}
+        wide={tableMode}
         onEditChalan={openChalan}
         selected={pickedJobs.has(item.id)}
         onToggleSelect={togglePicked}
       />
     ) : item.kind === 'sale' ? (
-      <SaleBillRow key={`s-${item.id}`} sale={item.sale} stage={item.stage} wide={isWideWeb} />
+      <SaleBillRow key={`s-${item.id}`} sale={item.sale} stage={item.stage} wide={tableMode} />
     ) : (
-      <OrderJobRow key={`o-${item.id}`} order={item.order} stage={activeStage} wide={isWideWeb} productMap={productMap} />
+      <OrderJobRow key={`o-${item.id}`} order={item.order} stage={activeStage} wide={tableMode} productMap={productMap} />
     );
 
   const emptyText = isLoading ? 'Loading…' : 'Nothing here right now.';
@@ -945,6 +1027,7 @@ export default function ResellerRequestQueue() {
     };
 
     return (
+      <TierContext.Provider value={tier}>
       <ScrollView className="flex-1" style={{ backgroundColor: PAGE_BG }} contentContainerStyle={{ padding: 32, paddingTop: 20, gap: 16 }}>
         <View className="flex-row items-stretch" style={{ gap: 6 }}>
           {WORKING_STAGES.map((stage, index) => {
@@ -994,7 +1077,7 @@ export default function ResellerRequestQueue() {
         </View>
 
         {hubView ?? (
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: 8 }} onLayout={(e) => setMeasuredWidth(e.nativeEvent.layout.width)}>
           <View className="flex-row items-center gap-2.5 rounded-lg px-4 py-3" style={{ backgroundColor: activeMeta.tint }}>
             <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: activeMeta.color }} />
             <Text className="text-[15px] font-bold text-gray-900">{activeMeta.label}</Text>
@@ -1014,26 +1097,28 @@ export default function ResellerRequestQueue() {
               </Pressable>
             </View>
           )}
-          <View className="flex-row rounded-lg px-4 py-2" style={{ gap: 14, backgroundColor: '#F3F4F6' }}>
-            {activeStage === 'completed' && <View style={{ width: 20 }} />}
-            {(
-              [
-                ['Token no.', { width: COLS.token }],
-                ['Date & time', { width: COLS.when }],
-                ['Job', { flexBasis: 0, flexGrow: COLS.job, minWidth: 0 }],
-                ['Customer', { flexBasis: 0, flexGrow: COLS.customer, minWidth: 0 }],
-                ['Address', { flexBasis: 0, flexGrow: COLS.where, minWidth: 0 }],
-                ['Amount', { width: COLS.amount, textAlign: 'right' }],
-                ['Technician', { width: COLS.tech }],
-                ['Progress', { width: COLS.status }],
-                ['Actions', { width: COLS.actions, textAlign: 'right' }],
-              ] as const
-            ).map(([label, style]) => (
-              <Text key={label} className="text-[11px] font-bold capitalize tracking-wide text-gray-500" style={style}>
-                {label}
-              </Text>
-            ))}
-          </View>
+          {tableMode && (
+            <View className="flex-row rounded-lg px-4 py-2" style={{ gap: TIER_GAP[tier], backgroundColor: '#F3F4F6' }}>
+              {activeStage === 'completed' && <View style={{ width: 20 }} />}
+              {TIER_COLUMNS[tier].map((key) => {
+                const fixed = TIER_WIDTH[tier][key];
+                const style =
+                  fixed != null
+                    ? { width: fixed, textAlign: key === 'amount' || key === 'actions' ? ('right' as const) : undefined }
+                    : { flexBasis: 0, flexGrow: TIER_GROW[tier][key as 'job' | 'customer' | 'where'], minWidth: 0 };
+                return (
+                  <Text
+                    key={key}
+                    className="text-[11px] font-bold capitalize tracking-wide text-gray-500"
+                    style={style}
+                    numberOfLines={1}
+                  >
+                    {HEAD_LABEL[key]}
+                  </Text>
+                );
+              })}
+            </View>
+          )}
           {stageJobs.length === 0 ? (
             <Text className="px-4 py-6 text-sm text-gray-500">{emptyText}</Text>
           ) : (
@@ -1043,6 +1128,7 @@ export default function ResellerRequestQueue() {
         )}
         {chalanModal}
       </ScrollView>
+      </TierContext.Provider>
     );
   }
 
