@@ -22,7 +22,9 @@ import { formatScheduledWhen } from '../../utils/scheduledTime';
 import { numericDateLabel } from '../../utils/nepaliDate';
 import { entryDay } from '../../utils/ledgerStatement';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
+import { canEditJobPrice } from '../../utils/jobPrice';
 import {
+  EditableAmount,
   FULL_TABLE_WIDTH,
   JobProgressBars,
   JobTableHeader,
@@ -685,6 +687,8 @@ function JobCompactRow({
   busy: boolean;
 }) {
   useCalendarMode(); // draws the date again when the AD / BS toggle changes
+  const userId = useAuthStore((state) => state.session?.user.id);
+  const updateRequest = useSupabaseUpdate('service_requests');
   const open = () => router.push(`/(reseller)/request/${r.id}` as any);
   const chip = r.status === 'in_progress' ? { label: 'Working on it', color: '#166534', bg: '#DCFCE7' } : statusChip(r);
   const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
@@ -738,12 +742,6 @@ function JobCompactRow({
           <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>
             {issue.title}
           </Text>
-          {/* The tight table has no Date column: it is under the job. */}
-          {!has('when') && !!dateText && (
-            <Text className="text-[11px] text-gray-500" numberOfLines={1}>
-              {dateText}
-            </Text>
-          )}
         </View>
       </Pressable>
 
@@ -779,9 +777,18 @@ function JobCompactRow({
         </View>
       )}
 
-      <Text className="text-right text-[13px] font-extrabold text-gray-900" style={{ width: w.amount }} numberOfLines={1}>
-        {money(r.quoted_price)}
-      </Text>
+      <EditableAmount
+        display={r.quoted_price != null ? money(r.quoted_price) : ''}
+        value={r.quoted_price}
+        width={w.amount}
+        onSave={
+          canEditJobPrice(r, userId)
+            ? async (amount) => {
+                await updateRequest.mutateAsync({ id: r.id, values: { quoted_price: amount } as any });
+              }
+            : undefined
+        }
+      />
 
       {has('tech') && (
         <View className="flex-row items-center" style={{ width: w.tech, gap: 6, ...cell }}>

@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
 import { distanceKm } from '../../lib/utils/distance';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
@@ -20,7 +20,9 @@ import { jobStages, type StageStepState } from '../../lib/utils/jobTimeline';
 import { numericDateLabel } from '../../lib/utils/nepaliDate';
 import { entryDay } from '../../lib/utils/ledgerStatement';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
+import { canEditJobPrice } from '../../lib/utils/jobPrice';
 import {
+  EditableAmount,
   JobProgressBars,
   JobTableHeader,
   JobTableScroll,
@@ -186,6 +188,8 @@ type JobRowData = {
   progress?: { label: string; state: StageStepState }[];
   tag: Tag;
   amount: number | null;
+  /** Set when the reseller can change this job's price from the table; saves the new amount. */
+  onEditAmount?: (amount: number) => Promise<void>;
   action: JobAction;
   open: () => void;
   onEdit?: () => void;
@@ -330,12 +334,6 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
                 {line}
               </Text>
             ))}
-            {/* The tight table has no Date column: it is under the job. */}
-            {!has('when') && !!dateText && (
-              <Text className="text-[11px] text-gray-500" numberOfLines={1}>
-                {dateText}
-              </Text>
-            )}
           </View>
         </Pressable>
 
@@ -369,9 +367,12 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
           </View>
         )}
 
-        <Text className="text-right text-[13px] font-extrabold text-gray-900" style={{ width: w.amount }} numberOfLines={1}>
-          {formatAmount(data.amount) || '—'}
-        </Text>
+        <EditableAmount
+          display={formatAmount(data.amount)}
+          value={data.amount}
+          width={w.amount}
+          onSave={data.onEditAmount}
+        />
 
         {has('tech') && (
           <View style={{ width: w.tech, ...cell }}>
@@ -493,6 +494,8 @@ function RequestJobRow({
   // An unclaimed request keeps the customer's number hidden until accepted.
   const customerPhone = isIncoming ? null : (item.customer_phone ?? customerProfile?.phone ?? null);
   const open = () => router.push(`/(reseller)/request/${item.id}`);
+  const userId = useAuthStore((state) => state.session?.user.id);
+  const updateRequest = useSupabaseUpdate('service_requests');
 
   const distance =
     item.location_data?.latitude != null &&
@@ -583,6 +586,12 @@ function RequestJobRow({
             : undefined,
         tag,
         amount: item.quoted_price,
+        onEditAmount:
+          wide && canEditJobPrice(item, userId)
+            ? async (amount) => {
+                await updateRequest.mutateAsync({ id: item.id, values: { quoted_price: amount } as any });
+              }
+            : undefined,
         action,
         open,
         onEdit: canEdit ? () => router.push(`/(reseller)/edit-request?id=${item.id}`) : undefined,
