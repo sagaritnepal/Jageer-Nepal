@@ -7,6 +7,26 @@ import { supabase } from '../supabase';
 import { resizeImageForUpload } from '../utils/resizeImage';
 import { showAlert, getErrorMessage } from '../utils/alert';
 
+type SignedPhoto = { url: string | null; error?: string };
+
+/** A link to open one saved chalan photo, or the reason there is none. The saved value is normally a
+ * path inside the request-photos bucket; a full link (an older save) is reduced to its path, or used
+ * as it is when it points somewhere else. */
+async function signPhoto(saved: string): Promise<SignedPhoto> {
+  let path = saved.trim();
+  if (/^https?:\/\//i.test(path)) {
+    const inBucket = path.match(/\/request-photos\/([^?#]+)/);
+    if (!inBucket) return { url: path };
+    path = decodeURIComponent(inBucket[1]);
+  }
+  path = path.replace(/^\/+/, '').replace(/^request-photos\//, '');
+  const { data, error } = await supabase.storage.from('request-photos').createSignedUrl(path, 3600);
+  if (data?.signedUrl) return { url: data.signedUrl };
+  const message = error?.message || 'The photo could not be found.';
+  console.warn('[chalan photo]', path, message);
+  return { url: null, error: message };
+}
+
 /** A photographed paper chalan (delivery/completion slip) for a job - only
  * the assigned technician can add one (see `editable`, set by the caller);
  * everyone else viewing the request just sees whatever's already attached.
@@ -30,20 +50,15 @@ export function ChalanPhotos({
   editable: boolean;
   onUploaded: (urls: string[]) => void | Promise<unknown>;
 }) {
-  // One entry per saved photo, in order: its signed link, or null when it could not be made.
-  const [signedUrls, setSignedUrls] = useState<(string | null)[]>([]);
+  // One entry per saved photo, in order: its signed link, or why it could not be made.
+  const [signedUrls, setSignedUrls] = useState<SignedPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const urls = await Promise.all(
-        chalanUrls.map(async (path) => {
-          const { data } = await supabase.storage.from('request-photos').createSignedUrl(path, 3600);
-          return data?.signedUrl ?? null;
-        })
-      );
+      const urls = await Promise.all(chalanUrls.map(signPhoto));
       if (!cancelled) setSignedUrls(urls);
     }
     if (chalanUrls.length > 0) load();
@@ -117,7 +132,8 @@ export function ChalanPhotos({
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
           <View className="flex-row gap-2">
             {chalanUrls.map((path, i) => {
-              const url = signedUrls[i];
+              const signed = signedUrls[i];
+              const url = signed?.url;
               if (url) {
                 return (
                   <Pressable key={path} onPress={() => setViewing(url)} accessibilityRole="button" accessibilityLabel={`Open chalan photo ${i + 1}`}>
@@ -125,19 +141,28 @@ export function ChalanPhotos({
                   </Pressable>
                 );
               }
-              // Still signing, or it could not be signed: keep the place so the photo is not just missing.
-              const waiting = signedUrls.length === 0;
+              // Still signing, or it could not be: keep the place, and say why, so the photo is not just missing.
+              const waiting = !signed;
               return (
-                <View
+                <Pressable
                   key={path}
-                  className="h-24 w-24 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50"
-                  style={{ gap: 4 }}
+                  disabled={waiting}
+                  onPress={() => showAlert("Can't open this photo", `${signed?.error ?? 'No link could be made.'}\n\nSaved as: ${path}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={waiting ? 'Loading the chalan photo' : "Why this chalan photo can't be opened"}
+                  className="h-24 w-24 items-center justify-center rounded-lg border border-dashed border-red-200 bg-red-50"
+                  style={{ gap: 3, ...(waiting ? { borderColor: '#D1D5DB', backgroundColor: '#F9FAFB' } : null) }}
                 >
-                  <Ionicons name={waiting ? 'hourglass-outline' : 'image-outline'} size={20} color="#9CA3AF" />
-                  <Text className="px-1 text-center text-[10.5px] font-semibold text-gray-500">
+                  <Ionicons name={waiting ? 'hourglass-outline' : 'alert-circle-outline'} size={20} color={waiting ? '#9CA3AF' : '#DC2626'} />
+                  <Text className="px-1 text-center text-[10.5px] font-semibold" style={{ color: waiting ? '#6B7280' : '#B91C1C' }}>
                     {waiting ? 'Loading…' : "Can't open"}
                   </Text>
-                </View>
+                  {!waiting && !!signed?.error && (
+                    <Text className="px-1 text-center text-[9px] text-red-700" numberOfLines={3}>
+                      {signed.error}
+                    </Text>
+                  )}
+                </Pressable>
               );
             })}
           </View>

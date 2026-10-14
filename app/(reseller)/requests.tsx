@@ -296,6 +296,72 @@ function ChalanLink({ chalan, size }: { chalan: NonNullable<JobRowData['chalan']
   );
 }
 
+/** A finished job's chalan, as the job page shows it: the number, the photos, who did the job and
+ * what they recorded (products and installation). It reads the job again as it opens, so what the
+ * technician saved a moment ago is here even when the table's copy is older - and the table is told
+ * to refresh too, so its line agrees with this. */
+function ChalanView({
+  job,
+  onEditNumber,
+  onClose,
+}: {
+  job: ServiceRequest;
+  onEditNumber: (currentNo: string | null) => void;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+  }, [job.id, queryClient]);
+
+  const { data: fresh } = useSupabaseRow('service_requests', job.id);
+  const row = fresh ?? job;
+  const { data: technician } = useSupabaseRow('profiles', row.technician_id ?? undefined);
+  const { data: jobCards } = useSupabaseQuery('job_cards', { filters: { service_request_id: job.id } });
+  const card = jobCards?.[0];
+
+  const number = row.chalan_no?.trim() || null;
+  const photos = row.chalan_urls ?? [];
+  const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
+  const labor = Number(card?.labor_cost) || 0;
+
+  const fact = (label: string, value: string) => (
+    <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
+      <Text className="text-sm text-gray-500">{label}</Text>
+      <Text className="flex-1 text-right text-sm font-semibold text-gray-900">{value}</Text>
+    </View>
+  );
+
+  return (
+    <>
+      <View className="mt-3 rounded-lg bg-gray-50 px-3 py-2.5" style={{ gap: 8 }}>
+        <View className="flex-row items-center justify-between" style={{ gap: 12 }}>
+          <Text className="text-sm text-gray-500">Chalan number</Text>
+          <Text className="text-[15px] font-bold text-gray-900">{number ?? 'Not written'}</Text>
+        </View>
+        {!!technician?.full_name && fact('Done by', technician.full_name)}
+        {parts.length > 0
+          ? fact('Products', parts.map((p) => `${p.name} × ${p.quantity}`).join(', '))
+          : !!card && fact('Products', 'None recorded')}
+        {labor > 0 && fact('Installation', `NPR ${labor.toLocaleString()}`)}
+        {fact('Chalan photos saved', String(photos.length))}
+      </View>
+
+      <ChalanPhotos chalanUrls={photos} requestId={job.id} editable={false} onUploaded={() => {}} />
+      {photos.length === 0 && <Text className="mt-3 text-[12.5px] text-gray-500">No photo of the chalan was added.</Text>}
+
+      <View className="mt-4 flex-row items-center justify-between" style={{ gap: 10 }}>
+        <Pressable onPress={() => onEditNumber(number)} hitSlop={6}>
+          <Text className="text-[12.5px] font-semibold text-gray-500">{number ? 'Change the number' : 'Add the number'}</Text>
+        </Pressable>
+        <Pressable onPress={onClose} className="h-10 items-center justify-center rounded-lg px-5" style={{ backgroundColor: '#0F766E' }}>
+          <Text className="text-sm font-semibold text-white">Close</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+}
+
 /** One job, rendered either as a table row (wide web) or a card (phone). */
 function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
   const tier = useContext(TierContext);
@@ -1008,35 +1074,16 @@ export default function ResellerRequestQueue() {
                   </View>
                 </>
               ) : (
-                <>
-                  <View className="mt-3 flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5" style={{ gap: 12 }}>
-                    <Text className="text-sm text-gray-500">Chalan number</Text>
-                    <Text className="text-[15px] font-bold text-gray-900">
-                      {chalanTarget?.chalan_no?.trim() ? chalanTarget.chalan_no.trim() : 'Not written'}
-                    </Text>
-                  </View>
-                  {chalanTarget && (
-                    <ChalanPhotos
-                      chalanUrls={chalanTarget.chalan_urls ?? []}
-                      requestId={chalanTarget.id}
-                      editable={false}
-                      onUploaded={() => {}}
-                    />
-                  )}
-                  {(chalanTarget?.chalan_urls?.length ?? 0) === 0 && (
-                    <Text className="mt-3 text-[12.5px] text-gray-500">No photo of the chalan was added.</Text>
-                  )}
-                  <View className="mt-4 flex-row items-center justify-between" style={{ gap: 10 }}>
-                    <Pressable onPress={() => setChalanEditing(true)} hitSlop={6}>
-                      <Text className="text-[12.5px] font-semibold text-gray-500">
-                        {chalanTarget?.chalan_no?.trim() ? 'Change the number' : 'Add the number'}
-                      </Text>
-                    </Pressable>
-                    <Pressable onPress={() => setChalanTarget(null)} className="h-10 items-center justify-center rounded-lg px-5" style={{ backgroundColor: '#0F766E' }}>
-                      <Text className="text-sm font-semibold text-white">Close</Text>
-                    </Pressable>
-                  </View>
-                </>
+                chalanTarget && (
+                  <ChalanView
+                    job={chalanTarget}
+                    onEditNumber={(currentNo) => {
+                      setChalanInput(currentNo ?? '');
+                      setChalanEditing(true);
+                    }}
+                    onClose={() => setChalanTarget(null)}
+                  />
+                )
               )}
             </Pressable>
           </Pressable>

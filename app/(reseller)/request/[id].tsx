@@ -1,5 +1,5 @@
 // app/(reseller)/request/[id].tsx
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { View, Text, TextInput, Pressable, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -325,6 +325,9 @@ function JobTracking({ request }: { request: ServiceRequest }) {
   // What the customer actually pays - the same amount the QR charges and
   // the ledger records.
   const amountDue = jobAmountDue(request.quoted_price, jobCards?.[0]);
+  // What the technician recorded on the job: products used and the installation charge.
+  const workParts = (jobCards?.[0]?.parts_used ?? []).filter((p) => p.name?.trim());
+  const workLabor = Number(jobCards?.[0]?.labor_cost) || 0;
 
   function confirmWithdraw() {
     showAlert(
@@ -553,6 +556,27 @@ function JobTracking({ request }: { request: ServiceRequest }) {
           {request.chalan_urls.length === 0 && (
             <Text className="mt-3 text-[12.5px] text-gray-500">No photo of the chalan yet - the technician adds it before completing the job.</Text>
           )}
+        </DetailCard>
+      )}
+
+      {(workParts.length > 0 || workLabor > 0) && (
+        <DetailCard wide={wide} icon="construct-outline" title="Work done">
+          <View style={{ gap: 8 }}>
+            {workParts.length > 0 && (
+              <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
+                <Text className="text-sm text-gray-500">Products used</Text>
+                <Text className="flex-1 text-right text-sm font-semibold text-gray-900">
+                  {workParts.map((p) => `${p.name} × ${p.quantity}`).join(', ')}
+                </Text>
+              </View>
+            )}
+            {workLabor > 0 && (
+              <View className="flex-row items-center justify-between" style={{ gap: 12 }}>
+                <Text className="text-sm text-gray-500">Installation</Text>
+                <Text className="text-sm font-semibold text-gray-900">{money(workLabor)}</Text>
+              </View>
+            )}
+          </View>
         </DetailCard>
       )}
 
@@ -968,7 +992,12 @@ export default function ResellerRequestDetailScreen() {
 
 function ResellerRequestDetail({ id }: { id: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
-  const { data: request, isLoading: loadingRequest } = useSupabaseRow('service_requests', id);
+  const { data: request, isLoading: loadingRequest, refetch } = useSupabaseRow('service_requests', id);
+  // Opening a job always reads it again - a copy kept from an earlier visit (or the list) can be older
+  // than what the technician has saved since, such as the chalan number and photo.
+  useEffect(() => {
+    refetch();
+  }, [id, refetch]);
 
   if (loadingRequest || !request || !userId) {
     return (
