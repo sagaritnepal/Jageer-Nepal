@@ -1,6 +1,6 @@
 // lib/components/ProductDetailContent.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, Image, ScrollView, type TextStyle } from 'react-native';
+import { View, Text, Pressable, Image, ScrollView, type PressableProps, type TextStyle, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsWideWeb } from '../hooks/useWideGrid';
@@ -47,6 +47,111 @@ function money(value: number): string {
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
+}
+
+/** A button that changes a little under the mouse pointer (web). For leaf buttons like these; a card
+ * with buttons inside it uses its own mouse events instead (see RelatedCard), because a Pressable
+ * inside swallows the outer one's hover. */
+function HoverPressable({
+  hoverStyle,
+  style,
+  disabled,
+  ...rest
+}: Omit<PressableProps, 'style'> & { style?: ViewStyle; hoverStyle?: ViewStyle }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Pressable
+      {...rest}
+      disabled={disabled}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={
+        [
+          style,
+          hovered && !disabled ? hoverStyle : null,
+          { transitionProperty: 'background-color, transform, box-shadow', transitionDuration: '160ms' },
+        ] as object
+      }
+    />
+  );
+}
+
+/** One of the "More from this seller" cards. The whole card responds to the pointer - it lifts with a
+ * blue edge and a soft shadow, the picture eases in and the name turns blue - using the DOM's mouse
+ * events, which fire for everything inside the card. */
+function RelatedCard({ item, width, productPath }: { item: Product; width?: number; productPath: string }) {
+  const [hovered, setHovered] = useState(false);
+  const itemStatus = stockStatus(item.stock_level);
+  // Web-only events, so typed as an object rather than native View props.
+  const hoverEvents = { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) } as object;
+  const ease = 'cubic-bezier(0.2, 0.7, 0.2, 1)';
+
+  return (
+    <View
+      {...hoverEvents}
+      style={
+        [
+          { ...card, overflow: 'hidden' },
+          width ? { width } : { flex: 1, minWidth: 0 },
+          {
+            borderColor: hovered ? '#60A5FA' : LINE,
+            transform: [{ translateY: hovered ? -4 : 0 }],
+            boxShadow: hovered ? '0 16px 32px rgba(37, 99, 235, 0.16)' : '0 1px 2px rgba(17, 24, 39, 0.05)',
+            transitionProperty: 'transform, box-shadow, border-color',
+            transitionDuration: '220ms',
+            transitionTimingFunction: ease,
+          },
+        ] as object
+      }
+    >
+      <Pressable
+        onPress={() => router.push(`${productPath}/${item.id}` as never)}
+        accessibilityRole="button"
+        accessibilityLabel={item.name}
+      >
+        <View
+          style={{
+            width: '100%',
+            aspectRatio: 4 / 3,
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            backgroundColor: '#EAF1FF',
+          }}
+        >
+          {item.image_url ? (
+            <Image
+              source={{ uri: toSafeImageUri(item.image_url)! }}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+              style={
+                {
+                  width: '100%',
+                  height: '100%',
+                  transform: [{ scale: hovered ? 1.06 : 1 }],
+                  transitionProperty: 'transform',
+                  transitionDuration: '320ms',
+                  transitionTimingFunction: ease,
+                } as object
+              }
+            />
+          ) : (
+            <Ionicons name="cube-outline" size={34} color="#93B4F5" />
+          )}
+        </View>
+        <View style={{ paddingTop: 12, paddingBottom: 14, paddingHorizontal: width ? 12 : 14, gap: 4 }}>
+          <Text
+            style={[text(width ? 13 : 13.5, '700', hovered ? BLUE : INK), { transitionProperty: 'color', transitionDuration: '160ms' } as object]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <Text style={text(width ? 13.5 : 14, '800', BLUE)}>{money(item.price)}</Text>
+          <Text style={text(12, '600', itemStatus.color)}>{itemStatus.short}</Text>
+        </View>
+      </Pressable>
+    </View>
+  );
 }
 
 /** The body of a product page, shared by the client and reseller product screens.
@@ -203,25 +308,27 @@ export function ProductDetailContent({
               backgroundColor: '#FFFFFF',
             }}
           >
-            <Pressable
+            <HoverPressable
               onPress={() => step(-1)}
               disabled={decDisabled}
               accessibilityRole="button"
               accessibilityLabel="Decrease quantity"
               style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', opacity: decDisabled ? 0.35 : 1 }}
+              hoverStyle={{ backgroundColor: '#F3F4F6' }}
             >
               <Ionicons name="remove" size={22} color="#374151" />
-            </Pressable>
+            </HoverPressable>
             <Text style={text(17, '700', INK, { minWidth: 44, textAlign: 'center' })}>{outOfStock ? 0 : qty}</Text>
-            <Pressable
+            <HoverPressable
               onPress={() => step(1)}
               disabled={incDisabled}
               accessibilityRole="button"
               accessibilityLabel="Increase quantity"
               style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', opacity: incDisabled ? 0.35 : 1 }}
+              hoverStyle={{ backgroundColor: '#F3F4F6' }}
             >
               <Ionicons name="add" size={22} color="#374151" />
-            </Pressable>
+            </HoverPressable>
           </View>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 2 }}>
@@ -230,7 +337,7 @@ export function ProductDetailContent({
         </View>
       </View>
 
-      <Pressable
+      <HoverPressable
         onPress={handleAdd}
         disabled={outOfStock}
         accessibilityRole="button"
@@ -241,11 +348,17 @@ export function ProductDetailContent({
           borderRadius: 14,
           backgroundColor: outOfStock ? '#9CA3AF' : added ? '#15803D' : '#EA580C',
         }}
+        // Darker and a touch raised under the pointer; the "added" green just deepens.
+        hoverStyle={{
+          backgroundColor: added ? '#166534' : '#C2410C',
+          transform: [{ translateY: -1 }],
+          boxShadow: '0 8px 18px rgba(194, 65, 12, 0.28)',
+        } as ViewStyle}
       >
         <Text style={text(16.5, '700', '#FFFFFF')}>
           {outOfStock ? 'Out of stock' : added ? `Added ${qty} to cart` : 'Add to cart'}
         </Text>
-      </Pressable>
+      </HoverPressable>
 
       <Text style={text(12.5, '400', MUTED, { lineHeight: 19 })}>
         Your cart holds items from one seller at a time. Adding this item to a cart that has another seller&apos;s items
@@ -287,38 +400,9 @@ export function ProductDetailContent({
     </View>
   );
 
-  const relatedCard = (item: Product, width?: number) => {
-    const itemStatus = stockStatus(item.stock_level);
-    return (
-      <Pressable
-        key={item.id}
-        onPress={() => router.push(`${productPath}/${item.id}` as never)}
-        accessibilityRole="button"
-        accessibilityLabel={item.name}
-        style={[{ ...card, overflow: 'hidden' }, width ? { width } : { flex: 1, minWidth: 0 }]}
-      >
-        <View style={{ width: '100%', aspectRatio: 4 / 3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: '#EAF1FF' }}>
-          {item.image_url ? (
-            <Image
-              source={{ uri: toSafeImageUri(item.image_url)! }}
-              style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
-              accessibilityIgnoresInvertColors
-            />
-          ) : (
-            <Ionicons name="cube-outline" size={34} color="#93B4F5" />
-          )}
-        </View>
-        <View style={{ paddingTop: 12, paddingBottom: 14, paddingHorizontal: width ? 12 : 14, gap: 4 }}>
-          <Text style={text(width ? 13 : 13.5, '700', INK)} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={text(width ? 13.5 : 14, '800', BLUE)}>{money(item.price)}</Text>
-          <Text style={text(12, '600', itemStatus.color)}>{itemStatus.short}</Text>
-        </View>
-      </Pressable>
-    );
-  };
+  const relatedCard = (item: Product, width?: number) => (
+    <RelatedCard key={item.id} item={item} width={width} productPath={productPath} />
+  );
 
   const moreFromSeller = related.length > 0 && (
     <View style={{ gap: 14 }}>
