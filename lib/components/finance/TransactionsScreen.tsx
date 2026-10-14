@@ -4,6 +4,8 @@ import { BackHandler, View, Text, TextInput, Pressable, Modal, ScrollView, FlatL
 import { KeyboardAwareSectionList } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../../supabase';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
 import { ticketLabel } from '../../utils/ticket';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
@@ -47,7 +49,9 @@ import type {
   CustomerLedgerEntry,
   ExpenseCategory,
   FinanceItem,
+  JobCard,
   Product,
+  ServiceRequest,
   VendorLedgerEntry,
 } from '../../../types/database.types';
 import { localTodayIso } from '../../utils/localDate';
@@ -62,6 +66,10 @@ export interface JobBillPrefill {
   partyName: string;
   items: { description: string; qty: string; rate: string }[];
   installation: number;
+  /** One line per job's labor when several jobs go on one bill. */
+  services?: { name: string; amount: number }[];
+  /** Every job the bill covers (one bill number for several chalans); `requestId` is the first. */
+  requestIds?: string[];
   note: string;
 }
 
@@ -821,6 +829,7 @@ function TransactionForm({
     if (initial?.service_charges?.length) return initial.service_charges.map((s) => ({ name: s.name, amount: String(s.amount) }));
     // A bill saved before the table existed carried one lump installation charge.
     if (initial?.installation_charge) return [{ name: 'Installation', amount: String(initial.installation_charge) }];
+    if (jobPrefill?.services?.length) return jobPrefill.services.map((s) => ({ name: s.name, amount: String(s.amount) }));
     if (jobPrefill?.installation) return [{ name: 'Installation', amount: String(jobPrefill.installation) }];
     return [{ name: '', amount: '' }];
   });
@@ -1073,7 +1082,13 @@ function TransactionForm({
             owner_id: userId,
             ...values,
             // A bill made from a job points back at it - that is what moves the job to Awaiting payment.
-            ...(jobPrefill ? { source_type: 'service_request_bill', source_id: jobPrefill.requestId } : null),
+            ...(jobPrefill
+              ? {
+                  source_type: 'service_request_bill',
+                  source_id: jobPrefill.requestId,
+                  ...(jobPrefill.requestIds && jobPrefill.requestIds.length > 1 ? { source_job_ids: jobPrefill.requestIds } : null),
+                }
+              : null),
           });
         }
         // The typeahead lets an item be typed straight into the bill; one
@@ -3052,6 +3067,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     edit: editParam,
     partyId: partyIdParam,
     fromJob,
+    fromJobs,
     voiceAmount,
     voiceParty,
     voiceDate,
@@ -3063,6 +3079,8 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     partyId?: string;
     /** A completed job to start the bill from. */
     fromJob?: string;
+    /** Several completed jobs of one customer, comma separated, to put on one bill. */
+    fromJobs?: string;
     voiceAmount?: string;
     voiceParty?: string;
     voiceDate?: string;
@@ -3082,26 +3100,56 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     [voiceAmount, voiceParty, voiceDate, voiceNote]
   );
   const userId = useAuthStore((state) => state.session?.user.id);
-  const { data: jobForBill } = useSupabaseRow('service_requests', fromJob || undefined);
-  const { data: jobCardsForBill } = useSupabaseQuery('job_cards', {
-    filters: fromJob ? { service_request_id: fromJob } : {},
-    enabled: !!fromJob,
+  // One completed job (?fromJob=) or several of one customer (?fromJobs=a,b,c) to bill together.
+  const billJobIds = useMemo(
+    () => (fromJobs ? fromJobs.split(',').filter(Boolean) : fromJob ? [fromJob] : []),
+    [fromJobs, fromJob]
+  );
+  const { data: billJobs } = useQuery({
+    queryKey: ['bill-jobs', billJobIds],
+    enabled: billJobIds.length > 0,
+    queryFn: async () => {
+      const [reqs, cards] = await Promise.all([
+        (supabase.from('service_requests') as any).select('*').in('id', billJobIds),
+        (supabase.from('job_cards') as any).select('*').in('service_request_id', billJobIds),
+      ]);
+      if (reqs.error) throw reqs.error;
+      if (cards.error) throw cards.error;
+      return { requests: (reqs.data ?? []) as ServiceRequest[], cards: (cards.data ?? []) as JobCard[] };
+    },
   });
   const jobPrefill = useMemo<JobBillPrefill | null>(() => {
-    if (!fromJob || !jobForBill || jobForBill.id !== fromJob || !jobCardsForBill) return null;
-    const card = jobCardsForBill[0];
-    const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
+    if (billJobIds.length === 0 || !billJobs || billJobs.requests.length === 0) return null;
+    const ordered = billJobIds
+      .map((id) => billJobs.requests.find((r) => r.id === id))
+      .filter((r): r is ServiceRequest => !!r);
+    if (ordered.length === 0) return null;
+    const items: JobBillPrefill['items'] = [];
+    const services: { name: string; amount: number }[] = [];
+    for (const job of ordered) {
+      const card = billJobs.cards.find((c) => c.service_request_id === job.id);
+      const tag = ticketLabel(job.ticket_no);
+      for (const p of (card?.parts_used ?? []).filter((p) => p.name?.trim())) {
+        items.push({ description: p.name, qty: String(p.quantity || 1), rate: String(p.cost || 0) });
+      }
+      const labor = Number(card?.labor_cost) || 0;
+      if (labor > 0) services.push({ name: ordered.length > 1 && tag ? `Installation - ${tag}` : 'Installation', amount: labor });
+    }
+    const first = ordered[0];
+    const refs = ordered
+      .map((j) => [ticketLabel(j.ticket_no) && `Job ${ticketLabel(j.ticket_no)}`, j.chalan_no && `Chalan ${j.chalan_no}`].filter(Boolean).join(' '))
+      .filter(Boolean);
     return {
-      requestId: jobForBill.id,
-      customerId: jobForBill.customer_id,
-      partyName: jobForBill.customer_name ?? '',
-      items: parts.map((p) => ({ description: p.name, qty: String(p.quantity || 1), rate: String(p.cost || 0) })),
-      installation: Number(card?.labor_cost) || 0,
-      note: [ticketLabel(jobForBill.ticket_no) && `Job ${ticketLabel(jobForBill.ticket_no)}`, jobForBill.chalan_no && `Chalan ${jobForBill.chalan_no}`]
-        .filter(Boolean)
-        .join(' · '),
+      requestId: first.id,
+      requestIds: ordered.map((j) => j.id),
+      customerId: first.customer_id,
+      partyName: first.customer_name ?? '',
+      items,
+      installation: services.reduce((sum, s) => sum + s.amount, 0),
+      services,
+      note: refs.join(' · '),
     };
-  }, [fromJob, jobForBill, jobCardsForBill]);
+  }, [billJobIds, billJobs]);
   const role = useRole();
   const { data: products } = useSupabaseQuery('products', {
     filters: userId && role ? { seller_id: userId, seller_role: role } : {},
