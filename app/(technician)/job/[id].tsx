@@ -260,6 +260,19 @@ function JobCard({ id }: { id: string }) {
     }
   }
 
+  // Saved as soon as the field is left, not only when the job is completed, so the reseller sees the
+  // number (and the photo) as soon as it is written.
+  async function saveChalanNo() {
+    if (!request || request.status !== 'in_progress') return;
+    const value = chalanNo.trim();
+    if (!value || value === (request.chalan_no ?? '').trim()) return;
+    try {
+      await updateRequest.mutateAsync({ id: request.id, values: { chalan_no: value } });
+    } catch (err) {
+      showAlert('Could not save the chalan number', getErrorMessage(err));
+    }
+  }
+
   async function handleAdvance() {
     if (!userId || !nextStatus || !request) return;
     // The chalan comes first: its number and a photo of the slip, before the job can be completed.
@@ -524,6 +537,7 @@ function JobCard({ id }: { id: string }) {
               <TextInput
                 value={chalanNo}
                 onChangeText={setChalanNo}
+                onBlur={saveChalanNo}
                 placeholder="Number written on the chalan"
                 placeholderTextColor="#9CA3AF"
                 className="rounded-lg border border-gray-300 px-3 py-2 text-sm"

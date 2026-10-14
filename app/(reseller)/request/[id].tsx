@@ -541,9 +541,18 @@ function JobTracking({ request }: { request: ServiceRequest }) {
       <ProblemCard request={request} />
       <RemarkCard remark={request.remark} />
 
-      {request.chalan_urls.length > 0 && (
+      {(!!request.chalan_no?.trim() || request.chalan_urls.length > 0 || request.status === 'in_progress') && (
         <DetailCard wide={wide} icon="document-attach-outline" title="Chalan">
+          <View className="flex-row items-center justify-between" style={{ gap: 12 }}>
+            <Text className="text-sm text-gray-500">Chalan number</Text>
+            <Text className="text-[15px] font-bold text-gray-900">
+              {request.chalan_no?.trim() ? request.chalan_no.trim() : 'Not added yet'}
+            </Text>
+          </View>
           <ChalanPhotos chalanUrls={request.chalan_urls} requestId={request.id} editable={false} onUploaded={() => {}} />
+          {request.chalan_urls.length === 0 && (
+            <Text className="mt-3 text-[12.5px] text-gray-500">No photo of the chalan yet - the technician adds it before completing the job.</Text>
+          )}
         </DetailCard>
       )}
 

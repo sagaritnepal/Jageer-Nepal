@@ -1,6 +1,6 @@
 // lib/components/ChalanPhotos.tsx
 import { useEffect, useState } from 'react';
-import { View, Text, Image, Pressable, ScrollView, Platform } from 'react-native';
+import { View, Text, Image, Pressable, ScrollView, Platform, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../supabase';
@@ -12,7 +12,11 @@ import { showAlert, getErrorMessage } from '../utils/alert';
  * everyone else viewing the request just sees whatever's already attached.
  * Stored the same way as service_requests.photo_urls (private paths in the
  * request-photos bucket, one folder per uploader), signed on read so a
- * preview works without making the bucket public. */
+ * preview works without making the bucket public.
+ *
+ * A photo that can't be opened (the signed link could not be made) still
+ * gets its place, marked "Can't open", so a saved chalan never just
+ * disappears. Tapping one that opened shows it full size. */
 export function ChalanPhotos({
   chalanUrls,
   requestId,
@@ -26,8 +30,10 @@ export function ChalanPhotos({
   editable: boolean;
   onUploaded: (urls: string[]) => void | Promise<unknown>;
 }) {
-  const [signedUrls, setSignedUrls] = useState<string[]>([]);
+  // One entry per saved photo, in order: its signed link, or null when it could not be made.
+  const [signedUrls, setSignedUrls] = useState<(string | null)[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +44,7 @@ export function ChalanPhotos({
           return data?.signedUrl ?? null;
         })
       );
-      if (!cancelled) setSignedUrls(urls.filter((u): u is string => !!u));
+      if (!cancelled) setSignedUrls(urls);
     }
     if (chalanUrls.length > 0) load();
     else setSignedUrls([]);
@@ -107,12 +113,33 @@ export function ChalanPhotos({
   return (
     <View className="mt-4">
       <Text className="mb-2 text-sm capitalize tracking-wide text-gray-400">Chalan</Text>
-      {signedUrls.length > 0 && (
+      {chalanUrls.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
           <View className="flex-row gap-2">
-            {signedUrls.map((url, i) => (
-              <Image key={i} source={{ uri: url }} className="h-24 w-24 rounded-lg" resizeMode="cover" />
-            ))}
+            {chalanUrls.map((path, i) => {
+              const url = signedUrls[i];
+              if (url) {
+                return (
+                  <Pressable key={path} onPress={() => setViewing(url)} accessibilityRole="button" accessibilityLabel={`Open chalan photo ${i + 1}`}>
+                    <Image source={{ uri: url }} className="h-24 w-24 rounded-lg" resizeMode="cover" />
+                  </Pressable>
+                );
+              }
+              // Still signing, or it could not be signed: keep the place so the photo is not just missing.
+              const waiting = signedUrls.length === 0;
+              return (
+                <View
+                  key={path}
+                  className="h-24 w-24 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50"
+                  style={{ gap: 4 }}
+                >
+                  <Ionicons name={waiting ? 'hourglass-outline' : 'image-outline'} size={20} color="#9CA3AF" />
+                  <Text className="px-1 text-center text-[10.5px] font-semibold text-gray-500">
+                    {waiting ? 'Loading…' : "Can't open"}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         </ScrollView>
       )}
@@ -128,6 +155,19 @@ export function ChalanPhotos({
           </Text>
         </Pressable>
       )}
+
+      <Modal visible={!!viewing} transparent animationType="fade" onRequestClose={() => setViewing(null)}>
+        <Pressable
+          onPress={() => setViewing(null)}
+          className="flex-1 items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+        >
+          {!!viewing && <Image source={{ uri: viewing }} style={{ width: '100%', height: '90%' }} resizeMode="contain" />}
+          <View className="absolute right-4 top-4 h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+            <Ionicons name="close" size={20} color="#FFFFFF" />
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

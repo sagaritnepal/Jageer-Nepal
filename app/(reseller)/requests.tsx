@@ -12,6 +12,7 @@ import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
 import { distanceKm } from '../../lib/utils/distance';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { ChalanPhotos } from '../../lib/components/ChalanPhotos';
 import { WorkHubPanel } from '../../lib/components/requests/WorkHubPanel';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
@@ -177,8 +178,9 @@ type JobRowData = {
   customerPhone?: string | null;
   /** The technician's name; the table shows a dash when there is none. */
   technician?: string | null;
-  /** The chalan number of a finished job, with the way to enter or fix it by hand. */
-  chalan?: { no: string | null; onEdit: () => void };
+  /** A finished job's chalan: its number, how many photos the technician attached, and the way to
+   * open it (to see it, or to type the number in when there is none yet). */
+  chalan?: { no: string | null; photos: number; onOpen: () => void };
   /** A tick box on the row, to bill several completed jobs of one customer together. */
   select?: { checked: boolean; onToggle: () => void };
   /** The job's token number, shown in its own column. */
@@ -267,6 +269,33 @@ function ManageButtons({ data, small }: { data: JobRowData; small?: boolean }) {
   );
 }
 
+/** The chalan line under a finished job. Once the technician has added the chalan - its number, a
+ * photo, or both - it reads "Chalan no. 123 · photo" and opens the chalan to look at; only a job with
+ * neither still offers "Add chalan no.". */
+function ChalanLink({ chalan, size }: { chalan: NonNullable<JobRowData['chalan']>; size: number }) {
+  const added = !!chalan.no || chalan.photos > 0;
+  const text = chalan.no
+    ? `Chalan no. ${chalan.no}${chalan.photos > 0 ? ' · photo' : ''}`
+    : chalan.photos > 0
+      ? 'View chalan · photo'
+      : 'Add chalan no.';
+  return (
+    <Pressable
+      onPress={chalan.onOpen}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={added ? 'View the chalan' : 'Add the chalan number'}
+      className="flex-row items-center self-start"
+      style={{ gap: 4, maxWidth: '100%' }}
+    >
+      <Text className="font-semibold" style={{ fontSize: size, color: added ? '#374151' : '#0F766E', flexShrink: 1 }} numberOfLines={1}>
+        {text}
+      </Text>
+      <Ionicons name={added ? 'eye-outline' : 'create-outline'} size={size + 1} color={added ? '#0F766E' : '#6B7280'} />
+    </Pressable>
+  );
+}
+
 /** One job, rendered either as a table row (wide web) or a card (phone). */
 function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wide: boolean }) {
   const tier = useContext(TierContext);
@@ -320,14 +349,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>
               {data.title}
             </Text>
-            {data.chalan && (
-              <Pressable onPress={data.chalan.onEdit} hitSlop={4} className="flex-row items-center self-start" style={{ gap: 4 }}>
-                <Text className="text-[11px] font-semibold" style={{ color: data.chalan.no ? '#374151' : '#0F766E' }} numberOfLines={1}>
-                  {data.chalan.no ? `Chalan no. ${data.chalan.no}` : 'Add chalan no.'}
-                </Text>
-                <Ionicons name="create-outline" size={11} color="#6B7280" />
-              </Pressable>
-            )}
+            {data.chalan && <ChalanLink chalan={data.chalan} size={11} />}
             {data.lines?.map((line) => (
               <Text key={line} className="text-[11px] text-gray-600" numberOfLines={1}>
                 {line}
@@ -413,14 +435,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             {data.who}
           </Text>
           {!!data.token && <Text className="text-xs font-bold text-gray-700">{`Token ${data.token}`}</Text>}
-          {data.chalan && (
-            <Pressable onPress={data.chalan.onEdit} hitSlop={4} className="flex-row items-center self-start" style={{ gap: 4 }}>
-              <Text className="text-xs font-semibold" style={{ color: data.chalan.no ? '#374151' : '#0F766E' }}>
-                {data.chalan.no ? `Chalan no. ${data.chalan.no}` : 'Add chalan no.'}
-              </Text>
-              <Ionicons name="create-outline" size={12} color="#6B7280" />
-            </Pressable>
-          )}
+          {data.chalan && <ChalanLink chalan={data.chalan} size={12} />}
           {data.lines?.map((line) => (
             <Text key={line} className="text-xs text-gray-600">
               {line}
@@ -462,7 +477,7 @@ function RequestJobRow({
   item: ServiceRequest;
   stage: Stage;
   wide: boolean;
-  /** Finished jobs: open the box to type the chalan number by hand. */
+  /** Finished jobs: open the chalan - to see it, or to type the number in when there is none. */
   onEditChalan?: (item: ServiceRequest) => void;
   /** Completed jobs: whether this one is ticked for a combined bill. */
   selected?: boolean;
@@ -578,7 +593,14 @@ function RequestJobRow({
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
         date: item.scheduled_date ?? entryDay(null, item.created_at),
         lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
-        chalan: finishedStage && onEditChalan ? { no: item.chalan_no ?? null, onEdit: () => onEditChalan(item) } : undefined,
+        chalan:
+          finishedStage && onEditChalan
+            ? {
+                no: item.chalan_no?.trim() || null,
+                photos: item.chalan_urls?.length ?? 0,
+                onOpen: () => onEditChalan(item),
+              }
+            : undefined,
         select:
           wide && stage === 'completed' && onToggleSelect
             ? { checked: !!selected, onToggle: () => onToggleSelect(item) }
@@ -865,13 +887,17 @@ export default function ResellerRequestQueue() {
     });
   useEffect(() => setPickedJobs(new Set()), [activeStage]);
 
-  // The chalan number can be typed in by hand on a finished job - until the field staff do it live.
+  // A finished job's chalan: opened to look at what the technician added (number and photos). The
+  // number can still be typed or fixed by hand from there - and is typed straight away when the
+  // job has no chalan at all.
   const [chalanTarget, setChalanTarget] = useState<ServiceRequest | null>(null);
   const [chalanInput, setChalanInput] = useState('');
+  const [chalanEditing, setChalanEditing] = useState(false);
   const [chalanSaving, setChalanSaving] = useState(false);
   const openChalan = (job: ServiceRequest) => {
     setChalanTarget(job);
     setChalanInput(job.chalan_no ?? '');
+    setChalanEditing(!job.chalan_no?.trim() && (job.chalan_urls?.length ?? 0) === 0);
   };
   async function saveChalan() {
     if (!chalanTarget || chalanSaving) return;
@@ -952,32 +978,66 @@ export default function ResellerRequestQueue() {
     <Modal visible={!!chalanTarget} transparent animationType="fade" onRequestClose={() => setChalanTarget(null)}>
           <Pressable className="flex-1 items-center justify-center bg-black/40 px-6" onPress={() => setChalanTarget(null)}>
             <Pressable onPress={() => {}} className="w-full max-w-sm rounded-xl bg-white p-4">
-              <Text className="text-base font-bold text-gray-900">Chalan number</Text>
+              <Text className="text-base font-bold text-gray-900">Chalan</Text>
               <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
                 {chalanTarget ? `${ticketLabel(chalanTarget.ticket_no) ?? ''} ${chalanTarget.issue_type}` : ''}
               </Text>
-              <TextInput
-                value={chalanInput}
-                onChangeText={setChalanInput}
-                onSubmitEditing={saveChalan}
-                autoFocus
-                placeholder="Number written on the chalan"
-                placeholderTextColor="#9CA3AF"
-                className="mt-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
-              />
-              <View className="mt-4 flex-row justify-end" style={{ gap: 10 }}>
-                <Pressable onPress={() => setChalanTarget(null)} className="h-10 items-center justify-center rounded-lg border border-gray-300 px-4">
-                  <Text className="text-sm font-semibold text-gray-700">Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={saveChalan}
-                  disabled={chalanSaving}
-                  className="h-10 items-center justify-center rounded-lg px-5 disabled:opacity-50"
-                  style={{ backgroundColor: '#0F766E' }}
-                >
-                  <Text className="text-sm font-semibold text-white">{chalanSaving ? 'Saving…' : 'Save'}</Text>
-                </Pressable>
-              </View>
+              {chalanEditing ? (
+                <>
+                  <TextInput
+                    value={chalanInput}
+                    onChangeText={setChalanInput}
+                    onSubmitEditing={saveChalan}
+                    autoFocus
+                    placeholder="Number written on the chalan"
+                    placeholderTextColor="#9CA3AF"
+                    className="mt-3 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
+                  />
+                  <View className="mt-4 flex-row justify-end" style={{ gap: 10 }}>
+                    <Pressable onPress={() => setChalanTarget(null)} className="h-10 items-center justify-center rounded-lg border border-gray-300 px-4">
+                      <Text className="text-sm font-semibold text-gray-700">Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={saveChalan}
+                      disabled={chalanSaving}
+                      className="h-10 items-center justify-center rounded-lg px-5 disabled:opacity-50"
+                      style={{ backgroundColor: '#0F766E' }}
+                    >
+                      <Text className="text-sm font-semibold text-white">{chalanSaving ? 'Saving…' : 'Save'}</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View className="mt-3 flex-row items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5" style={{ gap: 12 }}>
+                    <Text className="text-sm text-gray-500">Chalan number</Text>
+                    <Text className="text-[15px] font-bold text-gray-900">
+                      {chalanTarget?.chalan_no?.trim() ? chalanTarget.chalan_no.trim() : 'Not written'}
+                    </Text>
+                  </View>
+                  {chalanTarget && (
+                    <ChalanPhotos
+                      chalanUrls={chalanTarget.chalan_urls ?? []}
+                      requestId={chalanTarget.id}
+                      editable={false}
+                      onUploaded={() => {}}
+                    />
+                  )}
+                  {(chalanTarget?.chalan_urls?.length ?? 0) === 0 && (
+                    <Text className="mt-3 text-[12.5px] text-gray-500">No photo of the chalan was added.</Text>
+                  )}
+                  <View className="mt-4 flex-row items-center justify-between" style={{ gap: 10 }}>
+                    <Pressable onPress={() => setChalanEditing(true)} hitSlop={6}>
+                      <Text className="text-[12.5px] font-semibold text-gray-500">
+                        {chalanTarget?.chalan_no?.trim() ? 'Change the number' : 'Add the number'}
+                      </Text>
+                    </Pressable>
+                    <Pressable onPress={() => setChalanTarget(null)} className="h-10 items-center justify-center rounded-lg px-5" style={{ backgroundColor: '#0F766E' }}>
+                      <Text className="text-sm font-semibold text-white">Close</Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
             </Pressable>
           </Pressable>
     </Modal>

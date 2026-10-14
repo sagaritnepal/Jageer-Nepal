@@ -741,6 +741,11 @@ function JobCompactRow({
           <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>
             {issue.title}
           </Text>
+          {!!r.chalan_no?.trim() && (
+            <Text className="text-[11px] font-semibold text-gray-600" numberOfLines={1}>
+              {`Chalan no. ${r.chalan_no.trim()}${r.chalan_urls.length > 0 ? ' · photo added' : ''}`}
+            </Text>
+          )}
         </View>
       </Pressable>
 
