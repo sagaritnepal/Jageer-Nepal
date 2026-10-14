@@ -32,12 +32,38 @@ function ProductCard({
   fill?: boolean;
 }) {
   const outOfStock = item.stock_level <= 0;
+  // Pointer hover (web only; a touch screen never raises it): the card lifts a little with a blue
+  // edge and a soft shadow, and the Add to Cart button darkens, so it is clear which one is under it.
+  const [hovered, setHovered] = useState(false);
+  const [addHovered, setAddHovered] = useState(false);
 
   return (
-    <View
+    <Pressable
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => {
+        setHovered(false);
+        setAddHovered(false);
+      }}
+      // Not a button of its own: the picture and Add to Cart inside are the ones that do something.
+      accessible={false}
+      focusable={false}
       className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border border-gray-200 bg-white p-3`}
       // `flex: 1` fills the cell (wide grid); on a phone the card is already stretched to its row.
-      style={fill ? { flex: 1 } : undefined}
+      style={
+        [
+          fill ? { flex: 1 } : null,
+          {
+            borderColor: hovered ? '#60A5FA' : undefined,
+            transform: [{ translateY: hovered ? -3 : 0 }],
+            shadowColor: '#2563EB',
+            shadowOpacity: hovered ? 0.18 : 0,
+            shadowRadius: hovered ? 14 : 0,
+            shadowOffset: { width: 0, height: 6 },
+            transitionProperty: 'transform, box-shadow, border-color',
+            transitionDuration: '160ms',
+          },
+        ] as object
+      }
     >
       <Pressable style={{ flexGrow: 1 }} onPress={() => router.push(`/(reseller)/product/${item.id}`)}>
         <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
@@ -77,12 +103,15 @@ function ProductCard({
 
       <Pressable
         onPress={() => onAdd(item)}
+        onHoverIn={() => setAddHovered(true)}
+        onHoverOut={() => setAddHovered(false)}
         disabled={outOfStock}
         className="items-center rounded-lg bg-orange-500 py-2 disabled:opacity-40"
+        style={addHovered && !outOfStock ? { backgroundColor: '#1D4ED8' } : undefined}
       >
         <Text className="text-xs font-semibold text-white">Add to Cart</Text>
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
