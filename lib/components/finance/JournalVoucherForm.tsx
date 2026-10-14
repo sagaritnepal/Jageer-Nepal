@@ -127,7 +127,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
         pickerTitle="Debit which person?"
       />
       <FieldRow>
-        <Field label="Narration" basis={260}>
+        <Field label="Remarks" basis={260}>
           <TextInput
             value={narration}
             onChangeText={setNarration}
