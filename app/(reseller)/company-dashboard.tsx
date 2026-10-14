@@ -9,7 +9,7 @@ import { View, Text, Pressable, ScrollView, Image, Modal, useWindowDimensions, P
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Path, Polyline, Polygon, Line, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient as SvgGradient, Path, Polyline, Polygon, Line, Stop, Text as SvgText } from 'react-native-svg';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useAccountBalances } from '../../lib/hooks/useAccountBalances';
@@ -221,28 +221,89 @@ function Legend({ items }: { items: { label: string; color: string }[] }) {
 
 /** Two lines over twelve months, sales filled. */
 function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: number[]; purchases: number[] }) {
-  const W = 660;
-  const H = 240;
-  const top = 16;
-  const bottom = 30;
-  const max = Math.max(...sales, ...purchases, 1);
-  const x = (i: number) => 20 + (i / Math.max(labels.length - 1, 1)) * (W - 40);
+  const W = 760;
+  const H = 320;
+  const left = 46;
+  const right = 18;
+  const top = 26;
+  const bottom = 32;
+  const rawMax = Math.max(...sales, ...purchases, 1);
+  // round the top of the scale up to a tidy number so the grid labels read cleanly
+  const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
+  const max = Math.ceil(rawMax / mag / 2) * 2 * (mag / 2) || 1;
+  const n = Math.max(labels.length - 1, 1);
+  const x = (i: number) => left + (i / n) * (W - left - right);
   const y = (v: number) => top + (1 - v / max) * (H - top - bottom);
-  const line = (vs: number[]) => vs.map((v, i) => `${x(i)},${y(v)}`).join(' ');
-  const area = `${x(0)},${H - bottom} ${line(sales)} ${x(sales.length - 1)},${H - bottom}`;
+  const pts = (vs: number[]) => vs.map((v, i) => ({ x: x(i), y: y(v) }));
+  // smooth curve through the points (Catmull-Rom turned into cubic beziers)
+  const smooth = (vs: number[]) => {
+    const p = pts(vs);
+    if (p.length < 2) return '';
+    let d = `M${p[0].x},${p[0].y}`;
+    for (let i = 0; i < p.length - 1; i++) {
+      const p0 = p[i - 1] ?? p[i];
+      const p1 = p[i];
+      const p2 = p[i + 1];
+      const p3 = p[i + 2] ?? p2;
+      const c1x = p1.x + (p2.x - p0.x) / 6;
+      const c1y = Math.min(H - bottom, Math.max(top, p1.y + (p2.y - p0.y) / 6));
+      const c2x = p2.x - (p3.x - p1.x) / 6;
+      const c2y = Math.min(H - bottom, Math.max(top, p2.y - (p3.y - p1.y) / 6));
+      d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+    }
+    return d;
+  };
+  const salesLine = smooth(sales);
+  const purchaseLine = smooth(purchases);
+  const area = salesLine ? `${salesLine} L${x(sales.length - 1)},${H - bottom} L${x(0)},${H - bottom} Z` : '';
+  const grid = [0, 1, 2, 3, 4];
+  const bestIdx = sales.indexOf(Math.max(...sales));
   return (
     <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
-      {[0, 1, 2, 3].map((g) => {
-        const gy = top + (g / 3) * (H - top - bottom);
-        return <Line key={g} x1={20} x2={W - 20} y1={gy} y2={gy} stroke="#E5E7EB" strokeWidth={1} />;
+      <Defs>
+        <SvgGradient id="salesFill" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#2563EB" stopOpacity={0.35} />
+          <Stop offset="1" stopColor="#2563EB" stopOpacity={0.02} />
+        </SvgGradient>
+      </Defs>
+      {grid.map((g) => {
+        const gy = top + (g / 4) * (H - top - bottom);
+        return (
+          <G key={g}>
+            <Line x1={left} x2={W - right} y1={gy} y2={gy} stroke={g === 4 ? '#CBD5E1' : '#E5E7EB'} strokeWidth={1} strokeDasharray={g === 4 ? undefined : '4 5'} />
+            <SvgText x={left - 8} y={gy + 4} fontSize={11} fill="#6B7280" textAnchor="end">{lakh(max * (1 - g / 4))}</SvgText>
+          </G>
+        );
       })}
-      <SvgText x={20} y={top - 4} fontSize={11} fill="#6B7280">{lakh(max)}</SvgText>
-      <Polygon points={area} fill="#2563EB" fillOpacity={0.12} />
-      <Polyline points={line(sales)} fill="none" stroke="#2563EB" strokeWidth={3} strokeLinejoin="round" />
-      <Polyline points={line(purchases)} fill="none" stroke="#F59E0B" strokeWidth={3} strokeLinejoin="round" />
-      <Circle cx={x(sales.length - 1)} cy={y(sales[sales.length - 1] ?? 0)} r={5} fill="#2563EB" />
+      {area ? <Path d={area} fill="url(#salesFill)" /> : null}
+      <Path d={purchaseLine} fill="none" stroke="#F59E0B" strokeWidth={2.5} strokeLinecap="round" strokeDasharray="1 0" />
+      <Path d={salesLine} fill="none" stroke="#2563EB" strokeWidth={3.5} strokeLinecap="round" />
+      {purchases.map((v, i) => (
+        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={3.5} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2} />
+      ))}
+      {sales.map((v, i) => {
+        const best = i === bestIdx && v > 0;
+        const lastPoint = i === sales.length - 1;
+        return (
+          <G key={`s${i}`}>
+            <Circle cx={x(i)} cy={y(v)} r={best || lastPoint ? 6 : 4.5} fill="#FFFFFF" stroke="#2563EB" strokeWidth={3} />
+            {v > 0 && (
+              <SvgText
+                x={x(i)}
+                y={y(v) - 11}
+                fontSize={best || lastPoint ? 12 : 10.5}
+                fontWeight={best || lastPoint ? '700' : '600'}
+                fill={best || lastPoint ? '#1D4ED8' : '#374151'}
+                textAnchor="middle"
+              >
+                {lakh(v)}
+              </SvgText>
+            )}
+          </G>
+        );
+      })}
       {labels.map((l, i) => (
-        <SvgText key={`${l}${i}`} x={x(i)} y={H - 10} fontSize={11} fill="#6B7280" textAnchor="middle">
+        <SvgText key={`${l}${i}`} x={x(i)} y={H - 10} fontSize={11.5} fill="#6B7280" textAnchor="middle">
           {l}
         </SvgText>
       ))}
