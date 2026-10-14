@@ -348,9 +348,9 @@ export default function CompanyDashboard() {
   const wide = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const twoColumns = width >= 1100;
   const [mode] = useCalendarMode();
-  const [period, setPeriod] = useState<PeriodKey>('today');
+  const [period, setPeriod] = useState<PeriodKey>('this_fy');
   const [periodOpen, setPeriodOpen] = useState(false);
-  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? 'Today';
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? 'This fiscal year';
   const range = useMemo(() => periodRange(period, mode), [period, mode]);
   const prevRange = useMemo(() => periodRange(period, mode, 1), [period, mode]);
 
