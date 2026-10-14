@@ -29,9 +29,9 @@ export const TIER_COLUMNS: Record<Tier, ColKey[]> = {
  * the next is the same all along the table. Job, Customer and Address are the only ones that give
  * a little width back when the table is narrower than the sum. */
 export const TIER_WIDTH: Record<Tier, Partial<Record<ColKey, number>>> = {
-  full: { token: 64, when: 84, job: 240, customer: 210, where: 170, amount: 116, tech: 144, status: 228, actions: 176 },
-  compact: { token: 64, when: 84, job: 220, customer: 230, amount: 112, tech: 128, status: 212, actions: 168 },
-  tight: { token: 56, when: 78, job: 210, customer: 220, amount: 100, status: 190, actions: 160 },
+  full: { token: 64, when: 84, job: 240, customer: 210, where: 170, amount: 136, tech: 144, status: 228, actions: 176 },
+  compact: { token: 64, when: 84, job: 220, customer: 230, amount: 132, tech: 128, status: 212, actions: 168 },
+  tight: { token: 56, when: 78, job: 210, customer: 220, amount: 128, status: 190, actions: 160 },
 };
 /** The columns that may shrink a little to fit; every other one keeps its width. */
 const SHRINKS: ColKey[] = ['job', 'customer', 'where'];
@@ -44,7 +44,7 @@ export const TIER_GAP: Record<Tier, number> = { full: 12, compact: 10, tight: 8 
 /** The amount is left-aligned, under its header; this much empty room on its right keeps it from
  * running into the technician beside it. It is part of the column's width, in the header and every
  * row alike. */
-export const AMOUNT_PAD = 14;
+export const AMOUNT_PAD = 12;
 export const HEAD_LABEL: Record<ColKey, string> = {
   token: 'Token no.',
   when: 'Date',
@@ -64,7 +64,7 @@ export const ROW_PAD_Y = 8;
 export const ROW_BUTTON_HEIGHT = 30;
 
 /** The table's width (px) from which each size reads well; below MIN_TABLE_WIDTH it scrolls sideways. */
-export const FULL_TABLE_WIDTH = 1440;
+export const FULL_TABLE_WIDTH = 1470;
 export const COMPACT_TABLE_WIDTH = 1310;
 export const MIN_TABLE_WIDTH = 1080;
 export function tierFor(width: number): Tier {
@@ -242,7 +242,7 @@ export function EditableAmount({
   }
 
   const text = (
-    <Text className="text-left text-[13px] font-extrabold text-gray-900" style={{ flexShrink: 1 }} numberOfLines={1}>
+    <Text className="text-left text-[13px] font-extrabold text-gray-900" style={{ flexShrink: 0 }} numberOfLines={1}>
       {display || '—'}
     </Text>
   );
@@ -254,7 +254,7 @@ export function EditableAmount({
           accessibilityRole="button"
           accessibilityLabel="Change the price"
           className="flex-row items-center"
-          style={{ gap: 4, maxWidth: '100%' }}
+          style={{ gap: 4 }}
         >
           <Ionicons name="create-outline" size={12} color="#9CA3AF" />
           {text}
