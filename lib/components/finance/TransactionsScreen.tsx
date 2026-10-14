@@ -162,7 +162,7 @@ function ServiceChargesTable({
             />
           </View>
           <View style={{ width: 36, alignItems: 'center' }}>
-            {(rows.length > 1 || row.name.trim() || row.amount.trim()) && (
+            {(rows.length > 1 || !!row.name.trim() || !!row.amount.trim()) && (
               <Pressable
                 onPress={() => {
                   const next = rows.filter((_, i) => i !== index);
