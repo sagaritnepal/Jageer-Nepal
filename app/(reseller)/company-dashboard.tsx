@@ -408,7 +408,9 @@ export default function CompanyDashboard() {
       const who = (t.customer_id && names.get(t.customer_id)) || t.party_name || 'Walk-in';
       by.set(who, (by.get(who) ?? 0) + t.amount);
     }
-    return [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const total = [...by.values()].reduce((a, b) => a + b, 0);
+    const rows = [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    return { rows, total };
   }, [transactions, customers, months, mode]);
 
   // ---- jobs ----
@@ -646,10 +648,39 @@ export default function CompanyDashboard() {
 
   const customersCard = (
     <Panel title="Top customers" subtitle="Sales · last 12 months">
-      {topCustomers.length === 0 ? (
+      {topCustomers.rows.length === 0 ? (
         <Text className="py-8 text-center text-sm text-gray-400">No sales recorded yet</Text>
       ) : (
-        <HBars color="#2563EB" rows={topCustomers.map(([label, value]) => ({ label, value, display: lakh(value) }))} />
+        <View>
+          <View className="flex-row border-b border-gray-200 pb-2" style={{ gap: 8 }}>
+            <Text className="w-6 text-[11px] font-bold uppercase text-gray-500">#</Text>
+            <Text className="flex-1 text-[11px] font-bold uppercase text-gray-500">Customer</Text>
+            <Text className="w-24 text-right text-[11px] font-bold uppercase text-gray-500">Sales</Text>
+            <Text className="w-14 text-right text-[11px] font-bold uppercase text-gray-500">Share</Text>
+          </View>
+          {topCustomers.rows.map(([name, value], i) => {
+            const pct = topCustomers.total > 0 ? (value / topCustomers.total) * 100 : 0;
+            return (
+              <View key={name} className="border-b border-gray-100 py-2.5">
+                <View className="flex-row items-center" style={{ gap: 8 }}>
+                  <Text className="w-6 text-[12px] text-gray-400">{i + 1}</Text>
+                  <Text className="flex-1 text-[13px] font-semibold text-gray-800" numberOfLines={1}>{name}</Text>
+                  <Text className="w-24 text-right text-[13px] font-semibold text-gray-900">{npr(value)}</Text>
+                  <Text className="w-14 text-right text-[13px] font-bold text-blue-700">{pct.toFixed(1)}%</Text>
+                </View>
+                <View className="ml-8 mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                  <View style={{ width: `${Math.max(2, pct)}%`, height: 6, backgroundColor: '#2563EB' }} />
+                </View>
+              </View>
+            );
+          })}
+          <View className="flex-row pt-2.5" style={{ gap: 8 }}>
+            <Text className="w-6" />
+            <Text className="flex-1 text-[12px] font-bold text-gray-600">All customers</Text>
+            <Text className="w-24 text-right text-[12px] font-bold text-gray-900">{npr(topCustomers.total)}</Text>
+            <Text className="w-14 text-right text-[12px] font-bold text-gray-600">100%</Text>
+          </View>
+        </View>
       )}
     </Panel>
   );
@@ -692,8 +723,8 @@ export default function CompanyDashboard() {
       {kpis}
       {row([trend, expenses], [1.6, 1])}
       {row([money, ageing], [1.3, 1])}
-      {row([stages, customersCard, teamCard], [1, 1, 1])}
-      <RecentActivityCard basePath="/(reseller)" />
+      {row([stages, teamCard], [1, 1])}
+      {row([<RecentActivityCard key="recent" basePath="/(reseller)" />, customersCard], [1.4, 1])}
       {quick}
     </ScrollView>
   );
