@@ -123,6 +123,11 @@ export function TransferForm({ userId, onDone, bare = false }: { userId: string;
     <View className={bare ? '' : 'mb-4 rounded-2xl border border-gray-200 bg-white p-4'}>
       {!bare && <Text className="mb-3 text-sm font-semibold text-gray-900">Transfer money</Text>}
 
+      <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
+      <View className="mb-2.5">
+        <DateField value={date} onChange={setDate} />
+      </View>
+
       <Text className="mb-1 text-xs font-medium text-gray-500">From</Text>
       <Pressable
         onPress={() => setPickerOpen('from')}
@@ -150,11 +155,6 @@ export function TransferForm({ userId, onDone, bare = false }: { userId: string;
         keyboardType="numeric"
         className="mb-2.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900"
       />
-
-      <Text className="mb-1 text-xs font-medium text-gray-500">Date</Text>
-      <View className="mb-2.5">
-        <DateField value={date} onChange={setDate} />
-      </View>
 
       <Text className="mb-1 text-xs font-medium text-gray-500">Remarks (optional)</Text>
       <TextInput

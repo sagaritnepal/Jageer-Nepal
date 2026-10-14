@@ -90,6 +90,11 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
 
   return (
     <>
+      <FieldRow>
+        <Field label="Date" basis={220}>
+          <DateField value={date} onChange={setDate} />
+        </Field>
+      </FieldRow>
       <Text className="text-[12px] text-gray-500">
         Moves an amount from one person's ledger to another's. No cash or bank account is touched.
       </Text>
@@ -121,9 +126,6 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
             keyboardType="numeric"
             className={INPUT}
           />
-        </Field>
-        <Field label="Date" basis={220}>
-          <DateField value={date} onChange={setDate} />
         </Field>
         <Field label="Narration" basis={260}>
           <TextInput
