@@ -322,19 +322,29 @@ function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: num
       {sales.map((v, i) => {
         const best = i === bestIdx && v > 0;
         const lastPoint = i === sales.length - 1;
+        const pv = purchases[i] ?? 0;
+        // whichever line is higher keeps its figure above the dot, the other goes below it
+        const purchaseHigher = pv > v;
+        const salesY = purchaseHigher ? y(v) + 19 : y(v) - 11;
+        const purchaseY = purchaseHigher ? y(pv) - 11 : y(pv) + 19;
         return (
           <G key={`s${i}`}>
             <Circle cx={x(i)} cy={y(v)} r={best || lastPoint ? 6 : 4.5} fill="#FFFFFF" stroke="#2563EB" strokeWidth={3} />
             {v > 0 && (
               <SvgText
                 x={x(i)}
-                y={y(v) - 11}
+                y={salesY}
                 fontSize={best || lastPoint ? 12 : 10.5}
                 fontWeight={best || lastPoint ? '700' : '600'}
                 fill={best || lastPoint ? '#1D4ED8' : '#374151'}
                 textAnchor="middle"
               >
                 {lakh(v)}
+              </SvgText>
+            )}
+            {pv > 0 && (
+              <SvgText x={x(i)} y={purchaseY} fontSize={10.5} fontWeight="600" fill="#B45309" textAnchor="middle">
+                {lakh(pv)}
               </SvgText>
             )}
           </G>
