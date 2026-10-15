@@ -14,6 +14,10 @@ import { useCalendarMode } from '../../hooks/useCalendarMode';
 
 type Period = 'year' | 'all';
 
+const BRAND_DARK = '#1E3A8A';
+const BRAND = '#2563EB';
+const BRAND_TINT = '#EFF6FF';
+
 /** 1234567 -> "12,34,567" */
 function inr(n: number): string {
   const v = Math.round(n);
@@ -24,17 +28,17 @@ function inr(n: number): string {
 
 function SideHead({ title }: { title: string }) {
   return (
-    <View className="mb-1 flex-row justify-between border-b-2 border-gray-900 pb-2">
-      <Text className="text-[13px] font-bold text-gray-900">{title}</Text>
+    <View className="mb-1 flex-row justify-between border-b-2 pb-2" style={{ borderColor: BRAND_DARK }}>
+      <Text className="text-[13px] font-bold" style={{ color: BRAND_DARK }}>{title}</Text>
       <Text className="text-[11px] font-semibold text-gray-500">NPR</Text>
     </View>
   );
 }
 
 function Line({ label, amount, tone, bold, muted, onPress }: { label: string; amount: number; tone?: 'profit' | 'loss'; bold?: boolean; muted?: boolean; onPress?: () => void }) {
-  const color = tone === 'profit' ? '#047857' : tone === 'loss' ? '#B91C1C' : muted ? '#94A3B8' : '#0F172A';
+  const color = tone ? BRAND_DARK : muted ? '#94A3B8' : '#0F172A';
   return (
-    <Pressable onPress={onPress} disabled={!onPress} className="flex-row justify-between border-b border-gray-100 py-2.5" style={tone ? { backgroundColor: tone === 'profit' ? '#F0FDF4' : '#FEF2F2' } : undefined}>
+    <Pressable onPress={onPress} disabled={!onPress} className="flex-row justify-between border-b border-gray-100 py-2.5" style={tone ? { backgroundColor: BRAND_TINT, paddingHorizontal: 8, borderRadius: 6 } : undefined}>
       <Text className={`text-[14px] ${bold ? 'font-bold' : ''}`} style={{ color: muted ? '#94A3B8' : '#0F172A' }}>{label}</Text>
       <Text className={`text-[14px] ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color }}>{inr(amount)}</Text>
     </Pressable>
@@ -43,9 +47,9 @@ function Line({ label, amount, tone, bold, muted, onPress }: { label: string; am
 
 function TotalLine({ amount }: { amount: number }) {
   return (
-    <View className="my-1 flex-row justify-between border-y-2 border-gray-900 py-2.5">
-      <Text className="text-[15px] font-bold text-gray-900">Total</Text>
-      <Text className="text-[15px] font-bold text-gray-900">{inr(amount)}</Text>
+    <View className="my-1 flex-row justify-between border-y-2 py-2.5" style={{ borderColor: BRAND_DARK }}>
+      <Text className="text-[15px] font-bold" style={{ color: BRAND_DARK }}>Total</Text>
+      <Text className="text-[15px] font-bold" style={{ color: BRAND_DARK }}>{inr(amount)}</Text>
     </View>
   );
 }
@@ -134,6 +138,13 @@ export function ReportScreen({ basePath }: { basePath: string }) {
 
   // Tally's Profit & Loss A/c: trading account first (sales, closing stock against opening stock, purchases
   // and direct expenses) to a gross profit or loss carried down, then indirect expenses to the net result.
+  const periodText =
+    period !== 'range'
+      ? PERIOD_LABEL[period]
+      : monthLabelOf(range.from, range.to, calendarMode) ||
+        (range.from && range.from === range.to
+          ? toBsHistoryLabel(range.from)
+          : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`);
   const pl = useMemo(() => {
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
     const directNames = new Set((categories ?? []).filter((c) => c.expense_group === 'direct').map((c) => c.name));
@@ -167,13 +178,16 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     const indirectTotal = sum(indirect);
     const gross = sales + closing - opening - purchase - directTotal; // + profit, - loss
     const net = gross - indirectTotal;
-    return { items, services, sales, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net };
+    const bills = { sale: inRange.filter((t) => t.type === 'sale').length, purchase: inRange.filter((t) => t.type === 'purchase').length, expense: inRange.filter((t) => t.type === 'expense').length };
+    return { items, services, sales, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net, bills };
   }, [inRange, categories, products]);
   const grossProfit = pl.gross;
   const netProfit = pl.net;
   // each side of the trading account totals the same; likewise the second part
   const tradingTotal = pl.sales + pl.closing + (grossProfit < 0 ? -grossProfit : 0);
   const secondTotal = pl.indirectTotal + (grossProfit < 0 ? -grossProfit : 0) + (netProfit >= 0 ? netProfit : 0);
+  const costOfGoods = pl.opening + pl.purchase + pl.directTotal - pl.closing;
+  const companyName = useAuthStore((state) => state.profile)?.business_name ?? '';
   const totals = { sale: pl.sales, purchase: pl.purchase, expense: pl.directTotal + pl.indirectTotal };
 
   // The name (and the back button on a phone) are in the top bar, with Print: it opens the system's
@@ -261,20 +275,35 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       {toolbar ? <View className="mb-4">{toolbar}</View> : null}
 
-      {/* KPIs */}
-      <View className="mb-4 flex-row flex-wrap" style={{ gap: 10 }}>
-        {[
-          { label: 'Net sales', value: pl.sales, color: '#0F172A', sub: undefined, path: '/sales-report' },
-          { label: grossProfit >= 0 ? 'Gross profit' : 'Gross loss', value: Math.abs(grossProfit), color: grossProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(grossProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined, path: '/sales-report' },
-          { label: 'Indirect expenses', value: pl.indirectTotal, color: '#0F172A', sub: undefined, path: '/expense-report' },
-          { label: netProfit >= 0 ? 'Net profit' : 'Net loss', value: Math.abs(netProfit), color: netProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(netProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined, path: '/expense-report' },
-        ].map((k) => (
-          <Pressable key={k.label} onPress={() => go(k.path)} className="rounded-2xl border border-gray-200 bg-white p-4" style={{ flexGrow: 1, flexBasis: 200 }}>
-            <Text className="text-xs font-semibold text-gray-500">{k.label}</Text>
-            <Text className="mt-1 text-[20px] font-bold" style={{ color: k.color }}>NPR {inr(k.value)}</Text>
-            {!!k.sub && <Text className="text-xs text-gray-500">{k.sub}</Text>}
-          </Pressable>
-        ))}
+      {/* the report heading: one brand-blue band with the period and the key figures */}
+      <View className="mb-4 overflow-hidden rounded-2xl" style={{ backgroundColor: BRAND_DARK }}>
+        <View className="p-5" style={{ gap: 4 }}>
+          <Text className="text-[11.5px] font-bold" style={{ color: '#BFDBFE', letterSpacing: 1.4 }}>JAGEER NEPAL · FINANCE REPORT</Text>
+          <Text className="text-[24px] font-extrabold text-white" style={{ letterSpacing: 0.5 }}>PROFIT &amp; LOSS ACCOUNT REPORT</Text>
+          <Text className="text-[13px]" style={{ color: '#DBEAFE' }}>
+            {companyName}{periodText ? `  ·  ${periodText}` : ''}
+          </Text>
+        </View>
+        <View className="flex-row flex-wrap border-t" style={{ borderColor: 'rgba(255,255,255,0.18)' }}>
+          {[
+            { label: 'Net sales', value: pl.sales, sub: `${pl.bills.sale} sale ${pl.bills.sale === 1 ? 'bill' : 'bills'}`, path: '/sales-report' },
+            { label: 'Cost of goods', value: costOfGoods, sub: `${pl.bills.purchase} purchase ${pl.bills.purchase === 1 ? 'bill' : 'bills'}`, path: '/purchase-report' },
+            { label: grossProfit >= 0 ? 'Gross profit' : 'Gross loss', value: Math.abs(grossProfit), sub: pl.sales > 0 ? `${((Math.abs(grossProfit) / pl.sales) * 100).toFixed(1)}% of sales` : 'No sales', path: '/sales-report' },
+            { label: 'Indirect expenses', value: pl.indirectTotal, sub: `${pl.indirect.length} expense ${pl.indirect.length === 1 ? 'head' : 'heads'}`, path: '/expense-report' },
+            { label: netProfit >= 0 ? 'Net profit' : 'Net loss', value: Math.abs(netProfit), sub: pl.sales > 0 ? `${((Math.abs(netProfit) / pl.sales) * 100).toFixed(1)}% net margin` : 'No sales', path: '/expense-report' },
+          ].map((k, i) => (
+            <Pressable
+              key={k.label}
+              onPress={() => go(k.path)}
+              className="px-5 py-4"
+              style={{ flexGrow: 1, flexBasis: 170, borderLeftWidth: i === 0 ? 0 : 1, borderColor: 'rgba(255,255,255,0.18)' }}
+            >
+              <Text className="text-[11.5px] font-semibold" style={{ color: '#BFDBFE' }}>{k.label}</Text>
+              <Text className="mt-0.5 text-[19px] font-bold text-white">NPR {inr(k.value)}</Text>
+              <Text className="text-[11.5px]" style={{ color: '#93C5FD' }}>{k.sub}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       {/* the account: expenses and cost on the left, income on the right */}
