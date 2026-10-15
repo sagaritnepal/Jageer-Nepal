@@ -1001,7 +1001,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     return byStatus
       .filter(
         (d) =>
-          d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q) || typeOf(d).toLowerCase().includes(q)
+          d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q)
       )
       .sort((a, b) => rank(a) - rank(b));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1317,6 +1317,22 @@ function LedgerList({ basePath }: { basePath: string }) {
     </View>
   );
 
+  // One flat list, A to Z by name. A search narrows it to every ledger with the typed letters in it.
+  const sortedRows = useMemo(
+    () => [...filtered].sort((a, b) => a.row.name.localeCompare(b.row.name, undefined, { sensitivity: 'base' })),
+    [filtered]
+  );
+  const flatFooter = (
+    <View className="flex-row items-center justify-end px-1 pt-3" style={{ gap: 10 }}>
+      <Text className="text-[12.5px] font-bold text-gray-600">
+        {`${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`}
+      </Text>
+      <View style={{ width: 120, alignItems: 'flex-end' }}>
+        <PartyBalance position={footerPosition} compact />
+      </View>
+    </View>
+  );
+
   // The headers, each a card: its Ledger type, how many parties and what they add up to. Tap one to
   // open the parties inside it (`body`); a search or a status filter opens the ones with a match.
   const groupsView = (body: (g: LedgerGroup) => ReactNode) => (
@@ -1510,9 +1526,10 @@ function LedgerList({ basePath }: { basePath: string }) {
         {filtered.length === 0 && (narrowed || merged.length === 0) ? (
           emptyState
         ) : (
-          groupsView((g) => (
-            <BookTable bare hideHeader columns={columns} rows={g.rows} rowKey={(d) => `${d.row.kind}-${d.row.id}`} onRowPress={open} />
-          ))
+          <View>
+            <BookTable columns={columns} rows={sortedRows} rowKey={(d) => `${d.row.kind}-${d.row.id}`} onRowPress={open} stickyHeader />
+            {flatFooter}
+          </View>
         )}
 
         {typeMenu}
@@ -1555,21 +1572,20 @@ function LedgerList({ basePath }: { basePath: string }) {
         {filtered.length === 0 && (narrowed || merged.length === 0) ? (
           emptyState
         ) : (
-          groupsView((g) => (
-            <View className="p-2.5 pb-0">
-              {g.rows.map((d) => (
-                <PartyCard
-                  key={`${d.row.kind}-${d.row.id}`}
-                  data={d}
-                  onOpen={() => setViewing(d)}
-                  today={today}
-                  selecting={selecting}
-                  selected={selected.has(d.row.id)}
-                  onToggle={() => toggle(d.row.id)}
-                />
-              ))}
-            </View>
-          ))
+          <View style={{ gap: 0 }}>
+            {sortedRows.map((d) => (
+              <PartyCard
+                key={`${d.row.kind}-${d.row.id}`}
+                data={d}
+                onOpen={() => setViewing(d)}
+                today={today}
+                selecting={selecting}
+                selected={selected.has(d.row.id)}
+                onToggle={() => toggle(d.row.id)}
+              />
+            ))}
+            {flatFooter}
+          </View>
         )}
 
         {typeMenu}
