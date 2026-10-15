@@ -876,6 +876,8 @@ function LedgerList({ basePath }: { basePath: string }) {
   // Which headers (Ledger types) are open to show their parties. They all start closed - the headers
   // are the overview, and a type's parties are a tap away instead of a scroll.
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+  // Every header starts open, so each ledger type shows its parties straight away; later ones open too.
+  const [allStartOpen, setAllStartOpen] = useState(true);
 
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
@@ -1042,6 +1044,13 @@ function LedgerList({ basePath }: { basePath: string }) {
     return [...byKey.values()].sort((a, b) => last(a.key) - last(b.key) || a.label.localeCompare(b.label));
   }, [filtered, appUserType, partyTypeName, partyTypes, narrowed]);
   const groupKeys = groups.map((g) => g.key);
+  useEffect(() => {
+    if (allStartOpen && groupKeys.length > 0) {
+      setOpenKeys(new Set(groupKeys));
+      setAllStartOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKeys.join('|')]);
   const allOpen = groupKeys.length > 0 && groupKeys.every((k) => openKeys.has(k));
   const toggleGroup = (key: string) =>
     setOpenKeys((prev) => {
