@@ -282,65 +282,22 @@ export default function ResellerDashboard() {
   const pad = wide ? 32 : 16;
 
   const band = (
-    <View className="overflow-hidden rounded-2xl" style={{ backgroundColor: '#1E3A8A' }}>
-      <View className="flex-row flex-wrap items-center" style={{ padding: wide ? 24 : 18, gap: 16 }}>
-        <View style={{ flex: 1, minWidth: 240, gap: 4 }}>
-          <Text className="text-[11.5px] font-bold" style={{ color: '#BFDBFE', letterSpacing: 1.4 }}>SERVICES PORTAL</Text>
-          <Text className="text-[26px] font-extrabold text-white" numberOfLines={2}>
-            Welcome{company ? `, ${company}` : ''}
-          </Text>
-          <Text className="text-[13px]" style={{ color: '#DBEAFE' }}>
-            Pick a service to book a technician, or follow up on your team.
-          </Text>
-        </View>
-        <View
-          className="flex-row items-center rounded-xl bg-white px-4 py-2.5"
-          style={{ width: wide ? 340 : '100%' }}
-        >
-          <Ionicons name="search" size={16} color="#64748B" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search for services..."
-            placeholderTextColor="#94A3B8"
-            className="ml-2 flex-1 text-sm text-gray-900"
-          />
-        </View>
-      </View>
-      <View className="flex-row flex-wrap border-t" style={{ borderColor: 'rgba(255,255,255,0.18)' }}>
-        <Pressable
-          onPress={() => router.push('/(reseller)/new-request?from=dashboard')}
-          className="flex-row items-center px-5 py-3.5"
-          style={{ gap: 10, flexGrow: 1, flexBasis: 220 }}
-        >
-          <Ionicons name="add-circle" size={20} color="#FFFFFF" />
-          <View>
-            <Text className="text-[14px] font-bold text-white">Need a technician?</Text>
-            <Text className="text-[11.5px]" style={{ color: '#BFDBFE' }}>Request one directly in seconds</Text>
-          </View>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/(reseller)/requests' as any)}
-          className="flex-row items-center px-5 py-3.5"
-          style={{ gap: 10, flexGrow: 1, flexBasis: 220, borderLeftWidth: wide ? 1 : 0, borderColor: 'rgba(255,255,255,0.18)' }}
-        >
-          <Ionicons name="clipboard" size={20} color="#FFFFFF" />
-          <View>
-            <Text className="text-[14px] font-bold text-white">Requests</Text>
-            <Text className="text-[11.5px]" style={{ color: '#BFDBFE' }}>Open jobs and their progress</Text>
-          </View>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/(reseller)/employees' as any)}
-          className="flex-row items-center px-5 py-3.5"
-          style={{ gap: 10, flexGrow: 1, flexBasis: 220, borderLeftWidth: wide ? 1 : 0, borderColor: 'rgba(255,255,255,0.18)' }}
-        >
-          <Ionicons name="people" size={20} color="#FFFFFF" />
-          <View>
-            <Text className="text-[14px] font-bold text-white">My team</Text>
-            <Text className="text-[11.5px]" style={{ color: '#BFDBFE' }}>Technicians, status and leave</Text>
-          </View>
-        </Pressable>
+    <View className="flex-row flex-wrap items-center justify-between" style={{ gap: 12 }}>
+      <Text className="text-2xl font-extrabold text-gray-900" style={{ flexShrink: 1 }} numberOfLines={2}>
+        Welcome{company ? `, ${company}` : ''}
+      </Text>
+      <View
+        className="flex-row items-center rounded-xl border border-gray-200 bg-white px-4 py-2.5"
+        style={{ width: wide ? 320 : '100%' }}
+      >
+        <Ionicons name="search" size={16} color="#9CA3AF" />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search for services..."
+          placeholderTextColor="#9CA3AF"
+          className="ml-2 flex-1 text-sm text-gray-900"
+        />
       </View>
     </View>
   );
