@@ -925,10 +925,10 @@ export default function CompanyDashboard() {
       {periodBar}
       {kpis}
       {periodMenu}
-      {row([trend, expenses], [1.6, 1])}
+      {row([trend, <RecentActivityCard key="recent" basePath="/(reseller)" />], [1.5, 1])}
       {row([money, ageing], [1.3, 1])}
       {row([stages, teamCard], [1, 1])}
-      {row([<RecentActivityCard key="recent" basePath="/(reseller)" />, customersCard], [1.4, 1])}
+      {row([expenses, customersCard], [1, 1.4])}
       {quick}
     </ScrollView>
   );
