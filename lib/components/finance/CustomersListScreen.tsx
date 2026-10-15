@@ -1343,7 +1343,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         .sort((a, b) => a.row.name.localeCompare(b.row.name, undefined, { sensitivity: 'base' })),
     [filtered, letter]
   );
-  // A to Z in the brand blue: tap a letter to see the ledgers starting with it; letters with none are dim.
+  // Only the letters some ledger starts with, in the brand blue: tap one to see the ledgers starting with it.
   const letterBar = (
     <View className="flex-row flex-wrap items-center rounded-xl bg-white px-2 py-2" style={{ gap: 4, borderWidth: 1, borderColor: '#E5E7EB' }}>
       <Pressable
@@ -1353,8 +1353,8 @@ function LedgerList({ basePath }: { basePath: string }) {
       >
         <Text className="text-[12px] font-bold" style={{ color: letter == null ? '#FFFFFF' : '#1E3A8A' }}>All</Text>
       </Pressable>
-      {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => {
-        const has = lettersPresent.has(l);
+      {[...lettersPresent].sort().map((l) => {
+        const has = true;
         const on = letter === l;
         return (
           <Pressable
