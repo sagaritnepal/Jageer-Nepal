@@ -1350,6 +1350,9 @@ function LedgerList({ basePath }: { basePath: string }) {
               {tableMode && (
                 <>
                   {/* The column titles sit in this line, over the same columns the parties below use. */}
+                  <View style={{ width: 140 }}>
+                    <Text className="text-[10.5px] font-bold uppercase text-gray-500">Ledger type</Text>
+                  </View>
                   <View style={{ width: 125 }}>
                     <Text className="text-[10.5px] font-bold uppercase text-gray-500">Last transaction</Text>
                   </View>
@@ -1433,6 +1436,17 @@ function LedgerList({ basePath }: { basePath: string }) {
         render: (_d, index) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>,
       },
       { key: 'party', label: 'Party', render: partyCell },
+      {
+        // Which ledger type the party is filed under, between the name and its last transaction.
+        key: 'ledgerType',
+        label: 'Ledger type',
+        width: 140,
+        render: (d) => (
+          <Text className="text-[12.5px] font-semibold text-gray-700" numberOfLines={1}>
+            {d.typeName ?? (d.row.kind === 'customer' ? '—' : 'Customer')}
+          </Text>
+        ),
+      },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
       {
         // The number on that last transaction, with what it is the number of underneath.
