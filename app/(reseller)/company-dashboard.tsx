@@ -15,6 +15,7 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useAccountBalances } from '../../lib/hooks/useAccountBalances';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
+import { useRequestsStageStore } from '../../lib/hooks/useRequestsStage';
 import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
 import { adStringToBs, bsToAdString, bsDaysInMonth, numericDateLabel, BS_MONTHS } from '../../lib/utils/nepaliDate';
 import { localTodayIso } from '../../lib/utils/localDate';
@@ -191,9 +192,9 @@ function Kpi({
   );
 }
 
-type TableRow = { label: string; amount: number; share: number | null; color: string; count?: number; note?: string };
+type TableRow = { label: string; amount: number; share: number | null; color: string; count?: number; note?: string; onPress?: () => void };
 /** The table style used by Top customers: header, a row per item with a share bar, and a total line. */
-function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: { firstHead: string; rows: TableRow[]; total?: { label: string; amount: number; count?: number; share?: string }; showCount?: boolean; shareHead?: string }) {
+function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: { firstHead: string; rows: TableRow[]; total?: { label: string; amount: number; count?: number; share?: string; onPress?: () => void }; showCount?: boolean; shareHead?: string }) {
   return (
     <View>
       <View className="flex-row border-b border-gray-200 pb-2" style={{ gap: 8 }}>
@@ -203,7 +204,7 @@ function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: 
         <Text className="w-14 text-right text-[11px] font-bold uppercase text-gray-500">{shareHead}</Text>
       </View>
       {rows.map((r) => (
-        <View key={r.label} className="border-b border-gray-100 py-2.5">
+        <Pressable key={r.label} onPress={r.onPress} disabled={!r.onPress} className="border-b border-gray-100 py-2.5" style={({ hovered }: any) => (hovered && r.onPress ? { backgroundColor: '#F8FAFC' } : null)}>
           <View className="flex-row items-center" style={{ gap: 8 }}>
             <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: r.color }} />
             <Text className="flex-1 text-[13px] font-semibold text-gray-800" numberOfLines={1}>{r.label}</Text>
@@ -215,15 +216,15 @@ function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: 
             <View style={{ width: `${Math.min(100, Math.max(r.share ? 2 : 0, r.share ?? 0))}%`, height: 6, backgroundColor: r.color }} />
           </View>
           {!!r.note && <Text className="mt-1 text-[11px] text-gray-500" style={{ marginLeft: 17 }}>{r.note}</Text>}
-        </View>
+        </Pressable>
       ))}
       {total && (
-        <View className="flex-row pt-2.5" style={{ gap: 8 }}>
+        <Pressable onPress={total.onPress} disabled={!total.onPress} className="flex-row pt-2.5" style={{ gap: 8 }}>
           <Text className="flex-1 text-[12px] font-bold text-gray-600">{total.label}</Text>
           {showCount && <Text className="w-12 text-right text-[12px] font-bold text-gray-700">{total.count ?? 0}</Text>}
           <Text className="w-28 text-right text-[12px] font-bold text-gray-900">{npr(total.amount)}</Text>
           <Text className="w-14 text-right text-[12px] font-bold text-gray-600">{total.share ?? '100%'}</Text>
-        </View>
+        </Pressable>
       )}
     </View>
   );
@@ -258,7 +259,7 @@ function Legend({ items }: { items: { label: string; color: string }[] }) {
 }
 
 /** Two lines over twelve months, sales filled. */
-function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: number[]; purchases: number[] }) {
+function TrendChart({ labels, sales, purchases, onSales, onPurchases }: { labels: string[]; sales: number[]; purchases: number[]; onSales?: () => void; onPurchases?: () => void }) {
   const W = 760;
   const H = 320;
   const left = 46;
@@ -266,9 +267,9 @@ function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: num
   const top = 26;
   const bottom = 32;
   const rawMax = Math.max(...sales, ...purchases, 1);
-  // round the top of the scale up to a tidy number so the grid labels read cleanly
+  // round the top of the scale up to a tidy number (every step divides by 4) so the grid reads cleanly
   const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
-  const max = Math.ceil(rawMax / mag / 2) * 2 * (mag / 2) || 1;
+  const max = ([1, 1.2, 1.6, 2, 2.4, 3, 4, 5, 6, 8, 10].map((m) => m * mag).find((v) => v >= rawMax) ?? rawMax) || 1;
   const n = Math.max(labels.length - 1, 1);
   const x = (i: number) => left + (i / n) * (W - left - right);
   const y = (v: number) => top + (1 - v / max) * (H - top - bottom);
@@ -314,10 +315,10 @@ function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: num
         );
       })}
       {area ? <Path d={area} fill="url(#salesFill)" /> : null}
-      <Path d={purchaseLine} fill="none" stroke="#F59E0B" strokeWidth={2.5} strokeLinecap="round" strokeDasharray="1 0" />
-      <Path d={salesLine} fill="none" stroke="#2563EB" strokeWidth={3.5} strokeLinecap="round" />
+      <Path d={purchaseLine} fill="none" stroke="#F59E0B" strokeWidth={2.5} strokeLinecap="round" onPress={onPurchases} />
+      <Path d={salesLine} fill="none" stroke="#2563EB" strokeWidth={3.5} strokeLinecap="round" onPress={onSales} />
       {purchases.map((v, i) => (
-        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={3.5} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2} />
+        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={5} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2} onPress={onPurchases} />
       ))}
       {sales.map((v, i) => {
         const best = i === bestIdx && v > 0;
@@ -329,7 +330,7 @@ function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: num
         const purchaseY = purchaseHigher ? y(pv) - 11 : y(pv) + 19;
         return (
           <G key={`s${i}`}>
-            <Circle cx={x(i)} cy={y(v)} r={best || lastPoint ? 6 : 4.5} fill="#FFFFFF" stroke="#2563EB" strokeWidth={3} />
+            <Circle cx={x(i)} cy={y(v)} r={best || lastPoint ? 7 : 5.5} fill="#FFFFFF" stroke="#2563EB" strokeWidth={3} onPress={onSales} />
             {v > 0 && (
               <SvgText
                 x={x(i)}
@@ -413,18 +414,18 @@ function HBars({ rows, color }: { rows: { label: string; value: number; display:
   );
 }
 
-function Columns({ rows, color }: { rows: { label: string; value: number }[]; color: string }) {
+function Columns({ rows, color, onPress }: { rows: { label: string; value: number }[]; color: string; onPress?: () => void }) {
   const max = Math.max(...rows.map((r) => r.value), 1);
   return (
     <View className="flex-row items-end" style={{ gap: 12, height: 170 }}>
       {rows.map((r) => (
-        <View key={r.label} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 170, gap: 5 }}>
+        <Pressable key={r.label} onPress={onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 170, gap: 5 }}>
           <Text className="text-[12px] font-bold text-gray-900">{r.value}</Text>
           <View style={{ width: '100%', maxWidth: 46, height: Math.max(6, (r.value / max) * 110), borderRadius: 7, backgroundColor: color }} />
           <Text className="text-[11px] text-gray-600" numberOfLines={1}>
             {r.label}
           </Text>
-        </View>
+        </Pressable>
       ))}
     </View>
   );
@@ -555,15 +556,17 @@ export default function CompanyDashboard() {
   const topCustomers = useMemo(() => {
     const names = new Map((customers ?? []).map((c) => [c.id, c.name]));
     const by = new Map<string, number>();
+    const ids = new Map<string, string>();
     for (const t of transactions ?? []) {
       if (t.type !== 'sale') continue;
       if (!inRange(t.bill_date ?? t.created_at, range)) continue;
       const who = (t.customer_id && names.get(t.customer_id)) || t.party_name || 'Walk-in';
       by.set(who, (by.get(who) ?? 0) + t.amount);
+      if (t.customer_id) ids.set(who, t.customer_id);
     }
     const total = [...by.values()].reduce((a, b) => a + b, 0);
     const rows = [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-    return { rows, total };
+    return { rows, total, ids };
   }, [transactions, customers, range]);
 
   // ---- jobs ----
@@ -619,6 +622,11 @@ export default function CompanyDashboard() {
     profile?.business_vat_no && { icon: 'receipt-outline' as const, text: `VAT/PAN ${profile.business_vat_no}` },
   ].filter(Boolean) as { icon: keyof typeof Ionicons.glyphMap; text: string }[];
   const go = (path: string) => router.push(path as never);
+  const setStage = useRequestsStageStore((state) => state.setStage);
+  const openStage = (stage: string) => {
+    setStage(stage);
+    router.push('/(reseller)/requests' as never);
+  };
 
   const cashParts = [
     { label: 'Cash', value: Math.max(0, balances.cash), color: PALETTE[2] },
@@ -633,12 +641,12 @@ export default function CompanyDashboard() {
   const net = balances.total + owed.receivable - owed.payable;
 
   const stageRows = [
-    { label: 'New app requests', value: jobStats.newRequests, amount: jobStats.money.newRequests, color: '#F59E0B' },
-    { label: 'Waiting for a technician', value: jobStats.waiting, amount: jobStats.money.waiting, color: '#2563EB' },
-    { label: 'Assigned', value: jobStats.assigned, amount: jobStats.money.assigned, color: '#0EA5E9' },
-    { label: 'In progress', value: jobStats.working, amount: jobStats.money.working, color: '#16A34A' },
-    { label: 'Done, to be billed', value: jobStats.toBill, amount: jobStats.money.toBill, color: '#7C3AED' },
-    { label: 'Awaiting payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' },
+    { label: 'New app requests', value: jobStats.newRequests, amount: jobStats.money.newRequests, color: '#F59E0B' , stage: 'requests' },
+    { label: 'Waiting for a technician', value: jobStats.waiting, amount: jobStats.money.waiting, color: '#2563EB' , stage: 'my_jobs' },
+    { label: 'Assigned', value: jobStats.assigned, amount: jobStats.money.assigned, color: '#0EA5E9' , stage: 'my_jobs' },
+    { label: 'In progress', value: jobStats.working, amount: jobStats.money.working, color: '#16A34A' , stage: 'my_jobs' },
+    { label: 'Done, to be billed', value: jobStats.toBill, amount: jobStats.money.toBill, color: '#7C3AED' , stage: 'completed' },
+    { label: 'Awaiting payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' , stage: 'awaiting_payment' },
   ];
   const stageTotal = stageRows.reduce((s_, r) => s_ + r.value, 0);
   const stageAmount = stageRows.reduce((s_, r) => s_ + r.amount, 0);
@@ -669,18 +677,18 @@ export default function CompanyDashboard() {
       </View>
       <View className="mt-5 flex-row flex-wrap" style={{ gap: 10 }}>
         {[
-          { label: 'Customers', value: String((customers ?? []).length), icon: 'people-outline' as const },
-          { label: 'Team members', value: String((employees ?? []).length), icon: 'construct-outline' as const },
-          { label: 'Active jobs', value: String(jobStats.waiting + jobStats.assigned + jobStats.working), icon: 'clipboard-outline' as const },
-          { label: 'Shop orders open', value: String(jobStats.shopOrders), icon: 'bag-outline' as const },
+          { label: 'Customers', value: String((customers ?? []).length), icon: 'people-outline' as const, path: '/(reseller)/customers' },
+          { label: 'Team members', value: String((employees ?? []).length), icon: 'construct-outline' as const, path: '/(reseller)/employees' },
+          { label: 'Active jobs', value: String(jobStats.waiting + jobStats.assigned + jobStats.working), icon: 'clipboard-outline' as const, path: '/(reseller)/requests' },
+          { label: 'Shop orders open', value: String(jobStats.shopOrders), icon: 'bag-outline' as const, path: '/(reseller)/requests' },
         ].map((s) => (
-          <View key={s.label} className="flex-row items-center rounded-xl px-3.5 py-2.5" style={{ gap: 10, backgroundColor: 'rgba(255,255,255,0.12)', flexGrow: 1, flexBasis: 150 }}>
+          <Pressable key={s.label} onPress={() => go(s.path)} className="flex-row items-center rounded-xl px-3.5 py-2.5" style={{ gap: 10, backgroundColor: 'rgba(255,255,255,0.12)', flexGrow: 1, flexBasis: 150 }}>
             <Ionicons name={s.icon} size={18} color="#BFDBFE" />
             <View>
               <Text className="text-[18px] font-extrabold text-white">{s.value}</Text>
               <Text className="text-[11.5px] text-blue-100">{s.label}</Text>
             </View>
-          </View>
+          </Pressable>
         ))}
       </View>
     </LinearGradient>
@@ -732,11 +740,11 @@ export default function CompanyDashboard() {
       <Kpi label={`Sales · ${periodLabel}`} value={npr(totals.now.sale)} icon="trending-up-outline" color="#047857" tint="#ECFDF5" caption={sc.text} captionColor={sc.color} series={series.sale} onPress={() => go('/(reseller)/sales-report')} />
       <Kpi label={`Purchases · ${periodLabel}`} value={npr(totals.now.purchase)} icon="cart-outline" color="#B45309" tint="#FFFBEB" caption={pc.text} captionColor="#6B7280" series={series.purchase} onPress={() => go('/(reseller)/purchase-report')} />
       <Kpi label={`Expenses · ${periodLabel}`} value={npr(totals.now.expense)} icon="receipt-outline" color="#B91C1C" tint="#FEF2F2" caption={ec.text} captionColor="#6B7280" series={series.expense} onPress={() => go('/(reseller)/expense-report')} />
-      <Kpi label={`Result · ${periodLabel}`} value={npr(monthResult)} icon="calculator-outline" color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} tint="#F0FDFA" caption="Sales − purchases − expenses" />
+      <Kpi label={`Result · ${periodLabel}`} value={npr(monthResult)} icon="calculator-outline" color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} tint="#F0FDFA" caption="Sales − purchases − expenses" onPress={() => go('/(reseller)/report')} />
       <Kpi label="Cash & bank" value={npr(balances.total)} icon="wallet-outline" color="#047857" tint="#ECFDF5" caption={`Cash ${npr(balances.cash)}`} onPress={() => go('/(reseller)/bank-balances')} />
       <Kpi label="To receive" value={npr(owed.receivable)} icon="arrow-down-circle-outline" color="#1D4ED8" tint="#EFF6FF" caption={`From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`} onPress={() => go('/(reseller)/to-receive')} />
       <Kpi label="To pay" value={npr(owed.payable)} icon="arrow-up-circle-outline" color="#B91C1C" tint="#FEF2F2" caption="Owed to vendors" onPress={() => go('/(reseller)/to-give')} />
-      <Kpi label="Net position" value={npr(net)} icon="stats-chart-outline" color={net >= 0 ? '#7C3AED' : '#B91C1C'} tint="#F5F3FF" caption="Cash + receivable − payable" captionColor={net < 0 ? '#B91C1C' : '#6B7280'} />
+      <Kpi label="Net position" value={npr(net)} icon="stats-chart-outline" color={net >= 0 ? '#7C3AED' : '#B91C1C'} tint="#F5F3FF" caption="Cash + receivable − payable" captionColor={net < 0 ? '#B91C1C' : '#6B7280'} onPress={() => go('/(reseller)/bank-balances')} />
     </View>
   );
 
@@ -752,7 +760,7 @@ export default function CompanyDashboard() {
 
   const trend = (
     <Panel title="Sales and purchases" subtitle="Last 12 months" right={<Legend items={[{ label: 'Sales', color: '#2563EB' }, { label: 'Purchases', color: '#F59E0B' }]} />}>
-      <TrendChart labels={months.map((m) => m.label)} sales={series.sale} purchases={series.purchase} />
+      <TrendChart labels={months.map((m) => m.label)} sales={series.sale} purchases={series.purchase} onSales={() => go('/(reseller)/sales-report')} onPurchases={() => go('/(reseller)/purchase-report')} />
     </Panel>
   );
 
@@ -762,14 +770,16 @@ export default function CompanyDashboard() {
         <Text className="py-8 text-center text-sm text-gray-400">No expenses recorded in these months</Text>
       ) : (
         <View className="flex-row items-center" style={{ gap: 20 }}>
-          <Donut parts={expenseParts.parts} centre={lakh(expenseParts.total)} caption="Total" />
+          <Pressable onPress={() => go('/(reseller)/expense-report')}>
+            <Donut parts={expenseParts.parts} centre={lakh(expenseParts.total)} caption="Total" />
+          </Pressable>
           <View style={{ flex: 1, gap: 9 }}>
             {expenseParts.parts.map((p) => (
-              <View key={p.label} className="flex-row items-center" style={{ gap: 8 }}>
+              <Pressable key={p.label} onPress={() => go('/(reseller)/expense-report')} className="flex-row items-center" style={{ gap: 8 }}>
                 <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: p.color }} />
                 <Text className="flex-1 text-[13px] text-gray-800" numberOfLines={1}>{p.label}</Text>
                 <Text className="text-[13px] font-bold text-gray-900">{Math.round((p.value / expenseParts.total) * 100)}%</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         </View>
@@ -779,7 +789,7 @@ export default function CompanyDashboard() {
 
   const cashAll = Math.max(0, balances.total);
   const moneyRows: TableRow[] = [
-    ...cashParts.map((p) => ({ label: p.label === 'Cash' ? 'Cash in hand' : `Bank · ${p.label}`, amount: p.value, color: p.color, share: cashTotal > 0 ? (p.value / cashTotal) * 100 : null })),
+    ...cashParts.map((p) => ({ onPress: () => go('/(reseller)/bank-balances'), label: p.label === 'Cash' ? 'Cash in hand' : `Bank · ${p.label}`, amount: p.value, color: p.color, share: cashTotal > 0 ? (p.value / cashTotal) * 100 : null })),
   ];
   const money = (
     <Panel title="Money position" subtitle={`What you hold, are owed and owe · received for ${periodLabel}`}>
@@ -787,16 +797,17 @@ export default function CompanyDashboard() {
       {moneyRows.length === 0 ? (
         <Text className="py-3 text-sm text-gray-400">No balance on any account</Text>
       ) : (
-        <ShareTable firstHead="Account" rows={moneyRows} total={{ label: 'Total cash & bank', amount: cashAll }} shareHead="Share" />
+        <ShareTable firstHead="Account" rows={moneyRows} total={{ label: 'Total cash & bank', amount: cashAll, onPress: () => go('/(reseller)/bank-balances') }} shareHead="Share" />
       )}
       <Text className="mb-1 mt-5 text-[12px] font-bold uppercase text-gray-500">Receivable, payable and received</Text>
       <ShareTable
         firstHead="Item"
         shareHead="% of cash"
         rows={[
-          { label: `To receive · ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`, amount: owed.receivable, color: '#2563EB', share: cashAll > 0 ? (owed.receivable / cashAll) * 100 : null },
-          { label: 'To pay · vendors', amount: owed.payable, color: '#DC2626', share: cashAll > 0 ? (owed.payable / cashAll) * 100 : null },
+          { onPress: () => go('/(reseller)/to-receive'), label: `To receive · ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`, amount: owed.receivable, color: '#2563EB', share: cashAll > 0 ? (owed.receivable / cashAll) * 100 : null },
+          { onPress: () => go('/(reseller)/to-give'), label: 'To pay · vendors', amount: owed.payable, color: '#DC2626', share: cashAll > 0 ? (owed.payable / cashAll) * 100 : null },
           {
+            onPress: () => go('/(reseller)/received'),
             label: `Received · ${periodLabel}`,
             amount: collection.received,
             color: '#16A34A',
@@ -804,7 +815,7 @@ export default function CompanyDashboard() {
             note: collection.percent == null ? 'No sales billed in this period' : `${npr(collection.received)} collected of ${npr(collection.billed)} billed (share = % of billed)`,
           },
         ]}
-        total={{ label: 'Net position (cash + receivable − payable)', amount: net, share: '' }}
+        total={{ label: 'Net position (cash + receivable − payable)', amount: net, share: '', onPress: () => go('/(reseller)/bank-balances') }}
       />
     </Panel>
   );
@@ -819,11 +830,11 @@ export default function CompanyDashboard() {
         ].map((b) => {
           const max = Math.max(...owed.ageing, 1);
           return (
-            <View key={b.label} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 150, gap: 5 }}>
+            <Pressable key={b.label} onPress={() => go('/(reseller)/to-receive')} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 150, gap: 5 }}>
               <Text className="text-[12px] font-bold text-gray-900">{lakh(b.value)}</Text>
               <View style={{ width: '100%', height: Math.max(6, (b.value / max) * 90), borderRadius: 8, backgroundColor: b.color }} />
               <Text className="text-[11.5px] text-gray-600">{b.label}</Text>
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -835,8 +846,8 @@ export default function CompanyDashboard() {
       <ShareTable
         firstHead="Stage"
         showCount
-        rows={stageRows.map((r) => ({ label: r.label, amount: r.amount, count: r.value, color: r.color, share: stageAmount > 0 ? (r.amount / stageAmount) * 100 : null }))}
-        total={{ label: 'All stages', amount: stageAmount, count: stageTotal }}
+        rows={stageRows.map((r) => ({ onPress: () => openStage(r.stage), label: r.label, amount: r.amount, count: r.value, color: r.color, share: stageAmount > 0 ? (r.amount / stageAmount) * 100 : null }))}
+        total={{ label: 'All stages', amount: stageAmount, count: stageTotal, onPress: () => go('/(reseller)/requests') }}
       />
       {jobStats.overdue > 0 && (
         <Pressable onPress={() => go('/(reseller)/requests')} className="mt-3.5 flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: '#FEF2F2' }}>
@@ -863,7 +874,11 @@ export default function CompanyDashboard() {
           {topCustomers.rows.map(([name, value], i) => {
             const pct = topCustomers.total > 0 ? (value / topCustomers.total) * 100 : 0;
             return (
-              <View key={name} className="border-b border-gray-100 py-2.5">
+              <Pressable
+                key={name}
+                onPress={() => go(topCustomers.ids.has(name) ? `/(reseller)/customer/${topCustomers.ids.get(name)}` : '/(reseller)/sales-report')}
+                className="border-b border-gray-100 py-2.5"
+              >
                 <View className="flex-row items-center" style={{ gap: 8 }}>
                   <Text className="w-6 text-[12px] text-gray-400">{i + 1}</Text>
                   <Text className="flex-1 text-[13px] font-semibold text-gray-800" numberOfLines={1}>{name}</Text>
@@ -873,7 +888,7 @@ export default function CompanyDashboard() {
                 <View className="ml-8 mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
                   <View style={{ width: `${Math.max(2, pct)}%`, height: 6, backgroundColor: '#2563EB' }} />
                 </View>
-              </View>
+              </Pressable>
             );
           })}
           <View className="flex-row pt-2.5" style={{ gap: 8 }}>
@@ -892,7 +907,7 @@ export default function CompanyDashboard() {
       {team.length === 0 ? (
         <Text className="py-8 text-center text-sm text-gray-400">No finished jobs in this period</Text>
       ) : (
-        <Columns rows={team} color="#2563EB" />
+        <Columns rows={team} color="#2563EB" onPress={() => go('/(reseller)/team-activity')} />
       )}
     </Panel>
   );
@@ -925,10 +940,10 @@ export default function CompanyDashboard() {
       {periodBar}
       {kpis}
       {periodMenu}
-      {row([trend, expenses], [1.6, 1])}
+      {row([trend, <RecentActivityCard key="recent" basePath="/(reseller)" />], [1.5, 1])}
       {row([money, ageing], [1.3, 1])}
       {row([stages, teamCard], [1, 1])}
-      {row([<RecentActivityCard key="recent" basePath="/(reseller)" />, customersCard], [1.4, 1])}
+      {row([expenses, customersCard], [1, 1.4])}
       {quick}
     </ScrollView>
   );
