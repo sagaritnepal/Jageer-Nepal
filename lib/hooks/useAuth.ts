@@ -13,6 +13,10 @@ interface AuthState {
   session: Session | null;
   profile: Profile | null;
   isLoading: boolean;
+  /** The profile could not be read even after retrying. Without this the app
+   * waits on a null profile forever and the portal sits on a blank spinner. */
+  profileError: boolean;
+  setProfileError: (failed: boolean) => void;
   setSession: (session: Session | null) => void;
   setProfile: (profile: Profile | null) => void;
   setLoading: (loading: boolean) => void;
@@ -23,6 +27,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   profile: null,
   isLoading: true,
+  profileError: false,
+  setProfileError: (profileError) => set({ profileError }),
   setSession: (session) => set({ session }),
   setProfile: (profile) => set({ profile }),
   setLoading: (isLoading) => set({ isLoading }),
@@ -64,6 +70,49 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 }));
 
+/** Reads the signed-in user's profile, retrying a few times: a dropped request
+ * on a cold start used to leave the profile null for good and the portal
+ * frozen on its loading state. After the last failure `profileError` is set so
+ * the app can offer a retry instead of spinning forever. */
+export async function loadProfileWithRetry(userId: string, isActive: () => boolean = () => true) {
+  const { setProfile, setProfileError } = useAuthStore.getState();
+  setProfileError(false);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (!isActive()) return;
+    if (!error && data) {
+      setProfile(data as Profile);
+      return;
+    }
+    // PGRST116: no profile row at all - the login exists but the account was
+    // removed (or never finished registering). Retrying cannot help, and the
+    // saved session would trap every launch on the loading screen, so sign out.
+    if (error?.code === 'PGRST116' || (!error && !data)) {
+      await useAuthStore.getState().signOut();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+  }
+  if (isActive()) setProfileError(true);
+}
+
+/** Run right after a successful sign-in, before going anywhere. A login with no
+ * profile row is not an account the app can serve (no role, no portal), so it
+ * is signed out on the spot. Returns false when that happened. A network
+ * failure here is not treated as "no account" - the profile loader's retry
+ * and error screen handle that. */
+export async function ensureProfileExists(): Promise<boolean> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  if (!userId) return false;
+  const { data, error } = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
+  if (!error && !data) {
+    await useAuthStore.getState().signOut();
+    return false;
+  }
+  return true;
+}
+
 /**
  * Bootstraps the auth session and keeps it in sync with Supabase auth
  * state changes. Mount this once near the root of the app (see app/_layout.tsx).
@@ -74,10 +123,7 @@ export function useAuthListener() {
   useEffect(() => {
     let isMounted = true;
 
-    async function loadProfile(userId: string) {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (!error && isMounted) setProfile(data as Profile);
-    }
+    const loadProfile = (userId: string) => loadProfileWithRetry(userId, () => isMounted);
 
     // A separate getSession() call here used to race the INITIAL_SESSION
     // event below - on a cold start, whichever one happened to resolve
