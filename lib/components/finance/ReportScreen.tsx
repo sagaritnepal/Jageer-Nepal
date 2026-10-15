@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { useBarActions, useBookLayout } from './BookKit';
+import { useBookLayout, useBookToolbar } from './BookKit';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import { localTodayIso } from '../../utils/localDate';
 import { reportHtml, type PrintReport } from '../../utils/printReport';
@@ -145,38 +145,47 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   printNow.current = () => void printReportDocument(reportHtml(buildReport()));
   const excelNow = useRef<() => void>(() => {});
   excelNow.current = () => void exportReportDocument(buildReport());
-  useBarActions({ wide: layout.wide, right: () => (
+  // The report date control - arrows that page by month, and a menu of This Year / All Time, This
+  // month, Today, Yesterday, the last 7 / 14 / 30 days and a custom range - lives in the top bar with
+  // Print and Excel, as on the Day Book, Statement and Total Received / Paid pages. Only a narrow
+  // window, whose bar has no room for all three, shows them as a row at the top of the page.
+  const toolbar = useBookToolbar(
+    {
+      wide: layout.wide,
+      inBarMinWidth: 1180,
+      right: () => (
         <>
+          <DateStepFilter
+            from={period === 'range' ? range.from : ''}
+            to={period === 'range' ? range.to : ''}
+            idleLabel={period === 'range' ? 'This month' : PERIOD_LABEL[period]}
+            onChange={(f, t) => {
+              if (f || t) {
+                setRange({ from: f, to: t });
+                setPeriod('range');
+              } else {
+                setRange(thisMonth);
+                setPeriod('range');
+              }
+            }}
+            shortcuts={(['year', 'all'] as Period[]).map((p) => ({
+              label: PERIOD_LABEL[p],
+              on: period === p,
+              onSelect: () => setPeriod(p),
+            }))}
+          />
           <PrintButton onPress={() => printNow.current()} />
           <ExcelButton onPress={() => excelNow.current()} />
         </>
-      ) }, []);
+      ),
+    },
+    // `thisMonth` follows the calendar (AD / BS), so a switch re-registers the control.
+    [period, range.from, range.to, calendarMode]
+  );
 
   return (
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* The report date control: arrows that page by month, and a menu of This Year / All Time, This
-          month, Today, Yesterday, the last 7 / 14 / 30 days and a custom range. */}
-      <View className="mb-4 flex-row items-center">
-        <DateStepFilter
-          from={period === 'range' ? range.from : ''}
-          to={period === 'range' ? range.to : ''}
-          idleLabel={period === 'range' ? 'This month' : PERIOD_LABEL[period]}
-          onChange={(f, t) => {
-            if (f || t) {
-              setRange({ from: f, to: t });
-              setPeriod('range');
-            } else {
-              setRange(thisMonth);
-              setPeriod('range');
-            }
-          }}
-          shortcuts={(['year', 'all'] as Period[]).map((p) => ({
-            label: PERIOD_LABEL[p],
-            on: period === p,
-            onSelect: () => setPeriod(p),
-          }))}
-        />
-      </View>
+      {toolbar ? <View className="mb-4">{toolbar}</View> : null}
 
       <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
         <Text className="mb-1 text-xs font-semibold capitalize tracking-wide text-gray-400">Profit &amp; Loss</Text>
