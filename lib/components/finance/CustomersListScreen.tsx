@@ -1020,6 +1020,8 @@ function LedgerList({ basePath }: { basePath: string }) {
       }
       return g;
     };
+    // Every Ledger type is a header, one with nobody in it too (until a search narrows the list).
+    if (!narrowed) for (const t of partyTypes) slot(t.id, t.name);
     // An app user with no saved ledger is a customer: they go under Customer, with their APP badge.
     for (const d of filtered) {
       const typeId = d.row.kind === 'customer' ? d.row.customer.party_type_id ?? null : null;
@@ -1038,7 +1040,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
     const last = (k: string) => (k === NO_TYPE ? 1 : 0);
     return [...byKey.values()].sort((a, b) => last(a.key) - last(b.key) || a.label.localeCompare(b.label));
-  }, [filtered, appUserType, partyTypeName]);
+  }, [filtered, appUserType, partyTypeName, partyTypes, narrowed]);
   const groupKeys = groups.map((g) => g.key);
   const allOpen = groupKeys.length > 0 && groupKeys.every((k) => openKeys.has(k));
   const toggleGroup = (key: string) =>
