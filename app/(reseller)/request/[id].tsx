@@ -185,6 +185,17 @@ function ProblemCard({ request }: { request: ServiceRequest }) {
   );
 }
 
+/** Why the job was cancelled, in the reseller's own words from the cancel dialog. */
+function CancelReasonCard({ reason }: { reason: string | null | undefined }) {
+  const wide = useWideDetail();
+  if (!reason?.trim()) return null;
+  return (
+    <DetailCard wide={wide} icon="close-circle-outline" title="Why it was cancelled">
+      <Text className="text-[14px] leading-[21px] text-gray-700">{reason.trim()}</Text>
+    </DetailCard>
+  );
+}
+
 function RemarkCard({ remark }: { remark: string | null }) {
   const wide = useWideDetail();
   if (!remark) return null;
@@ -543,6 +554,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
 
       <ProblemCard request={request} />
       <RemarkCard remark={request.remark} />
+      {request.status === 'cancelled' && <CancelReasonCard reason={request.cancel_reason} />}
 
       {(!!request.chalan_no?.trim() || request.chalan_urls.length > 0 || request.status === 'in_progress') && (
         <DetailCard wide={wide} icon="document-attach-outline" title="Chalan">

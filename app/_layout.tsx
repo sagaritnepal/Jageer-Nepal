@@ -14,6 +14,7 @@ import { BiometricLockScreen } from '../lib/components/BiometricLockScreen';
 import { FloatingAssistantChat } from '../lib/components/FloatingAssistantChat';
 import { ClientAssistantChat } from '../lib/components/ClientAssistantChat';
 import { AppAlertHost } from '../lib/components/AppAlertHost';
+import { CancelWorkHost } from '../lib/components/CancelWorkHost';
 import { PushTapHandler } from '../lib/components/PushTapHandler';
 import { installWebAppManifest } from '../lib/utils/webAppManifest';
 import '../global.css';
@@ -168,6 +169,8 @@ export default function RootLayout() {
             <Stack.Screen name="(admin)" />
           </Stack>
         </AuthGate>
+        {/* The "Cancel this work?" dialog (with its reason box), for every screen that can cancel work. */}
+        <CancelWorkHost />
       </QueryProvider>
       <AppAlertHost />
     </SafeAreaProvider>

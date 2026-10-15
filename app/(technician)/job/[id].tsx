@@ -373,6 +373,14 @@ function JobCard({ id }: { id: string }) {
                   ? 'Cancelled by the reseller - no more work needed'
                   : request.status.replace('_', ' ')}
         </Text>
+        {request.status === 'cancelled' && !!request.cancel_reason?.trim() && (
+          <View className="mt-3 rounded-lg bg-red-50 p-3">
+            <Text className="text-xs text-red-900">
+              <Text className="font-semibold">Reason: </Text>
+              {request.cancel_reason.trim()}
+            </Text>
+          </View>
+        )}
         {request.status === 'in_progress' && (
           <Text className="mt-1 text-xs text-gray-500">
             Finish the work, then tap "Mark job complete" at the bottom of this page.

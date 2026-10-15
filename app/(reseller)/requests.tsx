@@ -710,7 +710,11 @@ function RequestJobRow({
         place: wide ? (item.location_data?.address ?? null) : place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
         date: item.scheduled_date ?? entryDay(null, item.created_at),
-        lines: finishedStage ? finishedLines(item, jobCards?.[0]) : undefined,
+        lines: finishedStage
+          ? finishedLines(item, jobCards?.[0])
+          : item.status === 'cancelled' && item.cancel_reason?.trim()
+            ? [`Cancelled: ${item.cancel_reason.trim()}`]
+            : undefined,
         chalan:
           finishedStage && onEditChalan
             ? {

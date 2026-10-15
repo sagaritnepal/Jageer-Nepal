@@ -172,6 +172,8 @@ export interface ServiceRequest {
   company_name: string | null;
   origin: RequestOrigin;
   remark: string | null;
+  /** Why the reseller cancelled the job - written in the cancel dialog (migration 0100). */
+  cancel_reason?: string | null;
   hold_status: HoldStatus;
   hold_note: string | null;
   hold_requested_at: string | null;
