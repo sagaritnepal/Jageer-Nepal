@@ -59,6 +59,9 @@ export function CatalogProductDetail({
   const upsertProduct = useSupabaseUpsert('products', 'seller_id,catalog_id');
   const [qty, setQty] = useState(existing?.stock_level ?? 0);
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
+  // What customers read under "About this product" on the listing. It starts as the listing's own
+  // text, else the catalog's; the seller can write their own, and it is saved with the listing.
+  const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const wide = useIsWideWeb();
 
@@ -72,6 +75,12 @@ export function CatalogProductDetail({
     }
   }, [existing?.id]);
 
+  // The description arrives with the catalog item and the listing; start the editor from it once.
+  const savedDescription = (existing?.description ?? item?.description ?? '').trim();
+  useEffect(() => {
+    setDescription(savedDescription);
+  }, [item?.id, existing?.id]);
+
   if (isLoading || !item) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-50">
@@ -81,7 +90,10 @@ export function CatalogProductDetail({
   }
 
   const isStocked = !!existing;
-  const dirty = qty !== (existing?.stock_level ?? 0) || price !== (existing ? String(existing.price) : '');
+  const dirty =
+    qty !== (existing?.stock_level ?? 0) ||
+    price !== (existing ? String(existing.price) : '') ||
+    description.trim() !== savedDescription;
   const purchasedStock = existing?.purchased_stock ?? 0;
   const purchasePrice = existing?.purchase_price ?? null;
   const atPurchasedCap = capToPurchasedStock && qty >= purchasedStock;
@@ -111,7 +123,8 @@ export function CatalogProductDetail({
         seller_id: userId,
         catalog_id: item!.id,
         name: item!.name,
-        description: item!.description,
+        // The seller's own words; emptied, it falls back to the catalog's text.
+        description: description.trim() ? description.trim() : item!.description,
         category: item!.category,
         image_url: item!.image_url,
         price: Number.isNaN(priceNum) ? 0 : priceNum,
@@ -287,13 +300,46 @@ export function CatalogProductDetail({
     </View>
   );
 
-  const hasDescription = !!item.description?.trim();
+  // The seller writes this: it is what a customer reads under "About this product". It is saved with
+  // the listing by the same button (Update listing / Add to my listings). Until something has been
+  // bought from wholesale there is no listing to save it to, so it is only shown.
+  const canWrite = !nothingPurchased;
   const about = (
     <View style={{ ...card, padding: 22, gap: 10, flexGrow: 1 }}>
       <Text style={text(17, '800', INK)}>About this product</Text>
-      <Text style={text(14.5, '400', hasDescription ? SOFT : '#9CA3AF', { lineHeight: 25 })}>
-        {hasDescription ? item.description : 'No description has been added for this item.'}
-      </Text>
+      {canWrite ? (
+        <>
+          <TextInput
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Write what customers should know - what it is, what is in the box, who it suits ..."
+            placeholderTextColor="#9CA3AF"
+            multiline
+            maxLength={1500}
+            accessibilityLabel="Product description"
+            style={{
+              minHeight: 130,
+              borderWidth: 1,
+              borderColor: '#D1D5DB',
+              borderRadius: 12,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              fontSize: 14.5,
+              lineHeight: 22,
+              color: INK,
+              backgroundColor: '#FFFFFF',
+              textAlignVertical: 'top',
+            }}
+          />
+          <Text style={text(12.5, '400', MUTED, { lineHeight: 18 })}>
+            Customers read this on the product page. Saved with your listing - leave it empty to use the catalog's own text.
+          </Text>
+        </>
+      ) : (
+        <Text style={text(14.5, '400', savedDescription ? SOFT : '#9CA3AF', { lineHeight: 25 })}>
+          {savedDescription || 'No description has been added for this item.'}
+        </Text>
+      )}
     </View>
   );
 
