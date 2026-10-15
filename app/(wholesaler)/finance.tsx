@@ -1,6 +1,6 @@
 // app/(wholesaler)/finance.tsx
-import { FinanceDashboardScreen } from '../../lib/components/finance/FinanceDashboardScreen';
+import { BalanceSheetScreen } from '../../lib/components/finance/BalanceSheetScreen';
 
 export default function FinanceScreen() {
-  return <FinanceDashboardScreen basePath="/(wholesaler)" />;
+  return <BalanceSheetScreen basePath="/(wholesaler)" />;
 }
