@@ -237,11 +237,16 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
               if (k.key !== 'Enter') return;
               k.prevent();
               if (!l.head.trim()) return;
-              // Enter with nothing highlighted takes the best match, or keeps what was typed as a new head
+              // Enter with nothing highlighted: an exact match is taken; a new name on the debit side stays
+              // as a new expense head, and on the credit side becomes a new ledger.
               if (!l.person) {
-                const first = accountOptions(l.head, l.side).find((o) => o.label.toLowerCase() === l.head.trim().toLowerCase() && !o.key.startsWith('new')) ?? accountOptions(l.head, l.side).filter((o) => !o.key.startsWith('new'))[0];
-                if (first) {
-                  pick(l.key, first.key, first.label);
+                const exact = accountOptions(l.head, l.side).find((o) => o.label.toLowerCase() === l.head.trim().toLowerCase() && !o.key.startsWith('new'));
+                if (exact) {
+                  pick(l.key, exact.key, exact.label);
+                  return;
+                }
+                if (l.side === 'credit') {
+                  pick(l.key, 'new-p', l.head.trim());
                   return;
                 }
               }
