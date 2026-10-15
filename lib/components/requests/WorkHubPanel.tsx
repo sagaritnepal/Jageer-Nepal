@@ -20,6 +20,7 @@ import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { formatScheduledWhen } from '../../utils/scheduledTime';
 import { numericDateLabel } from '../../utils/nepaliDate';
+import { formatDurationBetween } from '../../utils/duration';
 import { entryDay } from '../../utils/ledgerStatement';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { canEditJobPrice } from '../../utils/jobPrice';
@@ -669,6 +670,7 @@ function JobRowCard({
 function JobCompactRow({
   request: r,
   times,
+  now,
   technicianName,
   tier,
   onAssign,
@@ -678,6 +680,8 @@ function JobCompactRow({
 }: {
   request: ServiceRequest;
   times: JobTimes | undefined;
+  /** The current time, ticking each minute, so "Running: 2h 10m" keeps counting. */
+  now: number;
   technicianName: (id: string) => string;
   tier: Tier;
   onAssign: (request: ServiceRequest) => void;
@@ -707,6 +711,24 @@ function JobCompactRow({
   const stages = jobStages(r, times);
   const statusLine = [chip.label, hold?.label, overdue ? `Overdue by ${overdueBy(r)}` : null, pay.label].filter(Boolean).join(' · ');
   const techText = r.technician_id ? technicianName(r.technician_id) : r.open_to_team ? 'Open to the team' : 'Nobody yet';
+  // When the work began and how long it has been going (a job under way), or when it was offered and
+  // how long it has been waiting for an answer. `now` ticks each minute, so the figure keeps counting.
+  const stamp = (iso: string) => {
+    const d = new Date(iso);
+    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return `${numericDateLabel(entryDay(null, iso))}, ${time}`;
+  };
+  const timeLines: string[] = [];
+  if (r.status === 'in_progress') {
+    const begun = times?.started_at;
+    if (begun) {
+      timeLines.push(`Started: ${stamp(begun)}`);
+      timeLines.push(`Running: ${formatDurationBetween(begun, new Date(now))}`);
+    }
+  } else if (r.status === 'assigned' && r.assigned_at) {
+    timeLines.push(`Offered: ${stamp(r.assigned_at)}`);
+    timeLines.push(`Waiting: ${formatDurationBetween(r.assigned_at, new Date(now))}`);
+  }
   const address = r.location_data?.address ?? null;
   return (
     <View
@@ -746,6 +768,11 @@ function JobCompactRow({
               {`Chalan no. ${r.chalan_no.trim()}${r.chalan_urls.length > 0 ? ' · photo added' : ''}`}
             </Text>
           )}
+          {timeLines.map((line) => (
+            <Text key={line} className="text-[11px] text-gray-500" numberOfLines={1}>
+              {line}
+            </Text>
+          ))}
         </View>
       </Pressable>
 
@@ -917,6 +944,7 @@ function JobList({
               key={r.id}
               request={r}
               times={times?.get(r.id)}
+              now={now}
               technicianName={technicianName}
               tier={tier}
               onAssign={onAssign}

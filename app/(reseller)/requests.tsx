@@ -22,6 +22,7 @@ import { numericDateLabel } from '../../lib/utils/nepaliDate';
 import { entryDay } from '../../lib/utils/ledgerStatement';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
 import { canEditJobPrice } from '../../lib/utils/jobPrice';
+import { formatDurationBetween } from '../../lib/utils/duration';
 import {
   EditableAmount,
   JobProgressBars,
@@ -538,13 +539,36 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
   );
 }
 
-/** What a finished job shows: token and chalan numbers, the products used and the installation. */
+/** "11/06/2083, 10:30": the day in the calendar the app is read in (BS or AD) and the time of day. */
+function whenLabel(iso: string): string {
+  const d = new Date(iso);
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${numericDateLabel(entryDay(null, iso))}, ${time}`;
+}
+
+/** When the technician accepted the job, when they finished it, and how long it took - from the job
+ * card. A job reopened has no end until it is completed again; an older one may have neither. */
+function timeLines(card: JobCard | undefined): string[] {
+  const started = card?.started_at;
+  const ended = card?.completed_at;
+  const lines: string[] = [];
+  if (started) lines.push(`Started: ${whenLabel(started)}`);
+  if (ended) lines.push(`Ended: ${whenLabel(ended)}${started ? ` · Took ${formatDurationBetween(started, ended)}` : ''}`);
+  return lines;
+}
+
+/** What a finished job shows: token and chalan numbers, the products used and the installation, then
+ * when it started, when it ended and how long it took. */
 function finishedLines(item: ServiceRequest, card: JobCard | undefined): string[] {
   const ids: (string | null | undefined)[] = [];
   const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
   const products = parts.length > 0 ? `Products: ${parts.map((p) => `${p.name} × ${p.quantity}`).join(', ')}` : 'Products: none recorded';
   const installation = Number(card?.labor_cost) > 0 ? `Installation: NPR ${Number(card!.labor_cost).toLocaleString()}` : null;
-  return [ids.filter(Boolean).join(' · '), [products, installation].filter(Boolean).join(' · ')].filter(Boolean);
+  return [
+    ids.filter(Boolean).join(' · '),
+    [products, installation].filter(Boolean).join(' · '),
+    ...timeLines(card),
+  ].filter(Boolean);
 }
 
 function RequestJobRow({
@@ -584,6 +608,7 @@ function RequestJobRow({
   });
   const { confirmCancelWork, busyId } = useCancelWork();
   const deleting = busyId === item.id;
+  useCalendarMode(); // the start / end dates under the job are drawn again when AD / BS is switched
 
   // Delete a finished job for good: a completed or cancelled one with no payment and no bill on it
   // (the server refuses otherwise, with its reason - see delete_finished_job, migration 0098).
