@@ -52,7 +52,7 @@ function initialsOf(name: string): string {
 /** A button that changes a little under the mouse pointer (web). For leaf buttons like these; a card
  * with buttons inside it uses its own mouse events instead (see RelatedCard), because a Pressable
  * inside swallows the outer one's hover. */
-function HoverPressable({
+export function HoverPressable({
   hoverStyle,
   style,
   disabled,
