@@ -1328,6 +1328,19 @@ function LedgerList({ basePath }: { basePath: string }) {
           </Pressable>
         </View>
       )}
+      {/* The column titles, once, in line with every header's figures below. */}
+      <View className="flex-row items-center px-3.5" style={{ gap: 10, borderRadius: 8, backgroundColor: '#EEF2F7', paddingVertical: 8 }}>
+        <View style={{ width: 16 }} />
+        <Text className="flex-1 text-[11px] font-bold uppercase text-gray-600">Ledger type</Text>
+        <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ minWidth: 56, textAlign: 'right' }}>Parties</Text>
+        {tableMode && (
+          <>
+            <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ width: 105, textAlign: 'right' }}>To receive</Text>
+            <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ width: 105, textAlign: 'right' }}>To pay</Text>
+          </>
+        )}
+        <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ width: 120, textAlign: 'right' }}>Balance</Text>
+      </View>
       {groups.map((g) => {
         const isOpen = narrowed || openKeys.has(g.key);
         return (
@@ -1344,8 +1357,8 @@ function LedgerList({ basePath }: { basePath: string }) {
               <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
                 {g.label}
               </Text>
-              <Text className="text-[12px] text-gray-400">
-                {`${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`}
+              <Text className="text-[12px] text-gray-400" style={{ minWidth: 56, textAlign: 'right' }}>
+                {`${g.rows.length}`}
               </Text>
               {tableMode && (
                 <>
