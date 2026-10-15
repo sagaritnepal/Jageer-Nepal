@@ -1339,9 +1339,6 @@ function LedgerList({ basePath }: { basePath: string }) {
         .sort((a, b) => a.row.name.localeCompare(b.row.name, undefined, { sensitivity: 'base' })),
     [filtered]
   );
-      })}
-    </View>
-  );
   const flatFooter = (
     <View className="flex-row items-center justify-end px-1 pt-3" style={{ gap: 10 }}>
       <Text className="text-[12.5px] font-bold text-gray-600">
