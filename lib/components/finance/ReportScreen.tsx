@@ -2,7 +2,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useBookLayout, useBookToolbar } from './BookKit';
@@ -14,41 +13,6 @@ import { DateStepFilter, monthLabelOf, monthRange } from './DateRangeFilter';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 
 type Period = 'year' | 'all';
-
-type ReportLink = {
-  title: string;
-  subtitle: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  path: string;
-  children?: ReportLink[];
-};
-
-/** The five report types. Total Received / Total Paid are the cards on top of the Receivable / Payable Report. */
-const REPORT_GROUPS: { heading: string; links: ReportLink[] }[] = [
-  {
-    heading: 'Reports',
-    links: [
-      { title: 'Sales Report', subtitle: 'Every sale bill, newest first', icon: 'trending-up', color: '#059669', path: '/sales-report' },
-      { title: 'Purchase Report', subtitle: 'Every purchase bill, newest first', icon: 'cart', color: '#DC2626', path: '/purchase-report' },
-      { title: 'Expenses Report', subtitle: 'Every expense you recorded, newest first', icon: 'receipt', color: '#DC2626', path: '/expense-report' },
-      {
-        title: 'Receivable Report',
-        subtitle: 'Customers who owe you money',
-        icon: 'people',
-        color: '#059669',
-        path: '/to-receive',
-      },
-      {
-        title: 'Payable Report',
-        subtitle: 'Vendors you owe money to',
-        icon: 'storefront',
-        color: '#DC2626',
-        path: '/to-give',
-      },
-    ],
-  },
-];
 
 /** 1234567 -> "12,34,567" */
 function inr(n: number): string {
@@ -67,13 +31,13 @@ function SideHead({ title }: { title: string }) {
   );
 }
 
-function Line({ label, amount, tone, bold, muted }: { label: string; amount: number; tone?: 'profit' | 'loss'; bold?: boolean; muted?: boolean }) {
+function Line({ label, amount, tone, bold, muted, onPress }: { label: string; amount: number; tone?: 'profit' | 'loss'; bold?: boolean; muted?: boolean; onPress?: () => void }) {
   const color = tone === 'profit' ? '#047857' : tone === 'loss' ? '#B91C1C' : muted ? '#94A3B8' : '#0F172A';
   return (
-    <View className="flex-row justify-between border-b border-gray-100 py-2.5" style={tone ? { backgroundColor: tone === 'profit' ? '#F0FDF4' : '#FEF2F2' } : undefined}>
+    <Pressable onPress={onPress} disabled={!onPress} className="flex-row justify-between border-b border-gray-100 py-2.5" style={tone ? { backgroundColor: tone === 'profit' ? '#F0FDF4' : '#FEF2F2' } : undefined}>
       <Text className={`text-[14px] ${bold ? 'font-bold' : ''}`} style={{ color: muted ? '#94A3B8' : '#0F172A' }}>{label}</Text>
       <Text className={`text-[14px] ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color }}>{inr(amount)}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -86,19 +50,26 @@ function TotalLine({ amount }: { amount: number }) {
   );
 }
 
-function Group({ id, open, onToggle, label, amount, rows }: { id: string; open: Set<string>; onToggle: (k: string) => void; label: string; amount: number; rows: [string, number][] }) {
+function Group({ id, open, onToggle, label, amount, rows, onOpen }: { id: string; open: Set<string>; onToggle: (k: string) => void; label: string; amount: number; rows: [string, number][]; onOpen?: () => void }) {
   const isOpen = open.has(id);
   return (
     <View>
-      <Pressable onPress={() => onToggle(id)} disabled={rows.length === 0} className="flex-row justify-between py-2.5">
-        <Text className="text-[14px] font-bold text-gray-900">{rows.length ? (isOpen ? '▾ ' : '▸ ') : ''}{label}</Text>
-        <Text className="text-[14px] font-bold text-gray-900">{inr(amount)}</Text>
-      </Pressable>
+      <View className="flex-row items-center">
+        {rows.length > 0 && (
+          <Pressable onPress={() => onToggle(id)} hitSlop={6} className="pr-2 py-2.5">
+            <Text className="text-[14px] font-bold text-gray-900">{isOpen ? '▾' : '▸'}</Text>
+          </Pressable>
+        )}
+        <Pressable onPress={onOpen} disabled={!onOpen} className="flex-1 flex-row justify-between py-2.5">
+          <Text className="text-[14px] font-bold text-gray-900">{label}</Text>
+          <Text className="text-[14px] font-bold text-gray-900">{inr(amount)}</Text>
+        </Pressable>
+      </View>
       {isOpen && rows.map(([k, v]) => (
-        <View key={k} className="flex-row justify-between border-b border-gray-50 py-1.5" style={{ paddingLeft: 20 }}>
+        <Pressable key={k} onPress={onOpen} disabled={!onOpen} className="flex-row justify-between border-b border-gray-50 py-1.5" style={{ paddingLeft: 20 }}>
           <Text className="text-[13px] text-gray-600">{k}</Text>
           <Text className="text-[13px] text-gray-600">{inr(v)}</Text>
-        </View>
+        </Pressable>
       ))}
     </View>
   );
@@ -151,6 +122,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   });
   const { width } = useWindowDimensions();
   const twoSided = width >= 900;
+  const go = (path: string) => router.push(`${basePath}${path}` as never);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['sales', 'purchase', 'direct', 'indirect']));
   const toggleGroup = (k: string) =>
     setOpenGroups((prev) => {
@@ -292,16 +264,16 @@ export function ReportScreen({ basePath }: { basePath: string }) {
       {/* KPIs */}
       <View className="mb-4 flex-row flex-wrap" style={{ gap: 10 }}>
         {[
-          { label: 'Net sales', value: pl.sales, color: '#0F172A', sub: undefined },
-          { label: grossProfit >= 0 ? 'Gross profit' : 'Gross loss', value: Math.abs(grossProfit), color: grossProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(grossProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined },
-          { label: 'Indirect expenses', value: pl.indirectTotal, color: '#0F172A', sub: undefined },
-          { label: netProfit >= 0 ? 'Net profit' : 'Net loss', value: Math.abs(netProfit), color: netProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(netProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined },
+          { label: 'Net sales', value: pl.sales, color: '#0F172A', sub: undefined, path: '/sales-report' },
+          { label: grossProfit >= 0 ? 'Gross profit' : 'Gross loss', value: Math.abs(grossProfit), color: grossProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(grossProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined, path: '/sales-report' },
+          { label: 'Indirect expenses', value: pl.indirectTotal, color: '#0F172A', sub: undefined, path: '/expense-report' },
+          { label: netProfit >= 0 ? 'Net profit' : 'Net loss', value: Math.abs(netProfit), color: netProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(netProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined, path: '/expense-report' },
         ].map((k) => (
-          <View key={k.label} className="rounded-2xl border border-gray-200 bg-white p-4" style={{ flexGrow: 1, flexBasis: 200 }}>
+          <Pressable key={k.label} onPress={() => go(k.path)} className="rounded-2xl border border-gray-200 bg-white p-4" style={{ flexGrow: 1, flexBasis: 200 }}>
             <Text className="text-xs font-semibold text-gray-500">{k.label}</Text>
             <Text className="mt-1 text-[20px] font-bold" style={{ color: k.color }}>NPR {inr(k.value)}</Text>
             {!!k.sub && <Text className="text-xs text-gray-500">{k.sub}</Text>}
-          </View>
+          </Pressable>
         ))}
       </View>
 
@@ -310,22 +282,22 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         <View className={twoSided ? 'flex-row' : ''}>
           <View className="flex-1 p-5" style={twoSided ? { borderRightWidth: 1, borderColor: '#E5E7EB' } : { borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
             <SideHead title="Particulars" />
-            <Line label="Opening stock" amount={pl.opening} />
+            <Line label="Opening stock" amount={pl.opening} onPress={() => go('/inventory')} />
             <Group id="purchase" open={openGroups} onToggle={toggleGroup} label="Purchase accounts" amount={pl.purchase}
-              rows={[['Purchase bills', pl.purchase]]} />
-            <Group id="direct" open={openGroups} onToggle={toggleGroup} label="Direct expenses" amount={pl.directTotal} rows={pl.direct} />
+              rows={[['Purchase bills', pl.purchase]]} onOpen={() => go('/purchase-report')} />
+            <Group id="direct" open={openGroups} onToggle={toggleGroup} label="Direct expenses" amount={pl.directTotal} rows={pl.direct} onOpen={() => go('/expense-report')} />
             {grossProfit >= 0 ? <Line label="Gross profit c/o" amount={grossProfit} tone="profit" bold /> : null}
             <TotalLine amount={tradingTotal} />
             {grossProfit < 0 ? <Line label="Gross loss b/f" amount={-grossProfit} tone="loss" bold /> : null}
-            <Group id="indirect" open={openGroups} onToggle={toggleGroup} label="Indirect expenses" amount={pl.indirectTotal} rows={pl.indirect} />
+            <Group id="indirect" open={openGroups} onToggle={toggleGroup} label="Indirect expenses" amount={pl.indirectTotal} rows={pl.indirect} onOpen={() => go('/expense-report')} />
             {netProfit >= 0 ? <Line label="Net profit" amount={netProfit} tone="profit" bold /> : null}
             <TotalLine amount={secondTotal} />
           </View>
           <View className="flex-1 p-5">
             <SideHead title="Particulars" />
             <Group id="sales" open={openGroups} onToggle={toggleGroup} label="Sales accounts" amount={pl.sales}
-              rows={[['Sales - items', pl.items], ['Installation & repair services', pl.services]]} />
-            <Line label="Closing stock" amount={pl.closing} />
+              rows={[['Sales - items', pl.items], ['Installation & repair services', pl.services]]} onOpen={() => go('/sales-report')} />
+            <Line label="Closing stock" amount={pl.closing} onPress={() => go('/inventory')} />
             {grossProfit < 0 ? <Line label="Gross loss c/o" amount={-grossProfit} tone="loss" bold /> : null}
             <TotalLine amount={tradingTotal} />
             {grossProfit >= 0 ? <Line label="Gross profit b/f" amount={grossProfit} tone="profit" bold /> : null}
@@ -339,44 +311,6 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         </Text>
       </View>
 
-      {REPORT_GROUPS.map((group, g) => (
-        <View key={group.heading} className={`rounded-2xl border border-gray-200 bg-white p-4 ${g > 0 ? 'mt-4' : ''}`}>
-          <Text className="mb-1 text-xs font-semibold capitalize tracking-wide text-gray-400">{group.heading}</Text>
-          {group.links.map((r, i) => (
-            <View key={r.title} className={i > 0 ? 'border-t border-gray-100' : ''}>
-              <ReportMenuLink report={r} basePath={basePath} />
-              {r.children?.map((child) => (
-                <View key={child.title} className="ml-11 border-t border-gray-100">
-                  <ReportMenuLink report={child} basePath={basePath} compact />
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-      ))}
     </ScrollView>
-  );
-}
-
-function ReportMenuLink({ report, basePath, compact = false }: { report: ReportLink; basePath: string; compact?: boolean }) {
-  return (
-    <Pressable
-      onPress={() => router.push(`${basePath}${report.path}` as any)}
-      accessibilityRole="button"
-      accessibilityLabel={report.title}
-      className={`flex-row items-center ${compact ? 'py-2' : 'py-3'}`}
-      style={{ gap: 12 }}
-    >
-      <View className={`${compact ? 'h-7 w-7' : 'h-9 w-9'} items-center justify-center rounded-full`} style={{ backgroundColor: `${report.color}1A` }}>
-        <Ionicons name={report.icon} size={compact ? 15 : 18} color={report.color} />
-      </View>
-      <View className="flex-1" style={{ minWidth: 0 }}>
-        <Text className={`${compact ? 'text-xs' : 'text-sm'} font-bold text-gray-900`}>{report.title}</Text>
-        <Text className="text-xs text-gray-500" numberOfLines={1}>
-          {report.subtitle}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-    </Pressable>
   );
 }
