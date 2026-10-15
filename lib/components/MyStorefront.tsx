@@ -90,7 +90,7 @@ function EditablePrice({ item }: { item: Product }) {
   );
 }
 
-function ProductThumbnail({ item }: { item: Product }) {
+function ProductThumbnail({ item, zoomed }: { item: Product; zoomed?: boolean }) {
   const [failed, setFailed] = useState(false);
   const uri = toSafeImageUri(item.image_url);
 
@@ -103,6 +103,15 @@ function ProductThumbnail({ item }: { item: Product }) {
       className="h-full w-full"
       resizeMode="cover"
       onError={() => setFailed(true)}
+      // Eases in a little while the card is hovered (the tile clips it, so it stays inside).
+      style={
+        {
+          transform: [{ scale: zoomed ? 1.06 : 1 }],
+          transitionProperty: 'transform',
+          transitionDuration: '320ms',
+          transitionTimingFunction: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+        } as object
+      }
     />
   );
 }
@@ -142,13 +151,35 @@ function StorefrontCard({ item, basePath, fill }: { item: Product; basePath: str
       ? 'border-red-200 bg-red-50'
       : 'border-gray-200 bg-white';
 
+  // Pointer hover (web only; touch never raises it): the whole card lifts a little with a blue edge and
+  // a soft shadow, the picture eases in, and a faded (unavailable / out of stock) card comes up to full
+  // strength so it can be read. The DOM's mouse events fire for everything inside the card, price box
+  // and switch included; they are web-only, so typed as an object.
+  const [hovered, setHovered] = useState(false);
+  const hoverEvents = { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) } as object;
+
   return (
-    <View className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border p-3 ${cardTone} ${faded ? 'opacity-60' : ''}`}>
+    <View
+      {...hoverEvents}
+      className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border p-3 ${cardTone} ${faded ? 'opacity-60' : ''}`}
+      style={
+        {
+          borderColor: hovered ? '#60A5FA' : undefined,
+          opacity: hovered ? 1 : undefined,
+          transform: [{ translateY: hovered ? -4 : 0 }],
+          // Always a shadow (a faint one at rest), so it eases between two instead of jumping from none.
+          boxShadow: hovered ? '0 16px 32px rgba(37, 99, 235, 0.16)' : '0 1px 2px rgba(17, 24, 39, 0.05)',
+          transitionProperty: 'transform, box-shadow, border-color, opacity',
+          transitionDuration: '220ms',
+          transitionTimingFunction: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+        } as object
+      }
+    >
       <Pressable
         onPress={() => detailHref && router.push(detailHref)}
         className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100"
       >
-        <ProductThumbnail item={item} />
+        <ProductThumbnail item={item} zoomed={hovered} />
         <View className={`absolute left-1 top-1 rounded-full px-2 py-0.5 ${badge.bg}`}>
           <Text className="text-[9px] font-bold capitalize tracking-wide text-white">{badge.label}</Text>
         </View>

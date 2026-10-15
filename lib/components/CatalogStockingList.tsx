@@ -108,8 +108,25 @@ function StockRow({
       ? ((Number(existing.price) - purchasePrice) / purchasePrice) * 100
       : null;
 
+  // Pointer hover (web only): a list row, so it does not lift - it gets a blue edge, a faint tint and a
+  // soft shadow. The DOM's mouse events fire for the whole row, switch and fields included.
+  const [hovered, setHovered] = useState(false);
+  const hoverEvents = { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) } as object;
+
   return (
-    <View className="mb-2 rounded-xl border border-gray-200 bg-white p-2.5">
+    <View
+      {...hoverEvents}
+      className="mb-2 rounded-xl border border-gray-200 bg-white p-2.5"
+      style={
+        {
+          borderColor: hovered ? '#93C5FD' : undefined,
+          backgroundColor: hovered ? '#F8FAFF' : undefined,
+          boxShadow: hovered ? '0 6px 16px rgba(37, 99, 235, 0.10)' : '0 1px 2px rgba(17, 24, 39, 0.04)',
+          transitionProperty: 'box-shadow, border-color, background-color',
+          transitionDuration: '180ms',
+        } as object
+      }
+    >
       <View className="flex-row items-center gap-2.5">
         <Pressable
           onPress={() => router.push(`${basePath}/catalog/${item.id}`)}
