@@ -1328,19 +1328,6 @@ function LedgerList({ basePath }: { basePath: string }) {
           </Pressable>
         </View>
       )}
-      {/* The column titles, once, in line with every header's figures below. */}
-      <View className="flex-row items-center px-3.5" style={{ gap: 10, borderRadius: 8, backgroundColor: '#EEF2F7', paddingVertical: 8 }}>
-        <View style={{ width: 16 }} />
-        <Text className="flex-1 text-[11px] font-bold uppercase text-gray-600">Ledger type</Text>
-        <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ minWidth: 56, textAlign: 'right' }}>Parties</Text>
-        {tableMode && (
-          <>
-            <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ width: 105, textAlign: 'right' }}>To receive</Text>
-            <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ width: 105, textAlign: 'right' }}>To pay</Text>
-          </>
-        )}
-        <Text className="text-[11px] font-bold uppercase text-gray-600" style={{ width: 120, textAlign: 'right' }}>Balance</Text>
-      </View>
       {groups.map((g) => {
         const isOpen = narrowed || openKeys.has(g.key);
         return (
@@ -1357,24 +1344,27 @@ function LedgerList({ basePath }: { basePath: string }) {
               <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
                 {g.label}
               </Text>
-              <Text className="text-[12px] text-gray-400" style={{ minWidth: 56, textAlign: 'right' }}>
-                {`${g.rows.length}`}
+              <Text className="text-[12px] text-gray-400" style={{ minWidth: 86, textAlign: 'right' }}>
+                {`${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`}
               </Text>
               {tableMode && (
                 <>
-                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                  <View style={{ width: 170, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6 }}>
+                    <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Receive</Text>
                     <Text className="text-[12.5px] font-bold" style={{ color: g.receivable > 0 ? LEDGER_TONE.receivable.text : '#D1D5DB' }}>
                       {g.receivable > 0 ? bookMoney(g.receivable) : '—'}
                     </Text>
                   </View>
-                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                  <View style={{ width: 150, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6 }}>
+                    <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Pay</Text>
                     <Text className="text-[12.5px] font-bold" style={{ color: g.payable > 0 ? LEDGER_TONE.payable.text : '#D1D5DB' }}>
                       {g.payable > 0 ? bookMoney(g.payable) : '—'}
                     </Text>
                   </View>
                 </>
               )}
-              <View style={{ width: 120, alignItems: 'flex-end' }}>
+              <View style={{ width: 170, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Balance</Text>
                 <PartyBalance position={partyPosition({ receivable: g.net, payable: 0 })} compact />
               </View>
             </Pressable>
