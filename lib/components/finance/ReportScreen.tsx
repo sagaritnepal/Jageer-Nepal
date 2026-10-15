@@ -300,7 +300,6 @@ export function ReportScreen({ basePath }: { basePath: string }) {
             >
               <Text className="text-[11.5px] font-semibold" style={{ color: '#BFDBFE' }}>{k.label}</Text>
               <Text className="mt-0.5 text-[19px] font-bold text-white">NPR {inr(k.value)}</Text>
-              <Text className="text-[11.5px]" style={{ color: '#93C5FD' }}>{k.sub}</Text>
             </Pressable>
           ))}
         </View>
