@@ -84,6 +84,13 @@ export async function loadProfileWithRetry(userId: string, isActive: () => boole
       setProfile(data as Profile);
       return;
     }
+    // PGRST116: no profile row at all - the login exists but the account was
+    // removed (or never finished registering). Retrying cannot help, and the
+    // saved session would trap every launch on the loading screen, so sign out.
+    if (error?.code === 'PGRST116' || (!error && !data)) {
+      await useAuthStore.getState().signOut();
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
   }
   if (isActive()) setProfileError(true);
