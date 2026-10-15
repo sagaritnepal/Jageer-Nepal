@@ -29,7 +29,7 @@ const LINE = '#E2E8F0';
 const RED = '#B91C1C';
 const GREEN = '#047857';
 const AMBER = '#B45309';
-const TABULAR = { fontVariant: ['tabular-nums'] } as const;
+const TABULAR = { fontVariant: ['tabular-nums'], fontFamily: Platform.OS === 'web' ? '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace' : undefined } as const;
 
 // ---------- numbers ----------
 /** 2316130 -> "23,16,130" (the South Asian grouping); a minus sign for a negative. */
@@ -244,6 +244,19 @@ function TrendChart({ labels, assets, liabilities }: { labels: string[]; assets:
       {liabilities.map((v, i) => (
         <Circle key={`l${i}`} cx={x(i)} cy={y(v)} r={4} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2.5} />
       ))}
+      {assets.length > 0 && (
+        <G>
+          <Path
+            d={`M${W - right - 170},${top} h170 a8,8 0 0 1 8,8 v34 a8,8 0 0 1 -8,8 h-170 a8,8 0 0 1 -8,-8 v-34 a8,8 0 0 1 8,-8 Z`}
+            fill="#0F172A"
+            transform="translate(-8 0)"
+          />
+          <SvgText x={W - right - 178} y={top + 19} fontSize={11} fill="#CBD5E1">Latest month end</SvgText>
+          <SvgText x={W - right - 178} y={top + 38} fontSize={12.5} fontWeight="700" fill="#FFFFFF">
+            {`Gap  ${assets[assets.length - 1] - liabilities[liabilities.length - 1] < 0 ? '-' : '+'}${lakh(Math.abs(assets[assets.length - 1] - liabilities[liabilities.length - 1]))}`}
+          </SvgText>
+        </G>
+      )}
       {labels.map((l, i) => (
         <SvgText key={`${l}${i}`} x={x(i)} y={H - 9} fontSize={11.5} fill={MUTED} textAnchor="middle">{l}</SvgText>
       ))}
