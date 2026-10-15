@@ -74,9 +74,31 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     const persons = (people ?? []).filter((c) => match(c.name)).map((c) => ({ key: `p:${c.id}`, label: c.name, hint: 'Person' }));
     const heads =
       side === 'debit' ? (categories ?? []).filter((c) => match(c.name)).map((c) => ({ key: `h:${c.id}`, label: c.name, hint: 'Expense head' })) : [];
-    return [...heads, ...persons].slice(0, 14);
+    const typed = text.trim();
+    const exact = [...(categories ?? []), ...(people ?? [])].some((c) => c.name.toLowerCase() === typed.toLowerCase());
+    // not in the books yet: offer to add it right here
+    const adds =
+      typed && !exact
+        ? [
+            ...(side === 'debit' ? [{ key: 'new-h', label: typed, hint: '+ New expense head' }] : []),
+            { key: 'new-p', label: typed, hint: '+ New ledger (person)' },
+          ]
+        : [];
+    return [...heads, ...persons].slice(0, 14).concat(adds);
   };
-  const pick = (key: number, optionKey: string, label: string) => {
+  const pick = async (key: number, optionKey: string, label: string) => {
+    if (optionKey === 'new-p') {
+      const created = await (supabase.from('customers') as any).insert({ owner_id: ownerId, name: label.trim(), phone: null }).select('id').single();
+      if (created.error) {
+        showAlert('Could not add the ledger', getErrorMessage(created.error));
+        return;
+      }
+      optionKey = `p:${created.data.id}`;
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
+    } else if (optionKey === 'new-h') {
+      // the head itself is created when the voucher is posted
+      optionKey = 'h:new';
+    }
     if (optionKey.startsWith('p:')) patch(key, { kind: 'party', person: { id: optionKey.slice(2), name: label }, head: label });
     else patch(key, { kind: 'expense', person: null, head: label });
     setTimeout(() => amountRefs.current.get(key)?.focus(), 30);
@@ -217,7 +239,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
               if (!l.head.trim()) return;
               // Enter with nothing highlighted takes the best match, or keeps what was typed as a new head
               if (!l.person) {
-                const first = accountOptions(l.head, l.side).find((o) => o.label.toLowerCase() === l.head.trim().toLowerCase()) ?? accountOptions(l.head, l.side)[0];
+                const first = accountOptions(l.head, l.side).find((o) => o.label.toLowerCase() === l.head.trim().toLowerCase() && !o.key.startsWith('new')) ?? accountOptions(l.head, l.side).filter((o) => !o.key.startsWith('new'))[0];
                 if (first) {
                   pick(l.key, first.key, first.label);
                   return;
