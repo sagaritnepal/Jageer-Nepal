@@ -988,14 +988,9 @@ export function WorkHubPanel({
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
   const [assigning, setAssigning] = useState<{ request: ServiceRequest; mode: 'staff' | 'freelance' } | null>(null);
 
-  /** Opens the technician picker - unless the job has already been started. The database only lets a
-   * job be handed to someone while it is still waiting to be accepted, so a job in progress is
-   * explained here, instead of letting a technician be picked and the job then refused. */
+  /** Opens the technician picker. A job still waiting to be accepted is simply offered to the new
+   * person; one already in progress is handed over by the server (hand_over_job) - see sendJobTo. */
   function openPicker(request: ServiceRequest, mode: 'staff' | 'freelance') {
-    if (request.status === 'in_progress') {
-      showAlert("Can't reassign this job", 'This job is in progress, so it cannot be reassigned.');
-      return;
-    }
     setAssigning({ request, mode });
   }
   const [sending, setSending] = useState(false);
@@ -1170,19 +1165,43 @@ export function WorkHubPanel({
 
   async function sendJobTo(person: PickPerson) {
     if (!assigning) return;
+    const request = assigning.request;
+    // A job already under way is handed over by the server, not just re-offered - and the person who
+    // has it is named first, because they lose it (they are told, and the new one has to accept).
+    if (request.status === 'in_progress') {
+      const current = request.technician_id ? technicianName(request.technician_id) : 'The technician';
+      showAlert(
+        'Hand this job over?',
+        `${current} is working on it. It goes to ${person.name} as a new offer, and ${current} is told it was taken back. What has been recorded so far - parts, labour and chalan - stays on the job.`,
+        [
+          { text: 'Keep it with them', style: 'cancel' },
+          { text: 'Hand over', onPress: () => void deliverJob(request, person, true) },
+        ]
+      );
+      return;
+    }
+    await deliverJob(request, person, false);
+  }
+
+  async function deliverJob(request: ServiceRequest, person: PickPerson, handOver: boolean) {
     setSending(true);
     try {
-      await assignTechnician({ requestId: assigning.request.id, technicianId: person.id });
+      if (handOver) {
+        // hand_over_job (migration 0099): the job goes back to 'assigned' for the new technician.
+        const { error } = await (supabase as any).rpc('hand_over_job', {
+          p_request_id: request.id,
+          p_technician_id: person.id,
+        });
+        if (error) throw error;
+      } else {
+        await assignTechnician({ requestId: request.id, technicianId: person.id });
+      }
       await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+      await queryClient.invalidateQueries({ queryKey: ['job_cards'] });
       setAssigning(null);
       showJobSentAlert(person.name);
     } catch (err) {
-      const message = getErrorMessage(err);
-      // The database's own wording for a started job, said properly (the picker already stops this).
-      showAlert(
-        'Could not send the job',
-        /in_progress to assigned/i.test(message) ? 'This job is in progress, so it cannot be reassigned in a proper way.' : message
-      );
+      showAlert(handOver ? 'Could not hand the job over' : 'Could not send the job', getErrorMessage(err));
     } finally {
       setSending(false);
     }
@@ -1480,7 +1499,10 @@ export function WorkHubPanel({
       <AssignSheet
         request={assigning?.request ?? null}
         mode={assigning?.mode ?? 'staff'}
-        people={assigning?.mode === 'freelance' ? freelanceChoices : staffChoices}
+        // Not the technician who already has the job - handing it to them would be a no-op.
+        people={(assigning?.mode === 'freelance' ? freelanceChoices : staffChoices).filter(
+          (p) => p.id !== assigning?.request.technician_id
+        )}
         loading={assigning?.mode === 'freelance' && loadingTechnicians}
         onPick={sendJobTo}
         onClose={() => setAssigning(null)}
