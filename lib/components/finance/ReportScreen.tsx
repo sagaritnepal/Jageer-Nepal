@@ -164,6 +164,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   // and direct expenses) to a gross profit or loss carried down, then indirect expenses to the net result.
   const pl = useMemo(() => {
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
+    const directNames = new Set((categories ?? []).filter((c) => c.expense_group === 'direct').map((c) => c.name));
     let items = 0;
     let services = 0;
     let purchase = 0;
@@ -183,7 +184,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     const DIRECT = /(direct|freight|carriage|cartage|clearing|custom|import|repair|labour|labor|installation|job)/i;
     const direct: [string, number][] = [];
     const indirect: [string, number][] = [];
-    [...expenses.entries()].sort((a, b) => b[1] - a[1]).forEach((e) => (DIRECT.test(e[0]) ? direct : indirect).push(e));
+    [...expenses.entries()].sort((a, b) => b[1] - a[1]).forEach((e) => (directNames.has(e[0]) || (!(categories ?? []).some((c) => c.name === e[0] && c.expense_group) && DIRECT.test(e[0])) ? direct : indirect).push(e));
     const sum = (list: [string, number][]) => list.reduce((a, [, v]) => a + v, 0);
     // The stock held now, at cost. Stock has no history, so the period's opening stock is taken as the
     // same figure: stock moves through the purchase and sale bills themselves.
