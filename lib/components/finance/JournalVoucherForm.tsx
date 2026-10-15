@@ -7,7 +7,6 @@ import { supabase } from '../../supabase';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { DateField } from '../DateTimeFields';
 import { Field, FieldRow, FormActions, INPUT } from './FormKit';
-import { PartyMoveField } from './EntryEditParts';
 import { SuggestInput } from './SuggestInput';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { localTodayIso } from '../../utils/localDate';
@@ -51,12 +50,24 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
   const credit = total('credit');
   const balanced = debit > 0 && Math.abs(debit - credit) < 0.005;
 
-  const headOptions = (text: string) => {
+  const { data: people } = useSupabaseQuery('customers', {
+    filters: { owner_id: ownerId },
+    orderBy: { column: 'name' },
+    all: true,
+  });
+
+  // One search over both: people (either side) and expense heads (debit only).
+  const accountOptions = (text: string, side: Side) => {
     const q = text.trim().toLowerCase();
-    return (categories ?? [])
-      .filter((c) => !q || c.name.toLowerCase().includes(q))
-      .slice(0, 12)
-      .map((c) => ({ key: c.id, label: c.name }));
+    const match = (name: string) => !q || name.toLowerCase().includes(q);
+    const persons = (people ?? []).filter((c) => match(c.name)).map((c) => ({ key: `p:${c.id}`, label: c.name, hint: 'Person' }));
+    const heads =
+      side === 'debit' ? (categories ?? []).filter((c) => match(c.name)).map((c) => ({ key: `h:${c.id}`, label: c.name, hint: 'Expense head' })) : [];
+    return [...heads, ...persons].slice(0, 14);
+  };
+  const pick = (key: number, optionKey: string, label: string) => {
+    if (optionKey.startsWith('p:')) patch(key, { kind: 'party', person: { id: optionKey.slice(2), name: label }, head: label });
+    else patch(key, { kind: 'expense', person: null, head: label });
   };
 
   async function handleSave() {
@@ -66,8 +77,12 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     }
     for (const [i, l] of lines.entries()) {
       const where = `${l.side === 'debit' ? 'Debit' : 'Credit'} line ${i + 1}`;
-      if (l.kind === 'party' ? !l.person : !l.head.trim()) {
-        showAlert('Finish every line', `${where}: ${l.kind === 'party' ? 'pick the person' : 'choose the expense head'}.`);
+      if (!l.head.trim()) {
+        showAlert('Finish every line', `${where}: search and pick ${l.side === 'debit' ? 'a person or an expense head' : 'the person'}.`);
+        return;
+      }
+      if (l.side === 'credit' && !l.person) {
+        showAlert('Pick the person', `${where}: choose a person from the list - an expense head can only be debited.`);
         return;
       }
       const v = Number(l.amount);
@@ -95,7 +110,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
         const amount = Number(l.amount);
         let table: string;
         let row: Record<string, unknown>;
-        if (l.kind === 'expense') {
+        if (l.kind === 'expense' || !l.person) {
           const name = l.head.trim();
           let categoryId = created.get(name.toLowerCase()) ?? null;
           if (!categoryId) {
@@ -161,14 +176,10 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     <View key={l.key} className="rounded-xl border border-gray-200 bg-white p-3" style={{ gap: 8 }}>
       <View className="flex-row items-center" style={{ gap: 8 }}>
         <Text className="text-[12px] font-bold text-gray-500">{l.side === 'debit' ? 'Debit' : 'Credit'} {n}</Text>
-        {l.side === 'debit' && (
-          <View className="flex-row rounded-lg bg-gray-100 p-0.5">
-            {([['party', 'Person'], ['expense', 'Expense head']] as const).map(([k, label]) => (
-              <Pressable key={k} onPress={() => patch(l.key, { kind: k })} className="rounded-md px-2.5 py-1" style={{ backgroundColor: l.kind === k ? '#FFFFFF' : 'transparent' }}>
-                <Text className="text-[12px] font-semibold" style={{ color: l.kind === k ? '#1D4ED8' : '#6B7280' }}>{label}</Text>
-              </Pressable>
-            ))}
-          </View>
+        {l.head.trim() !== '' && (
+          <Text className="text-[11.5px] font-semibold" style={{ color: l.person ? '#1D4ED8' : '#B45309' }}>
+            {l.person ? 'Person' : l.side === 'debit' ? 'Expense head' : 'Pick a person from the list'}
+          </Text>
         )}
         <View style={{ flex: 1 }} />
         {lines.length > 2 && (
@@ -177,30 +188,19 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
           </Pressable>
         )}
       </View>
-      {l.kind === 'expense' ? (
-        <View style={{ zIndex: 5 }}>
-          <SuggestInput
-            value={l.head}
-            onChangeText={(v) => patch(l.key, { head: v })}
-            options={headOptions(l.head)}
-            onSelectOption={(o) => patch(l.key, { head: o.label })}
-            placeholder="Expense head, e.g. Salary Expenses"
-            accent="#DC2626"
-            inputClassName={INPUT}
-            showWhenEmpty
-          />
-        </View>
-      ) : (
-        <PartyMoveField
-          label={l.side === 'debit' ? 'Person (Debit)' : 'Person (Credit)'}
-          ownerId={ownerId}
-          partyId={l.person?.id ?? ''}
-          pickedName={l.person?.name}
-          onPick={(p) => patch(l.key, { person: p })}
-          hint={l.side === 'debit' ? 'Owes you more - or you owe them less.' : 'Owes you less - or you owe them more.'}
-          pickerTitle={l.side === 'debit' ? 'Debit which person?' : 'Credit which person?'}
+      <View style={{ zIndex: 5 }}>
+        <SuggestInput
+          value={l.head}
+          // typing again drops the earlier pick, so a stale person is never posted under a new name
+          onChangeText={(v) => patch(l.key, { head: v, person: null, kind: 'expense' })}
+          options={accountOptions(l.head, l.side)}
+          onSelectOption={(o) => pick(l.key, o.key, o.label)}
+          placeholder={l.side === 'debit' ? 'Search person or expense head, e.g. Salary Expenses' : 'Search person'}
+          accent={l.side === 'debit' ? '#DC2626' : '#047857'}
+          inputClassName={INPUT}
+          showWhenEmpty
         />
-      )}
+      </View>
       <TextInput
         value={l.amount}
         onChangeText={(v) => patch(l.key, { amount: v })}
