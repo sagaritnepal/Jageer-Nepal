@@ -26,7 +26,6 @@ import type { PrintReport } from '../../utils/printReport';
 import { TransactionDetailModal } from './TransactionsScreen';
 import { TransferForm } from './BankBalancesScreen';
 import { PopupCard } from './FormKit';
-import { JournalVoucherForm } from './JournalVoucherForm';
 import { journalOf } from '../../utils/journalVoucher';
 import { supabase } from '../../supabase';
 import type { BusinessTransaction } from '../../../types/database.types';
@@ -928,7 +927,6 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   // The Contra popup: money moved between your own accounts. The Voucher popup: an amount moved from
   // one person's ledger to another's.
   const [showContra, setShowContra] = useState(false);
-  const [showVoucher, setShowVoucher] = useState(false);
   // A bill opened from its row: shown in a popup, and edited in it.
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
   const queryClient = useQueryClient();
@@ -1456,7 +1454,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   // of their own under the heading.
   const entriesInBar = wide && windowWidth >= 1640;
   const newEntryButtons = (
-    <NewEntryButtons basePath={basePath} onVoucher={() => setShowVoucher(true)} onContra={() => setShowContra(true)} />
+    <NewEntryButtons basePath={basePath} onVoucher={() => router.push(`${basePath}/voucher` as never)} onContra={() => setShowContra(true)} />
   );
   const toolbar = useBookToolbar(
     {
@@ -1514,11 +1512,6 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
           />
 
           <EditEntryModal target={editing} onClose={() => setEditing(null)} />
-          {showVoucher && userId && (
-            <PopupCard title="Journal voucher" onClose={() => setShowVoucher(false)}>
-              <JournalVoucherForm ownerId={userId} onDone={() => setShowVoucher(false)} />
-            </PopupCard>
-          )}
           {showContra && userId && (
             <PopupCard title="Contra" onClose={() => setShowContra(false)}>
               <TransferForm bare userId={userId} onDone={() => setShowContra(false)} />
