@@ -27,11 +27,11 @@ const STANDALONE_KEYS = new Set(['inventory']);
 // Anything not named here goes after them, in the order it comes.
 const FINANCE_NAV_ORDER = [
   'daybook',
-  'customers',
   'transactions',
-  'report',
-  'quotation',
+  'customers',
   'bank-accounts',
+  'quotation',
+  'report',
 ];
 const financeNavRank = (key: string) => {
   const i = FINANCE_NAV_ORDER.indexOf(key);
