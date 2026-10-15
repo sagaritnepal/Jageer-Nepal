@@ -965,7 +965,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     };
     let opening = 0;
     const rows: BookRow[] = [];
-    const voucherExpense = new Map<string, { id: string; head: string }>();
+    const voucherExpense = new Map<string, { id: string; head: string; amount: number }[]>();
 
     for (const t of transactions ?? []) {
       const date = t.bill_date ?? localDay(t.created_at);
@@ -977,7 +977,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       // An expense posted by a journal voucher is listed as that voucher's one line, below.
       if (viaVoucher) {
         const code = journalOf(t.note)?.code;
-        if (code) voucherExpense.set(code, { id: t.id, head: categoryName.get(t.expense_category_id ?? '') ?? 'Expense' });
+        if (code) voucherExpense.set(code, [...(voucherExpense.get(code) ?? []), { id: t.id, head: categoryName.get(t.expense_category_id ?? '') ?? 'Expense', amount: Number(t.amount) }]);
         continue;
       }
       if (date < from || date > day) continue;
@@ -1122,48 +1122,58 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
 
     // A journal voucher is two entries - one on each person's ledger - that carry the same code in their
     // remark. It is one line here: its amount in the Bill amount column, and no cash in or out.
+    // A voucher is any number of debit and credit lines carrying one code; its day-book line names both
+    // sides and shows the total debited.
     type VoucherParts = {
       date: string;
       createdAt: string;
-      amount: number;
+      debitTotal: number;
       narration: string;
-      from?: string;
-      to?: string;
+      debits: string[];
+      credits: string[];
       entries: NonNullable<BookRow['journal']>['entries'];
     };
     const vouchers = new Map<string, VoucherParts>();
-    const voucherOf = (code: string, date: string, createdAt: string, amount: number, narration: string) => {
+    const voucherOf = (code: string, date: string, createdAt: string, narration: string) => {
       let v = vouchers.get(code);
       if (!v) {
-        v = { date, createdAt, amount, narration, entries: [] };
+        v = { date, createdAt, debitTotal: 0, narration, debits: [], credits: [], entries: [] };
         vouchers.set(code, v);
       }
       return v;
     };
+    const named = (who: string, amount: number) => `${who} ${amount.toLocaleString()}`;
     for (const e of customerEntries ?? []) {
       const j = journalOf(e.note);
       if (!j) continue;
-      const v = voucherOf(j.code, e.entry_date ?? localDay(e.created_at), e.created_at, Number(e.amount), j.narration);
+      const v = voucherOf(j.code, e.entry_date ?? localDay(e.created_at), e.created_at, j.narration);
       v.entries.push({ table: 'customer_ledger_entries', id: e.id });
       const who = contactName.get(e.customer_id) ?? 'Customer';
-      // Received = the person credited (From); Paid = the person debited (To).
-      if (e.entry_type === 'credit') v.from = who;
-      else v.to = who;
+      const amount = Number(e.amount);
+      // Received = the person credited; Paid = the person debited.
+      if (e.entry_type === 'credit') v.credits.push(named(who, amount));
+      else {
+        v.debits.push(named(who, amount));
+        v.debitTotal += amount;
+      }
     }
     for (const e of vendorEntries ?? []) {
       const j = journalOf(e.note);
       if (!j) continue;
-      const v = voucherOf(j.code, e.entry_date ?? localDay(e.created_at), e.created_at, Number(e.amount), j.narration);
+      const v = voucherOf(j.code, e.entry_date ?? localDay(e.created_at), e.created_at, j.narration);
       v.entries.push({ table: 'vendor_ledger_entries', id: e.id });
       const who = contactName.get(e.vendor_id) ?? 'Vendor';
-      if (e.entry_type === 'credit') v.to = who;
-      else v.from = who;
+      const amount = Number(e.amount);
+      if (e.entry_type === 'credit') {
+        v.debits.push(named(who, amount));
+        v.debitTotal += amount;
+      } else v.credits.push(named(who, amount));
     }
     for (const [code, v] of vouchers) {
-      const exp = voucherExpense.get(code);
-      if (exp) {
+      for (const exp of voucherExpense.get(code) ?? []) {
         v.entries.push({ table: 'business_transactions', id: exp.id });
-        v.to = exp.head;
+        v.debits.push(named(exp.head, exp.amount));
+        v.debitTotal += exp.amount;
       }
       if (v.date < from || v.date > day) continue;
       rows.push({
@@ -1173,8 +1183,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         date: v.date,
         time: timeOf(v.createdAt),
         details: `Journal voucher ${code}`,
-        sub: [`${v.from ?? '…'} → ${v.to ?? '…'}`, v.narration || null].filter(Boolean).join(' · '),
-        amount: v.amount,
+        sub: [`Dr ${v.debits.join(', ') || '…'} · Cr ${v.credits.join(', ') || '…'}`, v.narration || null].filter(Boolean).join(' · '),
+        amount: v.debitTotal,
         sortKey: v.createdAt,
         journal: { entries: v.entries },
       });

@@ -1,18 +1,24 @@
 // lib/components/finance/JournalVoucherForm.tsx
 import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../supabase';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
-import { SuggestInput } from './SuggestInput';
 import { DateField } from '../DateTimeFields';
 import { Field, FieldRow, FormActions, INPUT } from './FormKit';
 import { PartyMoveField } from './EntryEditParts';
+import { SuggestInput } from './SuggestInput';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { localTodayIso } from '../../utils/localDate';
 import { journalNote, newJournalCode } from '../../utils/journalVoucher';
 
 type Person = { id: string; name: string };
+type Side = 'debit' | 'credit';
+type Line = { key: number; side: Side; kind: 'party' | 'expense'; person: Person | null; head: string; amount: string };
+
+let lineSeq = 0;
+const newLine = (side: Side): Line => ({ key: (lineSeq += 1), side, kind: 'party', person: null, head: '', amount: '' });
 
 /** Whether a person has any entry on one of the two ledgers. */
 async function hasEntries(table: 'customer_ledger_entries' | 'vendor_ledger_entries', column: 'customer_id' | 'vendor_id', id: string) {
@@ -21,141 +27,190 @@ async function hasEntries(table: 'customer_ledger_entries' | 'vendor_ledger_entr
   return (count ?? 0) > 0;
 }
 
-/** The Journal voucher form: an amount moved from one person's ledger to another's. No cash or bank
- * account is touched (see journalVoucher.ts for how the two halves are kept). Meant to sit in a
- * PopupCard. */
+const money = (n: number) => `NPR ${Math.round(n * 100) / 100 === Math.round(n) ? Math.round(n).toLocaleString() : (Math.round(n * 100) / 100).toLocaleString()}`;
+
+/** The Journal voucher form: any number of Debit lines and Credit lines that add up to the same total.
+ * A line is a person's ledger (either side) or an expense head (debit only, e.g. Salary Expenses
+ * debited, Roshan and Manish credited). No cash or bank account is touched - see journalVoucher.ts:
+ * every line carries the voucher's code in its remark, which is how the lines are found again. */
 export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDone: () => void }) {
   const queryClient = useQueryClient();
-  const [from, setFrom] = useState<Person | null>(null);
-  const [to, setTo] = useState<Person | null>(null);
-  const [amount, setAmount] = useState('');
+  const [lines, setLines] = useState<Line[]>(() => [newLine('debit'), newLine('credit')]);
   const [date, setDate] = useState(localTodayIso());
   const [narration, setNarration] = useState('');
   const [saving, setSaving] = useState(false);
-  // The debit side is either a person's ledger or an expense head (Salary, Rent ...): a voucher that
-  // charges an expense with no cash moving, owed to the person on the credit side.
-  const [debitKind, setDebitKind] = useState<'party' | 'expense'>('party');
-  const [head, setHead] = useState('');
-  const { data: categories, refetch: refetchCategories } = useSupabaseQuery('expense_categories', {
+  const { data: categories } = useSupabaseQuery('expense_categories', {
     filters: { owner_id: ownerId },
     orderBy: { column: 'name' },
   });
-  const headOptions = useMemo(() => {
-    const q = head.trim().toLowerCase();
+
+  const patch = (key: number, values: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...values } : l)));
+  const remove = (key: number) => setLines((ls) => (ls.length > 2 ? ls.filter((l) => l.key !== key) : ls));
+  const total = (side: Side) => lines.filter((l) => l.side === side).reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  const debit = total('debit');
+  const credit = total('credit');
+  const balanced = debit > 0 && Math.abs(debit - credit) < 0.005;
+
+  const headOptions = (text: string) => {
+    const q = text.trim().toLowerCase();
     return (categories ?? [])
       .filter((c) => !q || c.name.toLowerCase().includes(q))
       .slice(0, 12)
       .map((c) => ({ key: c.id, label: c.name }));
-  }, [categories, head]);
+  };
 
   async function handleSave() {
-    const value = Number(amount);
-    const toExpense = debitKind === 'expense';
-    if (!from || (!toExpense && !to)) {
-      showAlert(toExpense ? 'Pick the credit person' : 'Pick both people', toExpense ? 'Choose who the expense is owed to.' : 'A journal voucher moves an amount from one person to another.');
-      return;
-    }
-    if (toExpense && !head.trim()) {
-      showAlert('Pick an expense head', 'Choose or type the expense, for example Salary.');
-      return;
-    }
-    if (!toExpense && to && from.id === to.id) {
-      showAlert('Pick two different people', 'The two sides of a voucher cannot be the same person.');
-      return;
-    }
-    if (!amount.trim() || Number.isNaN(value) || value <= 0) {
-      showAlert('Enter an amount', 'Add a valid amount in NPR.');
-      return;
-    }
     if (!date) {
       showAlert('Pick a date', 'Choose the date of this voucher.');
       return;
     }
+    for (const [i, l] of lines.entries()) {
+      const where = `${l.side === 'debit' ? 'Debit' : 'Credit'} line ${i + 1}`;
+      if (l.kind === 'party' ? !l.person : !l.head.trim()) {
+        showAlert('Finish every line', `${where}: ${l.kind === 'party' ? 'pick the person' : 'choose the expense head'}.`);
+        return;
+      }
+      const v = Number(l.amount);
+      if (!l.amount.trim() || Number.isNaN(v) || v <= 0) {
+        showAlert('Enter an amount', `${where}: add a valid amount in NPR.`);
+        return;
+      }
+    }
+    if (!lines.some((l) => l.side === 'debit') || !lines.some((l) => l.side === 'credit')) {
+      showAlert('Add both sides', 'A voucher needs at least one Debit and one Credit line.');
+      return;
+    }
+    if (!balanced) {
+      showAlert('Debit and credit differ', `Debit ${money(debit)} and Credit ${money(credit)} must be equal - the difference is ${money(Math.abs(debit - credit))}.`);
+      return;
+    }
     setSaving(true);
+    const made: { table: string; id: string }[] = [];
     try {
       const note = journalNote(newJournalCode(), narration);
-      if (toExpense) {
-        const name = head.trim();
-        const existing = (categories ?? []).find((c) => c.name.toLowerCase() === name.toLowerCase());
-        let categoryId = existing?.id ?? null;
-        if (!categoryId) {
-          const created = await (supabase.from('expense_categories') as any).insert({ owner_id: ownerId, name }).select('id').single();
-          if (created.error) throw created.error;
-          categoryId = created.data.id as string;
-        }
-        const expense = await (supabase.from('business_transactions') as any)
-          .insert({
+      const common = { owner_id: ownerId, note, source: 'manual', entry_date: date, bank_account_id: null };
+      const created = new Map((categories ?? []).map((c) => [c.name.toLowerCase(), c.id]));
+
+      for (const l of lines) {
+        const amount = Number(l.amount);
+        let table: string;
+        let row: Record<string, unknown>;
+        if (l.kind === 'expense') {
+          const name = l.head.trim();
+          let categoryId = created.get(name.toLowerCase()) ?? null;
+          if (!categoryId) {
+            const c = await (supabase.from('expense_categories') as any).insert({ owner_id: ownerId, name }).select('id').single();
+            if (c.error) throw c.error;
+            categoryId = c.data.id as string;
+            created.set(name.toLowerCase(), categoryId);
+          }
+          table = 'business_transactions';
+          row = {
             owner_id: ownerId,
             type: 'expense',
-            amount: value,
-            party_name: from.name,
-            customer_id: from.id,
+            amount,
+            party_name: name,
             note,
             bill_date: date,
             expense_category_id: categoryId,
             payment_mode: 'credit',
             bank_account_id: null,
-          })
-          .select('id')
-          .single();
-        if (expense.error) throw expense.error;
-        const owed = await (supabase.from('customer_ledger_entries') as any).insert({
-          owner_id: ownerId,
-          amount: value,
-          note,
-          source: 'manual',
-          entry_date: date,
-          bank_account_id: null,
-          customer_id: from.id,
-          entry_type: 'credit',
-        });
-        if (owed.error) {
-          await (supabase.from('business_transactions') as any).delete().eq('id', expense.data.id);
-          throw owed.error;
+          };
+        } else {
+          const person = l.person as Person;
+          // A debited person who only has a vendor ledger is debited there (a payment on it); everyone else on
+          // their customer ledger.
+          let vendorOnly = false;
+          if (l.side === 'debit') {
+            const [v, c] = await Promise.all([
+              hasEntries('vendor_ledger_entries', 'vendor_id', person.id),
+              hasEntries('customer_ledger_entries', 'customer_id', person.id),
+            ]);
+            vendorOnly = v && !c;
+          }
+          if (vendorOnly) {
+            table = 'vendor_ledger_entries';
+            row = { ...common, amount, vendor_id: person.id, entry_type: 'credit' };
+          } else {
+            table = 'customer_ledger_entries';
+            row = { ...common, amount, customer_id: person.id, entry_type: l.side };
+          }
         }
-        await Promise.all(
-          ['customer_ledger_entries', 'business_transactions', 'expense_categories'].map((table) => queryClient.invalidateQueries({ queryKey: [table] }))
-        );
-        await refetchCategories();
-        onDone();
-        return;
-      }
-      const toParty = to as Person;
-      // Debited: on their vendor ledger when that is the only ledger they have, else on their customer ledger.
-      const [toVendor, toCustomer] = await Promise.all([
-        hasEntries('vendor_ledger_entries', 'vendor_id', toParty.id),
-        hasEntries('customer_ledger_entries', 'customer_id', toParty.id),
-      ]);
-      const onVendorLedger = toVendor && !toCustomer;
-      const common = { owner_id: ownerId, amount: value, note, source: 'manual', entry_date: date, bank_account_id: null };
-
-      const credited = await (supabase.from('customer_ledger_entries') as any).insert({
-        ...common,
-        customer_id: from.id,
-        entry_type: 'credit',
-      });
-      if (credited.error) throw credited.error;
-
-      const debited = await (supabase.from(onVendorLedger ? 'vendor_ledger_entries' : 'customer_ledger_entries') as any).insert(
-        onVendorLedger
-          ? { ...common, vendor_id: toParty.id, entry_type: 'credit' }
-          : { ...common, customer_id: toParty.id, entry_type: 'debit' }
-      );
-      if (debited.error) {
-        // Take the first half back, so a voucher is never half of one.
-        await (supabase.from('customer_ledger_entries') as any).delete().eq('owner_id', ownerId).eq('note', note);
-        throw debited.error;
+        const res = await (supabase.from(table) as any).insert(row).select('id').single();
+        if (res.error) throw res.error;
+        made.push({ table, id: res.data.id as string });
       }
       await Promise.all(
-        ['customer_ledger_entries', 'vendor_ledger_entries'].map((table) => queryClient.invalidateQueries({ queryKey: [table] }))
+        ['customer_ledger_entries', 'vendor_ledger_entries', 'business_transactions', 'expense_categories'].map((t) =>
+          queryClient.invalidateQueries({ queryKey: [t] })
+        )
       );
       onDone();
     } catch (err) {
+      // Take back what was already posted, so a voucher is never part of one.
+      for (const m of made) await (supabase.from(m.table) as any).delete().eq('id', m.id);
       showAlert('Could not save the voucher', getErrorMessage(err));
     } finally {
       setSaving(false);
     }
   }
+
+  const sideLines = (side: Side) => lines.filter((l) => l.side === side);
+
+  const renderLine = (l: Line, n: number) => (
+    <View key={l.key} className="rounded-xl border border-gray-200 bg-white p-3" style={{ gap: 8 }}>
+      <View className="flex-row items-center" style={{ gap: 8 }}>
+        <Text className="text-[12px] font-bold text-gray-500">{l.side === 'debit' ? 'Debit' : 'Credit'} {n}</Text>
+        {l.side === 'debit' && (
+          <View className="flex-row rounded-lg bg-gray-100 p-0.5">
+            {([['party', 'Person'], ['expense', 'Expense head']] as const).map(([k, label]) => (
+              <Pressable key={k} onPress={() => patch(l.key, { kind: k })} className="rounded-md px-2.5 py-1" style={{ backgroundColor: l.kind === k ? '#FFFFFF' : 'transparent' }}>
+                <Text className="text-[12px] font-semibold" style={{ color: l.kind === k ? '#1D4ED8' : '#6B7280' }}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        <View style={{ flex: 1 }} />
+        {lines.length > 2 && (
+          <Pressable onPress={() => remove(l.key)} hitSlop={8} accessibilityLabel="Remove this line">
+            <Ionicons name="trash-outline" size={17} color="#DC2626" />
+          </Pressable>
+        )}
+      </View>
+      {l.kind === 'expense' ? (
+        <View style={{ zIndex: 5 }}>
+          <SuggestInput
+            value={l.head}
+            onChangeText={(v) => patch(l.key, { head: v })}
+            options={headOptions(l.head)}
+            onSelectOption={(o) => patch(l.key, { head: o.label })}
+            placeholder="Expense head, e.g. Salary Expenses"
+            accent="#DC2626"
+            inputClassName={INPUT}
+            showWhenEmpty
+          />
+        </View>
+      ) : (
+        <PartyMoveField
+          label={l.side === 'debit' ? 'Person (Debit)' : 'Person (Credit)'}
+          ownerId={ownerId}
+          partyId={l.person?.id ?? ''}
+          pickedName={l.person?.name}
+          onPick={(p) => patch(l.key, { person: p })}
+          hint={l.side === 'debit' ? 'Owes you more - or you owe them less.' : 'Owes you less - or you owe them more.'}
+          pickerTitle={l.side === 'debit' ? 'Debit which person?' : 'Credit which person?'}
+        />
+      )}
+      <TextInput
+        value={l.amount}
+        onChangeText={(v) => patch(l.key, { amount: v })}
+        placeholder="Amount (NPR)"
+        placeholderTextColor="#9CA3AF"
+        keyboardType="numeric"
+        className={INPUT}
+      />
+    </View>
+  );
 
   return (
     <>
@@ -163,64 +218,38 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
         <Field label="Date" basis={220}>
           <DateField value={date} onChange={setDate} />
         </Field>
-        <Field label="Amount (NPR)" basis={160}>
-          <TextInput
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="e.g. 1000"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            className={INPUT}
-          />
-        </Field>
       </FieldRow>
       <Text className="text-[12px] text-gray-500">
-        Moves an amount from one person's ledger to another's. No cash or bank account is touched.
+        Add as many Debit and Credit lines as you need - they must add up to the same total. No cash or bank account is touched.
       </Text>
-      <View className="gap-2">
-        <Text className="text-[12px] font-semibold text-gray-600">Debit</Text>
-        <View className="flex-row self-start rounded-lg bg-gray-100 p-0.5">
-          {([['party', 'Person'], ['expense', 'Expense head']] as const).map(([k, label]) => (
-            <Pressable key={k} onPress={() => setDebitKind(k)} className="rounded-md px-3 py-1.5" style={{ backgroundColor: debitKind === k ? '#FFFFFF' : 'transparent' }}>
-              <Text className="text-[12.5px] font-semibold" style={{ color: debitKind === k ? '#1D4ED8' : '#6B7280' }}>{label}</Text>
+
+      {(['debit', 'credit'] as const).map((side) => (
+        <View key={side} style={{ gap: 8 }}>
+          <View className="flex-row items-center" style={{ gap: 8 }}>
+            <Text className="text-[13px] font-extrabold" style={{ color: side === 'debit' ? '#B91C1C' : '#047857' }}>
+              {side === 'debit' ? 'DEBIT' : 'CREDIT'}
+            </Text>
+            <Text className="flex-1 text-[12px] text-gray-500">{money(total(side))}</Text>
+            <Pressable
+              onPress={() => setLines((ls) => [...ls, newLine(side)])}
+              className="flex-row items-center rounded-lg border border-gray-300 px-2.5 py-1.5"
+              style={{ gap: 4 }}
+            >
+              <Ionicons name="add" size={15} color="#1D4ED8" />
+              <Text className="text-[12.5px] font-semibold text-blue-700">Add {side}</Text>
             </Pressable>
-          ))}
-        </View>
-        {debitKind === 'expense' ? (
-          <View style={{ zIndex: 5 }}>
-            <SuggestInput
-              value={head}
-              onChangeText={setHead}
-              options={headOptions}
-              onSelectOption={(o) => setHead(o.label)}
-              placeholder="Expense head, e.g. Salary Expenses"
-              accent="#DC2626"
-              inputClassName={INPUT}
-              showWhenEmpty
-            />
-            <Text className="mt-1 text-[12px] text-gray-500">Charged as an expense, owed to the credit person below. No cash or bank account is touched.</Text>
           </View>
-        ) : (
-          <PartyMoveField
-            label="Person (Debit)"
-            ownerId={ownerId}
-            partyId={to?.id ?? ''}
-            pickedName={to?.name}
-            onPick={setTo}
-            hint="Owes you more - or you owe them less - by this amount."
-            pickerTitle="Debit which person?"
-          />
-        )}
+          {sideLines(side).map((l, i) => renderLine(l, i + 1))}
+        </View>
+      ))}
+
+      <View className="flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 12, backgroundColor: balanced ? '#ECFDF5' : '#FEF2F2' }}>
+        <Text className="flex-1 text-[13px] font-semibold text-gray-800">Debit {money(debit)}  ·  Credit {money(credit)}</Text>
+        <Text className="text-[13px] font-bold" style={{ color: balanced ? '#047857' : '#B91C1C' }}>
+          {balanced ? 'Balanced' : `Difference ${money(Math.abs(debit - credit))}`}
+        </Text>
       </View>
-      <PartyMoveField
-        label="Credit"
-        ownerId={ownerId}
-        partyId={from?.id ?? ''}
-        pickedName={from?.name}
-        onPick={setFrom}
-        hint="Owes you less - or you owe them more - by this amount."
-        pickerTitle="Credit which person?"
-      />
+
       <FieldRow>
         <Field label="Remarks" basis={260}>
           <TextInput
