@@ -28,6 +28,7 @@ import { TransferForm } from './BankBalancesScreen';
 import { PopupCard } from './FormKit';
 import { journalOf } from '../../utils/journalVoucher';
 import { supabase } from '../../supabase';
+import { tidyName } from '../../utils/nameCaps';
 import type { BusinessTransaction } from '../../../types/database.types';
 
 type Kind = 'opening' | 'received' | 'paid' | 'expense' | 'sale' | 'purchase' | 'transfer' | 'journal';
@@ -989,8 +990,8 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
         date,
         time: timeOf(t.created_at),
         details: isExpense
-          ? t.party_name || category || 'Expenses'
-          : t.party_name || (t.type === 'sale' ? 'Sale' : 'Purchase'),
+          ? tidyName(t.party_name) || category || 'Expenses'
+          : tidyName(t.party_name) || (t.type === 'sale' ? 'Sale' : 'Purchase'),
         sub:
           [
             t.bill_no ? `Bill #${t.bill_no}` : null,
@@ -1356,7 +1357,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   };
   const removeBill = (tx: BusinessTransaction) => {
     setViewingTx(null);
-    showAlert(`Delete this ${tx.type}?`, `${tx.party_name || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}`, [
+    showAlert(`Delete this ${tx.type}?`, `${tidyName(tx.party_name) || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',

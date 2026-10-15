@@ -12,6 +12,7 @@ import { SuggestInput } from './SuggestInput';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { localTodayIso } from '../../utils/localDate';
 import { journalNote, newJournalCode } from '../../utils/journalVoucher';
+import { tidyName } from '../../utils/nameCaps';
 
 type Person = { id: string; name: string };
 type Side = 'debit' | 'credit';
@@ -202,7 +203,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
             owner_id: ownerId,
             type: 'expense',
             amount,
-            party_name: name,
+            party_name: tidyName(name),
             note,
             bill_date: date,
             expense_category_id: categoryId,

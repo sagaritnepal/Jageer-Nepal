@@ -14,6 +14,7 @@ import { localTodayIso } from '../../utils/localDate';
 import type { PrintReport } from '../../utils/printReport';
 import { useReportActions } from './PrintButton';
 import type { FeedItem } from './TransactionsScreen';
+import { tidyName } from '../../utils/nameCaps';
 import type { AccountTransfer, BusinessTransaction, BusinessTransactionType } from '../../../types/database.types';
 
 type FilterKey = 'all' | BusinessTransactionType;
@@ -194,7 +195,9 @@ export function TransactionsBook({
           group,
           date: ymdOf(item.date),
           time: timeOf(t.created_at),
-          details: isExpense ? t.party_name || category || 'Expenses' : t.party_name || (t.type === 'sale' ? 'Sale' : 'Purchase'),
+          details: isExpense
+            ? tidyName(t.party_name) || category || 'Expenses'
+            : tidyName(t.party_name) || (t.type === 'sale' ? 'Sale' : 'Purchase'),
           sub:
             [
               t.bill_no ? `Bill #${t.bill_no}` : null,

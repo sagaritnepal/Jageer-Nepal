@@ -9,6 +9,7 @@ import { toBsHistoryLabel } from '../../../utils/nepaliDate';
 import { useCalendarMode } from '../../../hooks/useCalendarMode';
 import { LineChart } from './LineChart';
 import { MONEY } from '../moneyColors';
+import { tidyName } from '../../../utils/nameCaps';
 import { PERIODS, buildRange, npr, seriesByBucket, sumType, txTime, type PeriodKey } from './dashboardData';
 
 const SALES = MONEY.in.base;
@@ -176,7 +177,7 @@ export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?
                 </View>
                 <View className="flex-1" style={{ minWidth: 0 }}>
                   <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
-                    {t.party_name || meta.label}
+                    {tidyName(t.party_name) || meta.label}
                   </Text>
                   <Text className="text-[11px] text-gray-400" numberOfLines={1}>
                     {toBsHistoryLabel(t.bill_date ?? t.created_at)}

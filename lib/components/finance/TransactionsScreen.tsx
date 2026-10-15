@@ -32,6 +32,7 @@ import { ExpenseEntryTable, type ExpenseEntryRow as ExpenseRow, type ExpenseEntr
 import { KeyInput } from './KeyInput';
 import { useConfirmSave } from './ConfirmSave';
 import { TransactionsBook } from './TransactionsBook';
+import { tidyName } from '../../utils/nameCaps';
 import { BookTable, type BookColumn } from './BookKit';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
@@ -515,7 +516,7 @@ function RecentEntriesCard({
       render: (tx) => (
         <View style={{ minWidth: 0 }}>
           <Text numberOfLines={1} className="text-xs font-semibold text-gray-800">
-            {tx.party_name || 'Unnamed'}
+            {tidyName(tx.party_name) || 'Unnamed'}
           </Text>
           <Text className="text-[10px] text-gray-400">
             {toBsHistoryLabel(tx.bill_date ?? tx.created_at)}
@@ -1048,7 +1049,7 @@ function TransactionForm({
         const values = {
           type,
           amount: grandTotal,
-          party_name: partyName.trim() || null,
+          party_name: tidyName(partyName.trim()) || null,
           customer_id: resolvedCustomerId,
           note: note.trim() || null,
           bill_no: billNo.trim() || null,
@@ -1141,7 +1142,7 @@ function TransactionForm({
       const values = {
         type,
         amount: value,
-        party_name: partyName.trim() || null,
+        party_name: tidyName(partyName.trim()) || null,
         customer_id: customerId,
         note: note.trim() || null,
         bill_date: expenseDate || null,
@@ -1385,7 +1386,7 @@ function TransactionForm({
           values: {
             type,
             amount: value,
-            party_name: row.partyName.trim() || null,
+            party_name: tidyName(row.partyName.trim()) || null,
             customer_id: row.customerId,
             note: row.note.trim() || null,
             bill_date: expenseDate || null,
@@ -1428,7 +1429,7 @@ function TransactionForm({
           owner_id: userId,
           type: 'expense',
           amount: Number(row.amount),
-          party_name: row.partyName.trim() || null,
+          party_name: tidyName(row.partyName.trim()) || null,
           customer_id: row.customerId,
           note: row.note.trim() || null,
           bill_date: expenseDate || null,
@@ -2368,7 +2369,7 @@ function TransactionRow({
       <View className="flex-1">
         <Text className="text-sm font-semibold text-gray-900">
           {meta.label}
-          {tx.party_name ? ` · ${tx.party_name}` : ''}
+          {tx.party_name ? ` · ${tidyName(tx.party_name)}` : ''}
           {tx.bill_no ? ` · Bill #${tx.bill_no}` : ''}
           {categoryName ? ` · ${categoryName}` : ''}
         </Text>
@@ -2716,7 +2717,7 @@ function BillViewPopup({
       </View>
       <FieldRow>
         <Field label="Person" basis={300}>
-          <ReadBox icon="person-outline">{tx.party_name || '—'}</ReadBox>
+          <ReadBox icon="person-outline">{tidyName(tx.party_name) || '—'}</ReadBox>
         </Field>
       </FieldRow>
       <FieldRow>
@@ -2833,7 +2834,7 @@ export function TransactionDetailModal({
 
               {!!tx.party_name && (
                 <BillLine label="Paid to">
-                  <Text className="text-sm font-bold text-gray-900">{tx.party_name}</Text>
+                  <Text className="text-sm font-bold text-gray-900">{tidyName(tx.party_name)}</Text>
                 </BillLine>
               )}
               {!!tx.party_address && (
@@ -3411,7 +3412,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
     const label = TYPE_META[tx.type].label.toLowerCase();
     showAlert(
       `Delete this ${label}?`,
-      `${tx.party_name || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}${tx.customer_id ? '. It is also taken off their ledger.' : ''}`,
+      `${tidyName(tx.party_name) || 'Unnamed'} · NPR ${tx.amount.toLocaleString()}${tx.customer_id ? '. It is also taken off their ledger.' : ''}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {

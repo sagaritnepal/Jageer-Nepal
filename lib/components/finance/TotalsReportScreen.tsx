@@ -22,6 +22,7 @@ import { PopupCard } from './FormKit';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarButton, ToolbarSearch, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { BalanceFigure, EditableDetails } from './CustomerDetailScreen';
 import { TransactionDetailModal } from './TransactionsScreen';
+import { tidyName } from '../../utils/nameCaps';
 import type { BusinessTransaction } from '../../../types/database.types';
 
 /** Total Received / Total Paid are money that actually moved; Sales / Purchase / Expense are the bills themselves, paid or not. */
@@ -336,7 +337,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             id: t.id,
             date: t.bill_date ?? t.created_at,
             amount: t.amount,
-            party: t.party_name ?? '',
+            party: tidyName(t.party_name),
             note:
               kind === 'expense'
                 ? t.note ?? ''
@@ -350,8 +351,8 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
             category:
               kind === 'expense'
                 ? category ?? 'Uncategorized'
-                : (t.customer_id ? nameById.get(t.customer_id) : undefined) || t.party_name?.trim() || 'No party',
-            subject: kind === 'expense' ? t.party_name?.trim() || category || 'Uncategorized' : undefined,
+                : tidyName((t.customer_id ? nameById.get(t.customer_id) : undefined) || t.party_name?.trim()) || 'No party',
+            subject: kind === 'expense' ? tidyName(t.party_name?.trim()) || category || 'Uncategorized' : undefined,
             billNo: t.bill_no?.trim() || '',
             ledgerType: (t.customer_id ? ledgerTypeById.get(t.customer_id) : undefined) ?? '',
           };
@@ -473,7 +474,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           id: t.id,
           date: t.bill_date ?? t.created_at,
           amount: t.amount,
-          party: t.party_name ?? '',
+          party: tidyName(t.party_name),
           note: t.note ?? '',
           type: t.type === 'sale' ? PILL.sale : PILL.purchase,
           nav: { kind: 'transactions', type: t.type === 'sale' ? 'sale' : 'purchase' },
@@ -486,7 +487,7 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           id: t.id,
           date: t.bill_date ?? t.created_at,
           amount: t.amount,
-          party: t.party_name || category || '',
+          party: tidyName(t.party_name) || category || '',
           note: [t.party_name ? category : null, t.note].filter(Boolean).join(' · '),
           type: PILL.expense,
           nav: { kind: 'transactions', type: 'expense' },
