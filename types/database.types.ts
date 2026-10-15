@@ -34,6 +34,8 @@ export interface Profile {
   business_address: string | null;
   business_phone: string | null;
   business_logo_path: string | null;
+  /** Label and details of the Cash account (0101): { name, bank_name, account_number, account_holder_name, address }. */
+  cash_account?: Record<string, string | null> | null;
   created_at: string;
   updated_at: string;
 }
