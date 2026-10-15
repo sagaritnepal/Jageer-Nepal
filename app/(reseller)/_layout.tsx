@@ -20,6 +20,8 @@ import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/co
 // them never means going back to that dashboard to pick another tile.
 // Already reachable from the Day Book's "What are you recording?" menu.
 const DAYBOOK_ENTRY_KEYS = new Set(['payment-in', 'payment-out', 'sales', 'purchase', 'expenses']);
+// Finance shortcuts that sit at the top level of the side panel instead of under Finance.
+const STANDALONE_KEYS = new Set(['inventory']);
 
 // The order Finance's pages run down the side panel (the Finance page's own tiles keep theirs).
 // Anything not named here goes after them, in the order it comes.
@@ -27,7 +29,6 @@ const FINANCE_NAV_ORDER = [
   'daybook',
   'customers',
   'transactions',
-  'inventory',
   'report',
   'quotation',
   'bank-accounts',
@@ -55,12 +56,14 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/dashboard', label: 'Services', icon: 'construct' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
+  // Stock and Inventory is a page of its own in the side panel, not a child of Finance.
+  { href: '/(reseller)/inventory', label: 'Stock and Inventory', icon: 'cube' },
   {
     href: '/(reseller)/finance',
     label: 'Finance',
     icon: 'wallet',
     children: financeShortcuts('/(reseller)')
-      .filter((s) => !DAYBOOK_ENTRY_KEYS.has(s.key))
+      .filter((s) => !DAYBOOK_ENTRY_KEYS.has(s.key) && !STANDALONE_KEYS.has(s.key))
       .sort((a, b) => financeNavRank(a.key) - financeNavRank(b.key))
       .map((s) => (s.key === 'report' ? { href: s.href, label: s.label, icon: s.icon, children: REPORT_FAMILY } : { href: s.href, label: s.label, icon: s.icon })),
   },
