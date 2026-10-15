@@ -252,6 +252,7 @@ export function BookTable<T>({
   footer,
   stickyHeader,
   bare,
+  hideHeader,
 }: {
   columns: BookColumn<T>[];
   rows: T[];
@@ -269,6 +270,8 @@ export function BookTable<T>({
   stickyHeader?: boolean;
   /** No border or rounded corners of its own - for a table that sits inside a card that has them. */
   bare?: boolean;
+  /** No column-title row - for a table whose titles are shown by the header above it. */
+  hideHeader?: boolean;
 }) {
   const sticky = stickyHeader && Platform.OS === 'web';
   const cellStyle = (c: BookColumn<T>) => (c.width ? { width: c.width } : { flex: 1, minWidth: 0 });
@@ -277,7 +280,7 @@ export function BookTable<T>({
 
   return (
     <View className={`bg-white ${bare ? '' : 'rounded-xl border border-gray-300'} ${sticky ? '' : 'overflow-hidden'}`}>
-      <View
+      {!hideHeader && <View
         className={`flex-row border-b border-gray-300 bg-gray-50 ${sticky ? 'rounded-t-xl' : ''}`}
         style={sticky ? ({ position: 'sticky', top: 0, zIndex: 10 } as any) : undefined}
       >
@@ -290,7 +293,7 @@ export function BookTable<T>({
             {c.label}
           </Text>
         ))}
-      </View>
+      </View>}
 
       {rows.map((row, index) => {
         const group = groupOf?.(row);

@@ -659,6 +659,21 @@ function BulkBar({
 }
 
 /** The Ledger page: every word on it - table, cards, popups, top-bar controls - is in capitals. */
+/** The part of a name that matches the search, in the brand blue on a pale background. */
+function highlight(text: string, query: string) {
+  const q = query.trim();
+  if (!q) return text;
+  const at = text.toLowerCase().indexOf(q.toLowerCase());
+  if (at < 0) return text;
+  return (
+    <>
+      {text.slice(0, at)}
+      <Text style={{ color: '#1D4ED8', backgroundColor: '#DBEAFE' }}>{text.slice(at, at + q.length)}</Text>
+      {text.slice(at + q.length)}
+    </>
+  );
+}
+
 export function CustomersListScreen(props: { basePath: string }) {
   // Keyed on the visit: once the Ledger has been left for another page, the list comes back with
   // nothing open, nothing typed in the search and the figures read again.
@@ -1001,7 +1016,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     return byStatus
       .filter(
         (d) =>
-          d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q) || typeOf(d).toLowerCase().includes(q)
+          d.row.name.toLowerCase().includes(q) || (d.row.phone ?? '').includes(q)
       )
       .sort((a, b) => rank(a) - rank(b));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1317,6 +1332,55 @@ function LedgerList({ basePath }: { basePath: string }) {
     </View>
   );
 
+  // One flat list, A to Z by name. A search narrows it to every ledger with the typed letters in it.
+  const [letter, setLetter] = useState<string | null>(null);
+  const firstLetter = (name: string) => (name.trim()[0] ?? '#').toUpperCase();
+  const lettersPresent = useMemo(() => new Set(filtered.map((d) => firstLetter(d.row.name))), [filtered]);
+  const sortedRows = useMemo(
+    () =>
+      [...filtered]
+        .filter((d) => !letter || firstLetter(d.row.name) === letter)
+        .sort((a, b) => a.row.name.localeCompare(b.row.name, undefined, { sensitivity: 'base' })),
+    [filtered, letter]
+  );
+  // A to Z in the brand blue: tap a letter to see the ledgers starting with it; letters with none are dim.
+  const letterBar = (
+    <View className="flex-row flex-wrap items-center rounded-xl bg-white px-2 py-2" style={{ gap: 4, borderWidth: 1, borderColor: '#E5E7EB' }}>
+      <Pressable
+        onPress={() => setLetter(null)}
+        className="items-center justify-center rounded-lg px-2.5"
+        style={{ height: 30, backgroundColor: letter == null ? '#1E3A8A' : '#EFF6FF' }}
+      >
+        <Text className="text-[12px] font-bold" style={{ color: letter == null ? '#FFFFFF' : '#1E3A8A' }}>All</Text>
+      </Pressable>
+      {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => {
+        const has = lettersPresent.has(l);
+        const on = letter === l;
+        return (
+          <Pressable
+            key={l}
+            disabled={!has}
+            onPress={() => setLetter(on ? null : l)}
+            className="items-center justify-center rounded-lg"
+            style={{ width: 30, height: 30, backgroundColor: on ? '#2563EB' : has ? '#EFF6FF' : 'transparent' }}
+          >
+            <Text className="text-[12.5px] font-bold" style={{ color: on ? '#FFFFFF' : has ? '#1E3A8A' : '#CBD5E1' }}>{l}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+  const flatFooter = (
+    <View className="flex-row items-center justify-end px-1 pt-3" style={{ gap: 10 }}>
+      <Text className="text-[12.5px] font-bold text-gray-600">
+        {`${filtered.length} ${filtered.length === 1 ? 'party' : 'parties'} · Total`}
+      </Text>
+      <View style={{ width: 120, alignItems: 'flex-end' }}>
+        <PartyBalance position={footerPosition} compact />
+      </View>
+    </View>
+  );
+
   // The headers, each a card: its Ledger type, how many parties and what they add up to. Tap one to
   // open the parties inside it (`body`); a search or a status filter opens the ones with a match.
   const groupsView = (body: (g: LedgerGroup) => ReactNode) => (
@@ -1344,27 +1408,37 @@ function LedgerList({ basePath }: { basePath: string }) {
               <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
                 {g.label}
               </Text>
-              <Text className="text-[12px] text-gray-400" style={{ minWidth: 86, textAlign: 'right' }}>
+              <Text className="text-[12px] text-gray-400">
                 {`${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`}
               </Text>
               {tableMode && (
                 <>
-                  <View style={{ width: 170, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6 }}>
-                    <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Receive</Text>
+                  {/* The column titles sit in this line, over the same columns the parties below use. */}
+                  <View style={{ width: 140 }}>
+                    <Text className="text-[10.5px] font-bold uppercase text-gray-500">Ledger type</Text>
+                  </View>
+                  <View style={{ width: 125 }}>
+                    <Text className="text-[10.5px] font-bold uppercase text-gray-500">Last transaction</Text>
+                  </View>
+                  <View style={{ width: 120 }}>
+                    <Text className="text-[10.5px] font-bold uppercase text-gray-500">Ref No.</Text>
+                  </View>
+                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                    <Text className="text-[10.5px] font-bold uppercase text-gray-500">Receivable</Text>
                     <Text className="text-[12.5px] font-bold" style={{ color: g.receivable > 0 ? LEDGER_TONE.receivable.text : '#D1D5DB' }}>
                       {g.receivable > 0 ? bookMoney(g.receivable) : '—'}
                     </Text>
                   </View>
-                  <View style={{ width: 150, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6 }}>
-                    <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Pay</Text>
+                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                    <Text className="text-[10.5px] font-bold uppercase text-gray-500">Payable</Text>
                     <Text className="text-[12.5px] font-bold" style={{ color: g.payable > 0 ? LEDGER_TONE.payable.text : '#D1D5DB' }}>
                       {g.payable > 0 ? bookMoney(g.payable) : '—'}
                     </Text>
                   </View>
                 </>
               )}
-              <View style={{ width: 170, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
-                <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Balance</Text>
+              <View style={{ width: tableMode ? 120 : 150, alignItems: 'flex-end' }}>
+                {tableMode && <Text className="text-[10.5px] font-bold uppercase text-gray-500">Balance</Text>}
                 <PartyBalance position={partyPosition({ receivable: g.net, payable: 0 })} compact />
               </View>
             </Pressable>
@@ -1392,7 +1466,9 @@ function LedgerList({ basePath }: { basePath: string }) {
         <View style={{ minWidth: 0 }}>
           {/* Wraps, so on a narrow screen the APP badge drops below the name instead of cutting it short. */}
           <View className="flex-row flex-wrap items-center" style={{ columnGap: 6, rowGap: 2 }}>
-            <Text className="text-[13px] font-semibold text-gray-900">{nameCaps(d.row.name)}</Text>
+            <Text className="text-[13px] font-semibold text-gray-900">
+              {highlight(nameCaps(d.row.name), search)}
+            </Text>
             {(d.row.kind === 'app' || (d.row.kind === 'customer' && d.row.isApp)) && <Pill text="APP" color="#1D4ED8" bg="#EFF6FF" />}
           </View>
           {!!typeAndContact && (
@@ -1426,6 +1502,17 @@ function LedgerList({ basePath }: { basePath: string }) {
         render: (_d, index) => <Text className="text-[12.5px] text-gray-500">{index + 1}</Text>,
       },
       { key: 'party', label: 'Party', render: partyCell },
+      {
+        // Which ledger type the party is filed under, between the name and its last transaction.
+        key: 'ledgerType',
+        label: 'Ledger type',
+        width: 140,
+        render: (d) => (
+          <Text className="text-[12.5px] font-semibold text-gray-700" numberOfLines={1}>
+            {d.typeName ?? (d.row.kind === 'customer' ? '—' : 'Customer')}
+          </Text>
+        ),
+      },
       { key: 'last', label: 'Last transaction', width: 125, render: lastCell },
       {
         // The number on that last transaction, with what it is the number of underneath.
@@ -1489,9 +1576,11 @@ function LedgerList({ basePath }: { basePath: string }) {
         {filtered.length === 0 && (narrowed || merged.length === 0) ? (
           emptyState
         ) : (
-          groupsView((g) => (
-            <BookTable bare columns={columns} rows={g.rows} rowKey={(d) => `${d.row.kind}-${d.row.id}`} onRowPress={open} />
-          ))
+          <View style={{ gap: 10 }}>
+            {letterBar}
+            <BookTable columns={columns} rows={sortedRows} rowKey={(d) => `${d.row.kind}-${d.row.id}`} onRowPress={open} stickyHeader />
+            {flatFooter}
+          </View>
         )}
 
         {typeMenu}
@@ -1534,21 +1623,21 @@ function LedgerList({ basePath }: { basePath: string }) {
         {filtered.length === 0 && (narrowed || merged.length === 0) ? (
           emptyState
         ) : (
-          groupsView((g) => (
-            <View className="p-2.5 pb-0">
-              {g.rows.map((d) => (
-                <PartyCard
-                  key={`${d.row.kind}-${d.row.id}`}
-                  data={d}
-                  onOpen={() => setViewing(d)}
-                  today={today}
-                  selecting={selecting}
-                  selected={selected.has(d.row.id)}
-                  onToggle={() => toggle(d.row.id)}
-                />
-              ))}
-            </View>
-          ))
+          <View style={{ gap: 0 }}>
+            <View className="mb-2">{letterBar}</View>
+            {sortedRows.map((d) => (
+              <PartyCard
+                key={`${d.row.kind}-${d.row.id}`}
+                data={d}
+                onOpen={() => setViewing(d)}
+                today={today}
+                selecting={selecting}
+                selected={selected.has(d.row.id)}
+                onToggle={() => toggle(d.row.id)}
+              />
+            ))}
+            {flatFooter}
+          </View>
         )}
 
         {typeMenu}
