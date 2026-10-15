@@ -196,6 +196,9 @@ type JobRowData = {
   onEdit?: () => void;
   onDelete?: () => void;
   deleting?: boolean;
+  /** Delete a finished job for good (completed or cancelled, with no payment or bill on it). */
+  onRemove?: () => void;
+  removing?: boolean;
 };
 
 // The web table's columns, sizes and header row are shared with My Jobs - see JobTable.tsx.
@@ -244,10 +247,22 @@ function TagPill({ tag }: { tag: Tag }) {
 }
 
 function ManageButtons({ data, small }: { data: JobRowData; small?: boolean }) {
-  if (!data.onEdit && !data.onDelete) return null;
+  if (!data.onEdit && !data.onDelete && !data.onRemove) return null;
   const box = small ? 'h-7 w-7' : 'h-8 w-8';
   return (
     <View className="flex-row" style={{ gap: small ? 0 : 4 }}>
+      {data.onRemove && (
+        <Pressable
+          onPress={data.onRemove}
+          disabled={data.removing}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Delete job"
+          className={`${box} items-center justify-center rounded-lg disabled:opacity-40`}
+        >
+          <Ionicons name="trash-outline" size={small ? 17 : 18} color="#DC2626" />
+        </Pressable>
+      )}
       {data.onEdit && (
         <Pressable onPress={data.onEdit} hitSlop={6} className={`${box} items-center justify-center rounded-lg`}>
           <Ionicons name="create-outline" size={small ? 16 : 17} color="#6B7280" />
@@ -570,6 +585,43 @@ function RequestJobRow({
   const { confirmCancelWork, busyId } = useCancelWork();
   const deleting = busyId === item.id;
 
+  // Delete a finished job for good: a completed or cancelled one with no payment and no bill on it
+  // (the server refuses otherwise, with its reason - see delete_finished_job, migration 0098).
+  const queryClient = useQueryClient();
+  const [removing, setRemoving] = useState(false);
+  const canRemove =
+    !isIncoming &&
+    (item.status === 'resolved' || item.status === 'cancelled') &&
+    item.payment_status === 'unpaid' &&
+    !(Number(item.amount_paid) > 0);
+  function confirmRemove() {
+    showAlert(
+      'Delete this job?',
+      `${ticketLabel(item.ticket_no) ?? ''} ${item.issue_type} is removed for good, with its job card and chalan. This cannot be undone.`.trim(),
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Delete job',
+          style: 'destructive',
+          onPress: async () => {
+            setRemoving(true);
+            try {
+              const { error } = await (supabase as any).rpc('delete_finished_job', { p_request_id: item.id });
+              if (error) throw error;
+              for (const key of ['service_requests', 'customer_ledger_entries', 'job_cards', 'reward_point_events', 'profiles']) {
+                queryClient.invalidateQueries({ queryKey: [key] });
+              }
+            } catch (err) {
+              showAlert('Could not delete the job', getErrorMessage(err));
+            } finally {
+              setRemoving(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   const customerName = item.customer_name ?? customerProfile?.full_name ?? 'Customer';
   // An unclaimed request keeps the customer's number hidden until accepted.
   const customerPhone = isIncoming ? null : (item.customer_phone ?? customerProfile?.phone ?? null);
@@ -684,6 +736,8 @@ function RequestJobRow({
         onEdit: canEdit ? () => router.push(`/(reseller)/edit-request?id=${item.id}`) : undefined,
         onDelete: canCancel ? () => confirmCancelWork(item) : undefined,
         deleting,
+        onRemove: canRemove ? confirmRemove : undefined,
+        removing,
       }}
     />
   );
