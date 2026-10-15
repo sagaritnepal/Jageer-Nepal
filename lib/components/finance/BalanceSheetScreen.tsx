@@ -26,10 +26,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const INK = '#0F172A';
 const MUTED = '#64748B';
 const LINE = '#E2E8F0';
-const RED = '#B91C1C';
-const GREEN = '#047857';
-const AMBER = '#B45309';
-const TABULAR = { fontVariant: ['tabular-nums'], fontFamily: Platform.OS === 'web' ? '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace' : undefined } as const;
+const BRAND_DARK = '#1E3A8A';
+const BRAND = '#2563EB';
+const BRAND_TINT = '#EFF6FF';
+const RED = BRAND_DARK;
+const GREEN = BRAND_DARK;
+const AMBER = BRAND_DARK;
+const TABULAR = { fontVariant: ['tabular-nums'] } as const;
 
 // ---------- numbers ----------
 /** 2316130 -> "23,16,130" (the South Asian grouping); a minus sign for a negative. */
@@ -148,29 +151,6 @@ function Select<T extends string>({ label, value, options, onChange }: { label: 
   );
 }
 
-function Delta({ now, before, goodWhenUp = true }: { now: number; before: number | null; goodWhenUp?: boolean }) {
-  if (before == null) return null;
-  const p = pct(now, before);
-  if (p == null) return <Text className="text-[12px] text-gray-500">No earlier figure</Text>;
-  const up = p >= 0;
-  const good = up === goodWhenUp;
-  return (
-    <Text className="text-[12px] font-semibold" style={{ color: Math.abs(p) < 0.05 ? MUTED : good ? GREEN : RED }}>
-      {up ? '▲' : '▼'} {Math.abs(p) > 999 ? '999%+' : `${Math.abs(p).toFixed(1)}%`}
-    </Text>
-  );
-}
-
-function Kpi({ label, value, valueColor, children }: { label: string; value: string; valueColor?: string; children?: React.ReactNode }) {
-  return (
-    <View className="rounded-2xl bg-white p-4" style={{ flexGrow: 1, flexBasis: 200, minWidth: 180, boxShadow: '0 1px 2px rgba(16,24,40,0.05)' }}>
-      <Text className="text-[12px] font-semibold text-gray-500">{label}</Text>
-      <Text className="mt-1 text-[22px] font-bold" style={[{ color: valueColor ?? INK }, TABULAR]}>{value}</Text>
-      <View className="mt-1">{children}</View>
-    </View>
-  );
-}
-
 type RowSpec = { label: string; sub?: string; amount: number; onPress?: () => void; note?: string };
 
 function SheetRow({ r }: { r: RowSpec }) {
@@ -236,13 +216,13 @@ function TrendChart({ labels, assets, liabilities }: { labels: string[]; assets:
         );
       })}
       <Path d={`${path(assets)} L${x(assets.length - 1)},${H - bottom} L${x(0)},${H - bottom} Z`} fill="url(#bsFill)" />
-      <Path d={path(liabilities)} fill="none" stroke="#F59E0B" strokeWidth={3} strokeLinejoin="round" />
+      <Path d={path(liabilities)} fill="none" stroke="#93C5FD" strokeWidth={3} strokeLinejoin="round" />
       <Path d={path(assets)} fill="none" stroke="#1D4ED8" strokeWidth={3} strokeLinejoin="round" />
       {assets.map((v, i) => (
         <Circle key={`a${i}`} cx={x(i)} cy={y(v)} r={4} fill="#FFFFFF" stroke="#1D4ED8" strokeWidth={2.5} />
       ))}
       {liabilities.map((v, i) => (
-        <Circle key={`l${i}`} cx={x(i)} cy={y(v)} r={4} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2.5} />
+        <Circle key={`l${i}`} cx={x(i)} cy={y(v)} r={4} fill="#FFFFFF" stroke="#93C5FD" strokeWidth={2.5} />
       ))}
       {assets.length > 0 && (
         <G>
@@ -428,7 +408,7 @@ export function BalanceSheetScreen({ basePath }: { basePath: string }) {
     alerts.push({ tone: cover >= 100 ? 'ok' : 'warning', text: `Cash & bank cover ${cover.toFixed(0)}% of what you owe vendors` });
   }
   if (alerts.every((a) => a.tone === 'ok')) alerts.unshift({ tone: 'ok', text: 'No problems found in the balance sheet' });
-  const toneColor = { critical: '#DC2626', warning: '#F59E0B', ok: '#16A34A' } as const;
+  const toneColor = { critical: BRAND_DARK, warning: BRAND, ok: '#93C5FD' } as const;
 
   // ---- export ----
   const exportCsv = () => {
@@ -464,13 +444,13 @@ export function BalanceSheetScreen({ basePath }: { basePath: string }) {
 
   const liabilitySide = (
     <View className="flex-1" style={{ minWidth: 0, paddingVertical: 4 }}>
-      <View className="flex-row justify-between border-b-2 pb-2.5" style={{ borderColor: INK }}>
+      <View className="flex-row justify-between border-b-2 pb-2.5" style={{ borderColor: BRAND_DARK }}>
         <Text className="text-[14px] font-bold text-gray-900">LIABILITIES &amp; CAPITAL</Text>
         <Text className="text-[12px] font-semibold text-gray-500">NPR</Text>
       </View>
       <Group title="Current liabilities" rows={liabilityRows} subtotalLabel="Total liabilities" subtotal={now.liabilities} />
       <Group title="Capital & reserves" rows={equityRows} subtotalLabel="Total equity" subtotal={now.equity} />
-      <View className="mt-4 flex-row border-t-2 pt-3" style={{ borderColor: INK }}>
+      <View className="mt-4 flex-row border-t-2 pt-3" style={{ borderColor: BRAND_DARK }}>
         <Text className="flex-1 text-[15px] font-bold text-gray-900">Total liabilities &amp; equity</Text>
         <Text className="text-[15px] font-bold text-gray-900" style={TABULAR}>{inr(now.liabilities + now.equity)}</Text>
       </View>
@@ -478,13 +458,13 @@ export function BalanceSheetScreen({ basePath }: { basePath: string }) {
   );
   const assetSide = (
     <View className="flex-1" style={{ minWidth: 0, paddingVertical: 4 }}>
-      <View className="flex-row justify-between border-b-2 pb-2.5" style={{ borderColor: INK }}>
+      <View className="flex-row justify-between border-b-2 pb-2.5" style={{ borderColor: BRAND_DARK }}>
         <Text className="text-[14px] font-bold text-gray-900">ASSETS</Text>
         <Text className="text-[12px] font-semibold text-gray-500">NPR</Text>
       </View>
       <Group title="Cash & bank" rows={cashRows} subtotalLabel="Total cash & bank" subtotal={cashTotal} />
       <Group title="Receivables & stock" rows={receivableRows} subtotalLabel="Total receivables & stock" subtotal={receivableTotal} />
-      <View className="mt-4 flex-row border-t-2 pt-3" style={{ borderColor: INK }}>
+      <View className="mt-4 flex-row border-t-2 pt-3" style={{ borderColor: BRAND_DARK }}>
         <Text className="flex-1 text-[15px] font-bold text-gray-900">Total assets</Text>
         <Text className="text-[15px] font-bold text-gray-900" style={TABULAR}>{inr(now.assets)}</Text>
       </View>
@@ -498,9 +478,7 @@ export function BalanceSheetScreen({ basePath }: { basePath: string }) {
       {/* header and controls */}
       <View className="flex-row flex-wrap items-center" style={{ gap: 12 }}>
         <View style={{ flex: 1, minWidth: 240 }}>
-          <Text className="text-[12px] font-semibold text-gray-500" style={{ letterSpacing: 1 }}>FINANCE</Text>
-          <Text className="text-[26px] font-bold text-gray-900">Balance Sheet</Text>
-          <Text className="text-[13px] text-gray-500">{company} · as on {numericDateLabel(asOn)}</Text>
+          <Text className="text-[12px] font-semibold text-gray-500">Choose the date and what to compare with</Text>
         </View>
         <Select label="As on" value={asOnKey} options={AS_ON} onChange={setAsOnKey} />
         <Select label="Compare" value={compareKey} options={COMPARE} onChange={setCompareKey} />
@@ -510,25 +488,31 @@ export function BalanceSheetScreen({ basePath }: { basePath: string }) {
 
       {!ready ? <Text className="py-6 text-center text-sm text-gray-400">Reading your books…</Text> : null}
 
-      {/* key figures */}
-      <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-        <Kpi label="Total assets" value={`NPR ${inr(now.assets)}`}>
-          {before ? <Delta now={now.assets} before={before.assets} /> : null}
-          {before ? <Text className="text-[11px] text-gray-400">vs {compareLabel.toLowerCase()}</Text> : null}
-        </Kpi>
-        <Kpi label="Total liabilities" value={`NPR ${inr(now.liabilities)}`}>
-          {before ? <Delta now={now.liabilities} before={before.liabilities} goodWhenUp={false} /> : null}
-          {before ? <Text className="text-[11px] text-gray-400">vs {compareLabel.toLowerCase()}</Text> : null}
-        </Kpi>
-        <Kpi label="Owner's equity" value={`NPR ${inr(now.equity)}`} valueColor={now.equity < 0 ? RED : GREEN}>
-          <Text className="text-[12px] text-gray-500">Assets − liabilities</Text>
-          {before ? <Delta now={now.equity} before={before.equity} /> : null}
-        </Kpi>
-        <Kpi label="Current ratio" value={now.currentRatio == null ? '–' : now.currentRatio.toFixed(2)} valueColor={now.currentRatio != null && now.currentRatio < 1 ? AMBER : INK}>
-          <Text className="text-[12px]" style={{ color: now.currentRatio == null ? MUTED : now.currentRatio >= 1.5 ? GREEN : now.currentRatio >= 1 ? MUTED : AMBER, fontWeight: '600' }}>
-            {now.currentRatio == null ? 'You owe nothing' : now.currentRatio >= 1.5 ? 'Healthy (above 1.5)' : now.currentRatio >= 1 ? 'Adequate' : 'Below 1.0: watch'}
-          </Text>
-        </Kpi>
+      {/* the heading band: the same brand-blue band as the Profit & Loss report */}
+      <View className="overflow-hidden rounded-2xl" style={{ backgroundColor: BRAND_DARK }}>
+        <View className="p-5" style={{ gap: 4 }}>
+          <Text className="text-[11.5px] font-bold" style={{ color: '#BFDBFE', letterSpacing: 1.4 }}>JAGEER NEPAL · FINANCE REPORT</Text>
+          <Text className="text-[24px] font-extrabold text-white" style={{ letterSpacing: 0.5 }}>BALANCE SHEET</Text>
+          <Text className="text-[13px]" style={{ color: '#DBEAFE' }}>{company}  ·  as on {numericDateLabel(asOn)}</Text>
+        </View>
+        <View className="flex-row flex-wrap border-t" style={{ borderColor: 'rgba(255,255,255,0.18)' }}>
+          {[
+            { label: 'Total assets', value: `NPR ${inr(now.assets)}`, delta: before ? pct(now.assets, before.assets) : null },
+            { label: 'Total liabilities', value: `NPR ${inr(now.liabilities)}`, delta: before ? pct(now.liabilities, before.liabilities) : null },
+            { label: now.equity < 0 ? "Owner's equity (deficit)" : "Owner's equity", value: `NPR ${inr(now.equity)}`, delta: before ? pct(now.equity, before.equity) : null },
+            { label: 'Current ratio', value: now.currentRatio == null ? '–' : now.currentRatio.toFixed(2), delta: null },
+          ].map((k, i) => (
+            <View key={k.label} className="px-5 py-4" style={{ flexGrow: 1, flexBasis: 200, borderLeftWidth: i === 0 ? 0 : 1, borderColor: 'rgba(255,255,255,0.18)' }}>
+              <Text className="text-[11.5px] font-semibold" style={{ color: '#BFDBFE' }}>{k.label}</Text>
+              <Text className="mt-0.5 text-[19px] font-bold text-white" style={TABULAR}>{k.value}</Text>
+              {k.delta != null && (
+                <Text className="text-[11.5px]" style={{ color: '#93C5FD' }}>
+                  {k.delta >= 0 ? '▲' : '▼'} {Math.abs(k.delta) > 999 ? '999%+' : `${Math.abs(k.delta).toFixed(1)}%`} vs {compareLabel.toLowerCase()}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
       </View>
 
       {/* the sheet */}
@@ -537,9 +521,9 @@ export function BalanceSheetScreen({ basePath }: { basePath: string }) {
           <View className="flex-1 p-5" style={twoColumns ? { borderRightWidth: 1, borderColor: LINE } : { borderBottomWidth: 1, borderColor: LINE }}>{liabilitySide}</View>
           <View className="flex-1 p-5">{assetSide}</View>
         </View>
-        <View className="flex-row items-center border-t px-5 py-3" style={{ gap: 8, borderColor: LINE, backgroundColor: balanced ? '#F0FDF4' : '#FEF2F2' }}>
-          <Ionicons name={balanced ? 'checkmark-circle' : 'alert-circle'} size={18} color={balanced ? '#16A34A' : '#DC2626'} />
-          <Text className="flex-1 text-[13px] font-semibold" style={{ color: balanced ? '#166534' : '#991B1B' }}>
+        <View className="flex-row items-center border-t px-5 py-3" style={{ gap: 8, borderColor: LINE, backgroundColor: BRAND_TINT }}>
+          <Ionicons name={balanced ? 'checkmark-circle' : 'alert-circle'} size={18} color={BRAND} />
+          <Text className="flex-1 text-[13px] font-semibold" style={{ color: BRAND_DARK }}>
             {balanced ? 'Balanced: Assets = Liabilities + Equity' : 'Out of balance'}  ·  {inr(now.assets)} = {inr(now.liabilities)} + ({inr(now.equity)})
           </Text>
         </View>
@@ -552,7 +536,7 @@ export function BalanceSheetScreen({ basePath }: { basePath: string }) {
             <Text className="flex-1 text-[15px] font-bold text-gray-900">Assets vs liabilities</Text>
             <View className="flex-row" style={{ gap: 14 }}>
               <View className="flex-row items-center" style={{ gap: 6 }}><View style={{ width: 12, height: 3, backgroundColor: '#1D4ED8' }} /><Text className="text-[12px] text-gray-600">Assets</Text></View>
-              <View className="flex-row items-center" style={{ gap: 6 }}><View style={{ width: 12, height: 3, backgroundColor: '#F59E0B' }} /><Text className="text-[12px] text-gray-600">Liabilities</Text></View>
+              <View className="flex-row items-center" style={{ gap: 6 }}><View style={{ width: 12, height: 3, backgroundColor: '#93C5FD' }} /><Text className="text-[12px] text-gray-600">Liabilities</Text></View>
             </View>
           </View>
           <Text className="mb-1 text-[12px] text-gray-500">Month end, last 7 months</Text>
