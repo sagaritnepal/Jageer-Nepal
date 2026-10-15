@@ -188,6 +188,8 @@ type JobRowData = {
   token?: string | null;
   /** Assigned / WIP / Hold / Completed, drawn as four labelled segments. */
   progress?: { label: string; state: StageStepState }[];
+  /** When the job started and ended and how long it took - shown under the progress. */
+  timeDetails?: string[];
   tag: Tag;
   amount: number | null;
   /** Set when the reseller can change this job's price from the table; saves the new amount. */
@@ -487,7 +489,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
         <View style={{ width: w.status, flexShrink: 0 }}>
           {data.progress ? (
-            <JobProgressBars steps={data.progress} />
+            <JobProgressBars steps={data.progress} details={data.timeDetails} />
           ) : (
             <Text className="text-[11.5px] font-semibold text-gray-700" numberOfLines={1}>
               {data.tag.label}
@@ -523,6 +525,11 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
               {line}
             </Text>
           ))}
+          {data.timeDetails?.map((line) => (
+            <Text key={line} className="text-xs text-gray-500">
+              {line}
+            </Text>
+          ))}
           {!!meta && (
             <Text className="text-xs text-gray-400" numberOfLines={1}>
               {meta}
@@ -547,28 +554,28 @@ function whenLabel(iso: string): string {
 }
 
 /** When the technician accepted the job, when they finished it, and how long it took - from the job
- * card. A job reopened has no end until it is completed again; an older one may have neither. */
+ * card, one fact to a line (the same style as "Started / Running" on a job in progress), so none of
+ * it is cut off in the narrow Job column. A job with no recorded start says so instead of guessing;
+ * a job reopened has no end until it is completed again. */
 function timeLines(card: JobCard | undefined): string[] {
   const started = card?.started_at;
   const ended = card?.completed_at;
+  if (!started && !ended) return [];
   const lines: string[] = [];
-  if (started) lines.push(`Started: ${whenLabel(started)}`);
-  if (ended) lines.push(`Ended: ${whenLabel(ended)}${started ? ` · Took ${formatDurationBetween(started, ended)}` : ''}`);
+  lines.push(started ? `Started: ${whenLabel(started)}` : 'Started: not recorded');
+  if (ended) lines.push(`Ended: ${whenLabel(ended)}`);
+  if (started && ended) lines.push(`Took: ${formatDurationBetween(started, ended)}`);
   return lines;
 }
 
-/** What a finished job shows: token and chalan numbers, the products used and the installation, then
- * when it started, when it ended and how long it took. */
+/** What a finished job shows under its name: token and chalan numbers, the products used and the
+ * installation. (When it started and ended is under its progress: see timeLines.) */
 function finishedLines(item: ServiceRequest, card: JobCard | undefined): string[] {
   const ids: (string | null | undefined)[] = [];
   const parts = (card?.parts_used ?? []).filter((p) => p.name?.trim());
   const products = parts.length > 0 ? `Products: ${parts.map((p) => `${p.name} × ${p.quantity}`).join(', ')}` : 'Products: none recorded';
   const installation = Number(card?.labor_cost) > 0 ? `Installation: NPR ${Number(card!.labor_cost).toLocaleString()}` : null;
-  return [
-    ids.filter(Boolean).join(' · '),
-    [products, installation].filter(Boolean).join(' · '),
-    ...timeLines(card),
-  ].filter(Boolean);
+  return [ids.filter(Boolean).join(' · '), [products, installation].filter(Boolean).join(' · ')].filter(Boolean);
 }
 
 function RequestJobRow({
@@ -740,6 +747,7 @@ function RequestJobRow({
           : item.status === 'cancelled' && item.cancel_reason?.trim()
             ? [`Cancelled: ${item.cancel_reason.trim()}`]
             : undefined,
+        timeDetails: finishedStage ? timeLines(jobCards?.[0]) : undefined,
         chalan:
           finishedStage && onEditChalan
             ? {

@@ -768,11 +768,6 @@ function JobCompactRow({
               {`Chalan no. ${r.chalan_no.trim()}${r.chalan_urls.length > 0 ? ' · photo added' : ''}`}
             </Text>
           )}
-          {timeLines.map((line) => (
-            <Text key={line} className="text-[11px] text-gray-500" numberOfLines={1}>
-              {line}
-            </Text>
-          ))}
         </View>
       </Pressable>
 
@@ -842,7 +837,7 @@ function JobCompactRow({
 
       {/* Assigned / WIP / Hold / Completed, and under them how the job stands. */}
       <View style={{ width: w.status, flexShrink: 0 }}>
-        <JobProgressBars steps={stages} note={statusLine} />
+        <JobProgressBars steps={stages} note={statusLine} details={timeLines} />
       </View>
 
       <View className="flex-row items-center justify-end" style={{ gap: 4, width: w.actions, flexShrink: 0 }}>

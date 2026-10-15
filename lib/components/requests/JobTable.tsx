@@ -121,7 +121,16 @@ export function JobTableScroll({ available, gap = 6, children }: { available: nu
 /** Assigned / WIP / Hold / Completed as four thin bars with their short words above: the step the job
  * is on is green, finished ones dark grey, the rest light. A longer word gets a longer bar, so none
  * is cut short. `note` is the line under it: two lines at most, then an ellipsis. */
-export function JobProgressBars({ steps, note }: { steps: { label: string; state: StageStepState }[]; note?: string }) {
+export function JobProgressBars({
+  steps,
+  note,
+  details,
+}: {
+  steps: { label: string; state: StageStepState }[];
+  note?: string;
+  /** Small lines under the note - when the job started, how long it has run, and so on. */
+  details?: string[];
+}) {
   return (
     <View style={{ gap: 3 }}>
       <View className="flex-row" style={{ gap: 4 }}>
@@ -143,6 +152,11 @@ export function JobProgressBars({ steps, note }: { steps: { label: string; state
           {note}
         </Text>
       )}
+      {details?.map((line) => (
+        <Text key={line} className="text-[10.5px] text-gray-500" numberOfLines={1}>
+          {line}
+        </Text>
+      ))}
     </View>
   );
 }
