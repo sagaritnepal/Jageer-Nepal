@@ -1333,40 +1333,12 @@ function LedgerList({ basePath }: { basePath: string }) {
   );
 
   // One flat list, A to Z by name. A search narrows it to every ledger with the typed letters in it.
-  const [letter, setLetter] = useState<string | null>(null);
-  const firstLetter = (name: string) => (name.trim()[0] ?? '#').toUpperCase();
-  const lettersPresent = useMemo(() => new Set(filtered.map((d) => firstLetter(d.row.name))), [filtered]);
   const sortedRows = useMemo(
     () =>
       [...filtered]
-        .filter((d) => !letter || firstLetter(d.row.name) === letter)
         .sort((a, b) => a.row.name.localeCompare(b.row.name, undefined, { sensitivity: 'base' })),
-    [filtered, letter]
+    [filtered]
   );
-  // Only the letters some ledger starts with, in the brand blue: tap one to see the ledgers starting with it.
-  const letterBar = (
-    <View className="flex-row flex-wrap items-center rounded-xl bg-white px-2 py-2" style={{ gap: 4, borderWidth: 1, borderColor: '#E5E7EB' }}>
-      <Pressable
-        onPress={() => setLetter(null)}
-        className="items-center justify-center rounded-lg px-2.5"
-        style={{ height: 30, backgroundColor: letter == null ? '#1E3A8A' : '#EFF6FF' }}
-      >
-        <Text className="text-[12px] font-bold" style={{ color: letter == null ? '#FFFFFF' : '#1E3A8A' }}>All</Text>
-      </Pressable>
-      {[...lettersPresent].sort().map((l) => {
-        const has = true;
-        const on = letter === l;
-        return (
-          <Pressable
-            key={l}
-            disabled={!has}
-            onPress={() => setLetter(on ? null : l)}
-            className="items-center justify-center rounded-lg"
-            style={{ width: 30, height: 30, backgroundColor: on ? '#2563EB' : has ? '#EFF6FF' : 'transparent' }}
-          >
-            <Text className="text-[12.5px] font-bold" style={{ color: on ? '#FFFFFF' : has ? '#1E3A8A' : '#CBD5E1' }}>{l}</Text>
-          </Pressable>
-        );
       })}
     </View>
   );
@@ -1577,7 +1549,6 @@ function LedgerList({ basePath }: { basePath: string }) {
           emptyState
         ) : (
           <View style={{ gap: 10 }}>
-            {letterBar}
             <BookTable columns={columns} rows={sortedRows} rowKey={(d) => `${d.row.kind}-${d.row.id}`} onRowPress={open} stickyHeader />
             {flatFooter}
           </View>
@@ -1624,7 +1595,6 @@ function LedgerList({ basePath }: { basePath: string }) {
           emptyState
         ) : (
           <View style={{ gap: 0 }}>
-            <View className="mb-2">{letterBar}</View>
             {sortedRows.map((d) => (
               <PartyCard
                 key={`${d.row.kind}-${d.row.id}`}
