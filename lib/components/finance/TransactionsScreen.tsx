@@ -576,11 +576,14 @@ function CategoryPickerModal({
   selectedId: string | null;
   onSelect: (id: string) => void;
   onClose: () => void;
-  onCreate: (name: string) => Promise<void>;
+  onCreate: (name: string, group: 'direct' | 'indirect') => Promise<void>;
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [newName, setNewName] = useState('');
+  // The Add popup: the name and whether it is a Direct or an Indirect expense, then Save or Cancel.
+  const [adding, setAdding] = useState(false);
+  const [newGroup, setNewGroup] = useState<'direct' | 'indirect'>('indirect');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [saving, setSaving] = useState(false);
@@ -589,8 +592,10 @@ function CategoryPickerModal({
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      await onCreate(newName.trim());
+      await onCreate(newName.trim(), newGroup);
       setNewName('');
+      setNewGroup('indirect');
+      setAdding(false);
     } catch (err) {
       showAlert('Could not add category', getErrorMessage(err));
     } finally {
@@ -623,22 +628,70 @@ function CategoryPickerModal({
             </Pressable>
           </View>
 
-          <View className="mb-3 flex-row gap-2">
-            <TextInput
-              value={newName}
-              onChangeText={setNewName}
-              placeholder="New category name"
-              placeholderTextColor="#9CA3AF"
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-            />
-            <Pressable
-              onPress={handleCreate}
-              disabled={saving || !newName.trim()}
-              className="items-center justify-center rounded-lg bg-orange-500 px-3 disabled:opacity-50"
-            >
-              <Ionicons name="add" size={18} color="white" />
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => setAdding(true)}
+            className="mb-3 flex-row items-center justify-center rounded-lg bg-orange-500 py-2.5"
+            style={{ gap: 6 }}
+          >
+            <Ionicons name="add" size={18} color="white" />
+            <Text className="text-sm font-semibold text-white">Add expense head</Text>
+          </Pressable>
+
+          {adding && (
+            <View className="absolute inset-0 items-center justify-center rounded-xl bg-black/30 px-3" style={{ zIndex: 20 }}>
+              <View className="w-full rounded-xl bg-white p-4" style={{ gap: 10 }}>
+                <Text className="text-base font-semibold text-gray-900">New expense head</Text>
+                <View>
+                  <Text className="mb-1 text-xs font-semibold text-gray-600">Name *</Text>
+                  <TextInput
+                    value={newName}
+                    onChangeText={setNewName}
+                    autoFocus
+                    placeholder="e.g. Salary Advance"
+                    placeholderTextColor="#9CA3AF"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                  />
+                </View>
+                <View>
+                  <Text className="mb-1 text-xs font-semibold text-gray-600">Category</Text>
+                  <View className="flex-row" style={{ gap: 8 }}>
+                    {([['indirect', 'Indirect expense'], ['direct', 'Direct expense']] as const).map(([k, label]) => (
+                      <Pressable
+                        key={k}
+                        onPress={() => setNewGroup(k)}
+                        className="flex-1 items-center rounded-lg border py-2"
+                        style={{ borderColor: newGroup === k ? '#2563EB' : '#D1D5DB', backgroundColor: newGroup === k ? '#EFF6FF' : '#FFFFFF' }}
+                      >
+                        <Text className="text-[13px] font-semibold" style={{ color: newGroup === k ? '#1D4ED8' : '#374151' }}>{label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text className="mt-1 text-[11.5px] text-gray-500">
+                    Direct costs (freight, repairs, labour) are taken off sales before gross profit; indirect ones (salary, rent, phone) after it.
+                  </Text>
+                </View>
+                <View className="flex-row justify-end" style={{ gap: 10 }}>
+                  <Pressable
+                    onPress={() => {
+                      setAdding(false);
+                      setNewName('');
+                      setNewGroup('indirect');
+                    }}
+                    className="rounded-lg border border-gray-300 px-4 py-2"
+                  >
+                    <Text className="text-sm font-semibold text-gray-700">Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleCreate}
+                    disabled={saving || !newName.trim()}
+                    className="rounded-lg bg-blue-600 px-4 py-2 disabled:opacity-50"
+                  >
+                    <Text className="text-sm font-semibold text-white">{saving ? 'Saving...' : 'Save'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          )}
 
           {categories.length === 0 ? (
             <Text className="px-2 py-3 text-center text-sm text-gray-400">No categories yet — add one above.</Text>
@@ -939,8 +992,8 @@ function TransactionForm({
     }
   }
 
-  async function handleCreateCategory(name: string) {
-    const created = await createCategory.mutateAsync({ owner_id: userId, name });
+  async function handleCreateCategory(name: string, group: 'direct' | 'indirect' = 'indirect') {
+    const created = await createCategory.mutateAsync({ owner_id: userId, name, ...(group === 'direct' ? { expense_group: 'direct' } : {}) } as never);
     setCategoryId(created.id);
   }
   async function handleRenameCategory(id: string, name: string) {

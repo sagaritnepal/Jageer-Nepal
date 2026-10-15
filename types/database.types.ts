@@ -359,6 +359,8 @@ export interface ExpenseCategory {
   id: string;
   owner_id: string;
   name: string;
+  /** 'direct' costs sit above gross profit in the Profit & Loss; 'indirect' (the default) below it. */
+  expense_group?: 'direct' | 'indirect';
   created_at: string;
   updated_at: string;
 }
