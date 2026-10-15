@@ -15,7 +15,17 @@ import { journalNote, newJournalCode } from '../../utils/journalVoucher';
 
 type Person = { id: string; name: string };
 type Side = 'debit' | 'credit';
-type Line = { key: number; side: Side; kind: 'party' | 'expense'; person: Person | null; head: string; amount: string };
+type Line = { key: number; side: Side; kind: 'party' | 'expense'; person: Person | null; head: string; amount: string; confirmed?: boolean };
+
+/** A Save / Cancel question. */
+function ask(title: string, message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    showAlert(title, message, [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Save', onPress: () => resolve(true) },
+    ]);
+  });
+}
 
 let lineSeq = 0;
 const newLine = (side: Side): Line => ({ key: (lineSeq += 1), side, kind: 'party', person: null, head: '', amount: '' });
@@ -87,6 +97,22 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     return [...heads, ...persons].slice(0, 14).concat(adds);
   };
   const pick = async (key: number, optionKey: string, label: string) => {
+    if (optionKey === 'new-p' || optionKey === 'new-h') {
+      const isPerson = optionKey === 'new-p';
+      const ok = await ask(
+        isPerson ? 'Add new ledger?' : 'Add new expense head?',
+        `"${label.trim()}" is not in your books yet. ${isPerson ? 'Save it as a new ledger?' : 'Save it as a new expense head?'}`
+      );
+      if (!ok) {
+        patch(key, { head: '', person: null, kind: 'expense', confirmed: false });
+        return;
+      }
+      if (!isPerson) {
+        patch(key, { kind: 'expense', person: null, head: label.trim(), confirmed: true });
+        setTimeout(() => amountRefs.current.get(key)?.focus(), 30);
+        return;
+      }
+    }
     if (optionKey === 'new-p') {
       const created = await (supabase.from('customers') as any).insert({ owner_id: ownerId, name: label.trim(), phone: null }).select('id').single();
       if (created.error) {
@@ -95,9 +121,6 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
       }
       optionKey = `p:${created.data.id}`;
       void queryClient.invalidateQueries({ queryKey: ['customers'] });
-    } else if (optionKey === 'new-h') {
-      // the head itself is created when the voucher is posted
-      optionKey = 'h:new';
     }
     if (optionKey.startsWith('p:')) patch(key, { kind: 'party', person: { id: optionKey.slice(2), name: label }, head: label });
     else patch(key, { kind: 'expense', person: null, head: label });
@@ -145,6 +168,14 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     if (!balanced) {
       showAlert('Debit and credit differ', `Debit ${money(debit)} and Credit ${money(credit)} must be equal - the difference is ${money(Math.abs(debit - credit))}.`);
       return;
+    }
+    for (const l of lines) {
+      const name = l.head.trim();
+      const known = (categories ?? []).some((c) => c.name.toLowerCase() === name.toLowerCase());
+      if (l.side === 'debit' && !l.person && !known && !l.confirmed) {
+        if (!(await ask('Add new expense head?', `"${name}" is not in your books yet. Save it as a new expense head?`))) return;
+        patch(l.key, { confirmed: true });
+      }
     }
     setSaving(true);
     const made: { table: string; id: string }[] = [];
@@ -228,7 +259,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
           <SuggestInput
             value={l.head}
             // typing again drops the earlier pick, so a stale person is never posted under a new name
-            onChangeText={(v) => patch(l.key, { head: v, person: null, kind: 'expense' })}
+            onChangeText={(v) => patch(l.key, { head: v, person: null, kind: 'expense', confirmed: false })}
             options={accountOptions(l.head, l.side)}
             onSelectOption={(o) => pick(l.key, o.key, o.label)}
             inputRef={(el) => nameRefs.current.set(l.key, el)}
@@ -245,10 +276,8 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
                   pick(l.key, exact.key, exact.label);
                   return;
                 }
-                if (l.side === 'credit') {
-                  pick(l.key, 'new-p', l.head.trim());
-                  return;
-                }
+                pick(l.key, l.side === 'credit' ? 'new-p' : 'new-h', l.head.trim());
+                return;
               }
               amountRefs.current.get(l.key)?.focus();
             }}
