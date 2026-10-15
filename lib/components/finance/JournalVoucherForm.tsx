@@ -1,6 +1,7 @@
 // lib/components/finance/JournalVoucherForm.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { readKey } from '../../utils/webKeys';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../supabase';
@@ -38,6 +39,16 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
   const [date, setDate] = useState(localTodayIso());
   const [narration, setNarration] = useState('');
   const [saving, setSaving] = useState(false);
+  // Enter walks account -> amount -> the next line's account; these let it focus a box by line.
+  const nameRefs = useRef(new Map<number, TextInput | null>());
+  const amountRefs = useRef(new Map<number, TextInput | null>());
+  const [focusNew, setFocusNew] = useState<number | null>(null);
+  useEffect(() => {
+    if (focusNew == null) return;
+    const t = setTimeout(() => nameRefs.current.get(focusNew)?.focus(), 30);
+    setFocusNew(null);
+    return () => clearTimeout(t);
+  }, [focusNew, lines.length]);
   const { data: categories } = useSupabaseQuery('expense_categories', {
     filters: { owner_id: ownerId },
     orderBy: { column: 'name' },
@@ -68,6 +79,20 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
   const pick = (key: number, optionKey: string, label: string) => {
     if (optionKey.startsWith('p:')) patch(key, { kind: 'party', person: { id: optionKey.slice(2), name: label }, head: label });
     else patch(key, { kind: 'expense', person: null, head: label });
+    setTimeout(() => amountRefs.current.get(key)?.focus(), 30);
+  };
+  /** Enter on an amount: on to the next line; after the last one, a new line for whichever side is short. */
+  const nextLine = (key: number) => {
+    const i = lines.findIndex((l) => l.key === key);
+    const next = lines[i + 1];
+    if (next) {
+      nameRefs.current.get(next.key)?.focus();
+      return;
+    }
+    if (balanced) return;
+    const add = newLine(credit > debit ? 'debit' : 'credit');
+    setLines((ls) => [...ls, add]);
+    setFocusNew(add.key);
   };
 
   async function handleSave() {
@@ -172,43 +197,74 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
 
   const sideLines = (side: Side) => lines.filter((l) => l.side === side);
 
-  const renderLine = (l: Line, n: number) => (
-    <View key={l.key} className="rounded-xl border border-gray-200 bg-white p-3" style={{ gap: 8 }}>
+  const renderLine = (l: Line, n: number, count: number) => (
+    // earlier lines sit above later ones so an open account list is never painted over
+    <View key={l.key} style={{ zIndex: 100 - n, gap: 4 }}>
       <View className="flex-row items-center" style={{ gap: 8 }}>
-        <Text className="text-[12px] font-bold text-gray-500">{l.side === 'debit' ? 'Debit' : 'Credit'} {n}</Text>
-        {l.head.trim() !== '' && (
-          <Text className="text-[11.5px] font-semibold" style={{ color: l.person ? '#1D4ED8' : '#B45309' }}>
-            {l.person ? 'Person' : l.side === 'debit' ? 'Expense head' : 'Pick a person from the list'}
-          </Text>
-        )}
-        <View style={{ flex: 1 }} />
-        {lines.length > 2 && (
+        <Text className="w-14 text-[12px] font-bold text-gray-500">{l.side === 'debit' ? 'Dr' : 'Cr'} {n}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <SuggestInput
+            value={l.head}
+            // typing again drops the earlier pick, so a stale person is never posted under a new name
+            onChangeText={(v) => patch(l.key, { head: v, person: null, kind: 'expense' })}
+            options={accountOptions(l.head, l.side)}
+            onSelectOption={(o) => pick(l.key, o.key, o.label)}
+            inputRef={(el) => nameRefs.current.set(l.key, el)}
+            onKeyPress={(e) => {
+              const k = readKey(e);
+              if (k.key !== 'Enter') return;
+              k.prevent();
+              if (!l.head.trim()) return;
+              // Enter with nothing highlighted takes the best match, or keeps what was typed as a new head
+              if (!l.person) {
+                const first = accountOptions(l.head, l.side).find((o) => o.label.toLowerCase() === l.head.trim().toLowerCase()) ?? accountOptions(l.head, l.side)[0];
+                if (first) {
+                  pick(l.key, first.key, first.label);
+                  return;
+                }
+              }
+              amountRefs.current.get(l.key)?.focus();
+            }}
+            placeholder={l.side === 'debit' ? 'Person or expense head' : 'Person'}
+            accent={l.side === 'debit' ? '#DC2626' : '#047857'}
+            inputClassName={INPUT}
+            showWhenEmpty
+            adornment={
+              l.head.trim() !== '' ? (
+                <Text className="text-[10.5px] font-bold" style={{ color: l.person ? '#1D4ED8' : '#B45309' }}>
+                  {l.person ? 'PERSON' : l.side === 'debit' ? 'EXPENSE' : '?'}
+                </Text>
+              ) : undefined
+            }
+            adornmentWidth={l.head.trim() !== '' ? 70 : 0}
+          />
+        </View>
+        <TextInput
+          ref={(el) => {
+            amountRefs.current.set(l.key, el);
+          }}
+          value={l.amount}
+          onChangeText={(v) => patch(l.key, { amount: v })}
+          onKeyPress={(e) => {
+            if (readKey(e).key === 'Enter') {
+              readKey(e).prevent();
+              nextLine(l.key);
+            }
+          }}
+          placeholder="Amount"
+          placeholderTextColor="#9CA3AF"
+          keyboardType="numeric"
+          className={INPUT}
+          style={{ width: 130 }}
+        />
+        {lines.length > 2 && count > 0 ? (
           <Pressable onPress={() => remove(l.key)} hitSlop={8} accessibilityLabel="Remove this line">
             <Ionicons name="trash-outline" size={17} color="#DC2626" />
           </Pressable>
+        ) : (
+          <View style={{ width: 17 }} />
         )}
       </View>
-      <View style={{ zIndex: 5 }}>
-        <SuggestInput
-          value={l.head}
-          // typing again drops the earlier pick, so a stale person is never posted under a new name
-          onChangeText={(v) => patch(l.key, { head: v, person: null, kind: 'expense' })}
-          options={accountOptions(l.head, l.side)}
-          onSelectOption={(o) => pick(l.key, o.key, o.label)}
-          placeholder={l.side === 'debit' ? 'Search person or expense head, e.g. Salary Expenses' : 'Search person'}
-          accent={l.side === 'debit' ? '#DC2626' : '#047857'}
-          inputClassName={INPUT}
-          showWhenEmpty
-        />
-      </View>
-      <TextInput
-        value={l.amount}
-        onChangeText={(v) => patch(l.key, { amount: v })}
-        placeholder="Amount (NPR)"
-        placeholderTextColor="#9CA3AF"
-        keyboardType="numeric"
-        className={INPUT}
-      />
     </View>
   );
 
@@ -224,7 +280,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
       </Text>
 
       {(['debit', 'credit'] as const).map((side) => (
-        <View key={side} style={{ gap: 8 }}>
+        <View key={side} style={{ gap: 8, zIndex: side === 'debit' ? 300 : 200 }}>
           <View className="flex-row items-center" style={{ gap: 8 }}>
             <Text className="text-[13px] font-extrabold" style={{ color: side === 'debit' ? '#B91C1C' : '#047857' }}>
               {side === 'debit' ? 'DEBIT' : 'CREDIT'}
@@ -239,7 +295,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
               <Text className="text-[12.5px] font-semibold text-blue-700">Add {side}</Text>
             </Pressable>
           </View>
-          {sideLines(side).map((l, i) => renderLine(l, i + 1))}
+          {sideLines(side).map((l, i) => renderLine(l, i + 1, sideLines(side).length))}
         </View>
       ))}
 
