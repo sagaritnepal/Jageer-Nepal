@@ -8,3 +8,10 @@
 export function nameCaps(name: string | null | undefined): string {
   return (name ?? '').toLowerCase().replace(/(^|[\s(\-/.])(\p{L})/gu, (_m, lead: string, ch: string) => lead + ch.toUpperCase());
 }
+
+/** Capitalises the first letter of every word while typing, and leaves everything else alone (no
+ * lower-casing, same length) so the caret can stay where the person is typing. The full
+ * `nameCaps` still runs when the name is saved. */
+export function capWords(text: string): string {
+  return text.replace(/(^|[\s(\-/.])(\p{L})/gu, (_m, lead: string, ch: string) => lead + ch.toUpperCase());
+}

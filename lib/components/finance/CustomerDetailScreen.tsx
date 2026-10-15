@@ -1,6 +1,6 @@
 // lib/components/finance/CustomerDetailScreen.tsx
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, Text, TextInput, Pressable, Linking, useWindowDimensions } from 'react-native';
+import { View, Text, TextInput, Pressable, Linking, Platform, useWindowDimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +25,7 @@ import { Field, FieldRow, FormActions, FormCard, INPUT, PopupCard, Segmented } f
 import { MONEY } from './moneyColors';
 import { supabase } from '../../supabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
-import { nameCaps } from '../../utils/nameCaps';
+import { nameCaps, capWords } from '../../utils/nameCaps';
 import { deleteErrorMessage } from '../../utils/dbErrors';
 import { nextEntryNo } from '../../utils/nextEntryNo';
 import { useEntryNo } from '../../hooks/useEntryNo';
@@ -119,6 +119,7 @@ export function EditableDetails({ customerId, basePath, summary }: { customerId:
   const deleteCustomer = useSupabaseDelete('customers', { requireRow: true });
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
+  const nameInput = useRef<TextInput>(null);
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
@@ -194,7 +195,14 @@ export function EditableDetails({ customerId, basePath, summary }: { customerId:
         <Field label="Name *" basis={240}>
           <TextInput
             value={name}
-            onChangeText={(v) => setName(nameCaps(v))}
+            ref={nameInput}
+            onChange={(e) => {
+              // typing keeps the caret where it is: capitalising a letter must not send it to the end
+              const el = (e.nativeEvent as unknown as { target?: HTMLInputElement }).target;
+              const at = el?.selectionStart;
+              if (Platform.OS === 'web' && el && at != null) requestAnimationFrame(() => el.setSelectionRange?.(at, at));
+            }}
+            onChangeText={(v) => setName(capWords(v))}
             autoCapitalize="words"
             autoFocus
             placeholder="Name"

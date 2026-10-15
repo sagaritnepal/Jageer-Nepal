@@ -38,7 +38,7 @@ import {
 } from '../../utils/ledgerStatement';
 import { exportPartiesXlsx, type PartyListRow } from '../../utils/exportLedger';
 import { showAlert, getErrorMessage } from '../../utils/alert';
-import { nameCaps } from '../../utils/nameCaps';
+import { nameCaps, capWords } from '../../utils/nameCaps';
 import { isValidPhone10 } from '../../utils/phone';
 import { localTodayIso } from '../../utils/localDate';
 import { journalOf } from '../../utils/journalVoucher';
@@ -160,6 +160,7 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
   // is not set up yet), where the field is not shown at all.
   const { available: typesAvailable } = usePartyTypes(userId);
   const [name, setName] = useState(initialName ? nameCaps(initialName) : '');
+  const nameInput = useRef<TextInput>(null);
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [partyTypeId, setPartyTypeId] = useState<string | null>(null);
@@ -245,7 +246,14 @@ function AddCustomerForm({ userId, basePath, initialName, onDone }: { userId: st
           <View className="flex-row items-center rounded-lg border border-gray-300 bg-white">
             <TextInput
               value={name}
-              onChangeText={(v) => setName(nameCaps(v))}
+              ref={nameInput}
+              onChange={(e) => {
+                // typing keeps the caret where it is: capitalising a letter must not send it to the end
+                const el = (e.nativeEvent as unknown as { target?: HTMLInputElement }).target;
+                const at = el?.selectionStart;
+                if (Platform.OS === 'web' && el && at != null) requestAnimationFrame(() => el.setSelectionRange?.(at, at));
+              }}
+              onChangeText={(v) => setName(capWords(v))}
               autoCapitalize="words"
               autoFocus
               placeholder="Name"
