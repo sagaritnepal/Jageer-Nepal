@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
-import { useAuthStore } from '../lib/hooks/useAuth';
+import { useAuthStore, loadProfileWithRetry } from '../lib/hooks/useAuth';
 import { ROLE_ACCENT } from '../lib/constants/roleColors';
 
 const ROLE_HOME: Record<string, string> = {
@@ -39,6 +39,7 @@ function Splash({ onGetStarted }: { onGetStarted: () => void }) {
 export default function Index() {
   const session = useAuthStore((state) => state.session);
   const profile = useAuthStore((state) => state.profile);
+  const profileError = useAuthStore((state) => state.profileError);
   const [showSplash, setShowSplash] = useState(true);
 
   if (!session) {
@@ -56,6 +57,25 @@ export default function Index() {
   // fresh login on every web refresh despite a perfectly valid session;
   // show a loading state instead and let the effect above re-render once
   // the profile arrives.
+  if (!profile && profileError) {
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-white px-8">
+        <Text className="text-center text-base font-semibold text-gray-900">We could not load your account.</Text>
+        <Text className="text-center text-sm text-gray-500">Check your connection and try again.</Text>
+        <Pressable
+          onPress={() => loadProfileWithRetry(session.user.id)}
+          className="rounded-full px-8 py-3"
+          style={{ backgroundColor: ROLE_ACCENT.client }}
+        >
+          <Text className="font-bold text-white">Try Again</Text>
+        </Pressable>
+        <Pressable onPress={() => useAuthStore.getState().signOut()}>
+          <Text className="text-sm font-semibold text-gray-500">Sign Out</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   if (!profile) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
