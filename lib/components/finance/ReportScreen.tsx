@@ -1,9 +1,9 @@
 // lib/components/finance/ReportScreen.tsx
 import { useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthStore } from '../../hooks/useAuth';
+import { useAuthStore, useRole } from '../../hooks/useAuth';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { useBookLayout, useBookToolbar } from './BookKit';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
@@ -50,18 +50,61 @@ const REPORT_GROUPS: { heading: string; links: ReportLink[] }[] = [
   },
 ];
 
-const PERIOD_LABEL: Record<Period, string> = { year: 'This Year', all: 'All Time' };
+/** 1234567 -> "12,34,567" */
+function inr(n: number): string {
+  const v = Math.round(n);
+  const s = String(Math.abs(v));
+  const out = s.length <= 3 ? s : `${s.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',')},${s.slice(-3)}`;
+  return v < 0 ? `-${out}` : out;
+}
 
-function Row({ label, value, color = '#111827', bold = false }: { label: string; value: number; color?: string; bold?: boolean }) {
+function SideHead({ title }: { title: string }) {
   return (
-    <View className="flex-row items-center justify-between py-2">
-      <Text className={`text-sm ${bold ? 'font-bold text-gray-900' : 'text-gray-500'}`}>{label}</Text>
-      <Text className={`text-sm ${bold ? 'font-extrabold' : 'font-semibold'}`} style={{ color }}>
-        NPR {value.toLocaleString()}
-      </Text>
+    <View className="mb-1 flex-row justify-between border-b-2 border-gray-900 pb-2">
+      <Text className="text-[13px] font-bold text-gray-900">{title}</Text>
+      <Text className="text-[11px] font-semibold text-gray-500">NPR</Text>
     </View>
   );
 }
+
+function Line({ label, amount, tone, bold, muted }: { label: string; amount: number; tone?: 'profit' | 'loss'; bold?: boolean; muted?: boolean }) {
+  const color = tone === 'profit' ? '#047857' : tone === 'loss' ? '#B91C1C' : muted ? '#94A3B8' : '#0F172A';
+  return (
+    <View className="flex-row justify-between border-b border-gray-100 py-2.5" style={tone ? { backgroundColor: tone === 'profit' ? '#F0FDF4' : '#FEF2F2' } : undefined}>
+      <Text className={`text-[14px] ${bold ? 'font-bold' : ''}`} style={{ color: muted ? '#94A3B8' : '#0F172A' }}>{label}</Text>
+      <Text className={`text-[14px] ${bold ? 'font-bold' : 'font-semibold'}`} style={{ color }}>{inr(amount)}</Text>
+    </View>
+  );
+}
+
+function TotalLine({ amount }: { amount: number }) {
+  return (
+    <View className="my-1 flex-row justify-between border-y-2 border-gray-900 py-2.5">
+      <Text className="text-[15px] font-bold text-gray-900">Total</Text>
+      <Text className="text-[15px] font-bold text-gray-900">{inr(amount)}</Text>
+    </View>
+  );
+}
+
+function Group({ id, open, onToggle, label, amount, rows }: { id: string; open: Set<string>; onToggle: (k: string) => void; label: string; amount: number; rows: [string, number][] }) {
+  const isOpen = open.has(id);
+  return (
+    <View>
+      <Pressable onPress={() => onToggle(id)} disabled={rows.length === 0} className="flex-row justify-between py-2.5">
+        <Text className="text-[14px] font-bold text-gray-900">{rows.length ? (isOpen ? '▾ ' : '▸ ') : ''}{label}</Text>
+        <Text className="text-[14px] font-bold text-gray-900">{inr(amount)}</Text>
+      </Pressable>
+      {isOpen && rows.map(([k, v]) => (
+        <View key={k} className="flex-row justify-between border-b border-gray-50 py-1.5" style={{ paddingLeft: 20 }}>
+          <Text className="text-[13px] text-gray-600">{k}</Text>
+          <Text className="text-[13px] text-gray-600">{inr(v)}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const PERIOD_LABEL: Record<Period, string> = { year: 'This Year', all: 'All Time' };
 
 /** A profit & loss summary pulled from the same Finance data as everywhere
  * else - Sales, Purchase, and Expense already carry their own bill date, so
@@ -100,14 +143,65 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     });
   }, [transactions, period, range.from, range.to]);
 
-  const totals = useMemo(() => {
-    const result = { sale: 0, purchase: 0, expense: 0 };
-    for (const t of inRange) result[t.type] += t.amount;
-    return result;
-  }, [inRange]);
+  const role = useRole();
+  const { data: categories } = useSupabaseQuery('expense_categories', { filters: userId ? { owner_id: userId } : {}, enabled: !!userId });
+  const { data: products } = useSupabaseQuery('products', {
+    filters: userId && role ? { seller_id: userId, seller_role: role } : {},
+    enabled: !!userId && !!role,
+  });
+  const { width } = useWindowDimensions();
+  const twoSided = width >= 900;
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['sales', 'purchase', 'direct', 'indirect']));
+  const toggleGroup = (k: string) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
 
-  const grossProfit = totals.sale - totals.purchase;
-  const netProfit = grossProfit - totals.expense;
+  // Tally's Profit & Loss A/c: trading account first (sales, closing stock against opening stock, purchases
+  // and direct expenses) to a gross profit or loss carried down, then indirect expenses to the net result.
+  const pl = useMemo(() => {
+    const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
+    let items = 0;
+    let services = 0;
+    let purchase = 0;
+    const expenses = new Map<string, number>();
+    for (const t of inRange) {
+      if (t.type === 'sale') {
+        const svc = (t.service_charges ?? []).reduce((a, c) => a + (Number(c.amount) || 0), 0) + (Number(t.installation_charge) || 0);
+        services += svc;
+        items += t.amount - svc;
+      } else if (t.type === 'purchase') purchase += t.amount;
+      else {
+        const name = (t.expense_category_id && names.get(t.expense_category_id)) || 'Uncategorised';
+        expenses.set(name, (expenses.get(name) ?? 0) + t.amount);
+      }
+    }
+    // an expense head is direct when it is a cost of getting goods or doing jobs
+    const DIRECT = /(direct|freight|carriage|cartage|clearing|custom|import|repair|labour|labor|installation|job)/i;
+    const direct: [string, number][] = [];
+    const indirect: [string, number][] = [];
+    [...expenses.entries()].sort((a, b) => b[1] - a[1]).forEach((e) => (DIRECT.test(e[0]) ? direct : indirect).push(e));
+    const sum = (list: [string, number][]) => list.reduce((a, [, v]) => a + v, 0);
+    // The stock held now, at cost. Stock has no history, so the period's opening stock is taken as the
+    // same figure: stock moves through the purchase and sale bills themselves.
+    const closing = (products ?? []).reduce((a, p) => a + (Number(p.stock_level) > 0 && p.purchase_price != null ? Number(p.stock_level) * Number(p.purchase_price) : 0), 0);
+    const opening = closing;
+    const sales = items + services;
+    const directTotal = sum(direct);
+    const indirectTotal = sum(indirect);
+    const gross = sales + closing - opening - purchase - directTotal; // + profit, - loss
+    const net = gross - indirectTotal;
+    return { items, services, sales, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net };
+  }, [inRange, categories, products]);
+  const grossProfit = pl.gross;
+  const netProfit = pl.net;
+  // each side of the trading account totals the same; likewise the second part
+  const tradingTotal = pl.sales + pl.closing + (grossProfit < 0 ? -grossProfit : 0);
+  const secondTotal = pl.indirectTotal + (grossProfit < 0 ? -grossProfit : 0) + (netProfit >= 0 ? netProfit : 0);
+  const totals = { sale: pl.sales, purchase: pl.purchase, expense: pl.directTotal + pl.indirectTotal };
 
   // The name (and the back button on a phone) are in the top bar, with Print: it opens the system's
   // print preview of the profit & loss for the period shown.
@@ -130,15 +224,21 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         {
           columns: [{ label: 'Account' }, { label: 'Amount (NPR)', align: 'right' }],
           rows: [
-            ['Sales', n(totals.sale)],
-            ['Purchase', n(totals.purchase)],
-            ['Gross Profit', n(grossProfit)],
-            ['Expenses', n(totals.expense)],
-            ['Net Profit', n(netProfit)],
-          ],
+            ['Opening stock', n(pl.opening)],
+            ['Purchase accounts', n(pl.purchase)],
+            ['Direct expenses', n(pl.directTotal)],
+            ...pl.direct.map(([k, v]) => ['    ' + k, n(v)]),
+            [grossProfit >= 0 ? 'Gross profit c/o' : 'Gross loss c/o', n(Math.abs(grossProfit))],
+            ['Sales accounts', n(pl.sales)],
+            ['    Sales - items', n(pl.items)],
+            ['    Installation & repair services', n(pl.services)],
+            ['Closing stock', n(pl.closing)],
+            ['Indirect expenses', n(pl.indirectTotal)],
+            ...pl.indirect.map(([k, v]) => ['    ' + k, n(v)]),
+            [netProfit >= 0 ? 'Net profit' : 'Net loss', n(Math.abs(netProfit))],
         },
       ],
-      note: 'Sales, Purchase and Expenses are the bills dated in the period, paid or not.',
+      note: 'Sales, Purchase and Expenses are the bills dated in the period, paid or not. Stock is valued at cost as it stands now.',
     };
   };
   const printNow = useRef<() => void>(() => {});
@@ -187,17 +287,54 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     <ScrollView className="flex-1 bg-gray-50 px-6 pt-4" contentContainerStyle={{ paddingBottom: 40 }}>
       {toolbar ? <View className="mb-4">{toolbar}</View> : null}
 
-      <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
-        <Text className="mb-1 text-xs font-semibold capitalize tracking-wide text-gray-400">Profit &amp; Loss</Text>
-        <Row label="Sales" value={totals.sale} color="#059669" />
-        <View className="border-t border-gray-100" />
-        <Row label="Purchase" value={totals.purchase} color="#DC2626" />
-        <View className="border-t border-gray-100" />
-        <Row label="Gross Profit" value={grossProfit} color={grossProfit >= 0 ? '#059669' : '#DC2626'} bold />
-        <View className="mt-1 border-t border-gray-200" />
-        <Row label="Expenses" value={totals.expense} color="#DC2626" />
-        <View className="border-t border-gray-100" />
-        <Row label="Net Profit" value={netProfit} color={netProfit >= 0 ? '#059669' : '#DC2626'} bold />
+      {/* KPIs */}
+      <View className="mb-4 flex-row flex-wrap" style={{ gap: 10 }}>
+        {[
+          { label: 'Net sales', value: pl.sales, color: '#0F172A', sub: undefined },
+          { label: grossProfit >= 0 ? 'Gross profit' : 'Gross loss', value: Math.abs(grossProfit), color: grossProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(grossProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined },
+          { label: 'Indirect expenses', value: pl.indirectTotal, color: '#0F172A', sub: undefined },
+          { label: netProfit >= 0 ? 'Net profit' : 'Net loss', value: Math.abs(netProfit), color: netProfit >= 0 ? '#047857' : '#B91C1C', sub: pl.sales > 0 ? `${((Math.abs(netProfit) / pl.sales) * 100).toFixed(1)}% of sales` : undefined },
+        ].map((k) => (
+          <View key={k.label} className="rounded-2xl border border-gray-200 bg-white p-4" style={{ flexGrow: 1, flexBasis: 200 }}>
+            <Text className="text-xs font-semibold text-gray-500">{k.label}</Text>
+            <Text className="mt-1 text-[20px] font-bold" style={{ color: k.color }}>NPR {inr(k.value)}</Text>
+            {!!k.sub && <Text className="text-xs text-gray-500">{k.sub}</Text>}
+          </View>
+        ))}
+      </View>
+
+      {/* the account: expenses and cost on the left, income on the right */}
+      <View className="mb-4 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <View className={twoSided ? 'flex-row' : ''}>
+          <View className="flex-1 p-5" style={twoSided ? { borderRightWidth: 1, borderColor: '#E5E7EB' } : { borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
+            <SideHead title="Particulars" />
+            <Line label="Opening stock" amount={pl.opening} />
+            <Group id="purchase" open={openGroups} onToggle={toggleGroup} label="Purchase accounts" amount={pl.purchase}
+              rows={[['Purchase bills', pl.purchase]]} />
+            <Group id="direct" open={openGroups} onToggle={toggleGroup} label="Direct expenses" amount={pl.directTotal} rows={pl.direct} />
+            {grossProfit >= 0 ? <Line label="Gross profit c/o" amount={grossProfit} tone="profit" bold /> : null}
+            <TotalLine amount={tradingTotal} />
+            {grossProfit < 0 ? <Line label="Gross loss b/f" amount={-grossProfit} tone="loss" bold /> : null}
+            <Group id="indirect" open={openGroups} onToggle={toggleGroup} label="Indirect expenses" amount={pl.indirectTotal} rows={pl.indirect} />
+            {netProfit >= 0 ? <Line label="Net profit" amount={netProfit} tone="profit" bold /> : null}
+            <TotalLine amount={secondTotal} />
+          </View>
+          <View className="flex-1 p-5">
+            <SideHead title="Particulars" />
+            <Group id="sales" open={openGroups} onToggle={toggleGroup} label="Sales accounts" amount={pl.sales}
+              rows={[['Sales - items', pl.items], ['Installation & repair services', pl.services]]} />
+            <Line label="Closing stock" amount={pl.closing} />
+            {grossProfit < 0 ? <Line label="Gross loss c/o" amount={-grossProfit} tone="loss" bold /> : null}
+            <TotalLine amount={tradingTotal} />
+            {grossProfit >= 0 ? <Line label="Gross profit b/f" amount={grossProfit} tone="profit" bold /> : null}
+            <Line label="Indirect incomes" amount={0} muted />
+            {netProfit < 0 ? <Line label="Net loss" amount={-netProfit} tone="loss" bold /> : null}
+            <TotalLine amount={secondTotal} />
+          </View>
+        </View>
+        <Text className="border-t border-gray-200 bg-gray-50 px-5 py-3 text-xs text-gray-500">
+          Both sides total the same, as in Tally. Stock is valued at cost as it stands now, so opening and closing stock are the same figure.
+        </Text>
       </View>
 
       {REPORT_GROUPS.map((group, g) => (
