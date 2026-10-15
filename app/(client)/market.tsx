@@ -16,18 +16,59 @@ import type { Product } from '../../types/database.types';
 /** `fill` makes the card take its whole cell instead of the phone layout's
  * fixed 48% (two to a row) - used by the wide web grid below. */
 function ProductCard({ item, onAdd, fill }: { item: Product; onAdd: (product: Product) => void; fill?: boolean }) {
+  // Pointer hover (web only; touch never raises it): the whole card lifts a little with a blue edge and
+  // a soft shadow, the picture eases in, and Add to Cart darkens. The DOM's mouse events fire for
+  // everything inside the card (a Pressable's own hover would not, with Pressables nested in it);
+  // they are web-only, so typed as an object.
+  const [hovered, setHovered] = useState(false);
+  const [addHovered, setAddHovered] = useState(false);
+  const hoverEvents = {
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => {
+      setHovered(false);
+      setAddHovered(false);
+    },
+  } as object;
+  const ease = 'cubic-bezier(0.2, 0.7, 0.2, 1)';
+
   return (
-    <View className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border border-gray-200 bg-white p-3`}>
+    <View
+      {...hoverEvents}
+      className={`mb-4 ${fill ? 'w-full' : 'w-[48%]'} rounded-xl border border-gray-200 bg-white p-3`}
+      style={
+        {
+          borderColor: hovered ? '#60A5FA' : '#E5E7EB',
+          transform: [{ translateY: hovered ? -4 : 0 }],
+          // Always a shadow (a faint one at rest), so it eases between two instead of jumping from none.
+          boxShadow: hovered ? '0 16px 32px rgba(37, 99, 235, 0.16)' : '0 1px 2px rgba(17, 24, 39, 0.05)',
+          transitionProperty: 'transform, box-shadow, border-color',
+          transitionDuration: '220ms',
+          transitionTimingFunction: ease,
+        } as object
+      }
+    >
       <Pressable onPress={() => router.push(`/(client)/product/${item.id}`)}>
         <View className="mb-2 aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-100">
           {item.image_url ? (
-            <Image source={{ uri: toSafeImageUri(item.image_url)! }} className="h-full w-full" resizeMode="cover" />
+            <Image
+              source={{ uri: toSafeImageUri(item.image_url)! }}
+              className="h-full w-full"
+              resizeMode="cover"
+              style={
+                {
+                  transform: [{ scale: hovered ? 1.06 : 1 }],
+                  transitionProperty: 'transform',
+                  transitionDuration: '320ms',
+                  transitionTimingFunction: ease,
+                } as object
+              }
+            />
           ) : (
             <Text className="text-3xl">🖥️</Text>
           )}
         </View>
 
-        {item.category && (
+        {!!item.category && (
           <Text className="mb-0.5 text-[11px] capitalize tracking-wide text-orange-600">{item.category}</Text>
         )}
         <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
@@ -37,7 +78,19 @@ function ProductCard({ item, onAdd, fill }: { item: Product; onAdd: (product: Pr
         <Text className="mb-2 mt-0.5 text-xs text-gray-400">{item.stock_level} in stock</Text>
       </Pressable>
 
-      <Pressable onPress={() => onAdd(item)} className="items-center rounded-lg bg-orange-500 py-2">
+      <Pressable
+        onPress={() => onAdd(item)}
+        onHoverIn={() => setAddHovered(true)}
+        onHoverOut={() => setAddHovered(false)}
+        className="items-center rounded-lg bg-orange-500 py-2"
+        style={
+          {
+            backgroundColor: addHovered ? '#1D4ED8' : hovered ? '#2563EB' : undefined,
+            transitionProperty: 'background-color',
+            transitionDuration: '160ms',
+          } as object
+        }
+      >
         <Text className="text-xs font-semibold text-white">Add to Cart</Text>
       </Pressable>
     </View>
