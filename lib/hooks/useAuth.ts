@@ -96,6 +96,23 @@ export async function loadProfileWithRetry(userId: string, isActive: () => boole
   if (isActive()) setProfileError(true);
 }
 
+/** Run right after a successful sign-in, before going anywhere. A login with no
+ * profile row is not an account the app can serve (no role, no portal), so it
+ * is signed out on the spot. Returns false when that happened. A network
+ * failure here is not treated as "no account" - the profile loader's retry
+ * and error screen handle that. */
+export async function ensureProfileExists(): Promise<boolean> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  if (!userId) return false;
+  const { data, error } = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
+  if (!error && !data) {
+    await useAuthStore.getState().signOut();
+    return false;
+  }
+  return true;
+}
+
 /**
  * Bootstraps the auth session and keeps it in sync with Supabase auth
  * state changes. Mount this once near the root of the app (see app/_layout.tsx).

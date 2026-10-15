@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, KeyboardAvoidingView, ScrollView, Platform, Keyboard } from 'react-native';
 import { Link, router } from 'expo-router';
+import { ensureProfileExists } from '../../lib/hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { AppLogo } from '../../lib/components/AppLogo';
@@ -134,6 +135,10 @@ export default function Login() {
       return;
     }
     setFailedAttempts(0);
+    if (!(await ensureProfileExists())) {
+      showAlert('Account not found', 'This login has no Jageer account behind it. Register first, or contact support if you think this is a mistake.');
+      return;
+    }
     await offerBiometricSignIn(trimmedEmail, password);
     router.replace('/');
   }
@@ -176,6 +181,10 @@ export default function Login() {
         } else {
           showAlert('Could not sign in', `${error.message} Please try again.`);
         }
+        return;
+      }
+      if (!(await ensureProfileExists())) {
+        showAlert('Account not found', 'This login has no Jageer account behind it. Register first, or contact support if you think this is a mistake.');
         return;
       }
       router.replace('/');
