@@ -987,6 +987,17 @@ export function WorkHubPanel({
   const { confirmCancelWork, busyId: cancellingId } = useCancelWork();
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
   const [assigning, setAssigning] = useState<{ request: ServiceRequest; mode: 'staff' | 'freelance' } | null>(null);
+
+  /** Opens the technician picker - unless the job has already been started. The database only lets a
+   * job be handed to someone while it is still waiting to be accepted, so a job in progress is
+   * explained here, instead of letting a technician be picked and the job then refused. */
+  function openPicker(request: ServiceRequest, mode: 'staff' | 'freelance') {
+    if (request.status === 'in_progress') {
+      showAlert("Can't reassign this job", 'This job is in progress, so it cannot be reassigned.');
+      return;
+    }
+    setAssigning({ request, mode });
+  }
   const [sending, setSending] = useState(false);
   const [maximised, setMaximised] = useState(false);
   // One short row per job (default on a wide screen) so many jobs fit at once; off shows the full cards.
@@ -1166,7 +1177,12 @@ export function WorkHubPanel({
       setAssigning(null);
       showJobSentAlert(person.name);
     } catch (err) {
-      showAlert('Could not send the job', getErrorMessage(err));
+      const message = getErrorMessage(err);
+      // The database's own wording for a started job, said properly (the picker already stops this).
+      showAlert(
+        'Could not send the job',
+        /in_progress to assigned/i.test(message) ? 'This job is in progress, so it cannot be reassigned in a proper way.' : message
+      );
     } finally {
       setSending(false);
     }
@@ -1219,7 +1235,7 @@ export function WorkHubPanel({
                 request={r}
                 footer={
                   <View className="mt-2.5 flex-row" style={{ gap: 8 }}>
-                    {smallButton('Assign', 'person-add-outline', () => setAssigning({ request: r, mode: 'staff' }), 'blue')}
+                    {smallButton('Assign', 'person-add-outline', () => openPicker(r, 'staff'), 'blue')}
                     {smallButton(busyId === r.id ? 'Opening…' : 'Open to team', 'megaphone-outline', () => setOpenToTeam(r, true), 'ghost')}
                   </View>
                 }
@@ -1243,7 +1259,7 @@ export function WorkHubPanel({
                 request={r}
                 footer={
                   <View className="mt-2.5 flex-row" style={{ gap: 8 }}>
-                    {smallButton('Assign instead', 'person-add-outline', () => setAssigning({ request: r, mode: 'staff' }), 'ghost')}
+                    {smallButton('Assign instead', 'person-add-outline', () => openPicker(r, 'staff'), 'ghost')}
                     {smallButton(busyId === r.id ? 'Removing…' : 'Take back', 'close-circle-outline', () => setOpenToTeam(r, false), 'ghost')}
                   </View>
                 }
@@ -1408,8 +1424,8 @@ export function WorkHubPanel({
         times={jobTimes}
         now={now}
         technicianName={technicianName}
-        onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
-        onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
+        onAssign={(r) => openPicker(r, 'staff')}
+        onRequest={(r) => openPicker(r, 'freelance')}
         onCancelWork={confirmCancelWork}
         onOpenToTeam={setOpenToTeam}
         busyId={cancellingId ?? busyId}
@@ -1447,8 +1463,8 @@ export function WorkHubPanel({
               times={jobTimes}
               now={now}
               technicianName={technicianName}
-              onAssign={(r) => setAssigning({ request: r, mode: 'staff' })}
-              onRequest={(r) => setAssigning({ request: r, mode: 'freelance' })}
+              onAssign={(r) => openPicker(r, 'staff')}
+              onRequest={(r) => openPicker(r, 'freelance')}
               onCancelWork={confirmCancelWork}
               onOpenToTeam={setOpenToTeam}
               busyId={cancellingId ?? busyId}
