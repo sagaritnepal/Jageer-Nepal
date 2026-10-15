@@ -104,7 +104,8 @@ export function useAccountBalances(userId: string | undefined) {
           nav: { kind: 'transactions', type: isSale ? 'sale' : 'purchase' },
         });
       }
-      if (t.type === 'expense') {
+      // An expense posted through a journal voucher was never paid in cash: it is owed to a person.
+      if (t.type === 'expense' && !journalOf(t.note)) {
         const partyLabel = t.party_name ?? '';
         add(t.bank_account_id, -t.amount, {
           id: t.id,

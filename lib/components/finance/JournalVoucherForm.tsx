@@ -1,8 +1,10 @@
 // lib/components/finance/JournalVoucherForm.tsx
-import { useState } from 'react';
-import { Text, TextInput } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../supabase';
+import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { SuggestInput } from './SuggestInput';
 import { DateField } from '../DateTimeFields';
 import { Field, FieldRow, FormActions, INPUT } from './FormKit';
 import { PartyMoveField } from './EntryEditParts';
@@ -30,14 +32,34 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
   const [date, setDate] = useState(localTodayIso());
   const [narration, setNarration] = useState('');
   const [saving, setSaving] = useState(false);
+  // The debit side is either a person's ledger or an expense head (Salary, Rent ...): a voucher that
+  // charges an expense with no cash moving, owed to the person on the credit side.
+  const [debitKind, setDebitKind] = useState<'party' | 'expense'>('party');
+  const [head, setHead] = useState('');
+  const { data: categories, refetch: refetchCategories } = useSupabaseQuery('expense_categories', {
+    filters: { owner_id: ownerId },
+    orderBy: { column: 'name' },
+  });
+  const headOptions = useMemo(() => {
+    const q = head.trim().toLowerCase();
+    return (categories ?? [])
+      .filter((c) => !q || c.name.toLowerCase().includes(q))
+      .slice(0, 12)
+      .map((c) => ({ key: c.id, label: c.name }));
+  }, [categories, head]);
 
   async function handleSave() {
     const value = Number(amount);
-    if (!from || !to) {
-      showAlert('Pick both people', 'A journal voucher moves an amount from one person to another.');
+    const toExpense = debitKind === 'expense';
+    if (!from || (!toExpense && !to)) {
+      showAlert(toExpense ? 'Pick the credit person' : 'Pick both people', toExpense ? 'Choose who the expense is owed to.' : 'A journal voucher moves an amount from one person to another.');
       return;
     }
-    if (from.id === to.id) {
+    if (toExpense && !head.trim()) {
+      showAlert('Pick an expense head', 'Choose or type the expense, for example Salary.');
+      return;
+    }
+    if (!toExpense && to && from.id === to.id) {
       showAlert('Pick two different people', 'The two sides of a voucher cannot be the same person.');
       return;
     }
@@ -52,10 +74,57 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     setSaving(true);
     try {
       const note = journalNote(newJournalCode(), narration);
+      if (toExpense) {
+        const name = head.trim();
+        const existing = (categories ?? []).find((c) => c.name.toLowerCase() === name.toLowerCase());
+        let categoryId = existing?.id ?? null;
+        if (!categoryId) {
+          const created = await (supabase.from('expense_categories') as any).insert({ owner_id: ownerId, name }).select('id').single();
+          if (created.error) throw created.error;
+          categoryId = created.data.id as string;
+        }
+        const expense = await (supabase.from('business_transactions') as any)
+          .insert({
+            owner_id: ownerId,
+            type: 'expense',
+            amount: value,
+            party_name: from.name,
+            customer_id: from.id,
+            note,
+            bill_date: date,
+            expense_category_id: categoryId,
+            payment_mode: 'credit',
+            bank_account_id: null,
+          })
+          .select('id')
+          .single();
+        if (expense.error) throw expense.error;
+        const owed = await (supabase.from('customer_ledger_entries') as any).insert({
+          owner_id: ownerId,
+          amount: value,
+          note,
+          source: 'manual',
+          entry_date: date,
+          bank_account_id: null,
+          customer_id: from.id,
+          entry_type: 'credit',
+        });
+        if (owed.error) {
+          await (supabase.from('business_transactions') as any).delete().eq('id', expense.data.id);
+          throw owed.error;
+        }
+        await Promise.all(
+          ['customer_ledger_entries', 'business_transactions', 'expense_categories'].map((table) => queryClient.invalidateQueries({ queryKey: [table] }))
+        );
+        await refetchCategories();
+        onDone();
+        return;
+      }
+      const toParty = to as Person;
       // Debited: on their vendor ledger when that is the only ledger they have, else on their customer ledger.
       const [toVendor, toCustomer] = await Promise.all([
-        hasEntries('vendor_ledger_entries', 'vendor_id', to.id),
-        hasEntries('customer_ledger_entries', 'customer_id', to.id),
+        hasEntries('vendor_ledger_entries', 'vendor_id', toParty.id),
+        hasEntries('customer_ledger_entries', 'customer_id', toParty.id),
       ]);
       const onVendorLedger = toVendor && !toCustomer;
       const common = { owner_id: ownerId, amount: value, note, source: 'manual', entry_date: date, bank_account_id: null };
@@ -69,8 +138,8 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
 
       const debited = await (supabase.from(onVendorLedger ? 'vendor_ledger_entries' : 'customer_ledger_entries') as any).insert(
         onVendorLedger
-          ? { ...common, vendor_id: to.id, entry_type: 'credit' }
-          : { ...common, customer_id: to.id, entry_type: 'debit' }
+          ? { ...common, vendor_id: toParty.id, entry_type: 'credit' }
+          : { ...common, customer_id: toParty.id, entry_type: 'debit' }
       );
       if (debited.error) {
         // Take the first half back, so a voucher is never half of one.
@@ -108,23 +177,49 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
       <Text className="text-[12px] text-gray-500">
         Moves an amount from one person's ledger to another's. No cash or bank account is touched.
       </Text>
+      <View className="gap-2">
+        <Text className="text-[12px] font-semibold text-gray-600">Debit</Text>
+        <View className="flex-row self-start rounded-lg bg-gray-100 p-0.5">
+          {([['party', 'Person'], ['expense', 'Expense head']] as const).map(([k, label]) => (
+            <Pressable key={k} onPress={() => setDebitKind(k)} className="rounded-md px-3 py-1.5" style={{ backgroundColor: debitKind === k ? '#FFFFFF' : 'transparent' }}>
+              <Text className="text-[12.5px] font-semibold" style={{ color: debitKind === k ? '#1D4ED8' : '#6B7280' }}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {debitKind === 'expense' ? (
+          <View style={{ zIndex: 5 }}>
+            <SuggestInput
+              value={head}
+              onChangeText={setHead}
+              options={headOptions}
+              onSelectOption={(o) => setHead(o.label)}
+              placeholder="Expense head, e.g. Salary Expenses"
+              accent="#DC2626"
+              inputClassName={INPUT}
+              showWhenEmpty
+            />
+            <Text className="mt-1 text-[12px] text-gray-500">Charged as an expense, owed to the credit person below. No cash or bank account is touched.</Text>
+          </View>
+        ) : (
+          <PartyMoveField
+            label="Person (Debit)"
+            ownerId={ownerId}
+            partyId={to?.id ?? ''}
+            pickedName={to?.name}
+            onPick={setTo}
+            hint="Owes you more - or you owe them less - by this amount."
+            pickerTitle="Debit which person?"
+          />
+        )}
+      </View>
       <PartyMoveField
-        label="From (Credit)"
+        label="Credit"
         ownerId={ownerId}
         partyId={from?.id ?? ''}
         pickedName={from?.name}
         onPick={setFrom}
         hint="Owes you less - or you owe them more - by this amount."
         pickerTitle="Credit which person?"
-      />
-      <PartyMoveField
-        label="To (Debit)"
-        ownerId={ownerId}
-        partyId={to?.id ?? ''}
-        pickedName={to?.name}
-        onPick={setTo}
-        hint="Owes you more - or you owe them less - by this amount."
-        pickerTitle="Debit which person?"
       />
       <FieldRow>
         <Field label="Remarks" basis={260}>

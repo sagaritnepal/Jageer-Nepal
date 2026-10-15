@@ -70,7 +70,7 @@ type BookRow = {
   /** What this row actually is in the database, so it can be edited here. */
   edit?: EditTarget;
   /** A journal voucher: the two ledger entries behind this one line (nothing moved through an account). */
-  journal?: { entries: { table: 'customer_ledger_entries' | 'vendor_ledger_entries'; id: string }[] };
+  journal?: { entries: { table: 'customer_ledger_entries' | 'vendor_ledger_entries' | 'business_transactions'; id: string }[] };
 };
 
 type EditTable = 'customer_ledger_entries' | 'vendor_ledger_entries' | 'account_transfers';
@@ -965,12 +965,20 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
     };
     let opening = 0;
     const rows: BookRow[] = [];
+    const voucherExpense = new Map<string, { id: string; head: string }>();
 
     for (const t of transactions ?? []) {
       const date = t.bill_date ?? localDay(t.created_at);
-      if (t.type === 'expense' && date < from) {
+      const viaVoucher = t.type === 'expense' && !!journalOf(t.note);
+      if (t.type === 'expense' && !viaVoucher && date < from) {
         opening -= t.amount;
         carry(keyOf(t.bank_account_id), -t.amount);
+      }
+      // An expense posted by a journal voucher is listed as that voucher's one line, below.
+      if (viaVoucher) {
+        const code = journalOf(t.note)?.code;
+        if (code) voucherExpense.set(code, { id: t.id, head: categoryName.get(t.expense_category_id ?? '') ?? 'Expense' });
+        continue;
       }
       if (date < from || date > day) continue;
       const discount = t.discount_amount ?? 0;
@@ -1152,6 +1160,11 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
       else v.from = who;
     }
     for (const [code, v] of vouchers) {
+      const exp = voucherExpense.get(code);
+      if (exp) {
+        v.entries.push({ table: 'business_transactions', id: exp.id });
+        v.to = exp.head;
+      }
       if (v.date < from || v.date > day) continue;
       rows.push({
         ...blank,
