@@ -144,6 +144,15 @@ export default function ResellerLayout() {
             tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
           }}
         />
+        {/* Stock and Inventory: a tab of its own on a phone, as it is its own item in the side panel. */}
+        <Tabs.Screen
+          name="inventory"
+          options={{
+            title: 'Stock and Inventory',
+            tabBarLabel: 'Stock',
+            tabBarIcon: ({ color, focused }) => <TabIcon name="cube" color={color} focused={focused} />,
+          }}
+        />
         <Tabs.Screen
           name="finance"
           options={{ title: 'Finance', tabBarIcon: ({ color, focused }) => <TabIcon name="wallet" color={color} focused={focused} /> }}
@@ -212,7 +221,6 @@ export default function ResellerLayout() {
         <Tabs.Screen name="bank-accounts" options={{ href: null, title: 'Bank Accounts' }} />
         <Tabs.Screen name="bank-balances" options={{ href: null, title: 'Available Balance' }} />
         <Tabs.Screen name="import-statement" options={{ href: null, title: 'Import Statement' }} />
-        <Tabs.Screen name="inventory" options={{ href: null, title: 'Stock and Inventory' }} />
         <Tabs.Screen name="report" options={{ href: null, title: 'Report' }} />
         <Tabs.Screen name="daybook" options={{ href: null, title: 'Day Book' }} />
       </Tabs>
