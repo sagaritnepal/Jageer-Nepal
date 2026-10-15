@@ -237,6 +237,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
             ['Indirect expenses', n(pl.indirectTotal)],
             ...pl.indirect.map(([k, v]) => ['    ' + k, n(v)]),
             [netProfit >= 0 ? 'Net profit' : 'Net loss', n(Math.abs(netProfit))],
+          ],
         },
       ],
       note: 'Sales, Purchase and Expenses are the bills dated in the period, paid or not. Stock is valued at cost as it stands now.',
