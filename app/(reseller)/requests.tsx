@@ -1225,8 +1225,8 @@ export default function ResellerRequestQueue() {
               <Text className="flex-1 text-[13px] font-semibold text-gray-800">
                 {pickedJobs.size} {pickedJobs.size === 1 ? 'job' : 'jobs'} ticked - bill them together under one bill number
               </Text>
-              <Pressable onPress={() => setPickedJobs(new Set())} hitSlop={6}>
-                <Text className="text-[12.5px] font-semibold text-gray-600">Clear</Text>
+              <Pressable onPress={() => setPickedJobs(new Set())} hitSlop={6} accessibilityRole="button" accessibilityLabel="Unselect all jobs">
+                <Text className="text-[12.5px] font-semibold text-gray-600">Unselect</Text>
               </Pressable>
               <Pressable onPress={billPickedJobs} className="h-9 flex-row items-center gap-1.5 rounded-lg px-3.5" style={{ backgroundColor: '#0F766E' }}>
                 <Ionicons name="document-text-outline" size={15} color="#FFFFFF" />
