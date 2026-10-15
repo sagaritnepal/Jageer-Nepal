@@ -133,3 +133,6 @@ $$;
 
 revoke all on function technician_respond_to_job(uuid, boolean) from public;
 grant execute on function technician_respond_to_job(uuid, boolean) to authenticated;
+
+-- Make the API pick up the new function at once (Supabase usually does this by itself after a change).
+notify pgrst, 'reload schema';
