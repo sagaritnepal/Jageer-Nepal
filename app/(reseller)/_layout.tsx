@@ -27,7 +27,6 @@ const FINANCE_NAV_ORDER = [
   'daybook',
   'customers',
   'transactions',
-  'import-statement',
   'inventory',
   'report',
   'quotation',

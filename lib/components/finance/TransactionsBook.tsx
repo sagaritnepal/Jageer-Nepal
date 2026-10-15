@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { shortDateLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
-import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
+import { BackButton, BookPage, BookStat, BookStats, BookTable, FilterTabs, Pill, ToolbarButton, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { DateFilterButton } from './DateRangeFilter';
 import { MONEY } from './moneyColors';
 import { journalOf } from '../../utils/journalVoucher';
@@ -153,23 +153,30 @@ export function TransactionsBook({
   const hasBack = !!onBack;
   // Print and Excel: the statement as it stands (see buildReport, below).
   const reportButtons = useReportActions(() => buildReport());
+  // Import: the way into the statement import (bank / wallet file -> review -> add). It sits with the
+  // statement itself, on the whole Statement only - not on a Sales or Purchases list.
+  const canImport = !locked && !!basePath;
+  const importHref = basePath ? `${basePath}/import-statement` : null;
   const toolbar = useBookToolbar(
     {
       title,
       resetTitle: 'Statement',
       wide: layout.wide,
-      // The type tabs, the date filter, Print and Excel are more than a narrow bar holds.
-      inBarMinWidth: 1240,
+      // The type tabs, the date filter, Print, Excel and Import are more than a narrow bar holds.
+      inBarMinWidth: 1360,
       left: hasBack ? () => <BackButton onPress={() => live.current.onBack?.()} /> : undefined,
       right: () => (
         <>
           {showTabs && <FilterTabs options={filters} value={filter} onChange={(f) => live.current.onFilter(f)} />}
           <DateFilterButton from={from} to={to} onApply={setRange} />
           {reportButtons}
+          {canImport && importHref && (
+            <ToolbarButton label="Import" icon="cloud-upload-outline" onPress={() => router.push(importHref as never)} />
+          )}
         </>
       ),
     },
-    [showTabs, hasBack, filter, filters, from, to]
+    [showTabs, hasBack, filter, filters, from, to, canImport, importHref]
   );
 
   const rows = useMemo<Row[]>(() => {

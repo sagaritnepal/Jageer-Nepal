@@ -77,7 +77,8 @@ export function shortcuts(basePath: string): {
       href: `${basePath}${kind.path}`,
     })),
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
-    { key: 'import-statement', label: 'Import Statement', icon: 'document-attach', href: `${basePath}/import-statement` },
+    // Import Statement is not a page of its own in the menu any more: it is the Import button in the
+    // Statement page's header, which opens the same import flow (the /import-statement route).
     { key: 'inventory', label: 'Stock and Inventory', icon: 'cube', href: `${basePath}/inventory` },
     { key: 'report', label: 'Report', icon: 'bar-chart', href: `${basePath}/report` },
     // Quotation only exists under (reseller) for now - a wholesaler basePath has no matching
@@ -102,7 +103,6 @@ const SHORTCUT_COLORS: Record<string, { bg: string; fg: string }> = {
   purchase: { bg: '#FEF2F2', fg: '#DC2626' },
   expenses: { bg: MONEY.out.bg, fg: MONEY.out.base },
   'bank-accounts': { bg: '#EEF2FF', fg: '#4F46E5' },
-  'import-statement': { bg: '#F0FDFA', fg: '#0D9488' },
   inventory: { bg: '#F5F3FF', fg: '#7C3AED' },
   report: { bg: '#EFF6FF', fg: '#2563EB' },
   quotation: { bg: '#FDF4FF', fg: '#A21CAF' },

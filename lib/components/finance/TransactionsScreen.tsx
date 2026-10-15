@@ -3527,15 +3527,30 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
                 </View>
               )}
               {!isLockedToType && (
-                <Pressable
-                  onPress={() => {
-                    setEditingTx(null);
-                    setShowForm((v) => !v);
-                  }}
-                  className="h-10 w-10 items-center justify-center rounded-2xl bg-orange-500"
-                >
-                  <Ionicons name={showForm ? 'close' : 'add'} size={20} color="white" />
-                </Pressable>
+                <View className="flex-row items-center" style={{ gap: 8 }}>
+                  {/* Import (a bank / wallet statement file) - it used to be its own menu page. */}
+                  {!!basePath && (
+                    <Pressable
+                      onPress={() => router.push(`${basePath}/import-statement` as any)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Import a statement"
+                      className="h-10 flex-row items-center justify-center rounded-2xl border border-gray-300 bg-white px-3"
+                      style={{ gap: 6 }}
+                    >
+                      <Ionicons name="cloud-upload-outline" size={17} color="#1D4ED8" />
+                      <Text className="text-[13px] font-semibold text-gray-700">Import</Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    onPress={() => {
+                      setEditingTx(null);
+                      setShowForm((v) => !v);
+                    }}
+                    className="h-10 w-10 items-center justify-center rounded-2xl bg-orange-500"
+                  >
+                    <Ionicons name={showForm ? 'close' : 'add'} size={20} color="white" />
+                  </Pressable>
+                </View>
               )}
             </View>
             )}
