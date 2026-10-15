@@ -266,9 +266,9 @@ function TrendChart({ labels, sales, purchases }: { labels: string[]; sales: num
   const top = 26;
   const bottom = 32;
   const rawMax = Math.max(...sales, ...purchases, 1);
-  // round the top of the scale up to a tidy number so the grid labels read cleanly
+  // round the top of the scale up to a tidy number (every step divides by 4) so the grid reads cleanly
   const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
-  const max = Math.ceil(rawMax / mag / 2) * 2 * (mag / 2) || 1;
+  const max = ([1, 1.2, 1.6, 2, 2.4, 3, 4, 5, 6, 8, 10].map((m) => m * mag).find((v) => v >= rawMax) ?? rawMax) || 1;
   const n = Math.max(labels.length - 1, 1);
   const x = (i: number) => left + (i / n) * (W - left - right);
   const y = (v: number) => top + (1 - v / max) * (H - top - bottom);
