@@ -876,6 +876,8 @@ function LedgerList({ basePath }: { basePath: string }) {
   // Which headers (Ledger types) are open to show their parties. They all start closed - the headers
   // are the overview, and a type's parties are a tap away instead of a scroll.
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+  // Every header starts open, so each ledger type shows its parties straight away; later ones open too.
+  const [allStartOpen, setAllStartOpen] = useState(true);
 
   const { data: customers } = useSupabaseQuery('customers', {
     filters: userId ? { owner_id: userId } : {},
@@ -1020,6 +1022,8 @@ function LedgerList({ basePath }: { basePath: string }) {
       }
       return g;
     };
+    // Every Ledger type is a header, one with nobody in it too (until a search narrows the list).
+    if (!narrowed) for (const t of partyTypes) slot(t.id, t.name);
     // An app user with no saved ledger is a customer: they go under Customer, with their APP badge.
     for (const d of filtered) {
       const typeId = d.row.kind === 'customer' ? d.row.customer.party_type_id ?? null : null;
@@ -1038,8 +1042,15 @@ function LedgerList({ basePath }: { basePath: string }) {
     }
     const last = (k: string) => (k === NO_TYPE ? 1 : 0);
     return [...byKey.values()].sort((a, b) => last(a.key) - last(b.key) || a.label.localeCompare(b.label));
-  }, [filtered, appUserType, partyTypeName]);
+  }, [filtered, appUserType, partyTypeName, partyTypes, narrowed]);
   const groupKeys = groups.map((g) => g.key);
+  useEffect(() => {
+    if (allStartOpen && groupKeys.length > 0) {
+      setOpenKeys(new Set(groupKeys));
+      setAllStartOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKeys.join('|')]);
   const allOpen = groupKeys.length > 0 && groupKeys.every((k) => openKeys.has(k));
   const toggleGroup = (key: string) =>
     setOpenKeys((prev) => {
@@ -1333,24 +1344,27 @@ function LedgerList({ basePath }: { basePath: string }) {
               <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
                 {g.label}
               </Text>
-              <Text className="text-[12px] text-gray-400">
+              <Text className="text-[12px] text-gray-400" style={{ minWidth: 86, textAlign: 'right' }}>
                 {`${g.rows.length} ${g.rows.length === 1 ? 'party' : 'parties'}`}
               </Text>
               {tableMode && (
                 <>
-                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                  <View style={{ width: 170, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6 }}>
+                    <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Receive</Text>
                     <Text className="text-[12.5px] font-bold" style={{ color: g.receivable > 0 ? LEDGER_TONE.receivable.text : '#D1D5DB' }}>
                       {g.receivable > 0 ? bookMoney(g.receivable) : '—'}
                     </Text>
                   </View>
-                  <View style={{ width: 105, alignItems: 'flex-end' }}>
+                  <View style={{ width: 150, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6 }}>
+                    <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Pay</Text>
                     <Text className="text-[12.5px] font-bold" style={{ color: g.payable > 0 ? LEDGER_TONE.payable.text : '#D1D5DB' }}>
                       {g.payable > 0 ? bookMoney(g.payable) : '—'}
                     </Text>
                   </View>
                 </>
               )}
-              <View style={{ width: 120, alignItems: 'flex-end' }}>
+              <View style={{ width: 170, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                <Text className="text-[10.5px] font-semibold uppercase text-gray-400">Balance</Text>
                 <PartyBalance position={partyPosition({ receivable: g.net, payable: 0 })} compact />
               </View>
             </Pressable>
