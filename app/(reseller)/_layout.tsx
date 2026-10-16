@@ -56,6 +56,7 @@ const DAYBOOK_ENTRIES: WebNavItem[] = [
     .filter((s) => DAYBOOK_ENTRY_KEYS.has(s.key) && s.key !== 'expenses')
     .map((s) => ({ href: s.href, label: s.label, icon: s.icon })),
   { href: '/(reseller)/voucher', label: 'Voucher', icon: 'document-text' },
+  { href: '/(reseller)/contra', label: 'Contra', icon: 'swap-horizontal' },
 ];
 
 const NAV_ITEMS: WebNavItem[] = [
@@ -221,6 +222,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="transactions" options={{ href: null, title: 'Statement' }} />
         <Tabs.Screen name="quick-payment" options={{ href: null, title: 'Quick Payment' }} />
         <Tabs.Screen name="voucher" options={{ href: null, title: 'Journal Voucher' }} />
+        <Tabs.Screen name="contra" options={{ href: null, title: 'Contra' }} />
         <Tabs.Screen name="received" options={{ href: null, title: 'Total Received' }} />
         <Tabs.Screen name="paid" options={{ href: null, title: 'Total Paid' }} />
         <Tabs.Screen name="sales-report" options={{ href: null, title: 'Sales Report' }} />

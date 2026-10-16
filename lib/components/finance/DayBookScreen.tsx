@@ -1455,7 +1455,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   // of their own under the heading.
   const entriesInBar = wide && windowWidth >= 1640;
   const newEntryButtons = (
-    <NewEntryButtons basePath={basePath} onVoucher={() => router.push(`${basePath}/voucher` as never)} onContra={() => setShowContra(true)} />
+    <NewEntryButtons basePath={basePath} onVoucher={() => router.push(`${basePath}/voucher` as never)} onContra={() => router.push(`${basePath}/contra` as never)} />
   );
   const toolbar = useBookToolbar(
     {
