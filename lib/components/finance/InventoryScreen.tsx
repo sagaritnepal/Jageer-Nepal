@@ -389,6 +389,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search your products" wide={inBar} />
           <FilterTabs options={FILTERS} value={filter} onChange={setFilter} />
           {reportButtons}
+          <ToolbarButton icon="add" label="Add stock" onPress={() => router.push(`${basePath}/transactions?type=purchase&add=1` as never)} />
           {buyStockHref && <ToolbarButton icon="storefront" label="Buy Stock" onPress={() => router.push(buyStockHref as never)} />}
         </>
       ),
