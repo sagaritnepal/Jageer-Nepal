@@ -583,7 +583,7 @@ function CategoryPickerModal({
   const [newName, setNewName] = useState('');
   // The Add popup: the name and whether it is a Direct or an Indirect expense, then Save or Cancel.
   const [adding, setAdding] = useState(false);
-  const [newGroup, setNewGroup] = useState<'direct' | 'indirect'>('indirect');
+  const [newGroup, setNewGroup] = useState<'direct' | 'indirect'>('direct');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [saving, setSaving] = useState(false);
@@ -594,7 +594,7 @@ function CategoryPickerModal({
     try {
       await onCreate(newName.trim(), newGroup);
       setNewName('');
-      setNewGroup('indirect');
+      setNewGroup('direct');
       setAdding(false);
     } catch (err) {
       showAlert('Could not add category', getErrorMessage(err));
@@ -655,7 +655,7 @@ function CategoryPickerModal({
                 <View>
                   <Text className="mb-1 text-xs font-semibold text-gray-600">Category</Text>
                   <View className="flex-row" style={{ gap: 8 }}>
-                    {([['indirect', 'Indirect expense'], ['direct', 'Direct expense']] as const).map(([k, label]) => (
+                    {([['direct', 'Direct expense'], ['indirect', 'Indirect expense']] as const).map(([k, label]) => (
                       <Pressable
                         key={k}
                         onPress={() => setNewGroup(k)}
@@ -667,7 +667,7 @@ function CategoryPickerModal({
                     ))}
                   </View>
                   <Text className="mt-1 text-[11.5px] text-gray-500">
-                    Direct costs (freight, repairs, labour) are taken off sales before gross profit; indirect ones (salary, rent, phone) after it.
+                    Everything is a Direct expense unless you mark it Indirect. Direct expenses are taken off before gross profit, indirect ones after it.
                   </Text>
                 </View>
                 <View className="flex-row justify-end" style={{ gap: 10 }}>
@@ -675,7 +675,7 @@ function CategoryPickerModal({
                     onPress={() => {
                       setAdding(false);
                       setNewName('');
-                      setNewGroup('indirect');
+                      setNewGroup('direct');
                     }}
                     className="rounded-lg border border-gray-300 px-4 py-2"
                   >
@@ -992,8 +992,8 @@ function TransactionForm({
     }
   }
 
-  async function handleCreateCategory(name: string, group: 'direct' | 'indirect' = 'indirect') {
-    const created = await createCategory.mutateAsync({ owner_id: userId, name, ...(group === 'direct' ? { expense_group: 'direct' } : {}) } as never);
+  async function handleCreateCategory(name: string, group: 'direct' | 'indirect' = 'direct') {
+    const created = await createCategory.mutateAsync({ owner_id: userId, name, ...(group === 'indirect' ? { expense_group: 'indirect' } : {}) } as never);
     setCategoryId(created.id);
   }
   async function handleRenameCategory(id: string, name: string) {

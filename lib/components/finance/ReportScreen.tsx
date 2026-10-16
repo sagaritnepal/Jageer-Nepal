@@ -154,7 +154,6 @@ export function ReportScreen({ basePath }: { basePath: string }) {
           : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`);
   const pl = useMemo(() => {
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
-    const directNames = new Set((categories ?? []).filter((c) => c.expense_group === 'direct').map((c) => c.name));
     let items = 0;
     let services = 0;
     let purchase = 0;
@@ -194,11 +193,14 @@ export function ReportScreen({ basePath }: { basePath: string }) {
       expenses.set(lt, (expenses.get(lt) ?? 0) + e.amount);
       headType.set(lt, lt);
     }
-    // an expense head is direct when it is a cost of getting goods or doing jobs
-    const DIRECT = /(direct|freight|carriage|cartage|clearing|custom|import|repair|labour|labor|installation|job)/i;
+    // Two heads only: Direct expenses and Indirect expenses, each holding the registered expense heads as its
+    // sub-heads. A head is direct unless it was marked Indirect (when it was added, or its ledger type says so).
     const direct: [string, number][] = [];
     const indirect: [string, number][] = [];
-    [...expenses.entries()].sort((a, b) => b[1] - a[1]).forEach((e) => (directNames.has(e[0]) || (!(categories ?? []).some((c) => c.name === e[0] && c.expense_group) && (DIRECT.test(e[0]) || DIRECT.test(headType.get(e[0]) ?? ''))) ? direct : indirect).push(e));
+    const indirectNames = new Set((categories ?? []).filter((c) => c.expense_group === 'indirect').map((c) => c.name));
+    [...expenses.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .forEach((e) => (indirectNames.has(e[0]) || /indirect/i.test(e[0]) || /indirect/i.test(headType.get(e[0]) ?? '') ? indirect : direct).push(e));
     const sum = (list: [string, number][]) => list.reduce((a, [, v]) => a + v, 0);
     // The stock held now, at cost. Stock has no history, so the period's opening stock is taken as the
     // same figure: stock moves through the purchase and sale bills themselves.
