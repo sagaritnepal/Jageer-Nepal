@@ -1538,7 +1538,7 @@ function TransactionForm({
     const typed = partyName.trim();
     const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
     return vendorFocused && isBill && typed && !exact && !customerId
-      ? [...base, { key: '__new__', label: typed, hint: '+ Add new ledger' }]
+      ? [...base, { key: '__new__', label: typed, add: 'ledger' }]
       : base;
   }, [vendorSuggestions, partyName, customers, vendorFocused, isBill, customerId]);
 
@@ -1646,6 +1646,7 @@ function TransactionForm({
               onRemoveRow={removeExpenseRow}
               onPickCategory={setActiveCategoryRowKey}
               onSelectContact={attachContactToExpenseRow}
+              onCreateLedger={async (name) => (await createCustomer.mutateAsync({ owner_id: userId, name: tidyName(name), phone: null } as never)) as Customer}
               onRequestSave={handleSaveAllExpenses}
               onExit={() => (saveButtonRef.current as unknown as { focus?: () => void } | null)?.focus?.()}
               autoFocusFirst

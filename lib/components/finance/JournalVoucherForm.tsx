@@ -91,8 +91,8 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     const adds =
       typed && !exact
         ? [
-            ...(side === 'debit' ? [{ key: 'new-h', label: typed, hint: '+ New expense head' }] : []),
-            { key: 'new-p', label: typed, hint: '+ New ledger (person)' },
+            ...(side === 'debit' ? [{ key: 'new-h', label: typed, add: 'expense head' }] : []),
+            { key: 'new-p', label: typed, add: 'ledger' },
           ]
         : [];
     return [...heads, ...persons].slice(0, 14).concat(adds);

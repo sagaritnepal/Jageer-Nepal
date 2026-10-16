@@ -119,7 +119,7 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
     const base = suggestions.map((s) => ({ key: s.key, label: s.name, hint: s.hint }));
     const typed = focusedItemIndex != null ? (items[focusedItemIndex]?.description ?? '').trim() : '';
     const exact = typed && catalog.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
-    return typed && !exact && onCreateItem ? [...base, { key: '__new__', label: typed, hint: '+ Add new item' }] : base;
+    return typed && !exact && onCreateItem ? [...base, { key: '__new__', label: typed, add: 'stock item' }] : base;
   }, [suggestions, focusedItemIndex, items, catalog, onCreateItem]);
 
   function focusCell(index: number, col: Col) {

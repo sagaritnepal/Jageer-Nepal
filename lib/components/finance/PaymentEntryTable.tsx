@@ -127,7 +127,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
     const row = rows.find((r) => r.key === focusedRowKey);
     const typed = row?.customerName.trim() ?? '';
     const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
-    return typed && !exact && onCreateLedger ? [...base, { key: '__new__', label: typed, hint: '+ Add new ledger' }] : base;
+    return typed && !exact && onCreateLedger ? [...base, { key: '__new__', label: typed, add: 'ledger' }] : base;
   }, [suggestions, rows, focusedRowKey, customers, onCreateLedger]);
 
   function focusCell(rowIndex: number, col: Col) {
