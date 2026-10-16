@@ -13,6 +13,7 @@ import { DateStepFilter, monthLabelOf, monthRange } from './DateRangeFilter';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
 import { journalOf } from '../../utils/journalVoucher';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
 
 type Period = 'year' | 'all';
 
@@ -121,6 +122,8 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   }, [transactions, period, range.from, range.to]);
 
   const role = useRole();
+  const { data: partyRows } = useSupabaseQuery('customers', { filters: userId ? { owner_id: userId } : {}, all: true, enabled: !!userId });
+  const { nameById: partyTypeName } = usePartyTypes(userId);
   const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', { filters: userId ? { owner_id: userId } : {}, all: true, enabled: !!userId });
   const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', { filters: userId ? { owner_id: userId } : {}, all: true, enabled: !!userId });
   const { data: categories } = useSupabaseQuery('expense_categories', { filters: userId ? { owner_id: userId } : {}, enabled: !!userId });
@@ -156,6 +159,14 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     let services = 0;
     let purchase = 0;
     const expenses = new Map<string, number>();
+    // The ledger type a party is filed under (Direct Expense, Bike Repair Expense ...): an expense paid to
+    // such a party, or money paid out to a ledger of such a type, belongs to that kind of expense.
+    const typeOfParty = new Map<string, string>();
+    (partyRows ?? []).forEach((c) => {
+      const t = c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined;
+      if (t) typeOfParty.set(c.id, t);
+    });
+    const headType = new Map<string, string>();
     for (const t of inRange) {
       if (t.type === 'sale') {
         const svc = (t.service_charges ?? []).reduce((a, c) => a + (Number(c.amount) || 0), 0) + (Number(t.installation_charge) || 0);
@@ -163,15 +174,31 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         items += t.amount - svc;
       } else if (t.type === 'purchase') purchase += t.amount;
       else {
-        const name = (t.expense_category_id && names.get(t.expense_category_id)) || 'Uncategorised';
+        const ledgerType = t.customer_id ? typeOfParty.get(t.customer_id) : undefined;
+        const name = (t.expense_category_id && names.get(t.expense_category_id)) || ledgerType || 'Uncategorised';
         expenses.set(name, (expenses.get(name) ?? 0) + t.amount);
+        if (ledgerType) headType.set(name, ledgerType);
       }
+    }
+    // Money paid out to a ledger filed under an expense type counts as that expense too.
+    for (const e of customerEntries ?? []) {
+      if (e.entry_type !== 'debit' || e.source !== 'manual' || journalOf(e.note)) continue;
+      const day = (e.entry_date ?? e.created_at) as string;
+      const inThePeriod =
+        period === 'all' ||
+        (period === 'range'
+          ? (!range.from || day.slice(0, 10) >= range.from) && (!range.to || day.slice(0, 10) <= range.to)
+          : new Date(day).getFullYear() === new Date().getFullYear());
+      const lt = typeOfParty.get(e.customer_id);
+      if (!inThePeriod || !lt || !/expense/i.test(lt)) continue;
+      expenses.set(lt, (expenses.get(lt) ?? 0) + e.amount);
+      headType.set(lt, lt);
     }
     // an expense head is direct when it is a cost of getting goods or doing jobs
     const DIRECT = /(direct|freight|carriage|cartage|clearing|custom|import|repair|labour|labor|installation|job)/i;
     const direct: [string, number][] = [];
     const indirect: [string, number][] = [];
-    [...expenses.entries()].sort((a, b) => b[1] - a[1]).forEach((e) => (directNames.has(e[0]) || (!(categories ?? []).some((c) => c.name === e[0] && c.expense_group) && DIRECT.test(e[0])) ? direct : indirect).push(e));
+    [...expenses.entries()].sort((a, b) => b[1] - a[1]).forEach((e) => (directNames.has(e[0]) || (!(categories ?? []).some((c) => c.name === e[0] && c.expense_group) && (DIRECT.test(e[0]) || DIRECT.test(headType.get(e[0]) ?? ''))) ? direct : indirect).push(e));
     const sum = (list: [string, number][]) => list.reduce((a, [, v]) => a + v, 0);
     // The stock held now, at cost. Stock has no history, so the period's opening stock is taken as the
     // same figure: stock moves through the purchase and sale bills themselves.
@@ -184,7 +211,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     const net = gross - indirectTotal;
     const bills = { sale: inRange.filter((t) => t.type === 'sale').length, purchase: inRange.filter((t) => t.type === 'purchase').length, expense: inRange.filter((t) => t.type === 'expense').length };
     return { items, services, sales, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net, bills };
-  }, [inRange, categories, products]);
+  }, [inRange, categories, products, partyRows, partyTypeName, customerEntries, period, range.from, range.to]);
   const grossProfit = pl.gross;
   const netProfit = pl.net;
   // each side of the trading account totals the same; likewise the second part
