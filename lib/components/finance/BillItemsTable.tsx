@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { FinanceItem, Product } from '../../../types/database.types';
 import { readKey } from '../../utils/webKeys';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
+import { askSave } from '../../utils/askSave';
+import { showAlert, getErrorMessage } from '../../utils/alert';
 
 export interface BillItemRow {
   /** Optional HS code of the item (customs / tariff classification). */
@@ -45,6 +47,8 @@ interface Props {
   onExit: () => void;
   /** Rendered inside the card under the rows (the totals band). */
   footer?: ReactNode;
+  /** Saves an item typed here that is not in the stock list yet (after a Save / Cancel question). */
+  onCreateItem?: (name: string, rate: number | null) => Promise<void>;
 }
 
 function isBlank(row: BillItemRow): boolean {
@@ -60,7 +64,7 @@ function cleanNumber(v: string): string {
 }
 
 export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function BillItemsTable(
-  { items, products, financeItems, accent, onUpdate, onRemove, onRequestSave, onExit, footer },
+  { items, products, financeItems, accent, onUpdate, onRemove, onRequestSave, onExit, footer, onCreateItem },
   ref
 ) {
   const inputRefs = useRef<Record<string, TextInput | null>>({});
@@ -111,10 +115,12 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
     return matches.slice(0, MAX_SUGGESTIONS);
   }, [focusedItemIndex, items, catalog]);
 
-  const suggestionOptions = useMemo<SuggestOption[]>(
-    () => suggestions.map((s) => ({ key: s.key, label: s.name, hint: s.hint })),
-    [suggestions]
-  );
+  const suggestionOptions = useMemo<SuggestOption[]>(() => {
+    const base = suggestions.map((s) => ({ key: s.key, label: s.name, hint: s.hint }));
+    const typed = focusedItemIndex != null ? (items[focusedItemIndex]?.description ?? '').trim() : '';
+    const exact = typed && catalog.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
+    return typed && !exact && onCreateItem ? [...base, { key: '__new__', label: typed, hint: '+ Add new item' }] : base;
+  }, [suggestions, focusedItemIndex, items, catalog, onCreateItem]);
 
   function focusCell(index: number, col: Col) {
     inputRefs.current[`${index}:${col}`]?.focus();
@@ -240,7 +246,22 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
                 value={row.description}
                 onChangeText={(v) => onUpdate(index, { ...row, description: v })}
                 options={focusedItemIndex === index ? suggestionOptions : []}
-                onSelectOption={(opt, via) => {
+                onSelectOption={async (opt, via) => {
+                  if (opt.key === '__new__') {
+                    const name = opt.label.trim();
+                    if (!(await askSave('Add new item?', `"${name}" is not in your stock list yet. Save it as a new item?`))) {
+                      onUpdate(index, { ...row, description: '' });
+                      return;
+                    }
+                    try {
+                      await onCreateItem!(name, row.rate.trim() ? Number(row.rate) : null);
+                      onUpdate(index, { ...row, description: name, qty: row.qty.trim() ? row.qty : '1' });
+                      focusCell(index, 1);
+                    } catch (err) {
+                      showAlert('Could not add the item', getErrorMessage(err));
+                    }
+                    return;
+                  }
                   const s = suggestions.find((x) => x.key === opt.key);
                   if (!s) return;
                   onUpdate(index, {

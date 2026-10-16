@@ -33,6 +33,7 @@ import { KeyInput } from './KeyInput';
 import { useConfirmSave } from './ConfirmSave';
 import { TransactionsBook } from './TransactionsBook';
 import { tidyName } from '../../utils/nameCaps';
+import { askSave } from '../../utils/askSave';
 import { BookTable, type BookColumn } from './BookKit';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
@@ -1528,15 +1529,18 @@ function TransactionForm({
     return buildCustomerSuggestions(customers, phoneContacts.contacts, q, 6);
   }, [vendorFocused, isBill, partyName, customerId, customers, phoneContacts.contacts]);
 
-  const vendorOptions = useMemo<SuggestOption[]>(
-    () =>
-      vendorSuggestions.map((s) => ({
-        key: s.key,
-        label: s.name,
-        hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
-      })),
-    [vendorSuggestions]
-  );
+  const vendorOptions = useMemo<SuggestOption[]>(() => {
+    const base = vendorSuggestions.map((s) => ({
+      key: s.key,
+      label: s.name,
+      hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
+    }));
+    const typed = partyName.trim();
+    const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
+    return vendorFocused && isBill && typed && !exact && !customerId
+      ? [...base, { key: '__new__', label: typed, hint: '+ Add new ledger' }]
+      : base;
+  }, [vendorSuggestions, partyName, customers, vendorFocused, isBill, customerId]);
 
   useEffect(() => {
     if (!desktopWeb || !isBill) return;
@@ -1750,6 +1754,16 @@ function TransactionForm({
                     }}
                     options={vendorOptions}
                     onSelectOption={async (opt, via) => {
+                      if (opt.key === '__new__') {
+                        const name = opt.label.trim();
+                        if (!(await askSave('Add new ledger?', `"${name}" is not in your ledger yet. Save it as a new ledger?`))) {
+                          setPartyName('');
+                          return;
+                        }
+                        await handleSelectPartyNew(name, null);
+                        if (via !== 'tab') billNoRef.current?.focus();
+                        return;
+                      }
                       const s = vendorSuggestions.find((x) => x.key === opt.key);
                       if (!s) return;
                       if (via !== 'tab') billNoRef.current?.focus();
@@ -1857,6 +1871,9 @@ function TransactionForm({
               onRemove={removeItem}
               onRequestSave={handleSave}
               onExit={() => discountRef.current?.focus()}
+              onCreateItem={async (name, rate) => {
+                await createFinanceItem.mutateAsync({ owner_id: userId, name, rate: rate && rate > 0 ? rate : null });
+              }}
               footer={
                 <>
                 {type === 'sale' && (

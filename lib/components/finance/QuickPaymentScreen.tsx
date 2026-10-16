@@ -21,6 +21,8 @@ import { KeyboardSelect } from './KeyboardSelect';
 import { useConfirmSave } from './ConfirmSave';
 import { optionLabel } from '../../hooks/useAvailableAmounts';
 import { useAccountBalances } from '../../hooks/useAccountBalances';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
+import { nameCaps } from '../../utils/nameCaps';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { MONEY } from './moneyColors';
 import { readKey } from '../../utils/webKeys';
@@ -95,6 +97,7 @@ function QuickPaymentForm() {
   });
   const insertEntry = useSupabaseInsert(targetTable);
   const createCustomer = useSupabaseInsert('customers');
+  const { nameById: partyTypeName } = usePartyTypes(userId);
   const updateCustomer = useSupabaseUpdate('customers');
   const bankAccounts = useBankAccounts(userId);
   // Money in each bank / wallet account, shown beside it in the Payment method dropdown - receiving and
@@ -629,7 +632,7 @@ function QuickPaymentForm() {
                   the table below - one voucher covering several people,
                   not a separate form per person. Everything here is
                   reachable and fillable from the keyboard alone: Tab/Enter
-                  walk Date -> Receipt No. -> Payment method -> the table. */}
+                  walk Payment method -> Receipt No. -> the table (Date is the last box, reached with Tab). */}
               <View
                 className="mb-4 rounded-2xl border border-gray-200 bg-white px-5 py-4"
                 style={{ boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 4px 12px rgba(16,24,40,0.03)' }}
@@ -639,14 +642,22 @@ function QuickPaymentForm() {
                   <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Details</Text>
                 </View>
                 <View className="flex-row" style={{ gap: 14 }}>
-                  <View style={{ flex: 1.3, minWidth: 0 }}>
-                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Date</Text>
-                    <KeyboardDateInput
-                      value={date}
-                      onChange={setDate}
-                      accent={accent}
+                  <View style={{ flex: 1.1, minWidth: 0 }}>
+                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Payment method</Text>
+                    <KeyboardSelect
+                      value={bankAccountId ?? '__cash__'}
+                      options={[
+                        { value: '__cash__', label: 'Cash' },
+                        ...bankAccounts.accounts.map((a) => ({ value: a.id, label: optionLabel(a.name, available?.byId[a.id]) })),
+                      ]}
+                      onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
+                      selectRef={(el) => {
+                        methodRef.current = el;
+                      }}
                       onEnter={() => receiptRef.current?.focus()}
                       onRequestSave={handleSaveAll}
+                      accent={accent}
+                      label="Payment method"
                     />
                   </View>
                   <View style={{ flex: 0.8, minWidth: 0 }}>
@@ -663,7 +674,7 @@ function QuickPaymentForm() {
                         if (k.key !== 'Enter') return;
                         k.prevent();
                         if (k.ctrl) handleSaveAll();
-                        else methodRef.current?.focus();
+                        else focusFirstRow();
                       }}
                       placeholder="Optional"
                       placeholderTextColor="#9CA3AF"
@@ -674,22 +685,14 @@ function QuickPaymentForm() {
                       style={{ outlineStyle: 'none' } as object}
                     />
                   </View>
-                  <View style={{ flex: 1.1, minWidth: 0 }}>
-                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Payment method</Text>
-                    <KeyboardSelect
-                      value={bankAccountId ?? '__cash__'}
-                      options={[
-                        { value: '__cash__', label: 'Cash' },
-                        ...bankAccounts.accounts.map((a) => ({ value: a.id, label: optionLabel(a.name, available?.byId[a.id]) })),
-                      ]}
-                      onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
-                      selectRef={(el) => {
-                        methodRef.current = el;
-                      }}
+                  <View style={{ flex: 1.3, minWidth: 0 }}>
+                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Date</Text>
+                    <KeyboardDateInput
+                      value={date}
+                      onChange={setDate}
+                      accent={accent}
                       onEnter={focusFirstRow}
                       onRequestSave={handleSaveAll}
-                      accent={accent}
-                      label="Payment method"
                     />
                   </View>
                 </View>
@@ -701,8 +704,13 @@ function QuickPaymentForm() {
                 customers={customers ?? []}
                 phoneContacts={phoneContacts.contacts}
                 accent={accent}
-                partyLabel={payTarget === 'vendor' ? 'Vendor' : 'Customer'}
-                addLabel={`Add ${payTarget === 'vendor' ? 'vendor' : 'person'}`}
+                partyLabel="Ledger"
+                addLabel="Add ledger"
+                typeOf={(c) => (c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined)}
+                onCreateLedger={async (name) => {
+                  if (!userId) throw new Error('Not signed in');
+                  return (await createCustomer.mutateAsync({ owner_id: userId, name: nameCaps(name), phone: null } as never)) as Customer;
+                }}
                 totalLabel={isOut ? 'Total Paid' : 'Total Received'}
                 totalColor={meta.color}
                 onUpdateRow={updateRow}
