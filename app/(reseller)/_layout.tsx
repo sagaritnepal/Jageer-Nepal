@@ -59,6 +59,9 @@ const DAYBOOK_ENTRIES: WebNavItem[] = [
   { href: '/(reseller)/contra', label: 'Contra', icon: 'swap-horizontal' },
 ];
 
+// Bank Accounts is a dropdown too: the list, and the form to add a new account.
+const BANK_ENTRIES: WebNavItem[] = [{ href: '/(reseller)/bank-accounts?add=1', label: 'New Bank Account', icon: 'add-circle' }];
+
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/company-dashboard', label: 'Dashboard', icon: 'grid' },
   { href: '/(reseller)/dashboard', label: 'Services', icon: 'construct' },
@@ -76,7 +79,9 @@ const NAV_ITEMS: WebNavItem[] = [
           ? { href: s.href, label: s.label, icon: s.icon, children: REPORT_FAMILY }
           : s.key === 'daybook'
             ? { href: s.href, label: s.label, icon: s.icon, children: DAYBOOK_ENTRIES }
-            : { href: s.href, label: s.label, icon: s.icon }
+            : s.key === 'bank-accounts'
+              ? { href: s.href, label: s.label, icon: s.icon, children: BANK_ENTRIES }
+              : { href: s.href, label: s.label, icon: s.icon }
       ),
   },
 ];
