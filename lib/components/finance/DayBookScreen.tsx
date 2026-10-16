@@ -755,9 +755,9 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
   );
 }
 
-/** The five things a day can gain, one button each - the same forms the
- * Finance menu opens, without leaving the Day Book to find them. */
-const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
+/** The things a day can gain, in one "New entry" dropdown - the same forms the Finance menu opens, without
+ * leaving the Day Book to find them. Expenses are not listed: a Voucher charges an expense. */
+const NEW_ENTRY_KINDS = ENTRY_KINDS.filter((kind) => kind.key !== 'expenses').map((kind) => ({
   key: kind.key,
   label: kind.menuLabel ?? kind.label,
   icon: kind.icon,
@@ -766,44 +766,56 @@ const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
 }));
 
 function NewEntryButtons({ basePath, onVoucher, onContra }: { basePath: string; onVoucher: () => void; onContra: () => void }) {
+  const [open, setOpen] = useState(false);
+  const items: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; color: string; onPress: () => void }[] = [
+    ...NEW_ENTRY_KINDS.map((kind) => ({
+      key: kind.key,
+      label: kind.label,
+      icon: kind.icon as keyof typeof Ionicons.glyphMap,
+      color: kind.color,
+      onPress: () => router.push(`${basePath}${kind.path}` as any),
+    })),
+    { key: 'voucher', label: 'Voucher', icon: 'document-text', color: '#B45309', onPress: onVoucher },
+    { key: 'contra', label: 'Contra', icon: 'swap-horizontal', color: '#4338CA', onPress: onContra },
+  ];
   return (
-    <View className="flex-row flex-wrap items-center" style={{ gap: 6 }}>
-      {NEW_ENTRY_KINDS.map((kind) => (
-        <Pressable
-          key={kind.key}
-          accessibilityRole="button"
-          accessibilityLabel={`New ${kind.label}`}
-          onPress={() => router.push(`${basePath}${kind.path}` as any)}
-          className="flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3"
-          style={{ minHeight: 36 }}
-        >
-          <Ionicons name={kind.icon} size={16} color={kind.color} />
-          <Text className="text-[13px] font-semibold text-gray-800">{kind.label}</Text>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="New entry"
+        onPress={() => setOpen(true)}
+        className="flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
+        style={{ minHeight: 36, backgroundColor: '#1E3A8A' }}
+      >
+        <Ionicons name="add" size={16} color="#FFFFFF" />
+        <Text className="text-[13px] font-semibold text-white">New entry</Text>
+        <Ionicons name="chevron-down" size={14} color="#FFFFFF" />
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={{ flex: 1 }} onPress={() => setOpen(false)}>
+          <View
+            className="rounded-xl border border-gray-200 bg-white py-1"
+            style={{ position: 'absolute', top: 70, right: 24, minWidth: 220, boxShadow: '0 12px 32px rgba(16,24,40,0.18)' } as object}
+          >
+            <Text className="px-4 pb-1 pt-2 text-[11px] font-bold uppercase text-gray-400">What are you recording?</Text>
+            {items.map((item) => (
+              <Pressable
+                key={item.key}
+                onPress={() => {
+                  setOpen(false);
+                  item.onPress();
+                }}
+                className="flex-row items-center px-4 py-2.5"
+                style={{ gap: 10 }}
+              >
+                <Ionicons name={item.icon} size={16} color={item.color} />
+                <Text className="text-[13.5px] font-semibold text-gray-800">{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
         </Pressable>
-      ))}
-      {/* A journal voucher moves an amount from one person's ledger to another's - no cash: a popup, not a page. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="New Voucher"
-        onPress={onVoucher}
-        className="flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3"
-        style={{ minHeight: 36 }}
-      >
-        <Ionicons name="document-text" size={16} color="#B45309" />
-        <Text className="text-[13px] font-semibold text-gray-800">Voucher</Text>
-      </Pressable>
-      {/* A contra moves money between your own accounts (cash <-> bank, bank <-> wallet): a popup, not a page. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="New Contra"
-        onPress={onContra}
-        className="flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3"
-        style={{ minHeight: 36 }}
-      >
-        <Ionicons name="swap-horizontal" size={16} color="#4338CA" />
-        <Text className="text-[13px] font-semibold text-gray-800">Contra</Text>
-      </Pressable>
-    </View>
+      </Modal>
+    </>
   );
 }
 
