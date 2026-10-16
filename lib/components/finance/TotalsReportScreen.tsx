@@ -25,22 +25,6 @@ import { TransactionDetailModal } from './TransactionsScreen';
 import { tidyName } from '../../utils/nameCaps';
 import type { BusinessTransaction } from '../../../types/database.types';
 
-/** The page's own Add button: the entry form for what the report lists. */
-const NEW_PATH: Record<Kind, string> = {
-  received: '/quick-payment?type=in',
-  paid: '/quick-payment?type=out',
-  sale: '/transactions?type=sale&add=1',
-  purchase: '/transactions?type=purchase&add=1',
-  expense: '/transactions?type=expense&add=1',
-};
-const NEW_LABEL: Record<Kind, string> = {
-  received: 'New received',
-  paid: 'New paid',
-  sale: 'New sale',
-  purchase: 'New purchase',
-  expense: 'New expense',
-};
-
 /** Total Received / Total Paid are money that actually moved; Sales / Purchase / Expense are the bills themselves, paid or not. */
 type Kind = 'received' | 'paid' | 'sale' | 'purchase' | 'expense';
 
@@ -308,20 +292,13 @@ export function TotalsReportScreen({ kind, basePath, partyId }: { kind: Kind; ba
           />
           <PrintButton onPress={() => printNow.current()} />
           <ExcelButton onPress={() => excelNow.current()} />
-          {!partyId && (
-            <ToolbarButton
-              icon="add"
-              label={NEW_LABEL[kind]}
-              onPress={() => router.push(`${basePath}${NEW_PATH[kind]}` as never)}
-            />
-          )}
           {partyId && (
             <ToolbarButton icon="book-outline" label="Open ledger" onPress={() => router.push(`${basePath}/customer/${partyId}` as never)} />
           )}
         </>
       ),
     },
-    [partyId, basePath, range.from, range.to, restingLabel, search, kind]
+    [partyId, basePath, range.from, range.to, restingLabel, search]
   );
 
   // "Received" = every payment actually collected from a customer, whether
