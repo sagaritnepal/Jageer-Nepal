@@ -1211,14 +1211,50 @@ function LedgerList({ basePath }: { basePath: string }) {
       // Drawn in the app's top bar, outside this page's own tree - so it carries the capitals with it.
       right: (inBar) => (
         <CapsProvider>
-          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name, phone or type" wide={inBar} />
           <PrintButton onPress={() => printNow.current()} />
           <ExportButton onPress={() => exportNow.current(false)} busy={exporting} />
           <ToolbarButton icon="add" label="New party" onPress={openNewParty} />
         </CapsProvider>
       ),
     },
-    [exporting, search]
+    [exporting]
+  );
+
+  // The search sits right under the figures: a wide, rounded box with the match count and a clear button.
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchBar = (
+    <View
+      className="flex-row items-center rounded-2xl bg-white px-4"
+      style={{
+        height: 50,
+        gap: 10,
+        borderWidth: 1.5,
+        borderColor: searchFocused ? '#2563EB' : '#E2E8F0',
+        boxShadow: searchFocused ? '0 0 0 4px rgba(37,99,235,0.12)' : '0 1px 2px rgba(16,24,40,0.05)',
+      }}
+    >
+      <Ionicons name="search" size={19} color={searchFocused || search ? '#2563EB' : '#94A3B8'} />
+      <TextInput
+        value={search}
+        onChangeText={setSearch}
+        onFocus={() => setSearchFocused(true)}
+        onBlur={() => setSearchFocused(false)}
+        placeholder="Search ledgers by name or phone"
+        placeholderTextColor="#94A3B8"
+        className="flex-1 text-[15px] text-gray-900"
+        style={{ outlineStyle: 'none' } as object}
+      />
+      {!!search.trim() && (
+        <Text className="text-[12.5px] font-semibold" style={{ color: '#1E3A8A' }}>
+          {filtered.length} {filtered.length === 1 ? 'match' : 'matches'}
+        </Text>
+      )}
+      {!!search && (
+        <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Clear search">
+          <Ionicons name="close-circle" size={19} color="#94A3B8" />
+        </Pressable>
+      )}
+    </View>
   );
 
   // --- pieces both layouts share ---
@@ -1539,6 +1575,7 @@ function LedgerList({ basePath }: { basePath: string }) {
       <BookPage wide={layout.wide}>
         {toolbar}
         {summaryCards}
+        {searchBar}
         {addForm}
         {bulkBar}
 
