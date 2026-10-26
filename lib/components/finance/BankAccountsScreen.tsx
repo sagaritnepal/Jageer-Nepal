@@ -187,7 +187,7 @@ export function BankAccountsScreen() {
   );
   const { add } = useLocalSearchParams<{ add?: string }>();
   const [showAdd, setShowAdd] = useState(add === '1');
-  // "New Bank Account" in the side panel opens this page with the form already open.
+  // Opening this page as bank-accounts?add=1 shows it with the add form already open.
   useEffect(() => {
     if (add === '1') setShowAdd(true);
   }, [add]);

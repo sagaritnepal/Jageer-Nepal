@@ -21,7 +21,7 @@ import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/co
 // Already reachable from the Day Book's "What are you recording?" menu.
 const DAYBOOK_ENTRY_KEYS = new Set(['payment-in', 'payment-out', 'sales', 'purchase', 'expenses']);
 // Finance shortcuts that sit at the top level of the side panel instead of under Finance.
-const STANDALONE_KEYS = new Set<string>();
+const STANDALONE_KEYS = new Set(['inventory']);
 
 // The order Finance's pages run down the side panel (the Finance page's own tiles keep theirs).
 // Anything not named here goes after them, in the order it comes.
@@ -29,7 +29,6 @@ const FINANCE_NAV_ORDER = [
   'daybook',
   'transactions',
   'customers',
-  'inventory',
   'bank-accounts',
   'quotation',
   'report',
@@ -59,14 +58,13 @@ const DAYBOOK_ENTRIES: WebNavItem[] = [
   { href: '/(reseller)/contra', label: 'Contra', icon: 'swap-horizontal' },
 ];
 
-// Bank Accounts is a dropdown too: the list, and the form to add a new account.
-const BANK_ENTRIES: WebNavItem[] = [{ href: '/(reseller)/bank-accounts?add=1', label: 'New Bank Account', icon: 'add-circle' }];
-
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/company-dashboard', label: 'Dashboard', icon: 'grid' },
   { href: '/(reseller)/dashboard', label: 'Services', icon: 'construct' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
+  // Stock and Inventory is a page of its own in the side panel, not a child of Finance.
+  { href: '/(reseller)/inventory', label: 'Stock and Inventory', icon: 'cube' },
   {
     href: '/(reseller)/finance',
     label: 'Finance',
@@ -79,9 +77,7 @@ const NAV_ITEMS: WebNavItem[] = [
           ? { href: s.href, label: s.label, icon: s.icon, children: REPORT_FAMILY }
           : s.key === 'daybook'
             ? { href: s.href, label: s.label, icon: s.icon, children: DAYBOOK_ENTRIES }
-            : s.key === 'bank-accounts'
-              ? { href: s.href, label: s.label, icon: s.icon, children: BANK_ENTRIES }
-              : { href: s.href, label: s.label, icon: s.icon }
+            : { href: s.href, label: s.label, icon: s.icon }
       ),
   },
 ];
