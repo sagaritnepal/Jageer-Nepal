@@ -21,7 +21,7 @@ import { shortcuts as financeShortcuts, FINANCE_WIDE_ROUTES } from '../../lib/co
 // Already reachable from the Day Book's "What are you recording?" menu.
 const DAYBOOK_ENTRY_KEYS = new Set(['payment-in', 'payment-out', 'sales', 'purchase', 'expenses']);
 // Finance shortcuts that sit at the top level of the side panel instead of under Finance.
-const STANDALONE_KEYS = new Set(['inventory']);
+const STANDALONE_KEYS = new Set<string>();
 
 // The order Finance's pages run down the side panel (the Finance page's own tiles keep theirs).
 // Anything not named here goes after them, in the order it comes.
@@ -29,6 +29,7 @@ const FINANCE_NAV_ORDER = [
   'daybook',
   'transactions',
   'customers',
+  'inventory',
   'bank-accounts',
   'quotation',
   'report',
@@ -63,8 +64,6 @@ const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/dashboard', label: 'Services', icon: 'construct' },
   { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
-  // Stock and Inventory is a page of its own in the side panel, not a child of Finance.
-  { href: '/(reseller)/inventory', label: 'Stock and Inventory', icon: 'cube' },
   {
     href: '/(reseller)/finance',
     label: 'Finance',
@@ -157,7 +156,7 @@ export default function ResellerLayout() {
             tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
           }}
         />
-        {/* Stock and Inventory: a tab of its own on a phone, as it is its own item in the side panel. */}
+        {/* Stock and Inventory: a tab of its own on a phone (on the wide web layout it sits under Finance in the side panel). */}
         <Tabs.Screen
           name="inventory"
           options={{
