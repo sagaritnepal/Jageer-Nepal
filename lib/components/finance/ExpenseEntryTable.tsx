@@ -13,6 +13,8 @@ import type { PhoneContactEntry } from '../../hooks/usePhoneContacts';
 import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/customerSuggestions';
 import { readKey } from '../../utils/webKeys';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
+import { askSave } from '../../utils/askSave';
+import { showAlert, getErrorMessage } from '../../utils/alert';
 
 export interface ExpenseEntryRow {
   key: string;
@@ -54,6 +56,8 @@ interface Props {
   onPickCategory: (rowKey: string) => void;
   /** A phone contact that isn't a saved customer was picked as "Paid to". */
   onSelectContact: (rowKey: string, name: string, phone: string | null) => void;
+  /** Saves a ledger typed here that is not in the books yet and returns it. */
+  onCreateLedger?: (name: string) => Promise<Customer>;
   onRequestSave: () => void;
   /** Enter on a blank last row: the list is finished, move on (to Save). */
   onExit: () => void;
@@ -78,6 +82,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
     onRemoveRow,
     onPickCategory,
     onSelectContact,
+    onCreateLedger,
     onRequestSave,
     onExit,
     autoFocusFirst,
@@ -124,15 +129,17 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
     return buildCustomerSuggestions(customers, phoneContacts, q, MAX_SUGGESTIONS);
   }, [focusedRowKey, rows, customers, phoneContacts]);
 
-  const suggestionOptions = useMemo<SuggestOption[]>(
-    () =>
-      suggestions.map((s) => ({
-        key: s.key,
-        label: s.name,
-        hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
-      })),
-    [suggestions]
-  );
+  const suggestionOptions = useMemo<SuggestOption[]>(() => {
+    const base = suggestions.map((s) => ({
+      key: s.key,
+      label: s.name,
+      hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
+    }));
+    const row = rows.find((r) => r.key === focusedRowKey);
+    const typed = row?.partyName.trim() ?? '';
+    const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
+    return typed && !exact && !row?.customerId && onCreateLedger ? [...base, { key: '__new__', label: typed, add: 'ledger' }] : base;
+  }, [suggestions, rows, focusedRowKey, customers, onCreateLedger]);
 
   function focusCell(rowIndex: number, col: ExpenseCol) {
     const row = rows[rowIndex];
@@ -253,7 +260,22 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
                   onUpdateRow(row.key, { partyName: v, customerId: stillLinked ? row.customerId : null });
                 }}
                 options={focusedRowKey === row.key ? suggestionOptions : []}
-                onSelectOption={(opt, via) => {
+                onSelectOption={async (opt, via) => {
+                  if (opt.key === '__new__') {
+                    const name = opt.label.trim();
+                    if (!(await askSave('Add new ledger?', `"${name}" is not in your ledger yet. Save it as a new ledger?`))) {
+                      onUpdateRow(row.key, { partyName: '', customerId: null });
+                      return;
+                    }
+                    try {
+                      const created = await onCreateLedger!(name);
+                      onUpdateRow(row.key, { partyName: created.name, customerId: created.id });
+                      inputRefs.current[`${row.key}:1`]?.focus();
+                    } catch (err) {
+                      showAlert('Could not add the ledger', getErrorMessage(err));
+                    }
+                    return;
+                  }
                   const s = suggestions.find((x) => x.key === opt.key);
                   if (!s) return;
                   if (s.customer) onUpdateRow(row.key, { partyName: s.name, customerId: s.customer.id });

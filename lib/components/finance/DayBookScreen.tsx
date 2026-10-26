@@ -757,7 +757,7 @@ function EditEntryModal({ target, onClose }: { target: EditTarget | null; onClos
 
 /** The five things a day can gain, one button each - the same forms the
  * Finance menu opens, without leaving the Day Book to find them. */
-const NEW_ENTRY_KINDS = ENTRY_KINDS.map((kind) => ({
+const NEW_ENTRY_KINDS = ENTRY_KINDS.filter((kind) => kind.key !== 'expenses').map((kind) => ({
   key: kind.key,
   label: kind.menuLabel ?? kind.label,
   icon: kind.icon,
@@ -781,7 +781,7 @@ function NewEntryButtons({ basePath, onVoucher, onContra }: { basePath: string; 
           <Text className="text-[13px] font-semibold text-gray-800">{kind.label}</Text>
         </Pressable>
       ))}
-      {/* A journal voucher moves an amount from one person's ledger to another's - no cash: a popup, not a page. */}
+      {/* A journal voucher moves an amount from one person's ledger to another's - no cash: a page of its own. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="New Voucher"
@@ -792,7 +792,7 @@ function NewEntryButtons({ basePath, onVoucher, onContra }: { basePath: string; 
         <Ionicons name="document-text" size={16} color="#B45309" />
         <Text className="text-[13px] font-semibold text-gray-800">Voucher</Text>
       </Pressable>
-      {/* A contra moves money between your own accounts (cash <-> bank, bank <-> wallet): a popup, not a page. */}
+      {/* A contra moves money between your own accounts (cash <-> bank, bank <-> wallet): a page of its own. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="New Contra"
@@ -1455,7 +1455,7 @@ export function DayBookScreen({ basePath }: { basePath: string }) {
   // of their own under the heading.
   const entriesInBar = wide && windowWidth >= 1640;
   const newEntryButtons = (
-    <NewEntryButtons basePath={basePath} onVoucher={() => router.push(`${basePath}/voucher` as never)} onContra={() => setShowContra(true)} />
+    <NewEntryButtons basePath={basePath} onVoucher={() => router.push(`${basePath}/voucher` as never)} onContra={() => router.push(`${basePath}/contra` as never)} />
   );
   const toolbar = useBookToolbar(
     {

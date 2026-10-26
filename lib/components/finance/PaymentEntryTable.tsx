@@ -7,6 +7,8 @@ import type { PhoneContactEntry } from '../../hooks/usePhoneContacts';
 import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/customerSuggestions';
 import { readKey } from '../../utils/webKeys';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
+import { askSave } from '../../utils/askSave';
+import { showAlert, getErrorMessage } from '../../utils/alert';
 
 export interface PaymentRow {
   key: string;
@@ -45,6 +47,10 @@ interface Props {
   /** Enter on a blank last row: the list is finished, move on (to Save). */
   onExit: () => void;
   autoFocusFirst?: boolean;
+  /** Saves a ledger typed here that is not in the books yet (after a Save / Cancel question) and returns it. */
+  onCreateLedger?: (name: string) => Promise<Customer>;
+  /** The ledger type (category) a ledger is filed under, shown beside it. */
+  typeOf?: (customer: Customer) => string | undefined;
 }
 
 function rowHasContent(row: PaymentRow): boolean {
@@ -58,6 +64,8 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
     phoneContacts,
     accent,
     partyLabel,
+    onCreateLedger,
+    typeOf,
     addLabel,
     totalLabel,
     totalColor,
@@ -110,15 +118,17 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
     return buildCustomerSuggestions(customers, phoneContacts, q, MAX_SUGGESTIONS);
   }, [focusedRowKey, rows, customers, phoneContacts]);
 
-  const suggestionOptions = useMemo<SuggestOption[]>(
-    () =>
-      suggestions.map((s) => ({
-        key: s.key,
-        label: s.name,
-        hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
-      })),
-    [suggestions]
-  );
+  const suggestionOptions = useMemo<SuggestOption[]>(() => {
+    const base = suggestions.map((s) => ({
+      key: s.key,
+      label: s.name,
+      hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
+    }));
+    const row = rows.find((r) => r.key === focusedRowKey);
+    const typed = row?.customerName.trim() ?? '';
+    const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
+    return typed && !exact && onCreateLedger ? [...base, { key: '__new__', label: typed, add: 'ledger' }] : base;
+  }, [suggestions, rows, focusedRowKey, customers, onCreateLedger]);
 
   function focusCell(rowIndex: number, col: Col) {
     const row = rows[rowIndex];
@@ -204,6 +214,9 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
         <Text className="px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ flex: 1.35 }}>
           {partyLabel}
         </Text>
+        <Text className="px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ width: 150 }}>
+          Category
+        </Text>
         <Text
           className="px-2.5 text-right text-[11px] font-bold capitalize tracking-wider text-gray-500"
           style={{ width: 160 }}
@@ -245,7 +258,22 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                   });
                 }}
                 options={focusedRowKey === row.key ? suggestionOptions : []}
-                onSelectOption={(opt, via) => {
+                onSelectOption={async (opt, via) => {
+                  if (opt.key === '__new__') {
+                    const name = opt.label.trim();
+                    if (!(await askSave('Add new ledger?', `"${name}" is not in your ledger yet. Save it as a new ledger?`))) {
+                      onUpdateRow(row.key, { customerName: '', selectedCustomer: null, pendingPhone: null });
+                      return;
+                    }
+                    try {
+                      const created = await onCreateLedger!(name);
+                      onUpdateRow(row.key, { customerName: created.name, selectedCustomer: created, pendingPhone: null });
+                      inputRefs.current[`${row.key}:1`]?.focus();
+                    } catch (err) {
+                      showAlert('Could not add the ledger', getErrorMessage(err));
+                    }
+                    return;
+                  }
                   const s = suggestions.find((x) => x.key === opt.key);
                   if (!s) return;
                   onUpdateRow(row.key, {
@@ -261,7 +289,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                 onFocus={() => setFocusedCell({ key: row.key, col: 0 })}
                 onBlur={() => setFocusedCell((cur) => (cur?.key === row.key && cur.col === 0 ? null : cur))}
                 onKeyPress={(e) => handleKeyPress(e, row, rowIndex, 0)}
-                placeholder="Who is this from?"
+                placeholder="Search or add a ledger"
                 accessibilityLabel={`${partyLabel}, row ${rowIndex + 1}`}
                 autoFocus={autoFocusFirst && rowIndex === 0}
                 accent={accent}
@@ -276,6 +304,12 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                   ) : null
                 }
               />
+            </View>
+
+            <View style={{ width: 150, paddingHorizontal: 10 }}>
+              <Text className="text-[13px] font-semibold" style={{ color: linked && typeOf?.(linked) ? '#1E3A8A' : '#B2B8C1' }} numberOfLines={1}>
+                {linked ? typeOf?.(linked) ?? '—' : '—'}
+              </Text>
             </View>
 
             <View style={{ width: 160 }}>

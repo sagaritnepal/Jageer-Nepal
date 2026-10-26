@@ -1,4 +1,5 @@
 // lib/components/web/WebSidebarShell.tsx
+import { useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Image } from 'react-native';
 import { router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,13 +24,34 @@ export interface WebNavItem {
  * WebSidebarShell so its identity is stable across renders - an inline
  * component here would remount this whole branch (and its children) on
  * every render instead of just updating it. */
+function hasActive(item: WebNavItem, isActive: (href: string) => boolean): boolean {
+  return isActive(item.href) || !!item.children?.some((c) => hasActive(c, isActive));
+}
+
 function NavRow({ item, depth, isActive }: { item: WebNavItem; depth: number; isActive: (href: string) => boolean }) {
   const active = isActive(item.href);
   const top = depth === 0;
+  // A group (Finance, Report) is a dropdown: open while one of its pages is showing, and a second click on
+  // its name closes it again.
+  const insideActive = !!item.children && hasActive(item, isActive);
+  const [openState, setOpenState] = useState<boolean | null>(null);
+  const open = openState ?? insideActive;
+  useEffect(() => {
+    if (insideActive) setOpenState(null);
+  }, [insideActive]);
   return (
     <View>
       <Pressable
-        onPress={() => router.push(item.href as any)}
+        onPress={() => {
+          if (item.children) {
+            if (open) {
+              setOpenState(false);
+              return;
+            }
+            setOpenState(true);
+          }
+          router.push(item.href as any);
+        }}
         accessibilityRole="link"
         accessibilityLabel={item.label}
         accessibilityState={{ selected: active }}
@@ -56,9 +78,10 @@ function NavRow({ item, depth, isActive }: { item: WebNavItem; depth: number; is
         >
           {item.label}
         </Text>
+        {!!item.children && <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color="#9CA3AF" />}
       </Pressable>
 
-      {!!item.children && (
+      {!!item.children && open && (
         <View style={{ marginTop: 2, marginBottom: 4, gap: 1 }}>
           {item.children.map((child) => (
             <NavRow key={child.href} item={child} depth={depth + 1} isActive={isActive} />

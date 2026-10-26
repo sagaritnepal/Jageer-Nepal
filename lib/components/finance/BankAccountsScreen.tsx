@@ -1,7 +1,8 @@
 // lib/components/finance/BankAccountsScreen.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, Pressable, TextInput, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseUpdate } from '../../hooks/useSupabase';
 import { useBankAccounts, type BankAccountDetails } from '../../hooks/useBankAccounts';
@@ -184,7 +185,12 @@ export function BankAccountsScreen() {
       onDelete={() => saveCash(null)}
     />
   );
-  const [showAdd, setShowAdd] = useState(false);
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  const [showAdd, setShowAdd] = useState(add === '1');
+  // "New Bank Account" in the side panel opens this page with the form already open.
+  useEffect(() => {
+    if (add === '1') setShowAdd(true);
+  }, [add]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Print and Excel: the accounts and their details.

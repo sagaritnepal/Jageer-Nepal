@@ -11,6 +11,9 @@ import { reportHtml, type PrintReport } from '../../utils/printReport';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 import { DateStepFilter, monthLabelOf, monthRange } from './DateRangeFilter';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
+import { isSettledOnTheSpot } from '../../hooks/useAccountBalances';
+import { journalOf } from '../../utils/journalVoucher';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
 
 type Period = 'year' | 'all';
 
@@ -119,6 +122,10 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   }, [transactions, period, range.from, range.to]);
 
   const role = useRole();
+  const { data: partyRows } = useSupabaseQuery('customers', { filters: userId ? { owner_id: userId } : {}, all: true, enabled: !!userId });
+  const { nameById: partyTypeName } = usePartyTypes(userId);
+  const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', { filters: userId ? { owner_id: userId } : {}, all: true, enabled: !!userId });
+  const { data: vendorEntries } = useSupabaseQuery('vendor_ledger_entries', { filters: userId ? { owner_id: userId } : {}, all: true, enabled: !!userId });
   const { data: categories } = useSupabaseQuery('expense_categories', { filters: userId ? { owner_id: userId } : {}, enabled: !!userId });
   const { data: products } = useSupabaseQuery('products', {
     filters: userId && role ? { seller_id: userId, seller_role: role } : {},
@@ -147,11 +154,18 @@ export function ReportScreen({ basePath }: { basePath: string }) {
           : `${range.from ? toBsHistoryLabel(range.from) : 'Start'} - ${range.to ? toBsHistoryLabel(range.to) : 'Today'}`);
   const pl = useMemo(() => {
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
-    const directNames = new Set((categories ?? []).filter((c) => c.expense_group === 'direct').map((c) => c.name));
     let items = 0;
     let services = 0;
     let purchase = 0;
     const expenses = new Map<string, number>();
+    // The ledger type a party is filed under (Direct Expense, Bike Repair Expense ...): an expense paid to
+    // such a party, or money paid out to a ledger of such a type, belongs to that kind of expense.
+    const typeOfParty = new Map<string, string>();
+    (partyRows ?? []).forEach((c) => {
+      const t = c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined;
+      if (t) typeOfParty.set(c.id, t);
+    });
+    const headType = new Map<string, string>();
     for (const t of inRange) {
       if (t.type === 'sale') {
         const svc = (t.service_charges ?? []).reduce((a, c) => a + (Number(c.amount) || 0), 0) + (Number(t.installation_charge) || 0);
@@ -159,15 +173,34 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         items += t.amount - svc;
       } else if (t.type === 'purchase') purchase += t.amount;
       else {
-        const name = (t.expense_category_id && names.get(t.expense_category_id)) || 'Uncategorised';
+        const ledgerType = t.customer_id ? typeOfParty.get(t.customer_id) : undefined;
+        const name = (t.expense_category_id && names.get(t.expense_category_id)) || ledgerType || 'Uncategorised';
         expenses.set(name, (expenses.get(name) ?? 0) + t.amount);
+        if (ledgerType) headType.set(name, ledgerType);
       }
     }
-    // an expense head is direct when it is a cost of getting goods or doing jobs
-    const DIRECT = /(direct|freight|carriage|cartage|clearing|custom|import|repair|labour|labor|installation|job)/i;
+    // Money paid out to a ledger filed under an expense type counts as that expense too.
+    for (const e of customerEntries ?? []) {
+      if (e.entry_type !== 'debit' || e.source !== 'manual' || journalOf(e.note)) continue;
+      const day = (e.entry_date ?? e.created_at) as string;
+      const inThePeriod =
+        period === 'all' ||
+        (period === 'range'
+          ? (!range.from || day.slice(0, 10) >= range.from) && (!range.to || day.slice(0, 10) <= range.to)
+          : new Date(day).getFullYear() === new Date().getFullYear());
+      const lt = typeOfParty.get(e.customer_id);
+      if (!inThePeriod || !lt || !/expense/i.test(lt)) continue;
+      expenses.set(lt, (expenses.get(lt) ?? 0) + e.amount);
+      headType.set(lt, lt);
+    }
+    // Two heads only: Direct expenses and Indirect expenses, each holding the registered expense heads as its
+    // sub-heads. A head is direct unless it was marked Indirect (when it was added, or its ledger type says so).
     const direct: [string, number][] = [];
     const indirect: [string, number][] = [];
-    [...expenses.entries()].sort((a, b) => b[1] - a[1]).forEach((e) => (directNames.has(e[0]) || (!(categories ?? []).some((c) => c.name === e[0] && c.expense_group) && DIRECT.test(e[0])) ? direct : indirect).push(e));
+    const indirectNames = new Set((categories ?? []).filter((c) => c.expense_group === 'indirect').map((c) => c.name));
+    [...expenses.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .forEach((e) => (indirectNames.has(e[0]) || /indirect/i.test(e[0]) || /indirect/i.test(headType.get(e[0]) ?? '') ? indirect : direct).push(e));
     const sum = (list: [string, number][]) => list.reduce((a, [, v]) => a + v, 0);
     // The stock held now, at cost. Stock has no history, so the period's opening stock is taken as the
     // same figure: stock moves through the purchase and sale bills themselves.
@@ -180,12 +213,51 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     const net = gross - indirectTotal;
     const bills = { sale: inRange.filter((t) => t.type === 'sale').length, purchase: inRange.filter((t) => t.type === 'purchase').length, expense: inRange.filter((t) => t.type === 'expense').length };
     return { items, services, sales, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net, bills };
-  }, [inRange, categories, products]);
+  }, [inRange, categories, products, partyRows, partyTypeName, customerEntries, period, range.from, range.to]);
   const grossProfit = pl.gross;
   const netProfit = pl.net;
   // each side of the trading account totals the same; likewise the second part
   const tradingTotal = pl.sales + pl.closing + (grossProfit < 0 ? -grossProfit : 0);
   const secondTotal = pl.indirectTotal + (grossProfit < 0 ? -grossProfit : 0) + (netProfit >= 0 ? netProfit : 0);
+  // Money that actually moved in the period (Total Received / Total Paid, the same rules as those pages).
+  const cash = useMemo(() => {
+    const inPeriod = (d: string | null | undefined) => {
+      if (period === 'all') return true;
+      if (!d) return false;
+      if (period === 'range') {
+        const day = d.slice(0, 10);
+        return (!range.from || day >= range.from) && (!range.to || day <= range.to);
+      }
+      return new Date(d).getFullYear() === new Date().getFullYear();
+    };
+    let walkIn = 0;
+    let customers = 0;
+    let expenses = 0;
+    let toCustomers = 0;
+    let toVendors = 0;
+    let walkInBought = 0;
+    for (const t of transactions ?? []) {
+      const d = t.bill_date ?? t.created_at;
+      if (!inPeriod(d)) continue;
+      if (isSettledOnTheSpot(t)) {
+        if (t.type === 'sale') walkIn += t.amount;
+        else walkInBought += t.amount;
+      }
+      if (t.type === 'expense' && !journalOf(t.note)) expenses += t.amount;
+    }
+    for (const e of customerEntries ?? []) {
+      if (journalOf(e.note) || !inPeriod(e.entry_date ?? e.created_at)) continue;
+      if (e.entry_type === 'credit') customers += e.amount;
+      else if (e.source === 'manual') toCustomers += e.amount;
+    }
+    for (const e of vendorEntries ?? []) {
+      if (journalOf(e.note) || !inPeriod(e.entry_date ?? e.created_at)) continue;
+      if (e.entry_type === 'credit') toVendors += e.amount;
+    }
+    const received = walkIn + customers;
+    const paid = expenses + toCustomers + toVendors + walkInBought;
+    return { walkIn, customers, expenses, toCustomers, toVendors, walkInBought, received, paid };
+  }, [transactions, customerEntries, vendorEntries, period, range.from, range.to]);
   const costOfGoods = pl.opening + pl.purchase + pl.directTotal - pl.closing;
   const companyName = useAuthStore((state) => state.profile)?.business_name ?? '';
   const totals = { sale: pl.sales, purchase: pl.purchase, expense: pl.directTotal + pl.indirectTotal };
@@ -339,6 +411,29 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         </Text>
       </View>
 
+
+      {/* Total received and total paid: what really moved in the period */}
+      <View className="mb-4 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <View className={twoSided ? 'flex-row' : ''}>
+          <View className="flex-1 p-5" style={twoSided ? { borderRightWidth: 1, borderColor: '#E5E7EB' } : { borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
+            <SideHead title="Total received" />
+            <Line label="Payments from customers" amount={cash.customers} onPress={() => go('/received')} />
+            <Line label="Walk-in sales paid on the spot" amount={cash.walkIn} onPress={() => go('/received')} />
+            <TotalLine amount={cash.received} />
+          </View>
+          <View className="flex-1 p-5">
+            <SideHead title="Total paid" />
+            <Line label="Expenses" amount={cash.expenses} onPress={() => go('/paid')} />
+            <Line label="Payments to vendors" amount={cash.toVendors} onPress={() => go('/paid')} />
+            <Line label="Payments to customers and walk-in purchases" amount={cash.toCustomers + cash.walkInBought} onPress={() => go('/paid')} />
+            <TotalLine amount={cash.paid} />
+          </View>
+        </View>
+        <View className="flex-row items-center justify-between border-t border-gray-200 px-5 py-3" style={{ backgroundColor: BRAND_TINT }}>
+          <Text className="text-[13px] font-bold" style={{ color: BRAND_DARK }}>Net cash movement (received - paid)</Text>
+          <Text className="text-[14px] font-bold" style={{ color: BRAND_DARK }}>{inr(cash.received - cash.paid)}</Text>
+        </View>
+      </View>
     </ScrollView>
   );
 }
