@@ -44,7 +44,6 @@ import { localTodayIso } from '../../utils/localDate';
 import { journalOf } from '../../utils/journalVoucher';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
-import { getLastSyncedAt, isContactsSyncEnabled, requestAndSyncPhoneContacts } from '../../utils/contactsSync';
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
 import type { BusinessTransactionType, Customer, CustomerLedgerEntry, Profile } from '../../../types/database.types';
 
@@ -513,72 +512,6 @@ function AppCustomerRow({ entry }: { entry: AppCustomer }) {
       <Text className="mt-1.5 text-xs text-gray-400">
         {requestCount} request{requestCount === 1 ? '' : 's'} · last on {new Date(lastRequestAt).toLocaleDateString()}
       </Text>
-    </View>
-  );
-}
-
-function timeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  return `${Math.floor(hours / 24)} day ago`;
-}
-
-/** Button + status line for the "Your Customers" tab: first tap asks for
- * contacts permission and does an initial pull; after that, the app keeps
- * this list in sync with the phone's contacts automatically in the
- * background (useContactsSyncBootstrap), and this button just lets the
- * user force an immediate re-sync. */
-function PhoneContactsSyncButton({ userId }: { userId: string }) {
-  const queryClient = useQueryClient();
-  const [syncing, setSyncing] = useState(false);
-  const [enabled, setEnabled] = useState(false);
-  const [lastSynced, setLastSynced] = useState<Date | null>(null);
-
-  useEffect(() => {
-    isContactsSyncEnabled(userId).then(setEnabled);
-    getLastSyncedAt(userId).then(setLastSynced);
-  }, [userId]);
-
-  async function handleSync() {
-    setSyncing(true);
-    try {
-      const { granted, synced } = await requestAndSyncPhoneContacts(userId);
-      if (!granted) {
-        showAlert('Contacts access needed', 'Allow contacts access to sync your phone contacts here.');
-        return;
-      }
-      setEnabled(true);
-      setLastSynced(new Date());
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      showAlert('Synced', `${synced} phone contact${synced === 1 ? '' : 's'} synced to your customers.`);
-    } catch (err) {
-      showAlert('Could not sync contacts', getErrorMessage(err));
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  return (
-    <View className="mb-3">
-      <Pressable
-        onPress={handleSync}
-        disabled={syncing}
-        className="flex-row items-center justify-center gap-2 rounded-2xl border border-blue-700 bg-blue-50 py-2.5 disabled:opacity-50"
-      >
-        <Ionicons name="sync-outline" size={16} color="#1d4ed8" />
-        <Text className="text-xs font-semibold text-blue-700">
-          {syncing ? 'Syncing…' : enabled ? 'Sync phone contacts now' : 'Sync from phone contacts'}
-        </Text>
-      </Pressable>
-      {enabled && (
-        <Text className="mt-1 text-center text-[10px] text-gray-400">
-          {lastSynced ? `Auto-synced with your phone · last synced ${timeAgo(lastSynced)}` : 'Auto-synced with your phone'}
-        </Text>
-      )}
     </View>
   );
 }
@@ -1607,7 +1540,6 @@ function LedgerList({ basePath }: { basePath: string }) {
 
         {summaryCards}
 
-        {userId && <PhoneContactsSyncButton userId={userId} />}
 
         <View className="flex-row flex-wrap items-center" style={{ gap: 8 }}>
           <Pressable
