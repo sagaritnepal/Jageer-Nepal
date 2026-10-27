@@ -263,6 +263,22 @@ function Legend({ items }: { items: { label: string; color: string }[] }) {
   );
 }
 
+/** Props that make a chart shape open its page when pressed. On the web react-native-svg turns an
+ * `onPress` into React Native touch handlers that the browser does not know, and logs "Unknown event
+ * handler property" for every shape that has one - so there the shape gets a plain click listener. */
+function pressable(onPress?: () => void): any {
+  if (!onPress) return {};
+  if (Platform.OS !== 'web') return { onPress };
+  return {
+    ref: (shape: any) => {
+      const el: SVGElement | null | undefined = shape?.elementRef?.current;
+      if (!el) return;
+      el.onclick = () => onPress();
+      el.style.cursor = 'pointer';
+    },
+  };
+}
+
 /** Two lines over twelve months, sales filled. */
 function TrendChart({ labels, sales, purchases, onSales, onPurchases }: { labels: string[]; sales: number[]; purchases: number[]; onSales?: () => void; onPurchases?: () => void }) {
   const W = 760;
@@ -320,10 +336,10 @@ function TrendChart({ labels, sales, purchases, onSales, onPurchases }: { labels
         );
       })}
       {area ? <Path d={area} fill="url(#salesFill)" /> : null}
-      <Path d={purchaseLine} fill="none" stroke="#F59E0B" strokeWidth={2.5} strokeLinecap="round" onPress={onPurchases} />
-      <Path d={salesLine} fill="none" stroke="#2563EB" strokeWidth={3.5} strokeLinecap="round" onPress={onSales} />
+      <Path d={purchaseLine} fill="none" stroke="#F59E0B" strokeWidth={2.5} strokeLinecap="round" {...pressable(onPurchases)} />
+      <Path d={salesLine} fill="none" stroke="#2563EB" strokeWidth={3.5} strokeLinecap="round" {...pressable(onSales)} />
       {purchases.map((v, i) => (
-        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={5} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2} onPress={onPurchases} />
+        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={5} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2} {...pressable(onPurchases)} />
       ))}
       {sales.map((v, i) => {
         const best = i === bestIdx && v > 0;
@@ -335,7 +351,7 @@ function TrendChart({ labels, sales, purchases, onSales, onPurchases }: { labels
         const purchaseY = purchaseHigher ? y(pv) - 11 : y(pv) + 19;
         return (
           <G key={`s${i}`}>
-            <Circle cx={x(i)} cy={y(v)} r={best || lastPoint ? 7 : 5.5} fill="#FFFFFF" stroke="#2563EB" strokeWidth={3} onPress={onSales} />
+            <Circle cx={x(i)} cy={y(v)} r={best || lastPoint ? 7 : 5.5} fill="#FFFFFF" stroke="#2563EB" strokeWidth={3} {...pressable(onSales)} />
             {v > 0 && (
               <SvgText
                 x={x(i)}
