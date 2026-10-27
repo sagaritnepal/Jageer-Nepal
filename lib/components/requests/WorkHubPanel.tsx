@@ -16,6 +16,7 @@ import { useRankedTechnicians } from '../../hooks/useTechnicianRanking';
 import { assignTechnician, showJobSentAlert } from '../../utils/assignTechnician';
 import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
 import { canDeleteJob, useDeleteJob } from '../../hooks/useDeleteJob';
+import { canMarkJobDone, useMarkJobDone } from '../../hooks/useMarkJobDone';
 import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -435,12 +436,13 @@ function Fact({
   );
 }
 
-type CardAction = { label: string; icon: keyof typeof Ionicons.glyphMap; tone: 'primary' | 'ghost' | 'violet'; onPress: () => void };
+type CardAction = { label: string; icon: keyof typeof Ionicons.glyphMap; tone: 'primary' | 'ghost' | 'violet' | 'done'; onPress: () => void };
 
 const ACTION_TONE = {
   primary: { bg: '#0F766E', border: '#0F766E', fg: '#FFFFFF' },
   ghost: { bg: '#FFFFFF', border: '#D1D5DB', fg: '#374151' },
   violet: { bg: '#FFFFFF', border: '#DDD6FE', fg: '#6D28D9' },
+  done: { bg: '#F0FDF4', border: '#86EFAC', fg: '#166534' },
 } as const;
 
 /** One job as a card, top to bottom: what it is and what it is worth; the few
@@ -455,6 +457,7 @@ function JobRowCard({
   onRequest,
   onCancelWork,
   onDeleteWork,
+  onMarkDone,
   onOpenToTeam,
   busy,
   roomy,
@@ -468,6 +471,7 @@ function JobRowCard({
   onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
   onDeleteWork: (request: ServiceRequest) => void;
+  onMarkDone: (request: ServiceRequest) => void;
   onOpenToTeam: (request: ServiceRequest, open: boolean) => void;
   busy: boolean;
   roomy: boolean;
@@ -501,6 +505,10 @@ function JobRowCard({
   } else {
     actions.push({ label: 'Assign', icon: 'person-add-outline', tone: mainTone, onPress: () => onAssign(r) });
     actions.push({ label: 'Open to team', icon: 'megaphone-outline', tone: 'ghost', onPress: () => onOpenToTeam(r, true) });
+  }
+  // The work is finished but nobody completed it in the app (a technician who does not use it).
+  if (canMarkJobDone(r)) {
+    actions.push({ label: 'Mark as done', icon: 'checkmark-done-outline', tone: 'done', onPress: () => onMarkDone(r) });
   }
   actions.push({ label: 'Request Outsource', icon: 'paper-plane-outline', tone: 'violet', onPress: () => onRequest(r) });
 
@@ -695,6 +703,7 @@ function JobCompactRow({
   onRequest,
   onCancelWork,
   onDeleteWork,
+  onMarkDone,
   busy,
 }: {
   request: ServiceRequest;
@@ -707,6 +716,7 @@ function JobCompactRow({
   onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
   onDeleteWork: (request: ServiceRequest) => void;
+  onMarkDone: (request: ServiceRequest) => void;
   busy: boolean;
 }) {
   useCalendarMode(); // draws the date again when the AD / BS toggle changes
@@ -882,6 +892,17 @@ function JobCompactRow({
         >
           <Ionicons name="paper-plane-outline" size={15} color="#5B21B6" />
         </Pressable>
+        {canMarkJobDone(r) && (
+          <Pressable
+            onPress={() => onMarkDone(r)}
+            disabled={busy}
+            accessibilityLabel="Mark as done"
+            className="items-center justify-center rounded-lg disabled:opacity-50"
+            style={{ width: ROW_BUTTON_HEIGHT, height: ROW_BUTTON_HEIGHT, flexShrink: 0, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}
+          >
+            <Ionicons name="checkmark-done-outline" size={16} color="#166534" />
+          </Pressable>
+        )}
         {canCancelWork(r) && (
           <Pressable
             onPress={() => onCancelWork(r)}
@@ -921,6 +942,7 @@ function JobList({
   onRequest,
   onCancelWork,
   onDeleteWork,
+  onMarkDone,
   onOpenToTeam,
   busyId,
   wide,
@@ -937,6 +959,7 @@ function JobList({
   onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
   onDeleteWork: (request: ServiceRequest) => void;
+  onMarkDone: (request: ServiceRequest) => void;
   onOpenToTeam: (request: ServiceRequest, open: boolean) => void;
   busyId: string | null;
   wide: boolean;
@@ -979,6 +1002,7 @@ function JobList({
               onRequest={onRequest}
               onCancelWork={onCancelWork}
               onDeleteWork={onDeleteWork}
+              onMarkDone={onMarkDone}
               busy={busyId === r.id}
             />
           ))}
@@ -995,6 +1019,7 @@ function JobList({
             onRequest={onRequest}
             onCancelWork={onCancelWork}
             onDeleteWork={onDeleteWork}
+            onMarkDone={onMarkDone}
             onOpenToTeam={onOpenToTeam}
             busy={busyId === r.id}
             roomy={roomy}
@@ -1044,6 +1069,7 @@ export function WorkHubPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const { confirmCancelWork, busyId: cancellingId } = useCancelWork();
   const { confirmDeleteJob, deletingId } = useDeleteJob();
+  const { confirmMarkDone, doingId } = useMarkJobDone();
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
   const [assigning, setAssigning] = useState<{ request: ServiceRequest; mode: 'staff' | 'freelance' } | null>(null);
 
@@ -1506,8 +1532,9 @@ export function WorkHubPanel({
         onRequest={(r) => openPicker(r, 'freelance')}
         onCancelWork={confirmCancelWork}
         onDeleteWork={confirmDeleteJob}
+        onMarkDone={confirmMarkDone}
         onOpenToTeam={setOpenToTeam}
-        busyId={cancellingId ?? deletingId ?? busyId}
+        busyId={cancellingId ?? deletingId ?? doingId ?? busyId}
         wide={wide}
         dense={dense}
         emptyText={STAGE_COPY[stage].empty}
@@ -1546,8 +1573,9 @@ export function WorkHubPanel({
               onRequest={(r) => openPicker(r, 'freelance')}
               onCancelWork={confirmCancelWork}
               onDeleteWork={confirmDeleteJob}
+              onMarkDone={confirmMarkDone}
               onOpenToTeam={setOpenToTeam}
-              busyId={cancellingId ?? deletingId ?? busyId}
+              busyId={cancellingId ?? deletingId ?? doingId ?? busyId}
               wide={wide}
               expanded
               dense={dense}

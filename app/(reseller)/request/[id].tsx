@@ -37,6 +37,7 @@ import { assignTechnician, showJobSentAlert } from '../../../lib/utils/assignTec
 import { reopenCompletedJob, withdrawJobOffer, claimServiceRequest } from '../../../lib/hooks/useJobOffers';
 import { respondToJobHold } from '../../../lib/hooks/useJobHold';
 import { canCancelWork, useCancelWork } from '../../../lib/hooks/useCancelWork';
+import { canMarkJobDone, useMarkJobDone } from '../../../lib/hooks/useMarkJobDone';
 import { distanceKm } from '../../../lib/utils/distance';
 import { jobAmountDue } from '../../../lib/utils/jobAmount';
 import type { ServiceRequest } from '../../../types/database.types';
@@ -320,6 +321,24 @@ function CancelWorkButton({ request }: { request: ServiceRequest }) {
   );
 }
 
+/** "Mark as done" for work that was finished but never completed in the app (a technician who does
+ * not use it). Moves the job to Completed, ready to bill; asks "are you sure?" first. */
+function MarkDoneButton({ request }: { request: ServiceRequest }) {
+  const { confirmMarkDone, doingId } = useMarkJobDone();
+  if (!canMarkJobDone(request)) return null;
+  const busy = doingId === request.id;
+  return (
+    <DetailButton
+      label={busy ? 'Marking as done…' : 'Mark as done'}
+      icon="checkmark-done-outline"
+      kind="green"
+      height={42}
+      disabled={busy}
+      onPress={() => confirmMarkDone(request)}
+    />
+  );
+}
+
 function JobTracking({ request }: { request: ServiceRequest }) {
   // A "reseller" origin request's client_id is just the reseller's own id
   // (there's no real customer profile behind it), so only look up a photo
@@ -497,6 +516,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
                 disabled={withdrawing}
                 onPress={confirmWithdraw}
               />
+              <MarkDoneButton request={request} />
               <CancelWorkButton request={request} />
             </NextStepCard>
           )}
@@ -506,6 +526,7 @@ function JobTracking({ request }: { request: ServiceRequest }) {
               title="Wait for the job to finish"
               hint="You can collect payment once the technician marks the job done."
             >
+              <MarkDoneButton request={request} />
               <CancelWorkButton request={request} />
             </NextStepCard>
           )}
@@ -650,6 +671,7 @@ function SelfSourcedAssign({ request, userId }: { request: ServiceRequest; userI
             title="Pick a technician"
             hint="Set your price first if you know it, then choose who does the job."
           >
+            <MarkDoneButton request={request} />
             <CancelWorkButton request={request} />
           </NextStepCard>
           <ProgressCard request={request} />
@@ -952,6 +974,7 @@ function ChooseTechnician({ request, userId }: { request: ServiceRequest; userId
             title="Pick a technician"
             hint={`The customer approved ${money(request.quoted_price)} — choose who does the job.`}
           >
+            <MarkDoneButton request={request} />
             <CancelWorkButton request={request} />
           </NextStepCard>
           <ProgressCard request={request} />
