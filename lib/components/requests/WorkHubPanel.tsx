@@ -15,6 +15,7 @@ import { useMyEmployees } from '../../hooks/useTechnicianEmployment';
 import { useRankedTechnicians } from '../../hooks/useTechnicianRanking';
 import { assignTechnician, showJobSentAlert } from '../../utils/assignTechnician';
 import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
+import { canDeleteJob, useDeleteJob } from '../../hooks/useDeleteJob';
 import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
@@ -453,6 +454,7 @@ function JobRowCard({
   onAssign,
   onRequest,
   onCancelWork,
+  onDeleteWork,
   onOpenToTeam,
   busy,
   roomy,
@@ -465,6 +467,7 @@ function JobRowCard({
   onAssign: (request: ServiceRequest) => void;
   onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
+  onDeleteWork: (request: ServiceRequest) => void;
   onOpenToTeam: (request: ServiceRequest, open: boolean) => void;
   busy: boolean;
   roomy: boolean;
@@ -613,22 +616,37 @@ function JobRowCard({
         className="flex-row flex-wrap items-center border-t border-gray-100 px-5 py-3.5"
         style={{ gap: 10, justifyContent: roomy ? 'space-between' : 'flex-start' }}
       >
-        {canCancelWork(r) ? (
-          <Pressable
-            onPress={() => onCancelWork(r)}
-            disabled={busy}
-            accessibilityLabel="Cancel job"
-            className="h-11 flex-row items-center justify-center gap-2 rounded-lg px-3 disabled:opacity-50"
-            style={roomy ? undefined : { flexGrow: 1, flexBasis: 120 }}
-          >
-            <Ionicons name="close-circle-outline" size={18} color="#B91C1C" />
-            <Text className="text-[14px] font-semibold" style={{ color: '#B91C1C' }}>
-              Cancel job
-            </Text>
-          </Pressable>
-        ) : (
-          <View />
-        )}
+        {/* Cancel keeps the job (in the Cancelled tab); Delete removes it for good. */}
+        <View className="flex-row flex-wrap items-center" style={{ gap: 10, ...(roomy ? null : { flexGrow: 1, flexBasis: 120 }) }}>
+          {canCancelWork(r) && (
+            <Pressable
+              onPress={() => onCancelWork(r)}
+              disabled={busy}
+              accessibilityLabel="Cancel job"
+              className="h-11 flex-row items-center justify-center gap-2 rounded-lg px-3 disabled:opacity-50"
+              style={roomy ? undefined : { flexGrow: 1, flexBasis: 100 }}
+            >
+              <Ionicons name="close-circle-outline" size={18} color="#B91C1C" />
+              <Text className="text-[14px] font-semibold" style={{ color: '#B91C1C' }}>
+                Cancel job
+              </Text>
+            </Pressable>
+          )}
+          {canDeleteJob(r) && (
+            <Pressable
+              onPress={() => onDeleteWork(r)}
+              disabled={busy}
+              accessibilityLabel="Delete job"
+              className="h-11 flex-row items-center justify-center gap-2 rounded-lg px-3 disabled:opacity-50"
+              style={roomy ? undefined : { flexGrow: 1, flexBasis: 100 }}
+            >
+              <Ionicons name="trash-outline" size={18} color="#B91C1C" />
+              <Text className="text-[14px] font-semibold" style={{ color: '#B91C1C' }}>
+                Delete job
+              </Text>
+            </Pressable>
+          )}
+        </View>
         <View className="flex-row flex-wrap items-center" style={{ gap: 10 }}>
           {actions
             .slice()
@@ -676,6 +694,7 @@ function JobCompactRow({
   onAssign,
   onRequest,
   onCancelWork,
+  onDeleteWork,
   busy,
 }: {
   request: ServiceRequest;
@@ -687,6 +706,7 @@ function JobCompactRow({
   onAssign: (request: ServiceRequest) => void;
   onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
+  onDeleteWork: (request: ServiceRequest) => void;
   busy: boolean;
 }) {
   useCalendarMode(); // draws the date again when the AD / BS toggle changes
@@ -873,6 +893,17 @@ function JobCompactRow({
             <Ionicons name="close-circle-outline" size={16} color="#B91C1C" />
           </Pressable>
         )}
+        {canDeleteJob(r) && (
+          <Pressable
+            onPress={() => onDeleteWork(r)}
+            disabled={busy}
+            accessibilityLabel="Delete job"
+            className="items-center justify-center rounded-lg disabled:opacity-50"
+            style={{ width: ROW_BUTTON_HEIGHT, height: ROW_BUTTON_HEIGHT, flexShrink: 0, borderWidth: 1, borderColor: '#FECACA' }}
+          >
+            <Ionicons name="trash-outline" size={15} color="#B91C1C" />
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -889,6 +920,7 @@ function JobList({
   onAssign,
   onRequest,
   onCancelWork,
+  onDeleteWork,
   onOpenToTeam,
   busyId,
   wide,
@@ -904,6 +936,7 @@ function JobList({
   onAssign: (request: ServiceRequest) => void;
   onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
+  onDeleteWork: (request: ServiceRequest) => void;
   onOpenToTeam: (request: ServiceRequest, open: boolean) => void;
   busyId: string | null;
   wide: boolean;
@@ -945,6 +978,7 @@ function JobList({
               onAssign={onAssign}
               onRequest={onRequest}
               onCancelWork={onCancelWork}
+              onDeleteWork={onDeleteWork}
               busy={busyId === r.id}
             />
           ))}
@@ -960,6 +994,7 @@ function JobList({
             onAssign={onAssign}
             onRequest={onRequest}
             onCancelWork={onCancelWork}
+            onDeleteWork={onDeleteWork}
             onOpenToTeam={onOpenToTeam}
             busy={busyId === r.id}
             roomy={roomy}
@@ -1008,6 +1043,7 @@ export function WorkHubPanel({
   const updateRequest = useSupabaseUpdate('service_requests');
   const [busyId, setBusyId] = useState<string | null>(null);
   const { confirmCancelWork, busyId: cancellingId } = useCancelWork();
+  const { confirmDeleteJob, deletingId } = useDeleteJob();
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
   const [assigning, setAssigning] = useState<{ request: ServiceRequest; mode: 'staff' | 'freelance' } | null>(null);
 
@@ -1469,8 +1505,9 @@ export function WorkHubPanel({
         onAssign={(r) => openPicker(r, 'staff')}
         onRequest={(r) => openPicker(r, 'freelance')}
         onCancelWork={confirmCancelWork}
+        onDeleteWork={confirmDeleteJob}
         onOpenToTeam={setOpenToTeam}
-        busyId={cancellingId ?? busyId}
+        busyId={cancellingId ?? deletingId ?? busyId}
         wide={wide}
         dense={dense}
         emptyText={STAGE_COPY[stage].empty}
@@ -1508,8 +1545,9 @@ export function WorkHubPanel({
               onAssign={(r) => openPicker(r, 'staff')}
               onRequest={(r) => openPicker(r, 'freelance')}
               onCancelWork={confirmCancelWork}
+              onDeleteWork={confirmDeleteJob}
               onOpenToTeam={setOpenToTeam}
-              busyId={cancellingId ?? busyId}
+              busyId={cancellingId ?? deletingId ?? busyId}
               wide={wide}
               expanded
               dense={dense}

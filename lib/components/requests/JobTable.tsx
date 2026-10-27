@@ -29,9 +29,9 @@ export const TIER_COLUMNS: Record<Tier, ColKey[]> = {
  * the next is the same all along the table. Job, Customer and Address are the only ones that give
  * a little width back when the table is narrower than the sum. */
 export const TIER_WIDTH: Record<Tier, Partial<Record<ColKey, number>>> = {
-  full: { token: 64, when: 84, job: 240, customer: 210, where: 170, amount: 136, tech: 144, status: 228, actions: 176 },
-  compact: { token: 64, when: 84, job: 220, customer: 230, amount: 132, tech: 128, status: 212, actions: 168 },
-  tight: { token: 56, when: 78, job: 210, customer: 220, amount: 128, status: 190, actions: 160 },
+  full: { token: 64, when: 84, job: 240, customer: 210, where: 170, amount: 136, tech: 144, status: 228, actions: 210 },
+  compact: { token: 64, when: 84, job: 220, customer: 230, amount: 132, tech: 128, status: 212, actions: 202 },
+  tight: { token: 56, when: 78, job: 210, customer: 220, amount: 128, status: 190, actions: 194 },
 };
 /** The columns that may shrink a little to fit; every other one keeps its width. */
 const SHRINKS: ColKey[] = ['job', 'customer', 'where'];
@@ -64,9 +64,9 @@ export const ROW_PAD_Y = 8;
 export const ROW_BUTTON_HEIGHT = 30;
 
 /** The table's width (px) from which each size reads well; below MIN_TABLE_WIDTH it scrolls sideways. */
-export const FULL_TABLE_WIDTH = 1470;
-export const COMPACT_TABLE_WIDTH = 1310;
-export const MIN_TABLE_WIDTH = 1080;
+export const FULL_TABLE_WIDTH = 1504;
+export const COMPACT_TABLE_WIDTH = 1344;
+export const MIN_TABLE_WIDTH = 1114;
 export function tierFor(width: number): Tier {
   return width >= FULL_TABLE_WIDTH ? 'full' : width >= COMPACT_TABLE_WIDTH ? 'compact' : 'tight';
 }

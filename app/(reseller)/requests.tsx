@@ -9,6 +9,7 @@ import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { canCancelWork, useCancelWork } from '../../lib/hooks/useCancelWork';
+import { canDeleteJob, useDeleteJob } from '../../lib/hooks/useDeleteJob';
 import { distanceKm } from '../../lib/utils/distance';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
@@ -199,7 +200,7 @@ type JobRowData = {
   onEdit?: () => void;
   onDelete?: () => void;
   deleting?: boolean;
-  /** Delete a finished job for good (completed or cancelled, with no payment or bill on it). */
+  /** Delete a job for good, at any stage (with no payment or bill on it). */
   onRemove?: () => void;
   removing?: boolean;
 };
@@ -617,42 +618,11 @@ function RequestJobRow({
   const deleting = busyId === item.id;
   useCalendarMode(); // the start / end dates under the job are drawn again when AD / BS is switched
 
-  // Delete a finished job for good: a completed or cancelled one with no payment and no bill on it
-  // (the server refuses otherwise, with its reason - see delete_finished_job, migration 0098).
-  const queryClient = useQueryClient();
-  const [removing, setRemoving] = useState(false);
-  const canRemove =
-    !isIncoming &&
-    (item.status === 'resolved' || item.status === 'cancelled') &&
-    item.payment_status === 'unpaid' &&
-    !(Number(item.amount_paid) > 0);
-  function confirmRemove() {
-    showAlert(
-      'Delete this job?',
-      `${ticketLabel(item.ticket_no) ?? ''} ${item.issue_type} is removed for good, with its job card and chalan. This cannot be undone.`.trim(),
-      [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Delete job',
-          style: 'destructive',
-          onPress: async () => {
-            setRemoving(true);
-            try {
-              const { error } = await (supabase as any).rpc('delete_finished_job', { p_request_id: item.id });
-              if (error) throw error;
-              for (const key of ['service_requests', 'customer_ledger_entries', 'job_cards', 'reward_point_events', 'profiles']) {
-                queryClient.invalidateQueries({ queryKey: [key] });
-              }
-            } catch (err) {
-              showAlert('Could not delete the job', getErrorMessage(err));
-            } finally {
-              setRemoving(false);
-            }
-          },
-        },
-      ]
-    );
-  }
+  // Delete a job for good, at any stage: one with no payment and no bill on it (the server refuses
+  // otherwise, with its reason - see delete_finished_job, migrations 0098 and 0102).
+  const { confirmDeleteJob, deletingId } = useDeleteJob();
+  const removing = deletingId === item.id;
+  const canRemove = !isIncoming && canDeleteJob(item);
 
   const customerName = item.customer_name ?? customerProfile?.full_name ?? 'Customer';
   // An unclaimed request keeps the customer's number hidden until accepted.
@@ -773,7 +743,7 @@ function RequestJobRow({
         onEdit: canEdit ? () => router.push(`/(reseller)/edit-request?id=${item.id}`) : undefined,
         onDelete: canCancel ? () => confirmCancelWork(item) : undefined,
         deleting,
-        onRemove: canRemove ? confirmRemove : undefined,
+        onRemove: canRemove ? () => confirmDeleteJob(item) : undefined,
         removing,
       }}
     />
