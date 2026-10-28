@@ -20,10 +20,8 @@ export function CategoryGrid({
       {categories.map((c) => (
         <Pressable key={c.id} onPress={() => onSelect(c)} style={{ width: `${100 / columns}%` }} className="mb-5 items-center px-1">
           <CategoryBadge category={c.label} size={56} emoji={c.icon} categoryId={c.id} visualKey={c.visual_key} />
-          <Text
-            numberOfLines={2}
-            className="mt-2 text-center text-[11.5px] font-semibold leading-[1.2] text-gray-800"
-          >
+          {/* Full name, never truncated: the cell grows, and a flex row stretches its siblings to match so labels stay top-aligned. */}
+          <Text className="mt-1.5 text-center text-[13px] font-semibold leading-[17px] text-gray-900">
             {c.label}
           </Text>
         </Pressable>

@@ -308,9 +308,9 @@ export default function ResellerDashboard() {
       style={{ padding: wide ? 20 : 14 }}
       onLayout={(e) => setMainColumnWidth(e.nativeEvent.layout.width)}
     >
-      <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-[16px] font-bold" style={{ color: '#1E3A8A' }}>Browse by category</Text>
-        <Text className="text-[12px] text-gray-500">
+      <View className="mb-4 flex-row items-baseline justify-between">
+        <Text className="text-[18px] font-extrabold leading-[22px] text-gray-900">Browse by category</Text>
+        <Text className="text-[13px] text-gray-500">
           {filteredCategories.length} {filteredCategories.length === 1 ? 'service' : 'services'}
         </Text>
       </View>
