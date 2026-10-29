@@ -3,7 +3,7 @@
 // The cash-book look the Day Book established - a strip of stat tiles and one
 // bordered table with a totals footer, with each page's own controls up in the
 // top bar - as reusable pieces, so the book pages read as one family.
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import { Text } from './CapsText';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,7 +80,21 @@ export function ToolbarButton({ label, icon, onPress }: { label: string; icon: k
   );
 }
 
-export function BackButton({ onPress }: { onPress: () => void }) {
+/** `label`: where it goes back to ("Balance Sheet"), beside the arrow. */
+export function BackButton({ onPress, label }: { onPress: () => void; label?: string }) {
+  if (label) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityLabel={`Back to ${label}`}
+        className="h-9 flex-row items-center rounded-lg border border-gray-200 pl-2 pr-3"
+        style={{ gap: 4 }}
+      >
+        <Ionicons name="chevron-back" size={18} color="#374151" />
+        <Text className="text-[13px] font-semibold text-gray-700">{label}</Text>
+      </Pressable>
+    );
+  }
   return (
     <Pressable onPress={onPress} accessibilityLabel="Back" className="h-9 w-9 items-center justify-center rounded-lg border border-gray-200">
       <Ionicons name="chevron-back" size={18} color="#374151" />
@@ -129,10 +143,13 @@ export function ToolbarSearch({
  * on a wide screen the sidebar does that job) and its main action go up there
  * too, so the page needs no title row of its own. `right` is registered when
  * `deps` change; read callbacks through a ref if they must be current. */
-export function useBarActions({ wide, right }: { wide: boolean; right?: () => ReactNode }, deps: readonly unknown[]) {
+export function useBarActions(
+  { wide, right, left }: { wide: boolean; right?: () => ReactNode; left?: () => ReactNode },
+  deps: readonly unknown[]
+) {
   useScreenHeader(
-    { headerLeft: wide ? undefined : () => <BackButton onPress={() => router.back()} />, headerRight: right },
-    [wide, !!right, ...deps]
+    { headerLeft: left ?? (wide ? undefined : () => <BackButton onPress={() => router.back()} />), headerRight: right },
+    [wide, !!right, !!left, ...deps]
   );
 }
 
@@ -253,6 +270,7 @@ export function BookTable<T>({
   stickyHeader,
   bare,
   hideHeader,
+  maxRows,
 }: {
   columns: BookColumn<T>[];
   rows: T[];
@@ -272,17 +290,30 @@ export function BookTable<T>({
   bare?: boolean;
   /** No column-title row - for a table whose titles are shown by the header above it. */
   hideHeader?: boolean;
+  /** Past this many rows the table stops growing and scrolls inside itself - exactly this many rows show - with
+   * its header row and totals footer kept in view (web). */
+  maxRows?: number;
 }) {
-  const sticky = stickyHeader && Platform.OS === 'web';
+  const limited = maxRows != null && maxRows > 0 && rows.length > maxRows && Platform.OS === 'web';
+  // The page's own scroll pins the header; a table that scrolls inside itself pins it within that.
+  const sticky = (stickyHeader && Platform.OS === 'web') || limited;
+  // The rows' own heights, measured, so that exactly `maxRows` of them (with the header and footer) fit.
+  const [heights, setHeights] = useState<{ head: number; foot: number; rows: Record<number, number> }>({ head: 0, foot: 0, rows: {} });
+  const measure = (key: 'head' | 'foot', h: number) => setHeights((prev) => (prev[key] === h ? prev : { ...prev, [key]: h }));
+  const measureRow = (index: number, h: number) =>
+    setHeights((prev) => (prev.rows[index] === h ? prev : { ...prev, rows: { ...prev.rows, [index]: h } }));
+  const shown = limited ? Array.from({ length: maxRows! }, (_, i) => heights.rows[i]) : [];
+  const scrollHeight = limited && shown.every((h) => h != null) ? shown.reduce((a, b) => a + b, 0) + heights.head + heights.foot : undefined;
   const cellStyle = (c: BookColumn<T>) => (c.width ? { width: c.width } : { flex: 1, minWidth: 0 });
   const lastIndex = columns.length - 1;
   const footerStart = footer ? columns.findIndex((c) => c.key in footer.cells) : -1;
 
-  return (
-    <View className={`bg-white ${bare ? '' : 'rounded-xl border border-gray-300'} ${sticky ? '' : 'overflow-hidden'}`}>
+  const content = (
+    <>
       {!hideHeader && <View
-        className={`flex-row border-b border-gray-300 bg-gray-50 ${sticky ? 'rounded-t-xl' : ''}`}
+        className={`flex-row border-b border-gray-300 bg-gray-50 ${sticky && !limited ? 'rounded-t-xl' : ''}`}
         style={sticky ? ({ position: 'sticky', top: 0, zIndex: 10 } as any) : undefined}
+        onLayout={limited ? (e) => measure('head', e.nativeEvent.layout.height) : undefined}
       >
         {columns.map((c, i) => (
           <Text
@@ -299,7 +330,7 @@ export function BookTable<T>({
         const group = groupOf?.(row);
         const showGroup = group != null && (index === 0 || groupOf!(rows[index - 1]) !== group);
         return (
-          <View key={rowKey(row)}>
+          <View key={rowKey(row)} onLayout={limited && index < maxRows! ? (e) => measureRow(index, e.nativeEvent.layout.height) : undefined}>
             {showGroup && (
               <View className="border-b border-gray-200 bg-gray-50 px-2.5 py-1.5">
                 <Text className="text-[11px] font-bold capitalize tracking-wide text-gray-500">{group}</Text>
@@ -327,7 +358,11 @@ export function BookTable<T>({
       })}
 
       {footer && footerStart >= 0 && (
-        <View className={`flex-row bg-gray-50 ${sticky ? 'rounded-b-xl' : ''}`}>
+        <View
+          className={`flex-row bg-gray-50 ${sticky && !limited ? 'rounded-b-xl' : ''} ${limited ? 'border-t border-gray-300' : ''}`}
+          style={limited ? ({ position: 'sticky', bottom: 0, zIndex: 10 } as any) : undefined}
+          onLayout={limited ? (e) => measure('foot', e.nativeEvent.layout.height) : undefined}
+        >
           <Text className={`${CELL} flex-1 text-right text-[12.5px] font-bold text-gray-700`}>{footer.label}</Text>
           {columns.slice(footerStart).map((c, i, arr) => (
             <View
@@ -339,6 +374,18 @@ export function BookTable<T>({
             </View>
           ))}
         </View>
+      )}
+    </>
+  );
+
+  return (
+    <View className={`bg-white ${bare ? '' : 'rounded-xl border border-gray-300'} ${sticky && !limited ? '' : 'overflow-hidden'}`}>
+      {limited ? (
+        <ScrollView style={{ maxHeight: scrollHeight }} nestedScrollEnabled showsVerticalScrollIndicator>
+          {content}
+        </ScrollView>
+      ) : (
+        content
       )}
     </View>
   );

@@ -16,6 +16,7 @@ import { ContactPickerModal } from '../ContactPickerModal';
 import { DateField } from '../DateTimeFields';
 import { FormSection } from './FormSection';
 import { PaymentEntryTable, type PaymentEntryTableHandle, type PaymentRow } from './PaymentEntryTable';
+import { useConfirmNewParty, withType } from './NewPartyConfirm';
 import { KeyboardDateInput } from './KeyboardDateInput';
 import { KeyboardSelect } from './KeyboardSelect';
 import { useConfirmSave } from './ConfirmSave';
@@ -110,6 +111,8 @@ function QuickPaymentForm() {
   const phoneContacts = usePhoneContacts();
   const { scanning, pickAndScan } = useScanBill();
   const { confirm: confirmSave, dialog: confirmDialog } = useConfirmSave();
+  // A new customer / vendor made from a typed name is checked first, with its name editable.
+  const { askNewParty, dialog: newPartyDialog } = useConfirmNewParty();
 
   const [customerName, setCustomerName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -169,7 +172,7 @@ function QuickPaymentForm() {
   // a real customer_id, so this shouldn't mean a trip to Your Customers
   // first. If the phone number already matches someone saved, use that
   // record instead of creating an unlinked duplicate.
-  async function handleSelectNew(name: string, phone: string | null) {
+  async function handleSelectNew(name: string, phone: string | null, partyTypeId: string | null) {
     if (!userId) return;
     setShowPicker(false);
     if (phone) {
@@ -180,7 +183,7 @@ function QuickPaymentForm() {
       }
     }
     try {
-      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone });
+      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone, ...(partyTypeId ? { party_type_id: partyTypeId } : {}) });
       selectCustomer(created);
     } catch (err) {
       showAlert('Could not add customer', getErrorMessage(err));
@@ -229,7 +232,12 @@ function QuickPaymentForm() {
       // Typed a name that doesn't match anyone picked/selected above - save
       // them as a new customer on the spot rather than making this a dead
       // end that sends the reseller off to Your Customers first.
-      const customer = selectedCustomer ?? (await createCustomer.mutateAsync({ owner_id: userId, name: trimmedName, phone: null }));
+      let customer = selectedCustomer;
+      if (!customer) {
+        const asked = await askNewParty({ name: trimmedName, kind: payTarget === 'vendor' ? 'vendor' : 'customer' });
+        if (!asked) return;
+        customer = await createCustomer.mutateAsync({ owner_id: userId, name: asked.name, phone: null, ...withType(asked) });
+      }
       await insertEntry.mutateAsync({
         [payTarget === 'vendor' ? 'vendor_id' : 'customer_id']: customer.id,
         owner_id: userId,
@@ -343,7 +351,7 @@ function QuickPaymentForm() {
 
   // Same "typed a name that isn't saved yet -> save it now" behavior as
   // handleSelectNew above, just targeting whichever row's picker is open.
-  async function handleSelectNewForRow(name: string, phone: string | null) {
+  async function handleSelectNewForRow(name: string, phone: string | null, partyTypeId: string | null) {
     if (!userId || !activeRowKey) return;
     const key = activeRowKey;
     setActiveRowKey(null);
@@ -355,7 +363,7 @@ function QuickPaymentForm() {
       }
     }
     try {
-      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone });
+      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone, ...(partyTypeId ? { party_type_id: partyTypeId } : {}) });
       updateRow(key, { selectedCustomer: created, customerName: created.name });
     } catch (err) {
       showAlert('Could not add customer', getErrorMessage(err));
@@ -433,7 +441,9 @@ function QuickPaymentForm() {
             (customers ?? []).find((c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase()) ?? null;
         }
         if (!customer) {
-          customer = await createCustomer.mutateAsync({ owner_id: userId, name: trimmedName, phone: row.pendingPhone });
+          const asked = await askNewParty({ name: trimmedName, kind: payTarget === 'vendor' ? 'vendor' : 'customer' });
+          if (!asked) return;
+          customer = await createCustomer.mutateAsync({ owner_id: userId, name: asked.name, phone: row.pendingPhone, ...withType(asked) });
         }
         if (customer !== row.selectedCustomer) {
           updateRow(row.key, { selectedCustomer: customer, customerName: customer.name });
@@ -574,6 +584,7 @@ function QuickPaymentForm() {
   const pickerModals = (
     <>
       {confirmDialog}
+      {newPartyDialog}
       <ContactPickerModal
         visible={showPicker}
         initialQuery={pickerQuery}
@@ -582,6 +593,7 @@ function QuickPaymentForm() {
         onSelectCustomer={selectCustomer}
         onSelectNew={handleSelectNew}
         onClose={() => setShowPicker(false)}
+        partyKind={payTarget === 'vendor' ? 'vendor' : 'customer'}
       />
       <BankAccountPickerModal
         visible={showAccountPicker}
@@ -709,7 +721,10 @@ function QuickPaymentForm() {
                 typeOf={(c) => (c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined)}
                 onCreateLedger={async (name) => {
                   if (!userId) throw new Error('Not signed in');
-                  return (await createCustomer.mutateAsync({ owner_id: userId, name: nameCaps(name), phone: null } as never)) as Customer;
+                  // The new person is checked first: name, phone and Ledger type, or Cancel to drop the name.
+                  const asked = await askNewParty({ name: nameCaps(name), kind: payTarget === 'vendor' ? 'vendor' : 'customer' });
+                  if (!asked) return null;
+                  return (await createCustomer.mutateAsync({ owner_id: userId, name: asked.name, phone: asked.phone ?? null, ...withType(asked) } as never)) as Customer;
                 }}
                 totalLabel={isOut ? 'Total Paid' : 'Total Received'}
                 totalColor={meta.color}
@@ -776,6 +791,8 @@ function QuickPaymentForm() {
 
         {confirmDialog}
 
+        {newPartyDialog}
+
         <ContactPickerModal
           visible={activeRowKey != null}
           initialQuery={rowPickerQuery}
@@ -784,6 +801,7 @@ function QuickPaymentForm() {
           onSelectCustomer={selectCustomerForRow}
           onSelectNew={handleSelectNewForRow}
           onClose={() => setActiveRowKey(null)}
+          partyKind={payTarget === 'vendor' ? 'vendor' : 'customer'}
         />
         <BankAccountPickerModal
           visible={showAccountPicker}

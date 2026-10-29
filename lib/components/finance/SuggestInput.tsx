@@ -3,11 +3,14 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { readKey } from '../../utils/webKeys';
+import { highlightText } from './Highlight';
 
 export interface SuggestOption {
   key: string;
   label: string;
   hint?: string | null;
+  /** A small line under the name - for a person, the Ledger type they are filed under. */
+  sub?: string | null;
   /** An "add it" row: what is being added ("stock item", "ledger"). It reads Add "label" as new <add>, in blue. */
   add?: string;
 }
@@ -36,6 +39,9 @@ interface Props {
   adornmentWidth?: number;
   /** Show the list as soon as the box is focused, even before anything is typed (a pick-from-all box). */
   showWhenEmpty?: boolean;
+  /** Enter on a name nobody has takes the list's "Add ... as new" row - the owner then asks for confirmation -
+   * instead of passing the typed name on unchecked. */
+  enterAddsNew?: boolean;
 }
 
 /** A text box with a typeahead list that is fully driven from the keyboard:
@@ -60,6 +66,7 @@ export function SuggestInput({
   adornment,
   adornmentWidth = 0,
   showWhenEmpty,
+  enterAddsNew,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(-1);
@@ -71,6 +78,17 @@ export function SuggestInput({
     setOpen(false);
     setIndex(-1);
     onSelectOption(option, via);
+  }
+
+  function autoPick(exactOnly = false): SuggestOption | undefined {
+    const typed = value.trim().toLowerCase();
+    // Nothing typed (a list opened on an empty box): Enter just moves on.
+    if (!typed) return undefined;
+    const existing = options.filter((o) => !o.add);
+    const label = (o: SuggestOption) => o.label.trim().toLowerCase();
+    const exact = existing.find((o) => label(o) === typed);
+    if (exact || exactOnly) return exact;
+    return existing.find((o) => label(o).startsWith(typed)) ?? existing[0];
   }
 
   function handleKeyPress(e: unknown) {
@@ -86,14 +104,27 @@ export function SuggestInput({
         setIndex(activeIndex - 1);
         return;
       }
-      if (k.key === 'Enter' && !k.ctrl && activeIndex >= 0) {
-        k.prevent();
-        choose(options[activeIndex], 'enter');
-        return;
+      if (k.key === 'Enter' && !k.ctrl) {
+        const pick = activeIndex >= 0 ? options[activeIndex] : autoPick();
+        if (pick) {
+          k.prevent();
+          choose(pick, 'enter');
+          return;
+        }
+        // A name nobody has: Enter asks to add it, rather than letting it through unchecked.
+        const add = enterAddsNew && activeIndex < 0 ? options.find((o) => !!o.add) : undefined;
+        if (add) {
+          k.prevent();
+          choose(add, 'enter');
+          return;
+        }
       }
-      if (k.key === 'Tab' && !k.shift && activeIndex >= 0) {
-        choose(options[activeIndex], 'tab');
-        return;
+      if (k.key === 'Tab' && !k.shift) {
+        const pick = activeIndex >= 0 ? options[activeIndex] : autoPick(true);
+        if (pick) {
+          choose(pick, 'tab');
+          return;
+        }
       }
       if (k.key === 'Escape') {
         k.prevent();
@@ -176,7 +207,7 @@ export function SuggestInput({
                 ) : (
                   <>
                     <Text className="flex-1 text-sm text-gray-900" numberOfLines={1}>
-                      {o.label}
+                      {highlightText(o.label, value)}
                     </Text>
                     {!!o.hint && <Text className="ml-2 text-[11px] text-gray-400">{o.hint}</Text>}
                   </>

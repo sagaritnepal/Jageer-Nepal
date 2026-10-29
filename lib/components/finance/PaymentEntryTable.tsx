@@ -7,7 +7,6 @@ import type { PhoneContactEntry } from '../../hooks/usePhoneContacts';
 import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/customerSuggestions';
 import { readKey } from '../../utils/webKeys';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
-import { askSave } from '../../utils/askSave';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 
 export interface PaymentRow {
@@ -48,7 +47,8 @@ interface Props {
   onExit: () => void;
   autoFocusFirst?: boolean;
   /** Saves a ledger typed here that is not in the books yet (after a Save / Cancel question) and returns it. */
-  onCreateLedger?: (name: string) => Promise<Customer>;
+  /** Adds a typed name as a new ledger after the new-party popup confirms it; null when it was cancelled. */
+  onCreateLedger?: (name: string) => Promise<Customer | null>;
   /** The ledger type (category) a ledger is filed under, shown beside it. */
   typeOf?: (customer: Customer) => string | undefined;
 }
@@ -123,6 +123,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
       key: s.key,
       label: s.name,
       hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
+      sub: s.customer ? typeOf?.(s.customer) ?? null : null,
     }));
     const row = rows.find((r) => r.key === focusedRowKey);
     const typed = row?.customerName.trim() ?? '';
@@ -261,12 +262,12 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                 onSelectOption={async (opt, via) => {
                   if (opt.key === '__new__') {
                     const name = opt.label.trim();
-                    if (!(await askSave('Add new ledger?', `"${name}" is not in your ledger yet. Save it as a new ledger?`))) {
-                      onUpdateRow(row.key, { customerName: '', selectedCustomer: null, pendingPhone: null });
-                      return;
-                    }
                     try {
                       const created = await onCreateLedger!(name);
+                      if (!created) {
+                        onUpdateRow(row.key, { customerName: '', selectedCustomer: null, pendingPhone: null });
+                        return;
+                      }
                       onUpdateRow(row.key, { customerName: created.name, selectedCustomer: created, pendingPhone: null });
                       inputRefs.current[`${row.key}:1`]?.focus();
                     } catch (err) {
@@ -303,6 +304,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                     <Text className="text-[10px] font-bold capitalize text-gray-400">New</Text>
                   ) : null
                 }
+                enterAddsNew
               />
             </View>
 

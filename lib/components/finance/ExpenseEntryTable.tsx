@@ -9,11 +9,12 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Customer, ExpenseCategory } from '../../../types/database.types';
+import { useAuthStore } from '../../hooks/useAuth';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
 import type { PhoneContactEntry } from '../../hooks/usePhoneContacts';
 import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/customerSuggestions';
 import { readKey } from '../../utils/webKeys';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
-import { askSave } from '../../utils/askSave';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 
 export interface ExpenseEntryRow {
@@ -57,7 +58,8 @@ interface Props {
   /** A phone contact that isn't a saved customer was picked as "Paid to". */
   onSelectContact: (rowKey: string, name: string, phone: string | null) => void;
   /** Saves a ledger typed here that is not in the books yet and returns it. */
-  onCreateLedger?: (name: string) => Promise<Customer>;
+  /** Adds a typed name as a new ledger after the new-party popup confirms it; null when it was cancelled. */
+  onCreateLedger?: (name: string) => Promise<Customer | null>;
   onRequestSave: () => void;
   /** Enter on a blank last row: the list is finished, move on (to Save). */
   onExit: () => void;
@@ -120,6 +122,9 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
   }));
 
   const focusedRowKey = focusedCell?.col === 0 ? focusedCell.key : null;
+  // The Ledger type each person is filed under (Customer, Vendor, Employee ...), shown under their name in the list.
+  const { nameById: partyTypeName } = usePartyTypes(useAuthStore((state) => state.session?.user.id));
+  const typeOf = (c: { party_type_id?: string | null }) => (c.party_type_id ? partyTypeName.get(c.party_type_id) ?? null : null);
   const suggestions = useMemo<CustomerSuggestion[]>(() => {
     if (!focusedRowKey) return [];
     const row = rows.find((r) => r.key === focusedRowKey);
@@ -134,6 +139,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
       key: s.key,
       label: s.name,
       hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
+      sub: s.customer ? typeOf(s.customer) : null,
     }));
     const row = rows.find((r) => r.key === focusedRowKey);
     const typed = row?.partyName.trim() ?? '';
@@ -263,12 +269,12 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
                 onSelectOption={async (opt, via) => {
                   if (opt.key === '__new__') {
                     const name = opt.label.trim();
-                    if (!(await askSave('Add new ledger?', `"${name}" is not in your ledger yet. Save it as a new ledger?`))) {
-                      onUpdateRow(row.key, { partyName: '', customerId: null });
-                      return;
-                    }
                     try {
                       const created = await onCreateLedger!(name);
+                      if (!created) {
+                        onUpdateRow(row.key, { partyName: '', customerId: null });
+                        return;
+                      }
                       onUpdateRow(row.key, { partyName: created.name, customerId: created.id });
                       inputRefs.current[`${row.key}:1`]?.focus();
                     } catch (err) {
@@ -288,6 +294,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
                 onFocus={() => setFocusedCell({ key: row.key, col: 0 })}
                 onBlur={() => setFocusedCell((cur) => (cur?.key === row.key && cur.col === 0 ? null : cur))}
                 onKeyPress={(e) => handleKeyPress(e, row, rowIndex, 0)}
+                enterAddsNew
                 placeholder="Who was this paid to?"
                 accessibilityLabel={`Paid to, row ${rowIndex + 1}`}
                 autoFocus={autoFocusFirst && rowIndex === 0}

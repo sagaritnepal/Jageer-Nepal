@@ -6,7 +6,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../supabase';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
+import { useConfirmNewParty, withType } from './NewPartyConfirm';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
+import { highlightText } from './Highlight';
 import { ticketLabel } from '../../utils/ticket';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
@@ -402,6 +405,16 @@ function ItemPickerModal({
               <TextInput
                 value={search}
                 onChangeText={setSearch}
+                // Enter takes the item that exists: exactly as typed, else the first that starts with it, else the first match.
+                onSubmitEditing={() => {
+                  const typed = search.trim().toLowerCase();
+                  if (!typed) return;
+                  const nameOf = (row: (typeof matches)[number]) => (row.kind === 'product' ? row.product.name : row.item.name).trim().toLowerCase();
+                  const pick = matches.find((row) => nameOf(row) === typed) ?? matches.find((row) => nameOf(row).startsWith(typed)) ?? matches[0];
+                  if (!pick) return;
+                  if (pick.kind === 'product') onPick(pick.product);
+                  else onPickFinanceItem(pick.item);
+                }}
                 placeholder="Search your products, or type a new item name"
                 placeholderTextColor="#9CA3AF"
                 autoFocus
@@ -420,7 +433,7 @@ function ItemPickerModal({
                     >
                       <View className="flex-1 pr-2">
                         <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-                          {row.product.name}
+                          {highlightText(row.product.name, search)}
                         </Text>
                         <Text className={`text-xs ${row.product.stock_level > 0 ? 'text-gray-500' : 'text-red-500'}`}>
                           {row.product.stock_level} in stock
@@ -435,7 +448,7 @@ function ItemPickerModal({
                     >
                       <View className="flex-1 pr-2">
                         <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
-                          {row.item.name}
+                          {highlightText(row.item.name, search)}
                         </Text>
                         <Text className="text-xs text-gray-400">Not in stock — used before</Text>
                       </View>
@@ -796,6 +809,9 @@ function TransactionForm({
   const desktopWeb = useIsWideWeb();
   const createTx = useSupabaseInsert('business_transactions');
   const { confirm: confirmSave, dialog: confirmDialog } = useConfirmSave();
+  // A new customer / vendor made from a typed name is checked first, with its name editable.
+  const { askNewParty, dialog: newPartyDialog } = useConfirmNewParty();
+  const newPartyKind = type === 'purchase' ? 'vendor' : type === 'sale' ? 'customer' : 'payee';
   const updateTx = useSupabaseUpdate('business_transactions');
   const { data: categories } = useSupabaseQuery('expense_categories', {
     filters: { owner_id: userId },
@@ -977,25 +993,43 @@ function TransactionForm({
   // seemed to "take", then Save would refuse with "Pick a customer". Create
   // a real customer here too when this is a bill, same as Quick Payment
   // already does.
-  async function handleSelectPartyNew(name: string, phone: string | null) {
+  /** Resolves to whether a party is now picked (false when the confirmation was cancelled or the save failed). */
+  async function handleSelectPartyNew(name: string, phone: string | null, partyTypeId?: string | null, confirmName = false): Promise<boolean> {
     setShowPartyPicker(false);
-    if (!phone && !isBill) {
+    // `partyTypeId` given: the picker's popup already confirmed this person (a null is "no Ledger type").
+    if (!phone && !isBill && partyTypeId === undefined && !confirmName) {
       setPartyName(name);
       setCustomerId(null);
-      return;
+      return true;
     }
     if (phone) {
       const existing = customers.find((c) => c.phone === phone);
       if (existing) {
         selectCustomer(existing);
-        return;
+        return true;
       }
     }
+    // A name typed in the box is checked first; one the picker's own step already confirmed is not asked again.
+    let finalName = name;
+    let typePatch: { party_type_id?: string } = partyTypeId ? { party_type_id: partyTypeId } : {};
+    if (confirmName) {
+      const checked = await askNewParty({ name, kind: newPartyKind });
+      if (!checked) {
+        // Cancelled in the confirmation: the name is dropped, so it cannot be saved by accident.
+        setPartyName('');
+        setCustomerId(null);
+        return false;
+      }
+      finalName = checked.name;
+      typePatch = withType(checked);
+    }
     try {
-      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone });
+      const created = await createCustomer.mutateAsync({ owner_id: userId, name: finalName, phone, ...typePatch });
       selectCustomer(created);
+      return true;
     } catch (err) {
       showAlert('Could not add customer', getErrorMessage(err));
+      return false;
     }
   }
 
@@ -1095,21 +1129,26 @@ function TransactionForm({
         // the saved party of that name - and a brand-new name is saved as a
         // new customer/vendor on the spot, same as Quick Payment does.
         let resolvedCustomerId = customerId;
+        let savedPartyName = partyName;
         if (!resolvedCustomerId) {
           const typed = partyName.trim();
           const existing = customers.find((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
           if (existing) {
             resolvedCustomerId = existing.id;
           } else {
-            const created = await createCustomer.mutateAsync({ owner_id: userId, name: typed, phone: null });
+            const asked = await askNewParty({ name: typed, kind: newPartyKind });
+            if (!asked) return;
+            const created = await createCustomer.mutateAsync({ owner_id: userId, name: asked.name, phone: null, ...withType(asked) });
             resolvedCustomerId = created.id;
+            savedPartyName = created.name;
+            setPartyName(created.name);
           }
           setCustomerId(resolvedCustomerId);
         }
         const values = {
           type,
           amount: grandTotal,
-          party_name: tidyName(partyName.trim()) || null,
+          party_name: tidyName(savedPartyName.trim()) || null,
           customer_id: resolvedCustomerId,
           note: note.trim() || null,
           bill_no: billNo.trim() || null,
@@ -1363,14 +1402,16 @@ function TransactionForm({
   // Same "a plain typed name with no phone just fills party_name, a phone
   // number links or creates a real customer" behavior as handleSelectPartyNew
   // above (expense never requires a real customer_id, unlike a bill).
-  async function handleSelectNewPartyForExpenseRow(name: string, phone: string | null) {
+  async function handleSelectNewPartyForExpenseRow(name: string, phone: string | null, partyTypeId: string | null) {
     const key = activePartyRowKey;
     setActivePartyRowKey(null);
-    if (key) await attachContactToExpenseRow(key, name, phone);
+    if (key) await attachContactToExpenseRow(key, name, phone, partyTypeId);
   }
 
-  async function attachContactToExpenseRow(key: string, name: string, phone: string | null) {
-    if (!phone) {
+  // `partyTypeId` given: the picker's popup already confirmed this person (a null is "no Ledger type"); left out
+  // (a phone contact picked from the payee list), the confirmation popup is asked here before anything is saved.
+  async function attachContactToExpenseRow(key: string, name: string, phone: string | null, partyTypeId?: string | null) {
+    if (!phone && partyTypeId === undefined) {
       updateExpenseRow(key, { partyName: name, customerId: null });
       return;
     }
@@ -1379,8 +1420,20 @@ function TransactionForm({
       updateExpenseRow(key, { partyName: existing.name, customerId: existing.id });
       return;
     }
+    let finalName = name;
+    let typePatch: { party_type_id?: string } = partyTypeId ? { party_type_id: partyTypeId } : {};
+    if (partyTypeId === undefined) {
+      const asked = await askNewParty({ name, kind: 'payee' });
+      if (!asked) {
+        // Cancelled: the name is dropped, so it cannot be saved by accident.
+        updateExpenseRow(key, { partyName: '', customerId: null });
+        return;
+      }
+      finalName = asked.name;
+      typePatch = withType(asked);
+    }
     try {
-      const created = await createCustomer.mutateAsync({ owner_id: userId, name, phone });
+      const created = await createCustomer.mutateAsync({ owner_id: userId, name: finalName, phone, ...typePatch });
       updateExpenseRow(key, { partyName: created.name, customerId: created.id });
     } catch (err) {
       showAlert('Could not add customer', getErrorMessage(err));
@@ -1527,6 +1580,9 @@ function TransactionForm({
   const itemsTableRef = useRef<BillItemsTableHandle>(null);
   const [vendorFocused, setVendorFocused] = useState(false);
 
+  // The Ledger type each person is filed under (Customer, Vendor, Employee ...), shown under their name in the list.
+  const { nameById: partyTypeName } = usePartyTypes(userId);
+  const typeOf = (c: { party_type_id?: string | null }) => (c.party_type_id ? partyTypeName.get(c.party_type_id) ?? null : null);
   const vendorSuggestions = useMemo<CustomerSuggestion[]>(() => {
     if (!vendorFocused || !isBill) return [];
     const q = partyName.trim();
@@ -1540,6 +1596,7 @@ function TransactionForm({
       key: s.key,
       label: s.name,
       hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
+      sub: s.customer ? typeOf(s.customer) : null,
     }));
     const typed = partyName.trim();
     const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
@@ -1652,7 +1709,12 @@ function TransactionForm({
               onRemoveRow={removeExpenseRow}
               onPickCategory={setActiveCategoryRowKey}
               onSelectContact={attachContactToExpenseRow}
-              onCreateLedger={async (name) => (await createCustomer.mutateAsync({ owner_id: userId, name: tidyName(name), phone: null } as never)) as Customer}
+              onCreateLedger={async (name) => {
+                // The new person is checked first: name, phone and Ledger type, or Cancel to drop the name.
+                const asked = await askNewParty({ name: tidyName(name), kind: 'payee' });
+                if (!asked) return null;
+                return (await createCustomer.mutateAsync({ owner_id: userId, name: asked.name, phone: asked.phone ?? null, ...withType(asked) } as never)) as Customer;
+              }}
               onRequestSave={handleSaveAllExpenses}
               onExit={() => (saveButtonRef.current as unknown as { focus?: () => void } | null)?.focus?.()}
               autoFocusFirst
@@ -1683,6 +1745,8 @@ function TransactionForm({
 
         {confirmDialog}
 
+        {newPartyDialog}
+
         <ContactPickerModal
           visible={activePartyRowKey != null}
           initialQuery={expenseRowPickerQuery}
@@ -1691,6 +1755,7 @@ function TransactionForm({
           onSelectCustomer={selectPartyForExpenseRow}
           onSelectNew={handleSelectNewPartyForExpenseRow}
           onClose={() => setActivePartyRowKey(null)}
+          partyKind="payee"
         />
         <CategoryPickerModal
           visible={activeCategoryRowKey != null}
@@ -1778,7 +1843,7 @@ function TransactionForm({
                         setPartyName(s.name);
                         setCustomerId(s.customer.id);
                       } else {
-                        await handleSelectPartyNew(s.name, s.phone);
+                        await handleSelectPartyNew(s.name, s.phone, undefined, true);
                       }
                     }}
                     inputRef={(el) => {
@@ -1793,6 +1858,7 @@ function TransactionForm({
                       if (k.ctrl) handleSave();
                       else billNoRef.current?.focus();
                     }}
+                    enterAddsNew
                     placeholder={type === 'purchase' ? 'Vendor / supplier name' : 'Customer name'}
                     accessibilityLabel={partyLabel}
                     autoFocus={!initial}
@@ -1883,7 +1949,7 @@ function TransactionForm({
               }}
               footer={
                 <>
-                {type !== 'expense' && (
+                {(
                   <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} serviceNames={serviceNames} bought={type === 'purchase'} />
                 )}
                 <View
@@ -2056,6 +2122,8 @@ function TransactionForm({
           </View>
         </View>
 
+        {newPartyDialog}
+
         {confirmDialog}
 
         <ContactPickerModal
@@ -2066,6 +2134,7 @@ function TransactionForm({
           onSelectCustomer={selectCustomer}
           onSelectNew={handleSelectPartyNew}
           onClose={() => setShowPartyPicker(false)}
+          partyKind={newPartyKind}
         />
       </View>
     );
@@ -2260,7 +2329,7 @@ function TransactionForm({
               <Text className="text-sm font-bold text-gray-900">G. Total</Text>
               <Text className="text-base font-extrabold text-gray-900">NPR {grandTotal.toLocaleString()}</Text>
             </View>
-            {type !== 'expense' && (
+            {(
               <View className="mt-3">
                 <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent="#EA580C" serviceNames={serviceNames} bought={type === 'purchase'} />
               </View>
@@ -2415,6 +2484,7 @@ function TransactionForm({
         available={available}
       />
       {confirmDialog}
+      {newPartyDialog}
       <ContactPickerModal
         visible={showPartyPicker}
         initialQuery={partyPickerQuery}
@@ -2423,6 +2493,7 @@ function TransactionForm({
         onSelectCustomer={selectCustomer}
         onSelectNew={handleSelectPartyNew}
         onClose={() => setShowPartyPicker(false)}
+        partyKind={newPartyKind}
       />
       <View className="flex-row gap-2">
         <Pressable onPress={onCancel} className="flex-1 items-center rounded-lg border border-gray-300 py-2.5">

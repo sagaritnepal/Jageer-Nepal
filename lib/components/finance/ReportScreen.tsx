@@ -1,5 +1,6 @@
 // lib/components/finance/ReportScreen.tsx
 import { useMemo, useRef, useState } from 'react';
+import { withFrom } from '../../hooks/useCameFrom';
 import { View, Text, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
@@ -90,8 +91,10 @@ const PERIOD_LABEL: Record<Period, string> = { year: 'This Year', all: 'All Time
  * introducing a second source of truth. */
 export function ReportScreen({ basePath }: { basePath: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
+  // Every bill (not the API's first 1000): the stock at a period's start is worked out from all of them.
   const { data: transactions } = useSupabaseQuery('business_transactions', {
     filters: userId ? { owner_id: userId } : {},
+    all: true,
     enabled: !!userId,
   });
   // The period: one of the ready-made ones, or the dates picked with the date control.
@@ -133,7 +136,8 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   });
   const { width } = useWindowDimensions();
   const twoSided = width >= 900;
-  const go = (path: string) => router.push(`${basePath}${path}` as never);
+  // What a line opens is marked as opened from here, so it shows a way back (see useCameFrom).
+  const go = (path: string) => router.push(withFrom(`${basePath}${path}`, 'profit-loss') as never);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['sales', 'dincome', 'purchase', 'direct', 'indirect']));
   const toggleGroup = (k: string) =>
     setOpenGroups((prev) => {
@@ -209,10 +213,48 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     // Services sold are direct income; services bought in (outsourced work) are a direct expense.
     if (servicesBought > 0) direct.unshift(['Services bought (outsourced work)', servicesBought]);
     const sum = (list: [string, number][]) => list.reduce((a, [, v]) => a + v, 0);
-    // The stock held now, at cost. Stock has no history, so the period's opening stock is taken as the
-    // same figure: stock moves through the purchase and sale bills themselves.
-    const closing = (products ?? []).reduce((a, p) => a + (Number(p.stock_level) > 0 && p.purchase_price != null ? Number(p.stock_level) * Number(p.purchase_price) : 0), 0);
-    const opening = closing;
+    // Stock has no history of its own, but every unit in and out is on a bill. Opening stock is what the bills put
+    // on the shelf before the period's first day (purchases less sales); closing stock is what is on the shelf now,
+    // less what came in after the period's last day, plus what went out after it. Each valued at cost - the
+    // product's cost price, else what its latest purchase bill paid.
+    const dayOf = (t: { bill_date: string | null; created_at: string }) => {
+      if (t.bill_date) return t.bill_date.slice(0, 10);
+      const c = new Date(t.created_at);
+      return `${c.getFullYear()}-${String(c.getMonth() + 1).padStart(2, '0')}-${String(c.getDate()).padStart(2, '0')}`;
+    };
+    const year = new Date().getFullYear();
+    const start = period === 'all' ? '' : period === 'range' ? range.from : `${year}-01-01`;
+    const end = period === 'all' ? '' : period === 'range' ? range.to : `${year}-12-31`;
+    const key = (n: string | null | undefined) => (n ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const beforeStart = new Map<string, number>(); // units in less units out, before the first day
+    const afterEnd = new Map<string, number>(); // the same, after the last day
+    const lastRate = new Map<string, number>();
+    const stockBills = [...(transactions ?? [])]
+      .filter((t) => t.type === 'sale' || t.type === 'purchase')
+      .sort((a, b) => dayOf(a).localeCompare(dayOf(b)));
+    for (const t of stockBills) {
+      const day = dayOf(t);
+      for (const line of t.items ?? []) {
+        const k = key(line.description);
+        if (!k) continue;
+        const q = (Number(line.qty) || 0) * (t.type === 'purchase' ? 1 : -1);
+        if (start && day < start) beforeStart.set(k, (beforeStart.get(k) ?? 0) + q);
+        if (end && day > end) afterEnd.set(k, (afterEnd.get(k) ?? 0) + q);
+        if (t.type === 'purchase' && Number(line.rate) > 0) lastRate.set(k, Number(line.rate));
+      }
+    }
+    let opening = 0;
+    let closing = 0;
+    for (const p of products ?? []) {
+      const k = key(p.name);
+      const cost = p.purchase_price != null ? Number(p.purchase_price) : lastRate.get(k);
+      if (cost == null) continue;
+      const now = Number(p.stock_level) || 0;
+      // Opening: only what the bills put on the shelf before the first day - stock no bill explains (an opening
+      // quantity typed on the product, a purchase bill since deleted) is not taken to have been there already.
+      opening += Math.max(0, beforeStart.get(k) ?? 0) * cost;
+      closing += Math.max(0, now - (afterEnd.get(k) ?? 0)) * cost;
+    }
     const sales = items;
     const income = items + services;
     const directTotal = sum(direct);
@@ -221,7 +263,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     const net = gross - indirectTotal;
     const bills = { sale: inRange.filter((t) => t.type === 'sale').length, purchase: inRange.filter((t) => t.type === 'purchase').length, expense: inRange.filter((t) => t.type === 'expense').length };
     return { items, services, sales, income, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net, bills };
-  }, [inRange, categories, products, partyRows, partyTypeName, customerEntries, period, range.from, range.to]);
+  }, [inRange, categories, products, transactions, partyRows, partyTypeName, customerEntries, period, range.from, range.to]);
   const grossProfit = pl.gross;
   const netProfit = pl.net;
   // each side of the trading account totals the same; likewise the second part
@@ -305,7 +347,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
           ],
         },
       ],
-      note: 'Sales, Purchase and Expenses are the bills dated in the period, paid or not. Stock is valued at cost as it stands now.',
+      note: 'Sales, Purchase and Expenses are the bills dated in the period, paid or not. Opening stock is what was on the shelf on the first day, closing stock on the last, worked out from the bills and valued at cost.',
     };
   };
   const printNow = useRef<() => void>(() => {});
@@ -406,6 +448,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
               rows={[['Sales - items', pl.items]]} onOpen={() => go('/sales-report')} />
             <Group id="dincome" open={openGroups} onToggle={toggleGroup} label="Direct incomes" amount={pl.services}
               rows={[['Installation & repair services sold', pl.services]]} onOpen={() => go('/sales-report')} />
+            {/* What is left on the shelf: the stock list. */}
             <Line label="Closing stock" amount={pl.closing} onPress={() => go('/inventory')} />
             {grossProfit < 0 ? <Line label="Gross loss c/o" amount={-grossProfit} tone="loss" bold /> : null}
             <TotalLine amount={tradingTotal} />
@@ -416,7 +459,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
           </View>
         </View>
         <Text className="border-t border-gray-200 bg-gray-50 px-5 py-3 text-xs text-gray-500">
-          Both sides total the same, as in Tally. Stock is valued at cost as it stands now, so opening and closing stock are the same figure.
+          Both sides total the same, as in Tally. Opening stock is what was on the shelf on the period's first day and closing stock on its last, worked out from the bills and valued at cost.
         </Text>
       </View>
 

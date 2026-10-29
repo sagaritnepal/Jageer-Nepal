@@ -137,6 +137,7 @@ export function PopupCard({
   maxWidth = 560,
   headerRight,
   closeOnOutside = false,
+  hideClose = false,
   children,
 }: {
   title: string;
@@ -144,6 +145,8 @@ export function PopupCard({
   maxWidth?: number;
   /** Buttons in the blue bar, left of the close button - so they take no room from the form below. */
   headerRight?: ReactNode;
+  /** No cross in the blue bar: the popup is answered with its own buttons (Esc still closes it). */
+  hideClose?: boolean;
   /** A click on the dimmed area closes the card - for one with nothing typed in it. */
   closeOnOutside?: boolean;
   children: ReactNode;
@@ -166,9 +169,11 @@ export function PopupCard({
                 {title}
               </Text>
               {headerRight}
-              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </Pressable>
+              {!hideClose && (
+                <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+                  <Ionicons name="close" size={22} color="#FFFFFF" />
+                </Pressable>
+              )}
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 14 }}>
               {children}

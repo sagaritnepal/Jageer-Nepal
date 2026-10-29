@@ -4,6 +4,7 @@ import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
+import { useCameFrom } from '../../hooks/useCameFrom';
 import { BackButton, BookPage, BookStat, BookStats, BookTable, Pill, ToolbarSearch, money, useBookLayout, useBookToolbar, type BookColumn } from './BookKit';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
@@ -19,6 +20,7 @@ import { MONEY } from './moneyColors';
 import { journalOf } from '../../utils/journalVoucher';
 import { PopupCard } from './FormKit';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
+import { highlightText } from './Highlight';
 
 type Direction = 'receive' | 'give';
 
@@ -101,6 +103,7 @@ const JOURNAL = { label: 'Journal voucher', color: '#B45309', bg: '#FFFBEB' };
 export function PartyBalancesScreen({ basePath, direction }: { basePath: string; direction: Direction }) {
   const meta = META[direction];
   const layout = useBookLayout();
+  const cameFrom = useCameFrom(basePath);
   useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const userId = useAuthStore((state) => state.session?.user.id);
   const profile = useAuthStore((state) => state.profile);
@@ -258,7 +261,8 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
   const toolbar = useBookToolbar(
     {
       wide: layout.wide,
-      left: layout.wide ? undefined : () => <BackButton onPress={() => router.back()} />,
+      // Opened from the Balance Sheet: a way back to it, on a wide screen too.
+      left: layout.wide && !cameFrom ? undefined : () => <BackButton onPress={cameFrom?.back ?? (() => router.back())} label={cameFrom?.label} />,
       right: (inBar) => (
         <>
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by name" wide={inBar} />
@@ -267,7 +271,7 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
         </>
       ),
     },
-    [search]
+    [search, cameFrom?.label]
   );
 
   const openLedger = (partyId: string) => router.push(hrefFor(partyId) as never);
@@ -346,7 +350,7 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
               >
                 <Ionicons name="chevron-forward" size={16} color="#6B7280" />
                 <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
-                  {nameCaps(h.name)}
+                  {highlightText(nameCaps(h.name), search)}
                 </Text>
                 <Text className="text-[12px] text-gray-400">
                   {[h.ledgerType || null, entryWord(h.entries.length)].filter(Boolean).join(' · ')}

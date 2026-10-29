@@ -43,8 +43,10 @@ import { isValidPhone10 } from '../../utils/phone';
 import { localTodayIso } from '../../utils/localDate';
 import { journalOf } from '../../utils/journalVoucher';
 import { toBsHistoryLabel } from '../../utils/nepaliDate';
+import { highlightText as highlight } from './Highlight';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import { pickPhoneContact } from '../../utils/pickPhoneContact';
+import { round2 } from '../../utils/money';
 import type { BusinessTransactionType, Customer, CustomerLedgerEntry, Profile } from '../../../types/database.types';
 
 /** A reference number and what it is the number of ("Sales no.", "Payment no.", ...). */
@@ -63,7 +65,12 @@ const BILL_KIND: Record<BusinessTransactionType, string> = { sale: 'Sales no.', 
  * `referenceById` is each entry's reference number (by entry id, only for entries that have
  * one): the number of the bill it was posted from, else its own receipt / payment number -
  * as a party's statement shows it - with what kind of number it is. */
-function useLedgerItems(userId: string | undefined): { byParty: Map<string, LedgerItem[]>; referenceById: Map<string, LedgerReference> } {
+function useLedgerItems(userId: string | undefined): {
+  byParty: Map<string, LedgerItem[]>;
+  referenceById: Map<string, LedgerReference>;
+  /** Money that actually moved with each party: all received from them, all paid to them (journal vouchers are not cash). */
+  cashByParty: Map<string, { paid: number; received: number }>;
+} {
   // `all`: balances are sums over every entry, and the API cuts a plain read
   // off at 1000 rows - past that, each party's balance is silently wrong.
   const { data: customerEntries } = useSupabaseQuery('customer_ledger_entries', {
@@ -87,6 +94,15 @@ function useLedgerItems(userId: string | undefined): { byParty: Map<string, Ledg
   return useMemo(() => {
     const byParty = new Map<string, LedgerItem[]>();
     const referenceById = new Map<string, LedgerReference>();
+    const cashByParty = new Map<string, { paid: number; received: number }>();
+    const cash = (partyId: string) => {
+      let c = cashByParty.get(partyId);
+      if (!c) {
+        c = { paid: 0, received: 0 };
+        cashByParty.set(partyId, c);
+      }
+      return c;
+    };
     const add = (partyId: string, item: LedgerItem) => {
       const list = byParty.get(partyId);
       if (list) list.push(item);
@@ -117,6 +133,11 @@ function useLedgerItems(userId: string | undefined): { byParty: Map<string, Ledg
     };
     for (const e of customerEntries ?? []) {
       note('customer', e);
+      // Received: what they paid in. Paid: money given out to them by hand (a debit a bill posts is not cash).
+      if (!journalOf(e.note)) {
+        if (e.entry_type === 'credit') cash(e.customer_id).received += Number(e.amount);
+        else if (e.source === 'manual') cash(e.customer_id).paid += Number(e.amount);
+      }
       add(e.customer_id, {
         id: e.id,
         side: 'customer',
@@ -129,6 +150,8 @@ function useLedgerItems(userId: string | undefined): { byParty: Map<string, Ledg
     }
     for (const e of vendorEntries ?? []) {
       note('vendor', e);
+      // Paid: what was paid to the vendor (the debits are the bills they sent).
+      if (!journalOf(e.note) && e.entry_type === 'credit') cash(e.vendor_id).paid += Number(e.amount);
       add(e.vendor_id, {
         id: e.id,
         side: 'vendor',
@@ -139,7 +162,7 @@ function useLedgerItems(userId: string | undefined): { byParty: Map<string, Ledg
         note: e.note,
       });
     }
-    return { byParty, referenceById };
+    return { byParty, referenceById, cashByParty };
   }, [customerEntries, vendorEntries, bills]);
 }
 
@@ -329,6 +352,9 @@ interface PartyRowData {
   typeName: string | undefined;
   /** The reference number (sales, purchase, payment or receipt no.) of their latest transaction - null when it has none. */
   lastReference: LedgerReference | null;
+  /** All the money paid to them, and all received from them, as of today. */
+  totalPaid: number;
+  totalReceived: number;
 }
 
 /** The balance as the shared balance cell draws it. */
@@ -592,21 +618,6 @@ function BulkBar({
 }
 
 /** The Ledger page: every word on it - table, cards, popups, top-bar controls - is in capitals. */
-/** The part of a name that matches the search, in the brand blue on a pale background. */
-function highlight(text: string, query: string) {
-  const q = query.trim();
-  if (!q) return text;
-  const at = text.toLowerCase().indexOf(q.toLowerCase());
-  if (at < 0) return text;
-  return (
-    <>
-      {text.slice(0, at)}
-      <Text style={{ color: '#1D4ED8', backgroundColor: '#DBEAFE' }}>{text.slice(at, at + q.length)}</Text>
-      {text.slice(at + q.length)}
-    </>
-  );
-}
-
 export function CustomersListScreen(props: { basePath: string }) {
   // Keyed on the visit: once the Ledger has been left for another page, the list comes back with
   // nothing open, nothing typed in the search and the figures read again.
@@ -833,7 +844,7 @@ function LedgerList({ basePath }: { basePath: string }) {
     enabled: !!userId,
   });
   const appCustomers = useAppCustomers(userId);
-  const { byParty: itemsByParty, referenceById } = useLedgerItems(userId);
+  const { byParty: itemsByParty, referenceById, cashByParty } = useLedgerItems(userId);
   const { nameById: partyTypeName, types: partyTypes } = usePartyTypes(userId);
   // A person typed Expense / Sales / Purchase opens on that report (see usePartyDestination).
   const hrefFor = usePartyDestination(userId, basePath);
@@ -894,9 +905,11 @@ function LedgerList({ basePath }: { basePath: string }) {
           overdue: overdueAmount(balance, receivableAging(all, today)),
           typeName: row.kind === 'customer' && row.customer.party_type_id ? partyTypeName.get(row.customer.party_type_id) : undefined,
           lastReference: (latest && referenceById.get(latest.id)) || null,
+          totalPaid: round2(row.kind === 'customer' ? cashByParty.get(row.id)?.paid ?? 0 : 0),
+          totalReceived: round2(row.kind === 'customer' ? cashByParty.get(row.id)?.received ?? 0 : 0),
         };
       }),
-    [merged, itemsByParty, referenceById, today, partyTypeName]
+    [merged, itemsByParty, referenceById, cashByParty, today, partyTypeName]
   );
 
   // The headline cards count the way the Finance dashboard does, so the two always
@@ -1411,7 +1424,7 @@ function LedgerList({ basePath }: { basePath: string }) {
           </View>
           {!!typeAndContact && (
             <Text className="text-[11px] text-gray-400" numberOfLines={1}>
-              {typeAndContact}
+              {highlight(typeAndContact, search)}
             </Text>
           )}
         </View>
@@ -1447,7 +1460,7 @@ function LedgerList({ basePath }: { basePath: string }) {
         width: 140,
         render: (d) => (
           <Text className="text-[12.5px] font-semibold text-gray-700" numberOfLines={1}>
-            {d.typeName ?? (d.row.kind === 'customer' ? '—' : 'Customer')}
+            {d.typeName ? highlight(d.typeName, search) : d.row.kind === 'customer' ? '—' : 'Customer'}
           </Text>
         ),
       },
@@ -1467,6 +1480,36 @@ function LedgerList({ basePath }: { basePath: string }) {
                 {d.lastReference.kind}
               </Text>
             </View>
+          ) : (
+            <Text className="text-[12.5px] text-gray-300">—</Text>
+          ),
+      },
+      {
+        // All the money paid to them - to a vendor, or given out to a customer - whatever it settled.
+        key: 'totalPaid',
+        label: 'Total paid',
+        width: 110,
+        align: 'right',
+        render: (d) =>
+          d.totalPaid ? (
+            <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.payable.text }}>
+              {bookMoney(d.totalPaid)}
+            </Text>
+          ) : (
+            <Text className="text-[12.5px] text-gray-300">—</Text>
+          ),
+      },
+      {
+        // All the money received from them.
+        key: 'totalReceived',
+        label: 'Total received',
+        width: 120,
+        align: 'right',
+        render: (d) =>
+          d.totalReceived ? (
+            <Text className="text-[12.5px] font-bold" style={{ color: LEDGER_TONE.receivable.text }}>
+              {bookMoney(d.totalReceived)}
+            </Text>
           ) : (
             <Text className="text-[12.5px] text-gray-300">—</Text>
           ),
@@ -1504,6 +1547,28 @@ function LedgerList({ basePath }: { basePath: string }) {
       { key: 'balance', label: 'Balance', width: 120, align: 'right', render: (d) => <PartyBalance position={positionOf(d)} compact /> },
     ];
 
+    // The listed parties added up, column by column, in the line under the table - which stays in view while
+    // the table scrolls (see `maxRows` below).
+    const sum = (pick: (d: PartyRowData) => number) => round2(sortedRows.reduce((total, d) => total + pick(d), 0));
+    const total = (value: number, color: string) =>
+      value ? (
+        <Text className="text-[12.5px] font-extrabold" style={{ color }}>
+          {bookMoney(value)}
+        </Text>
+      ) : (
+        <Text className="text-[12.5px] text-gray-300">—</Text>
+      );
+    const tableFooter = {
+      label: `${sortedRows.length} ${sortedRows.length === 1 ? 'party' : 'parties'} · Total`,
+      cells: {
+        totalPaid: total(sum((d) => d.totalPaid), LEDGER_TONE.payable.text),
+        totalReceived: total(sum((d) => d.totalReceived), LEDGER_TONE.receivable.text),
+        receivable: total(sum((d) => (d.status === 'receivable' ? d.balance : 0)), LEDGER_TONE.receivable.text),
+        payable: total(sum((d) => (d.status === 'payable' ? -d.balance : 0)), LEDGER_TONE.payable.text),
+        balance: <PartyBalance position={footerPosition} compact />,
+      },
+    };
+
     return (
       <BookPage wide={layout.wide}>
         {toolbar}
@@ -1515,10 +1580,16 @@ function LedgerList({ basePath }: { basePath: string }) {
         {filtered.length === 0 && (narrowed || merged.length === 0) ? (
           emptyState
         ) : (
-          <View style={{ gap: 10 }}>
-            <BookTable columns={columns} rows={sortedRows} rowKey={(d) => `${d.row.kind}-${d.row.id}`} onRowPress={open} stickyHeader />
-            {flatFooter}
-          </View>
+          // Twenty parties show, then the table scrolls inside itself, its header and totals kept in view.
+          <BookTable
+            columns={columns}
+            rows={sortedRows}
+            rowKey={(d) => `${d.row.kind}-${d.row.id}`}
+            onRowPress={open}
+            stickyHeader
+            maxRows={20}
+            footer={tableFooter}
+          />
         )}
 
         {typeMenu}
