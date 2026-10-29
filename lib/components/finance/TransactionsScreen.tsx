@@ -89,8 +89,11 @@ function ServiceChargesTable({
   onChange,
   accent,
   serviceNames,
+  bought,
 }: {
   rows: ServiceRowState[];
+  /** A Purchase bill: services bought in (work done by outsource staff), not sold. */
+  bought?: boolean;
   onChange: (rows: ServiceRowState[]) => void;
   accent: string;
   /** Every service that can be picked ("CCTV & Surveillance - Installation", "... - Repair" ...). */
@@ -115,7 +118,7 @@ function ServiceChargesTable({
           #
         </Text>
         <Text className={head} style={{ flex: 1 }}>
-          Service{filled > 0 ? ` · ${filled} ${filled === 1 ? 'line' : 'lines'}` : ' (optional)'}
+          {bought ? 'Services bought (outsourced work)' : 'Service'}{filled > 0 ? ` · ${filled} ${filled === 1 ? 'line' : 'lines'}` : ' (optional)'}
         </Text>
         {/* The Qty and Rate columns of the Items table above are left empty so Amount lines up with it. */}
         <View style={{ width: 210 }} />
@@ -874,7 +877,7 @@ function TransactionForm({
   const { data: serviceCategories } = useSupabaseQuery('service_categories', {
     filters: { is_active: true },
     orderBy: { column: 'sort_order' },
-    enabled: type === 'sale',
+    enabled: type !== 'expense',
   });
   const serviceNames = useMemo(
     () => (serviceCategories ?? []).flatMap((c) => [`${c.label} - Installation`, `${c.label} - Repair`]),
@@ -908,7 +911,7 @@ function TransactionForm({
   // Service charges (a Sale's installation / repair lines) are part of the bill: the discount and the VAT
   // apply to the items and the services together.
   const installationAmount =
-    type === 'sale' ? serviceRows.reduce((sum, r) => sum + Math.max(0, Number(r.amount) || 0), 0) : 0;
+    type !== 'expense' ? serviceRows.reduce((sum, r) => sum + Math.max(0, Number(r.amount) || 0), 0) : 0;
   const subtotal = itemsSubtotal + installationAmount;
   const discountAmount =
     discountMode === 'percent'
@@ -1880,8 +1883,8 @@ function TransactionForm({
               }}
               footer={
                 <>
-                {type === 'sale' && (
-                  <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} serviceNames={serviceNames} />
+                {type !== 'expense' && (
+                  <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent={accent} serviceNames={serviceNames} bought={type === 'purchase'} />
                 )}
                 <View
                   className="flex-row flex-wrap border-t border-gray-200 bg-gray-50 px-5 py-4"
@@ -2257,9 +2260,9 @@ function TransactionForm({
               <Text className="text-sm font-bold text-gray-900">G. Total</Text>
               <Text className="text-base font-extrabold text-gray-900">NPR {grandTotal.toLocaleString()}</Text>
             </View>
-            {type === 'sale' && (
+            {type !== 'expense' && (
               <View className="mt-3">
-                <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent="#EA580C" serviceNames={serviceNames} />
+                <ServiceChargesTable rows={serviceRows} onChange={setServiceRows} accent="#EA580C" serviceNames={serviceNames} bought={type === 'purchase'} />
               </View>
             )}
             <TextInput
