@@ -847,7 +847,7 @@ function TransactionForm({
   // 13%) since it's normally a fixed rate applied to whatever the subtotal
   // is. They're independent, separately collapsible rows - adding one
   // doesn't imply the other.
-  const initialSubtotal = initial ? initial.items.reduce((sum, i) => sum + i.amount, 0) : 0;
+  const initialSubtotal = initial ? initial.items.reduce((sum, i) => sum + i.amount, 0) + (initial.installation_charge ?? 0) : 0;
   const [discountAmountInput, setDiscountAmountInput] = useState(initial ? String(initial.discount_amount) : '0');
   // Web: the discount can be typed as a percent of the subtotal or as an NPR
   // amount - whichever was typed last drives the other, so a percent keeps
@@ -904,7 +904,12 @@ function TransactionForm({
   const [saving, setSaving] = useState(false);
 
   const isBill = type !== 'expense';
-  const subtotal = items.filter(isSavableItem).reduce((sum, row) => sum + lineTotal(row), 0);
+  const itemsSubtotal = items.filter(isSavableItem).reduce((sum, row) => sum + lineTotal(row), 0);
+  // Service charges (a Sale's installation / repair lines) are part of the bill: the discount and the VAT
+  // apply to the items and the services together.
+  const installationAmount =
+    type === 'sale' ? serviceRows.reduce((sum, r) => sum + Math.max(0, Number(r.amount) || 0), 0) : 0;
+  const subtotal = itemsSubtotal + installationAmount;
   const discountAmount =
     discountMode === 'percent'
       ? Math.round((subtotal * Math.min(Number(discountPercentInput) || 0, 100)) / 100)
@@ -923,9 +928,7 @@ function TransactionForm({
   }
   const discountInputValue = discountMode === 'percent' ? discountPercentInput : discountAmountInput;
   const vatAmount = Math.round(((subtotal - discountAmount) * (Number(vatPercent) || 0)) / 100);
-  const installationAmount =
-    type === 'sale' ? serviceRows.reduce((sum, r) => sum + Math.max(0, Number(r.amount) || 0), 0) : 0;
-  const grandTotal = subtotal - discountAmount + vatAmount + installationAmount;
+  const grandTotal = subtotal - discountAmount + vatAmount;
   const selectedCategory = (categories ?? []).find((c) => c.id === categoryId) ?? null;
   const selectedAccountName = bankAccountId
     ? bankAccounts.accounts.find((a) => a.id === bankAccountId)?.name ?? 'Cash'
@@ -1078,7 +1081,7 @@ function TransactionForm({
           ...(billNo.trim() ? [{ label: 'Bill no.', value: billNo.trim() }] : []),
           ...(discountAmount > 0 ? [{ label: 'Discount', value: `− NPR ${discountAmount.toLocaleString()}` }] : []),
           ...(vatAmount > 0 ? [{ label: 'VAT', value: `+ NPR ${vatAmount.toLocaleString()}` }] : []),
-          ...(installationAmount > 0 ? [{ label: 'Service charges', value: `+ NPR ${installationAmount.toLocaleString()}` }] : []),
+          ...(installationAmount > 0 ? [{ label: 'Service charges (VAT and discount apply)', value: `NPR ${installationAmount.toLocaleString()}` }] : []),
         ],
         total: { label: 'Grand total', value: `NPR ${grandTotal.toLocaleString()}`, color: TYPE_META[type].color },
       });
@@ -1900,8 +1903,20 @@ function TransactionForm({
                   </View>
 
                   <View style={{ width: 320 }}>
+                    {installationAmount > 0 && (
+                      <>
+                        <View className="flex-row items-center justify-between py-1">
+                          <Text className="text-[13px] text-gray-500">Items</Text>
+                          <Text className="text-[13px] text-gray-700">NPR {itemsSubtotal.toLocaleString()}</Text>
+                        </View>
+                        <View className="flex-row items-center justify-between py-1">
+                          <Text className="text-[13px] text-gray-500">Services</Text>
+                          <Text className="text-[13px] text-gray-700">+ NPR {installationAmount.toLocaleString()}</Text>
+                        </View>
+                      </>
+                    )}
                     <View className="flex-row items-center justify-between py-1.5">
-                      <Text className="text-[13px] text-gray-500">Subtotal</Text>
+                      <Text className="text-[13px] text-gray-500">{installationAmount > 0 ? 'Subtotal (items + services)' : 'Subtotal'}</Text>
                       <Text className="text-[13px] font-semibold text-gray-700">NPR {subtotal.toLocaleString()}</Text>
                     </View>
                     <View className="flex-row items-center justify-between py-1">
@@ -2165,8 +2180,14 @@ function TransactionForm({
 
           <FormSection icon="calculator-outline" title="Totals">
             <View className="mb-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1">
+              {installationAmount > 0 && (
+                <View className="flex-row items-center justify-between py-1">
+                  <Text className="text-xs text-gray-500">Services included</Text>
+                  <Text className="text-xs text-gray-700">NPR {installationAmount.toLocaleString()}</Text>
+                </View>
+              )}
               <View className="flex-row items-center justify-between py-1.5">
-                <Text className="text-xs text-gray-500">Subtotal</Text>
+                <Text className="text-xs text-gray-500">{installationAmount > 0 ? 'Subtotal (items + services)' : 'Subtotal'}</Text>
                 <Text className="text-xs font-semibold text-gray-700">NPR {subtotal.toLocaleString()}</Text>
               </View>
               {/* The +/close toggle always sits in the same leading spot, whether the row
@@ -2731,8 +2752,9 @@ function BillItemsReadOnly({ tx }: { tx: BusinessTransaction }) {
           </BillCell>
         </View>
       ))}
+      {billServices(tx) > 0 && <BillTotal label="Service charges" value={`+ ${billServices(tx).toLocaleString()}`} />}
       {(tx.discount_amount > 0 || tx.vat_amount > 0) && (
-        <BillTotal label="Sub-total" value={tx.items.reduce((sum, item) => sum + item.amount, 0).toLocaleString()} />
+        <BillTotal label="Sub-total" value={(tx.items.reduce((sum, item) => sum + item.amount, 0) + billServices(tx)).toLocaleString()} />
       )}
       {tx.discount_amount > 0 && <BillTotal label="Discount" value={`− ${tx.discount_amount.toLocaleString()}`} />}
       {tx.vat_amount > 0 && <BillTotal label="VAT" value={`+ ${tx.vat_amount.toLocaleString()}`} />}
@@ -2745,6 +2767,12 @@ function BillItemsReadOnly({ tx }: { tx: BusinessTransaction }) {
       />
     </View>
   );
+}
+
+/** A bill's service lines (installation, repair ...) added up: the VAT and the discount apply to these and the items together. */
+function billServices(tx: BusinessTransaction): number {
+  const lines = (tx.service_charges ?? []).reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
+  return lines > 0 ? lines : Number(tx.installation_charge ?? 0);
 }
 
 /** One read-only box of a bill's card - what a typed box of BillEditPopup shows, as plain text. */
@@ -2966,7 +2994,8 @@ export function TransactionDetailModal({
                 </>
               )}
 
-              {showSubtotal && <BillTotal label="Sub-total" value={subtotal.toLocaleString()} />}
+              {billServices(tx) > 0 && <BillTotal label="Service charges" value={`+ ${billServices(tx).toLocaleString()}`} />}
+              {showSubtotal && <BillTotal label="Sub-total" value={(subtotal + billServices(tx)).toLocaleString()} />}
               {tx.discount_amount > 0 && <BillTotal label="Discount" value={`− ${tx.discount_amount.toLocaleString()}`} />}
               {tx.vat_amount > 0 && <BillTotal label="VAT" value={`+ ${tx.vat_amount.toLocaleString()}`} />}
               <BillTotal label="Total (NPR)" value={tx.amount.toLocaleString()} tint={meta.bg} color={meta.color} strong />
