@@ -134,7 +134,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   const { width } = useWindowDimensions();
   const twoSided = width >= 900;
   const go = (path: string) => router.push(`${basePath}${path}` as never);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['sales', 'purchase', 'direct', 'indirect']));
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set(['sales', 'dincome', 'purchase', 'direct', 'indirect']));
   const toggleGroup = (k: string) =>
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -156,6 +156,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
     let items = 0;
     let services = 0;
+    let servicesBought = 0;
     let purchase = 0;
     const expenses = new Map<string, number>();
     // The ledger type a party is filed under (Direct Expense, Bike Repair Expense ...): an expense paid to
@@ -171,7 +172,11 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         const svc = (t.service_charges ?? []).reduce((a, c) => a + (Number(c.amount) || 0), 0) + (Number(t.installation_charge) || 0);
         services += svc;
         items += t.amount - svc;
-      } else if (t.type === 'purchase') purchase += t.amount;
+      } else if (t.type === 'purchase') {
+        const svc = (t.service_charges ?? []).reduce((a, c) => a + (Number(c.amount) || 0), 0) + (Number(t.installation_charge) || 0);
+        servicesBought += svc;
+        purchase += t.amount - svc;
+      }
       else {
         const ledgerType = t.customer_id ? typeOfParty.get(t.customer_id) : undefined;
         const name = (t.expense_category_id && names.get(t.expense_category_id)) || ledgerType || 'Uncategorised';
@@ -201,23 +206,26 @@ export function ReportScreen({ basePath }: { basePath: string }) {
     [...expenses.entries()]
       .sort((a, b) => b[1] - a[1])
       .forEach((e) => (indirectNames.has(e[0]) || /indirect/i.test(e[0]) || /indirect/i.test(headType.get(e[0]) ?? '') ? indirect : direct).push(e));
+    // Services sold are direct income; services bought in (outsourced work) are a direct expense.
+    if (servicesBought > 0) direct.unshift(['Services bought (outsourced work)', servicesBought]);
     const sum = (list: [string, number][]) => list.reduce((a, [, v]) => a + v, 0);
     // The stock held now, at cost. Stock has no history, so the period's opening stock is taken as the
     // same figure: stock moves through the purchase and sale bills themselves.
     const closing = (products ?? []).reduce((a, p) => a + (Number(p.stock_level) > 0 && p.purchase_price != null ? Number(p.stock_level) * Number(p.purchase_price) : 0), 0);
     const opening = closing;
-    const sales = items + services;
+    const sales = items;
+    const income = items + services;
     const directTotal = sum(direct);
     const indirectTotal = sum(indirect);
-    const gross = sales + closing - opening - purchase - directTotal; // + profit, - loss
+    const gross = income + closing - opening - purchase - directTotal; // + profit, - loss
     const net = gross - indirectTotal;
     const bills = { sale: inRange.filter((t) => t.type === 'sale').length, purchase: inRange.filter((t) => t.type === 'purchase').length, expense: inRange.filter((t) => t.type === 'expense').length };
-    return { items, services, sales, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net, bills };
+    return { items, services, sales, income, purchase, direct, indirect, directTotal, indirectTotal, opening, closing, gross, net, bills };
   }, [inRange, categories, products, partyRows, partyTypeName, customerEntries, period, range.from, range.to]);
   const grossProfit = pl.gross;
   const netProfit = pl.net;
   // each side of the trading account totals the same; likewise the second part
-  const tradingTotal = pl.sales + pl.closing + (grossProfit < 0 ? -grossProfit : 0);
+  const tradingTotal = pl.income + pl.closing + (grossProfit < 0 ? -grossProfit : 0);
   const secondTotal = pl.indirectTotal + (grossProfit < 0 ? -grossProfit : 0) + (netProfit >= 0 ? netProfit : 0);
   // Money that actually moved in the period (Total Received / Total Paid, the same rules as those pages).
   const cash = useMemo(() => {
@@ -260,7 +268,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
   }, [transactions, customerEntries, vendorEntries, period, range.from, range.to]);
   const costOfGoods = pl.opening + pl.purchase + pl.directTotal - pl.closing;
   const companyName = useAuthStore((state) => state.profile)?.business_name ?? '';
-  const totals = { sale: pl.sales, purchase: pl.purchase, expense: pl.directTotal + pl.indirectTotal };
+  const totals = { sale: pl.income, purchase: pl.purchase, expense: pl.directTotal + pl.indirectTotal };
 
   // The name (and the back button on a phone) are in the top bar, with Print: it opens the system's
   // print preview of the profit & loss for the period shown.
@@ -289,8 +297,7 @@ export function ReportScreen({ basePath }: { basePath: string }) {
             ...pl.direct.map(([k, v]) => ['    ' + k, n(v)]),
             [grossProfit >= 0 ? 'Gross profit c/o' : 'Gross loss c/o', n(Math.abs(grossProfit))],
             ['Sales accounts', n(pl.sales)],
-            ['    Sales - items', n(pl.items)],
-            ['    Installation & repair services', n(pl.services)],
+            ['Direct incomes (services sold)', n(pl.services)],
             ['Closing stock', n(pl.closing)],
             ['Indirect expenses', n(pl.indirectTotal)],
             ...pl.indirect.map(([k, v]) => ['    ' + k, n(v)]),
@@ -358,11 +365,11 @@ export function ReportScreen({ basePath }: { basePath: string }) {
         </View>
         <View className="flex-row flex-wrap border-t" style={{ borderColor: 'rgba(255,255,255,0.18)' }}>
           {[
-            { label: 'Net sales', value: pl.sales, sub: `${pl.bills.sale} sale ${pl.bills.sale === 1 ? 'bill' : 'bills'}`, path: '/sales-report' },
+            { label: 'Sales & direct income', value: pl.income, sub: `${pl.bills.sale} sale ${pl.bills.sale === 1 ? 'bill' : 'bills'}`, path: '/sales-report' },
             { label: 'Cost of goods', value: costOfGoods, sub: `${pl.bills.purchase} purchase ${pl.bills.purchase === 1 ? 'bill' : 'bills'}`, path: '/purchase-report' },
-            { label: grossProfit >= 0 ? 'Gross profit' : 'Gross loss', value: Math.abs(grossProfit), sub: pl.sales > 0 ? `${((Math.abs(grossProfit) / pl.sales) * 100).toFixed(1)}% of sales` : 'No sales', path: '/sales-report' },
+            { label: grossProfit >= 0 ? 'Gross profit' : 'Gross loss', value: Math.abs(grossProfit), sub: pl.income > 0 ? `${((Math.abs(grossProfit) / pl.income) * 100).toFixed(1)}% of sales` : 'No sales', path: '/sales-report' },
             { label: 'Indirect expenses', value: pl.indirectTotal, sub: `${pl.indirect.length} expense ${pl.indirect.length === 1 ? 'head' : 'heads'}`, path: '/expense-report' },
-            { label: netProfit >= 0 ? 'Net profit' : 'Net loss', value: Math.abs(netProfit), sub: pl.sales > 0 ? `${((Math.abs(netProfit) / pl.sales) * 100).toFixed(1)}% net margin` : 'No sales', path: '/expense-report' },
+            { label: netProfit >= 0 ? 'Net profit' : 'Net loss', value: Math.abs(netProfit), sub: pl.income > 0 ? `${((Math.abs(netProfit) / pl.income) * 100).toFixed(1)}% net margin` : 'No sales', path: '/expense-report' },
           ].map((k, i) => (
             <Pressable
               key={k.label}
@@ -396,7 +403,9 @@ export function ReportScreen({ basePath }: { basePath: string }) {
           <View className="flex-1 p-5">
             <SideHead title="Particulars" />
             <Group id="sales" open={openGroups} onToggle={toggleGroup} label="Sales accounts" amount={pl.sales}
-              rows={[['Sales - items', pl.items], ['Installation & repair services', pl.services]]} onOpen={() => go('/sales-report')} />
+              rows={[['Sales - items', pl.items]]} onOpen={() => go('/sales-report')} />
+            <Group id="dincome" open={openGroups} onToggle={toggleGroup} label="Direct incomes" amount={pl.services}
+              rows={[['Installation & repair services sold', pl.services]]} onOpen={() => go('/sales-report')} />
             <Line label="Closing stock" amount={pl.closing} onPress={() => go('/inventory')} />
             {grossProfit < 0 ? <Line label="Gross loss c/o" amount={-grossProfit} tone="loss" bold /> : null}
             <TotalLine amount={tradingTotal} />
