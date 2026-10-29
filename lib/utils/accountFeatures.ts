@@ -1,9 +1,9 @@
 // lib/utils/accountFeatures.ts
 //
-// THE PER-APP SETTINGS FILE for the shared finance code. lib/components/finance is the same in Jageer Nepal and
-// Finance Nepal (Finance Nepal is the master, see .github/workflows/finance-sync.yml there); this file is the one
-// place the two differ. It keeps the same names in both apps - only what they return changes. Jageer's copy: no
-// vehicle accounts, no Rent & EMI, no built-in logos, the blue banner for everyone.
+// What Jageer's finance pages offer. Several finance files were merged from Finance Nepal (a separate product with
+// its own database) and ask these questions; Jageer's answers: no vehicle accounts, no Rent & EMI, no built-in
+// logos, the blue banner for everyone. Jageer's finance code is maintained here on its own - it is not kept in step
+// with Finance Nepal's.
 import type { BillItem } from '../../types/database.types';
 
 /** What this app's finance pages offer. */
