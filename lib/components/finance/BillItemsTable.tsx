@@ -119,7 +119,7 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
     const base = suggestions.map((s) => ({ key: s.key, label: s.name, hint: s.hint }));
     const typed = focusedItemIndex != null ? (items[focusedItemIndex]?.description ?? '').trim() : '';
     const exact = typed && catalog.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
-    return typed && !exact && onCreateItem ? [...base, { key: '__new__', label: typed, add: 'stock item' }] : base;
+    return typed && !exact && onCreateItem ? [...base, { key: '__new__', label: `Add "${typed}" as new stock item`, kind: 'add' as const }] : base;
   }, [suggestions, focusedItemIndex, items, catalog, onCreateItem]);
 
   function focusCell(index: number, col: Col) {
@@ -248,7 +248,7 @@ export const BillItemsTable = forwardRef<BillItemsTableHandle, Props>(function B
                 options={focusedItemIndex === index ? suggestionOptions : []}
                 onSelectOption={async (opt, via) => {
                   if (opt.key === '__new__') {
-                    const name = opt.label.trim();
+                    const name = row.description.trim();
                     if (!(await askSave('Add new item?', `"${name}" is not in your stock list yet. Save it as a new item?`))) {
                       onUpdate(index, { ...row, description: '' });
                       return;

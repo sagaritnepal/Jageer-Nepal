@@ -15,15 +15,14 @@ import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { ContactPickerModal } from '../ContactPickerModal';
 import { DateField } from '../DateTimeFields';
 import { FormSection } from './FormSection';
-import { PaymentEntryTable, type PaymentEntryTableHandle, type PaymentRow } from './PaymentEntryTable';
+import { RenamePartyPopup } from './FormKit';
 import { useConfirmNewParty, withType } from './NewPartyConfirm';
+import { PaymentEntryTable, type PaymentEntryTableHandle, type PaymentRow } from './PaymentEntryTable';
 import { KeyboardDateInput } from './KeyboardDateInput';
 import { KeyboardSelect } from './KeyboardSelect';
 import { useConfirmSave } from './ConfirmSave';
 import { optionLabel } from '../../hooks/useAvailableAmounts';
 import { useAccountBalances } from '../../hooks/useAccountBalances';
-import { usePartyTypes } from '../../hooks/usePartyTypes';
-import { nameCaps } from '../../utils/nameCaps';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { MONEY } from './moneyColors';
 import { readKey } from '../../utils/webKeys';
@@ -32,6 +31,9 @@ import { toBsLabel, toBsHistoryLabel } from '../../utils/nepaliDate';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import type { Customer } from '../../../types/database.types';
 import { localTodayIso } from '../../utils/localDate';
+import { round2, formatMoney } from '../../utils/money';
+import { itemListOf, sellsVehicles } from '../../utils/accountFeatures';
+import type { SuggestOption } from './SuggestInput';
 
 // Local date, not UTC - see localTodayIso.
 const todayIso = localTodayIso;
@@ -43,7 +45,7 @@ function makeRowKey() {
 }
 
 function emptyPaymentRow(): PaymentRow {
-  return { key: makeRowKey(), customerName: '', selectedCustomer: null, pendingPhone: null, amount: '', note: '' };
+  return { key: makeRowKey(), customerName: '', selectedCustomer: null, pendingPhone: null, amount: '', note: '', item: '' };
 }
 
 export function QuickPaymentScreen() {
@@ -88,6 +90,63 @@ function QuickPaymentForm() {
     orderBy: { column: 'name' },
     enabled: !!userId,
   });
+  // A vehicle account's Paid and Received tables also name the car each payment is for (its number): on Paid,
+  // the cars bought from that vendor; on Received, the cars sold to that customer.
+  const profile = useAuthStore((state) => state.profile);
+  const withCar = sellsVehicles(profile?.business_name?.trim() || profile?.full_name);
+  const { data: purchaseBills } = useSupabaseQuery('business_transactions', {
+    filters: userId ? { owner_id: userId, type: 'purchase' } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    all: true,
+    enabled: !!userId && withCar,
+  });
+  const { data: saleBills } = useSupabaseQuery('business_transactions', {
+    filters: userId ? { owner_id: userId, type: 'sale' } : {},
+    orderBy: { column: 'created_at', ascending: false },
+    all: true,
+    enabled: !!userId && withCar && !isOut,
+  });
+  // The bills that name a party's cars: what was bought from a vendor, or sold to a customer.
+  const partyBills = isOut ? purchaseBills : saleBills;
+  // The cars on each party's bills, newest bill first - by the saved party, or by the name on a bill made out
+  // to one with no link.
+  const carsByVendor = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const bill of partyBills ?? []) {
+      const key = bill.customer_id ? `id:${bill.customer_id}` : `name:${(bill.party_name ?? '').trim().toLowerCase()}`;
+      const list = map.get(key) ?? [];
+      for (const name of itemListOf(bill.items)) if (!list.includes(name)) list.push(name);
+      map.set(key, list);
+    }
+    return map;
+  }, [partyBills]);
+  // What is still owed on each car: what its bill billed (the whole bill when it is the only car on it, else
+  // the car's own line) less the payments whose remark starts with that car - the way the Payable Report reads
+  // them. Keyed by party ("id:..." or, for a bill with no saved party, "name:...") and car.
+  const carBilled = useMemo(() => {
+    const map = new Map<string, number>();
+    const add = (key: string, amount: number) => map.set(key, (map.get(key) ?? 0) + amount);
+    for (const bill of partyBills ?? []) {
+      const vendorKey = bill.customer_id ? `id:${bill.customer_id}` : `name:${(bill.party_name ?? '').trim().toLowerCase()}`;
+      const cars = itemListOf(bill.items);
+      if (cars.length === 1) add(`${vendorKey}|${cars[0].toLowerCase()}`, Number(bill.amount));
+      else {
+        for (const item of bill.items ?? []) {
+          const car = item.description?.trim().toLowerCase();
+          if (car) add(`${vendorKey}|${car}`, Number(item.amount) || 0);
+        }
+      }
+    }
+    return map;
+  }, [partyBills]);
+  const carOptionsFor = (vendor: Customer | null, typed: string): SuggestOption[] => {
+    const mine = vendor ? [...(carsByVendor.get(`id:${vendor.id}`) ?? []), ...(carsByVendor.get(`name:${vendor.name.trim().toLowerCase()}`) ?? [])] : [];
+    const q = typed.trim().toLowerCase();
+    // Only this party's cars - never the rest of the stock. One with none leaves the box a plain one.
+    return [...new Set(mine)]
+      .filter((name) => !q || name.toLowerCase().includes(q))
+      .map((name) => ({ key: name, label: name }));
+  };
   // Same-direction, same-target manual entries only - counts Payment In
   // separately from Payment Out (and vendor separately from customer), and
   // skips booking-synced credits (job payments), which never carry a
@@ -96,16 +155,57 @@ function QuickPaymentForm() {
     filters: userId ? { owner_id: userId, entry_type: entryType, source: 'manual' } : {},
     enabled: !!userId,
   });
+  // What is still owed to each vendor: their ledger's bills (debit) less what has been paid (credit) - the
+  // same figure as the Payable Report. Every entry, not a capped first page: a balance is a sum over all of them.
+  const { data: vendorLedger } = useSupabaseQuery('vendor_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    all: true,
+    enabled: !!userId && payTarget === 'vendor',
+  });
+  const dueByVendor = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of vendorLedger ?? []) {
+      map.set(e.vendor_id, (map.get(e.vendor_id) ?? 0) + (e.entry_type === 'debit' ? Number(e.amount) : -Number(e.amount)));
+    }
+    return map;
+  }, [vendorLedger]);
+  const dueOf = (vendorId: string) => round2(dueByVendor.get(vendorId) ?? 0);
+  // What a customer has paid on each car: their Received entries whose remark starts with it.
+  const { data: customerLedger } = useSupabaseQuery('customer_ledger_entries', {
+    filters: userId ? { owner_id: userId } : {},
+    all: true,
+    enabled: !!userId && withCar && !isOut,
+  });
+  // Money paid on each car - to a vendor (Paid) or by a customer (Received): a credit on that ledger.
+  const carPaid = useMemo(() => {
+    const map = new Map<string, number>();
+    const entries: { party: string; entry_type: string; note: string | null; amount: number }[] = isOut
+      ? (vendorLedger ?? []).map((e) => ({ party: e.vendor_id, entry_type: e.entry_type, note: e.note, amount: Number(e.amount) }))
+      : (customerLedger ?? []).map((e) => ({ party: e.customer_id, entry_type: e.entry_type, note: e.note, amount: Number(e.amount) }));
+    for (const e of entries) {
+      if (e.entry_type !== 'credit' || !e.note) continue;
+      const key = `id:${e.party}|${e.note.split(' · ')[0].trim().toLowerCase()}`;
+      map.set(key, (map.get(key) ?? 0) + e.amount);
+    }
+    return map;
+  }, [isOut, vendorLedger, customerLedger]);
+  /** What is left to pay on a car of this party; null when none of their bills has the car. */
+  const itemDueOf = (vendor: Customer | null, car: string): number | null => {
+    const c = car.trim().toLowerCase();
+    if (!vendor || !c) return null;
+    const billed = [`id:${vendor.id}`, `name:${vendor.name.trim().toLowerCase()}`].reduce((s, k) => s + (carBilled.get(`${k}|${c}`) ?? 0), 0);
+    if (!billed) return null;
+    return round2(billed - (carPaid.get(`id:${vendor.id}|${c}`) ?? 0));
+  };
   const insertEntry = useSupabaseInsert(targetTable);
   const createCustomer = useSupabaseInsert('customers');
-  const { nameById: partyTypeName } = usePartyTypes(userId);
   const updateCustomer = useSupabaseUpdate('customers');
   const bankAccounts = useBankAccounts(userId);
   // Money in each bank / wallet account, shown beside it in the Payment method dropdown - receiving and
   // paying alike: the books' own figures (the same as the account lists show). Cash has none.
   const balances = useAccountBalances(userId);
   const available = useMemo(
-    () => (balances.ready ? { byId: Object.fromEntries(balances.perAccount.map((a) => [a.id, Math.round(a.balance)])) } : null),
+    () => (balances.ready ? { byId: Object.fromEntries(balances.perAccount.map((a) => [a.id, round2(a.balance)])) } : null),
     [balances]
   );
   const phoneContacts = usePhoneContacts();
@@ -212,7 +312,7 @@ function QuickPaymentForm() {
       showAlert('Add a customer', 'Tap the field to search or add a customer for this payment.');
       return;
     }
-    const value = Number(amount);
+    const value = round2(Number(amount));
     if (!amount.trim() || Number.isNaN(value) || value <= 0) {
       showAlert('Enter an amount', 'Add a valid amount in NPR.');
       return;
@@ -224,7 +324,7 @@ function QuickPaymentForm() {
         ...(receiptNo.trim() ? [{ label: isOut ? 'Payment no.' : 'Receipt no.', value: receiptNo.trim() }] : []),
         { label: 'Paid via', value: selectedAccountName },
       ],
-      total: { label: 'Amount', value: `NPR ${value.toLocaleString()}`, color: isOut ? MONEY.out.base : MONEY.in.base },
+      total: { label: 'Amount', value: `NPR ${formatMoney(value)}`, color: isOut ? MONEY.out.base : MONEY.in.base },
     });
     if (!ok) return;
     setSaving(true);
@@ -251,7 +351,7 @@ function QuickPaymentForm() {
       } as any);
       showAlert(
         isOut ? 'Paid saved' : 'Received saved',
-        `NPR ${value.toLocaleString()} for ${customer.name}.`
+        `NPR ${formatMoney(value)} for ${customer.name}.`
       );
       setAmount('');
       setNote('');
@@ -323,6 +423,7 @@ function QuickPaymentForm() {
 
   const tableRef = useRef<PaymentEntryTableHandle>(null);
   const receiptRef = useRef<TextInput>(null);
+  const dateRef = useRef<TextInput>(null);
   const methodRef = useRef<HTMLSelectElement | null>(null);
   const saveButtonRef = useRef<View>(null);
 
@@ -386,6 +487,7 @@ function QuickPaymentForm() {
         pendingPhone: null,
         amount: scanned.amount ? String(scanned.amount) : '',
         note: scanned.note ?? '',
+        item: '',
       },
     ]);
     if (scanned.date) setDate(scanned.date);
@@ -418,11 +520,14 @@ function QuickPaymentForm() {
     const ok = await confirmSave({
       title: `Save ${validRows.length === 1 ? 'this' : `these ${validRows.length}`} ${isOut ? 'Paid' : 'Received'} ${validRows.length === 1 ? 'entry' : 'entries'}?`,
       rows: [
-        ...validRows.slice(0, 5).map((r) => ({ label: r.customerName.trim(), value: `NPR ${Number(r.amount).toLocaleString()}` })),
+        ...validRows.slice(0, 5).map((r) => ({
+          label: [r.customerName.trim(), r.item.trim()].filter(Boolean).join(' · '),
+          value: `NPR ${formatMoney(Number(r.amount))}`,
+        })),
         ...(validRows.length > 5 ? [{ label: `+ ${validRows.length - 5} more` }] : []),
         { label: 'Paid via', value: selectedAccountName },
       ],
-      total: { label: 'Total', value: `NPR ${sum.toLocaleString()}`, color: isOut ? MONEY.out.base : MONEY.in.base },
+      total: { label: 'Total', value: `NPR ${formatMoney(sum)}`, color: isOut ? MONEY.out.base : MONEY.in.base },
     });
     if (!ok) return;
     setSaving(true);
@@ -452,8 +557,9 @@ function QuickPaymentForm() {
           [payTarget === 'vendor' ? 'vendor_id' : 'customer_id']: customer.id,
           owner_id: userId,
           entry_type: entryType,
-          amount: Number(row.amount),
-          note: row.note.trim() || null,
+          amount: round2(Number(row.amount)),
+          // The car goes first in the remark, so the ledger and Total Paid name it.
+          note: [row.item.trim(), row.note.trim()].filter(Boolean).join(' · ') || null,
           source: 'manual',
           bank_account_id: bankAccountId,
           entry_date: date || null,
@@ -466,17 +572,17 @@ function QuickPaymentForm() {
       }
       showAlert(
         isOut ? 'Paid saved' : 'Received saved',
-        `${validRows.length} ${validRows.length === 1 ? 'entry' : 'entries'} saved, NPR ${validRows
-          .reduce((sum, r) => sum + Number(r.amount), 0)
-          .toLocaleString()} total.`
+        `${validRows.length} ${validRows.length === 1 ? 'entry' : 'entries'} saved, NPR ${formatMoney(
+          validRows.reduce((sum, r) => sum + Number(r.amount), 0)
+        )} total.`
       );
       const fresh = emptyPaymentRow();
       setRows([fresh]);
       setBankAccountId(null);
       setDate(todayIso());
       setReceiptNoTouched(false);
-      // Ready for the next voucher - caret straight back in the first cell.
-      tableRef.current?.focusRow(fresh.key, 0);
+      // Ready for the next voucher - caret straight back on the date.
+      dateRef.current?.focus();
     } catch (err) {
       showAlert('Could not save', getErrorMessage(err));
     } finally {
@@ -536,22 +642,14 @@ function QuickPaymentForm() {
         )}
       </View>
       {showRenameCustomer && (
-        <View className="mb-1 flex-row items-center gap-2">
-          <TextInput
-            value={renameCustomerValue}
-            onChangeText={setRenameCustomerValue}
-            autoFocus
-            placeholder="Name"
-            placeholderTextColor="#9CA3AF"
-            className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-          />
-          <Pressable onPress={handleRenameCustomer} disabled={renamingCustomer} hitSlop={8}>
-            <Ionicons name="checkmark-circle" size={22} color="#059669" />
-          </Pressable>
-          <Pressable onPress={() => setShowRenameCustomer(false)} hitSlop={8}>
-            <Ionicons name="close-circle" size={22} color="#9CA3AF" />
-          </Pressable>
-        </View>
+        <RenamePartyPopup
+          title={payTarget === 'vendor' ? 'Edit vendor' : 'Edit customer'}
+          value={renameCustomerValue}
+          onChange={setRenameCustomerValue}
+          onSave={handleRenameCustomer}
+          onClose={() => setShowRenameCustomer(false)}
+          saving={renamingCustomer}
+        />
       )}
       {selectedCustomer ? (
         <View className="flex-row items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2">
@@ -644,7 +742,7 @@ function QuickPaymentForm() {
                   the table below - one voucher covering several people,
                   not a separate form per person. Everything here is
                   reachable and fillable from the keyboard alone: Tab/Enter
-                  walk Payment method -> Receipt No. -> the table (Date is the last box, reached with Tab). */}
+                  walk Date -> Receipt No. -> Payment method -> the table. */}
               <View
                 className="mb-4 rounded-2xl border border-gray-200 bg-white px-5 py-4"
                 style={{ boxShadow: '0 1px 2px rgba(16,24,40,0.04), 0 4px 12px rgba(16,24,40,0.03)' }}
@@ -654,22 +752,16 @@ function QuickPaymentForm() {
                   <Text className="text-[11px] font-bold capitalize tracking-wider text-gray-500">Details</Text>
                 </View>
                 <View className="flex-row" style={{ gap: 14 }}>
-                  <View style={{ flex: 1.1, minWidth: 0 }}>
-                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Payment method</Text>
-                    <KeyboardSelect
-                      value={bankAccountId ?? '__cash__'}
-                      options={[
-                        { value: '__cash__', label: 'Cash' },
-                        ...bankAccounts.accounts.map((a) => ({ value: a.id, label: optionLabel(a.name, available?.byId[a.id]) })),
-                      ]}
-                      onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
-                      selectRef={(el) => {
-                        methodRef.current = el;
-                      }}
+                  <View style={{ flex: 1.3, minWidth: 0 }}>
+                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Date</Text>
+                    <KeyboardDateInput
+                      value={date}
+                      onChange={setDate}
+                      inputRef={dateRef}
+                      autoFocus
+                      accent={accent}
                       onEnter={() => receiptRef.current?.focus()}
                       onRequestSave={handleSaveAll}
-                      accent={accent}
-                      label="Payment method"
                     />
                   </View>
                   <View style={{ flex: 0.8, minWidth: 0 }}>
@@ -686,7 +778,7 @@ function QuickPaymentForm() {
                         if (k.key !== 'Enter') return;
                         k.prevent();
                         if (k.ctrl) handleSaveAll();
-                        else focusFirstRow();
+                        else methodRef.current?.focus();
                       }}
                       placeholder="Optional"
                       placeholderTextColor="#9CA3AF"
@@ -697,14 +789,22 @@ function QuickPaymentForm() {
                       style={{ outlineStyle: 'none' } as object}
                     />
                   </View>
-                  <View style={{ flex: 1.3, minWidth: 0 }}>
-                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Date</Text>
-                    <KeyboardDateInput
-                      value={date}
-                      onChange={setDate}
-                      accent={accent}
+                  <View style={{ flex: 1.1, minWidth: 0 }}>
+                    <Text className="mb-1.5 text-xs font-semibold text-gray-600">Payment method</Text>
+                    <KeyboardSelect
+                      value={bankAccountId ?? '__cash__'}
+                      options={[
+                        { value: '__cash__', label: 'Cash' },
+                        ...bankAccounts.accounts.map((a) => ({ value: a.id, label: optionLabel(a.name, available?.byId[a.id]) })),
+                      ]}
+                      onChange={(v) => setBankAccountId(v === '__cash__' ? null : v)}
+                      selectRef={(el) => {
+                        methodRef.current = el;
+                      }}
                       onEnter={focusFirstRow}
                       onRequestSave={handleSaveAll}
+                      accent={accent}
+                      label="Payment method"
                     />
                   </View>
                 </View>
@@ -716,24 +816,29 @@ function QuickPaymentForm() {
                 customers={customers ?? []}
                 phoneContacts={phoneContacts.contacts}
                 accent={accent}
-                partyLabel="Ledger"
-                addLabel="Add ledger"
-                typeOf={(c) => (c.party_type_id ? partyTypeName.get(c.party_type_id) : undefined)}
-                onCreateLedger={async (name) => {
-                  if (!userId) throw new Error('Not signed in');
-                  // The new person is checked first: name, phone and Ledger type, or Cancel to drop the name.
-                  const asked = await askNewParty({ name: nameCaps(name), kind: payTarget === 'vendor' ? 'vendor' : 'customer' });
-                  if (!asked) return null;
-                  return (await createCustomer.mutateAsync({ owner_id: userId, name: asked.name, phone: asked.phone ?? null, ...withType(asked) } as never)) as Customer;
-                }}
+                partyLabel={payTarget === 'vendor' ? 'Vendor' : 'Customer'}
+                addLabel={`Add ${payTarget === 'vendor' ? 'vendor' : 'person'}`}
                 totalLabel={isOut ? 'Total Paid' : 'Total Received'}
                 totalColor={meta.color}
                 onUpdateRow={updateRow}
+                withCar={withCar}
+                carOptionsFor={carOptionsFor}
+                itemDueOf={withCar ? itemDueOf : undefined}
+                dueOf={payTarget === 'vendor' ? dueOf : undefined}
+                onCreateParty={async (name) => {
+                  try {
+                    const asked = await askNewParty({ name, kind: payTarget === 'vendor' ? 'vendor' : 'customer' });
+                    if (!asked) return null;
+                    return await createCustomer.mutateAsync({ owner_id: userId, name: asked.name, phone: null, ...withType(asked) });
+                  } catch (err) {
+                    showAlert('Could not add ' + (payTarget === 'vendor' ? 'vendor' : 'customer'), getErrorMessage(err));
+                    return null;
+                  }
+                }}
                 onAddRow={addRow}
                 onRemoveRow={removeRow}
                 onRequestSave={handleSaveAll}
                 onExit={() => (saveButtonRef.current as unknown as { focus?: () => void } | null)?.focus?.()}
-                autoFocusFirst
               />
 
               <View className="mt-4 flex-row items-center justify-end" style={{ gap: 16 }}>
@@ -777,9 +882,14 @@ function QuickPaymentForm() {
                         <Text className="text-[10px] text-gray-400">
                           {toBsHistoryLabel(entry.entry_date ?? entry.created_at)}
                         </Text>
+                        {withCar && !!entry.note && (
+                          <Text numberOfLines={1} className="text-[10px] text-gray-500">
+                            {entry.note}
+                          </Text>
+                        )}
                       </View>
                       <Text className="text-xs font-bold" style={{ color: accent }}>
-                        NPR {entry.amount.toLocaleString()}
+                        NPR {formatMoney(entry.amount)}
                       </Text>
                     </View>
                   ))

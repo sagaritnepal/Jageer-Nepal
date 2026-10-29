@@ -10,6 +10,8 @@ import type { BillItem } from '../../types/database.types';
 export const FINANCE_FEATURES = {
   /** Rent & EMI (rentals, EMI plans, employees' daily rental wages) - tables only Finance Nepal's database has. */
   rentAndEmi: false,
+  /** Receivable / Payable reports in the Ledger page's own table for every account (otherwise only vehicle accounts). */
+  ledgerTableReports: true,
 } as const;
 
 /** A vehicle account (Purchase Report and Paid page name the vehicle, Inventory per vehicle ...). None in Jageer. */

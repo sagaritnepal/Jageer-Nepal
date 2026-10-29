@@ -3,11 +3,14 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Customer } from '../../../types/database.types';
+import { useAuthStore } from '../../hooks/useAuth';
+import { usePartyTypes } from '../../hooks/usePartyTypes';
 import type { PhoneContactEntry } from '../../hooks/usePhoneContacts';
 import { buildCustomerSuggestions, type CustomerSuggestion } from '../../utils/customerSuggestions';
 import { readKey } from '../../utils/webKeys';
 import { SuggestInput, type SuggestOption } from './SuggestInput';
-import { showAlert, getErrorMessage } from '../../utils/alert';
+import { decimalInput } from '../../utils/number';
+import { formatMoney } from '../../utils/money';
 
 export interface PaymentRow {
   key: string;
@@ -18,6 +21,8 @@ export interface PaymentRow {
   pendingPhone: string | null;
   amount: string;
   note: string;
+  /** The car (its number) a payment is for - only on a vehicle account (see `withCar`). */
+  item: string;
 }
 
 export interface PaymentEntryTableHandle {
@@ -25,8 +30,10 @@ export interface PaymentEntryTableHandle {
   focusRow: (rowKey: string, col?: 0 | 1 | 2) => void;
 }
 
-type Col = 0 | 1 | 2;
+// 0 party, 1 amount, 2 remarks; 3 item sits between the party and the amount when `withCar`.
+type Col = 0 | 1 | 2 | 3;
 const MAX_SUGGESTIONS = 6;
+const ADD_PARTY_KEY = '__add-party__';
 
 interface Props {
   rows: PaymentRow[];
@@ -46,15 +53,20 @@ interface Props {
   /** Enter on a blank last row: the list is finished, move on (to Save). */
   onExit: () => void;
   autoFocusFirst?: boolean;
-  /** Saves a ledger typed here that is not in the books yet (after a Save / Cancel question) and returns it. */
-  /** Adds a typed name as a new ledger after the new-party popup confirms it; null when it was cancelled. */
-  onCreateLedger?: (name: string) => Promise<Customer | null>;
-  /** The ledger type (category) a ledger is filed under, shown beside it. */
-  typeOf?: (customer: Customer) => string | undefined;
+  /** Saves a typed name as a new customer / vendor on the spot. The "Add ... as new ..." row only shows when this is given. */
+  onCreateParty?: (name: string) => Promise<Customer | null>;
+  /** A vehicle account: each row also names the car it pays for (Item). */
+  withCar?: boolean;
+  /** The cars to pick for a row's party - only theirs (bought from a vendor, sold to a customer) - narrowed by what is typed. */
+  carOptionsFor?: (vendor: Customer | null, typed: string) => SuggestOption[];
+  /** What is still owed to a saved vendor (negative = paid ahead). When given, the vendor box shows it. */
+  dueOf?: (partyId: string) => number;
+  /** What is still owed on one car of the party; null when it is not one of theirs. When given, the Item box shows it. */
+  itemDueOf?: (vendor: Customer | null, item: string) => number | null;
 }
 
 function rowHasContent(row: PaymentRow): boolean {
-  return !!(row.customerName.trim() || row.amount.trim() || row.note.trim());
+  return !!(row.customerName.trim() || row.amount.trim() || row.note.trim() || row.item.trim());
 }
 
 export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(function PaymentEntryTable(
@@ -64,8 +76,6 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
     phoneContacts,
     accent,
     partyLabel,
-    onCreateLedger,
-    typeOf,
     addLabel,
     totalLabel,
     totalColor,
@@ -75,9 +85,17 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
     onRequestSave,
     onExit,
     autoFocusFirst,
+    onCreateParty,
+    withCar,
+    carOptionsFor,
+    dueOf,
+    itemDueOf,
   },
   ref
 ) {
+  // The order Enter / Tab walk along a row.
+  const order: Col[] = withCar ? [0, 3, 1, 2] : [0, 1, 2];
+  const amountWidth = withCar ? 140 : 160;
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const pendingFocus = useRef<{ key: string; col: Col } | null>(null);
   const [focusedCell, setFocusedCell] = useState<{ key: string; col: Col } | null>(null);
@@ -109,6 +127,9 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
   }));
 
   const focusedRowKey = focusedCell?.col === 0 ? focusedCell.key : null;
+  // The Ledger type each person is filed under (Customer, Vendor, Employee ...), shown under their name in the list.
+  const { nameById: partyTypeName } = usePartyTypes(useAuthStore((state) => state.session?.user.id));
+  const typeOf = (c: { party_type_id?: string | null }) => (c.party_type_id ? partyTypeName.get(c.party_type_id) ?? null : null);
   const suggestions = useMemo<CustomerSuggestion[]>(() => {
     if (!focusedRowKey) return [];
     const row = rows.find((r) => r.key === focusedRowKey);
@@ -119,17 +140,21 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
   }, [focusedRowKey, rows, customers, phoneContacts]);
 
   const suggestionOptions = useMemo<SuggestOption[]>(() => {
-    const base = suggestions.map((s) => ({
+    const options: SuggestOption[] = suggestions.map((s) => ({
       key: s.key,
       label: s.name,
-      hint: s.customer ? (s.phone ?? 'Saved') : 'From contacts',
-      sub: s.customer ? typeOf?.(s.customer) ?? null : null,
+      hint: s.customer ? s.phone : 'From contacts',
+      sub: s.customer ? typeOf(s.customer) : null,
     }));
-    const row = rows.find((r) => r.key === focusedRowKey);
+    // Nobody saved goes by what was typed: offer to add them right here, like the stock item box does.
+    const row = focusedRowKey ? rows.find((r) => r.key === focusedRowKey) : null;
     const typed = row?.customerName.trim() ?? '';
-    const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
-    return typed && !exact && onCreateLedger ? [...base, { key: '__new__', label: typed, add: 'ledger' }] : base;
-  }, [suggestions, rows, focusedRowKey, customers, onCreateLedger]);
+    const linkedExact = !!row?.selectedCustomer && row.selectedCustomer.name === row.customerName;
+    if (onCreateParty && typed && !linkedExact && !customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase())) {
+      options.push({ key: ADD_PARTY_KEY, label: `Add "${typed}" as new ${partyLabel.toLowerCase()}`, kind: 'add' });
+    }
+    return options;
+  }, [suggestions, focusedRowKey, rows, customers, onCreateParty, partyLabel, partyTypeName]);
 
   function focusCell(rowIndex: number, col: Col) {
     const row = rows[rowIndex];
@@ -143,7 +168,8 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
   // Enter = Tab, except in the last cell of the last row: a row with
   // something in it starts a new row, a blank one means "done" and moves on.
   function advance(rowIndex: number, col: Col) {
-    if (col < 2) focusCell(rowIndex, (col + 1) as Col);
+    const at = order.indexOf(col);
+    if (at < order.length - 1) focusCell(rowIndex, order[at + 1]);
     else if (rowIndex < rows.length - 1) focusCell(rowIndex + 1, 0);
     else if (rowHasContent(rows[rowIndex])) addRowAndFocus(0);
     else onExit();
@@ -151,8 +177,9 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
 
   // Shift+Enter is Shift+Tab: back one cell, or to the last cell of the row above.
   function retreat(rowIndex: number, col: Col) {
-    if (col > 0) focusCell(rowIndex, (col - 1) as Col);
-    else if (rowIndex > 0) focusCell(rowIndex - 1, 2);
+    const at = order.indexOf(col);
+    if (at > 0) focusCell(rowIndex, order[at - 1]);
+    else if (rowIndex > 0) focusCell(rowIndex - 1, order[order.length - 1]);
   }
 
   function handleKeyPress(e: unknown, row: PaymentRow, rowIndex: number, col: Col) {
@@ -215,12 +242,14 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
         <Text className="px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ flex: 1.35 }}>
           {partyLabel}
         </Text>
-        <Text className="px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ width: 150 }}>
-          Category
-        </Text>
+        {withCar && (
+          <Text className="px-2.5 text-[11px] font-bold capitalize tracking-wider text-gray-500" style={{ flex: 1.2 }}>
+            Item
+          </Text>
+        )}
         <Text
           className="px-2.5 text-right text-[11px] font-bold capitalize tracking-wider text-gray-500"
-          style={{ width: 160 }}
+          style={{ width: amountWidth }}
         >
           Amount (NPR)
         </Text>
@@ -260,18 +289,14 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                 }}
                 options={focusedRowKey === row.key ? suggestionOptions : []}
                 onSelectOption={async (opt, via) => {
-                  if (opt.key === '__new__') {
-                    const name = opt.label.trim();
-                    try {
-                      const created = await onCreateLedger!(name);
-                      if (!created) {
-                        onUpdateRow(row.key, { customerName: '', selectedCustomer: null, pendingPhone: null });
-                        return;
-                      }
+                  if (opt.key === ADD_PARTY_KEY) {
+                    const created = await onCreateParty?.(row.customerName.trim());
+                    if (created) {
                       onUpdateRow(row.key, { customerName: created.name, selectedCustomer: created, pendingPhone: null });
-                      inputRefs.current[`${row.key}:1`]?.focus();
-                    } catch (err) {
-                      showAlert('Could not add the ledger', getErrorMessage(err));
+                      if (via !== 'tab') inputRefs.current[`${row.key}:${order[1]}`]?.focus();
+                    } else {
+                      // Cancelled in the confirmation: the name is dropped, so it cannot be saved by accident.
+                      onUpdateRow(row.key, { customerName: '', selectedCustomer: null, pendingPhone: null });
                     }
                     return;
                   }
@@ -282,7 +307,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                     selectedCustomer: s.customer,
                     pendingPhone: s.customer ? null : s.phone,
                   });
-                  if (via !== 'tab') inputRefs.current[`${row.key}:1`]?.focus();
+                  if (via !== 'tab') inputRefs.current[`${row.key}:${order[1]}`]?.focus();
                 }}
                 inputRef={(el) => {
                   inputRefs.current[`${row.key}:0`] = el;
@@ -290,7 +315,8 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                 onFocus={() => setFocusedCell({ key: row.key, col: 0 })}
                 onBlur={() => setFocusedCell((cur) => (cur?.key === row.key && cur.col === 0 ? null : cur))}
                 onKeyPress={(e) => handleKeyPress(e, row, rowIndex, 0)}
-                placeholder="Search or add a ledger"
+                enterAddsNew
+                placeholder="Who is this from?"
                 accessibilityLabel={`${partyLabel}, row ${rowIndex + 1}`}
                 autoFocus={autoFocusFirst && rowIndex === 0}
                 accent={accent}
@@ -304,23 +330,77 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
                     <Text className="text-[10px] font-bold capitalize text-gray-400">New</Text>
                   ) : null
                 }
-                enterAddsNew
               />
+              {/* What is still owed to the chosen vendor, so the amount can be set against it. */}
+              {linked && dueOf ? (
+                (() => {
+                  const due = dueOf(linked.id);
+                  return (
+                    <Text
+                      className="px-2.5 pb-1 text-[11px] font-semibold"
+                      style={{ color: due > 0 ? '#B91C1C' : due < 0 ? '#047857' : '#9CA3AF' }}
+                      numberOfLines={1}
+                    >
+                      {due > 0 ? `Due NPR ${formatMoney(due)}` : due < 0 ? `Paid ahead NPR ${formatMoney(-due)}` : 'Nothing due'}
+                    </Text>
+                  );
+                })()
+              ) : null}
             </View>
 
-            <View style={{ width: 150, paddingHorizontal: 10 }}>
-              <Text className="text-[13px] font-semibold" style={{ color: linked && typeOf?.(linked) ? '#1E3A8A' : '#B2B8C1' }} numberOfLines={1}>
-                {linked ? typeOf?.(linked) ?? '—' : '—'}
-              </Text>
-            </View>
+            {withCar && (
+              <>
+                {/* The car this payment is for: only this party's cars (bought from a vendor, sold to a customer). */}
+                <View style={{ flex: 1.2, minWidth: 0 }}>
+                  <SuggestInput
+                    value={row.item}
+                    onChangeText={(v) => onUpdateRow(row.key, { item: v })}
+                    options={focusedCell?.key === row.key && focusedCell.col === 3 ? carOptionsFor?.(linked, row.item) ?? [] : []}
+                    showWhenEmpty
+                    onSelectOption={(opt, via) => {
+                      onUpdateRow(row.key, { item: opt.label });
+                      if (via !== 'tab') inputRefs.current[`${row.key}:1`]?.focus();
+                    }}
+                    inputRef={(el) => {
+                      inputRefs.current[`${row.key}:3`] = el;
+                    }}
+                    onFocus={() => setFocusedCell({ key: row.key, col: 3 })}
+                    onBlur={() => setFocusedCell((cur) => (cur?.key === row.key && cur.col === 3 ? null : cur))}
+                    onKeyPress={(e) => handleKeyPress(e, row, rowIndex, 3)}
+                    placeholder="Car number"
+                    accessibilityLabel={`Item, row ${rowIndex + 1}`}
+                    accent={accent}
+                    inputClassName={cellClass}
+                    inputStyle={cellStyle(row.key, 3)}
+                    compact
+                  />
+                  {/* What is left to pay on this car, under it - as the party's due is under the party. */}
+                  {itemDueOf
+                    ? (() => {
+                        const due = itemDueOf(linked, row.item);
+                        if (due == null) return null;
+                        return (
+                          <Text
+                            className="px-2.5 pb-1 text-[11px] font-semibold"
+                            style={{ color: due > 0 ? '#B91C1C' : due < 0 ? '#047857' : '#9CA3AF' }}
+                            numberOfLines={1}
+                          >
+                            {due > 0 ? `Due NPR ${formatMoney(due)}` : due < 0 ? `Paid ahead NPR ${formatMoney(-due)}` : 'Cleared'}
+                          </Text>
+                        );
+                      })()
+                    : null}
+                </View>
+              </>
+            )}
 
-            <View style={{ width: 160 }}>
+            <View style={{ width: amountWidth }}>
               <TextInput
                 ref={(el) => {
                   inputRefs.current[`${row.key}:1`] = el;
                 }}
                 value={row.amount}
-                onChangeText={(v) => onUpdateRow(row.key, { amount: v.replace(/[^0-9.]/g, '') })}
+                onChangeText={(v) => onUpdateRow(row.key, { amount: decimalInput(v) })}
                 onFocus={() => setFocusedCell({ key: row.key, col: 1 })}
                 onBlur={() => setFocusedCell((cur) => (cur?.key === row.key && cur.col === 1 ? null : cur))}
                 onKeyPress={(e) => handleKeyPress(e, row, rowIndex, 1)}
@@ -387,7 +467,7 @@ export const PaymentEntryTable = forwardRef<PaymentEntryTableHandle, Props>(func
         <View className="flex-row items-baseline gap-3 pr-2">
           <Text className="text-[13px] font-semibold text-gray-500">{totalLabel}</Text>
           <Text className="text-xl font-extrabold" style={{ color: totalColor ?? accent }}>
-            NPR {total.toLocaleString()}
+            NPR {formatMoney(total)}
           </Text>
         </View>
       </View>

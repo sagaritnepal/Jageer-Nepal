@@ -144,7 +144,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
     const row = rows.find((r) => r.key === focusedRowKey);
     const typed = row?.partyName.trim() ?? '';
     const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
-    return typed && !exact && !row?.customerId && onCreateLedger ? [...base, { key: '__new__', label: typed, add: 'ledger' }] : base;
+    return typed && !exact && !row?.customerId && onCreateLedger ? [...base, { key: '__new__', label: `Add "${typed}" as new ledger`, kind: 'add' as const }] : base;
   }, [suggestions, rows, focusedRowKey, customers, onCreateLedger]);
 
   function focusCell(rowIndex: number, col: ExpenseCol) {
@@ -268,7 +268,7 @@ export const ExpenseEntryTable = forwardRef<ExpenseEntryTableHandle, Props>(func
                 options={focusedRowKey === row.key ? suggestionOptions : []}
                 onSelectOption={async (opt, via) => {
                   if (opt.key === '__new__') {
-                    const name = opt.label.trim();
+                    const name = row.partyName.trim();
                     try {
                       const created = await onCreateLedger!(name);
                       if (!created) {

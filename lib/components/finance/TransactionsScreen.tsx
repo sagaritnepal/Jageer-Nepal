@@ -1601,7 +1601,7 @@ function TransactionForm({
     const typed = partyName.trim();
     const exact = typed && customers.some((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
     return vendorFocused && isBill && typed && !exact && !customerId
-      ? [...base, { key: '__new__', label: typed, add: 'ledger' }]
+      ? [...base, { key: '__new__', label: `Add "${typed}" as new ledger`, kind: 'add' as const }]
       : base;
   }, [vendorSuggestions, partyName, customers, vendorFocused, isBill, customerId]);
 
@@ -1827,7 +1827,7 @@ function TransactionForm({
                     options={vendorOptions}
                     onSelectOption={async (opt, via) => {
                       if (opt.key === '__new__') {
-                        const name = opt.label.trim();
+                        const name = partyName.trim();
                         if (!(await askSave('Add new ledger?', `"${name}" is not in your ledger yet. Save it as a new ledger?`))) {
                           setPartyName('');
                           return;
