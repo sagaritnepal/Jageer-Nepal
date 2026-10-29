@@ -1,6 +1,6 @@
 // lib/components/finance/PartyBalancesScreen.tsx
 import { useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -20,7 +20,8 @@ import { MONEY } from './moneyColors';
 import { journalOf } from '../../utils/journalVoucher';
 import { PopupCard } from './FormKit';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
-import { highlightText } from './Highlight';
+import { LedgerFormatTable, type LedgerFormatRow } from './LedgerFormatTable';
+import { partyFigures } from '../../utils/partyFigures';
 
 type Direction = 'receive' | 'give';
 
@@ -202,6 +203,17 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
   // a tap on it is the popup - the log of entries behind its figure, scrollable.
   const [view, setView] = useState<Heading | null>(null);
 
+  // Each person listed, with their Ledger figures (both ledgers, every entry) - the Ledger page's reading.
+  const ledgerRows = useMemo((): LedgerFormatRow[] => {
+    const figures = partyFigures(customerEntries ?? [], vendorEntries ?? [], '', '');
+    return shown.map((h) => ({
+      key: h.partyId,
+      name: nameCaps(h.name),
+      ledgerType: h.ledgerType,
+      ...(figures.get(h.partyId) ?? { billed: 0, paid: 0, received: 0, payable: 0, receivable: 0, lastDay: '', lastRef: '' }),
+    }));
+  }, [customerEntries, vendorEntries, shown]);
+
   const entryWord = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
 
   // Print and Excel carry the page - the headings and what each comes to - or, from inside the popup,
@@ -337,39 +349,9 @@ export function PartyBalancesScreen({ basePath, direction }: { basePath: string;
           <Text className="mt-2 text-gray-500">{needle ? `No name matches "${search.trim()}".` : meta.empty}</Text>
         </View>
       ) : (
-        // Every heading, each a card - the name, how many entries and what they add up to. Tap one to
-        // open the log of entries inside it.
-        <View style={{ gap: 10 }}>
-          {shown.map((h) => (
-            <View key={h.partyId} className="overflow-hidden rounded-xl border border-gray-300 bg-white">
-              <Pressable
-                onPress={() => setView(h)}
-                accessibilityRole="button"
-                className="flex-row items-center px-3.5 py-3"
-                style={{ gap: 10, backgroundColor: '#FFFFFF' }}
-              >
-                <Ionicons name="chevron-forward" size={16} color="#6B7280" />
-                <Text className="flex-1 text-[14px] font-bold text-gray-900" numberOfLines={1}>
-                  {highlightText(nameCaps(h.name), search)}
-                </Text>
-                <Text className="text-[12px] text-gray-400">
-                  {[h.ledgerType || null, entryWord(h.entries.length)].filter(Boolean).join(' · ')}
-                </Text>
-                <Text className="text-right text-[14px] font-extrabold" style={{ minWidth: 84, color: meta.color }}>
-                  {money(h.balance)}
-                </Text>
-              </Pressable>
-            </View>
-          ))}
-          <View className="flex-row items-center justify-end px-1" style={{ gap: 10 }}>
-            <Text className="text-[12.5px] font-bold text-gray-600">
-              {`${shown.length} ${shown.length === 1 ? meta.who.toLowerCase() : `${meta.who.toLowerCase()}s`} · Total`}
-            </Text>
-            <Text className="text-[14px] font-extrabold" style={{ color: meta.color }}>
-              {money(shownTotal)}
-            </Text>
-          </View>
-        </View>
+        // The Ledger page's own table: party, ledger type, last transaction, balance, paid, received, payable and
+        // receivable, with a totals line. A line opens that person's entries.
+        <LedgerFormatTable rows={ledgerRows} full={layout.full} search={search} partyLabel={meta.who} onOpen={(r) => setView(shown.find((h) => h.partyId === r.key) ?? null)} />
       )}
 
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">{meta.note}</Text>
