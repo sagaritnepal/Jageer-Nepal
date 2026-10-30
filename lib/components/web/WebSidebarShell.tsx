@@ -1,6 +1,6 @@
 // lib/components/web/WebSidebarShell.tsx
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Image } from 'react-native';
+import { View, Text, Pressable, ScrollView, Image, Modal } from 'react-native';
 import { router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
@@ -102,6 +102,37 @@ function initialsOf(name: string | null | undefined) {
     .join('');
 }
 
+/** The Jageer Nepal logo large on a white card, over the page. Clicking outside it, the close button or Esc closes it. */
+function LogoPopup({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!visible || typeof window === 'undefined') return undefined;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visible, onClose]);
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        accessibilityLabel="Close"
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'rgba(15,23,42,0.6)' }}
+      >
+        {/* A press on the card itself does not close it - only outside it, or the close button. */}
+        <Pressable
+          onPress={() => {}}
+          style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: 28, alignItems: 'center', gap: 14, width: '100%', maxWidth: 440 }}
+        >
+          <Pressable onPress={onClose} accessibilityLabel="Close" hitSlop={8} style={{ position: 'absolute', top: 12, right: 12 }}>
+            <Ionicons name="close" size={22} color="#6B7280" />
+          </Pressable>
+          <Image source={require('../../../assets/jageer-logo.png')} style={{ width: '100%', aspectRatio: 1, maxWidth: 360 }} resizeMode="contain" />
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#111827' }}>Jageer Nepal</Text>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // The content column's own max-width - wide enough to actually use laptop
 // space (unlike the app-wide 640px WebFrame cap that applies pre-login),
 // narrow enough that a plain mobile-first form/list still reads well
@@ -151,6 +182,7 @@ export function WebSidebarShell({
     : CONTENT_MAX_WIDTH;
   const searchParams = useGlobalSearchParams<Record<string, string>>();
   const profile = useAuthStore((state) => state.profile);
+  const [showLogo, setShowLogo] = useState(false);
 
   // Several Finance sub-links share one route with a different `type` query
   // param (Payment In/Out both go to quick-payment, Sales/Purchase/Expenses
@@ -196,17 +228,17 @@ export function WebSidebarShell({
           paddingHorizontal: 14,
         }}
       >
-        {/* The brand mark: the app's own logo and name. Pressing it goes back to the role's first page
-            (the Dashboard for a reseller). */}
-        <Pressable
-          onPress={() => items[0] && router.push(items[0].href as never)}
-          accessibilityRole="link"
-          accessibilityLabel="Go to the dashboard"
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginBottom: 20 }}
-        >
-          <Image source={require('../../../assets/jageer-logo.png')} style={{ width: 34, height: 34, borderRadius: 9 }} resizeMode="contain" />
-          <Text style={{ fontSize: 15, fontWeight: '800', color: '#111827' }}>Jageer Nepal</Text>
-        </Pressable>
+        {/* The brand mark: the app's own logo and name. The logo opens large in a popup; the name goes back
+            to the role's first page (the Dashboard for a reseller). */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, marginBottom: 20 }}>
+          <Pressable onPress={() => setShowLogo(true)} accessibilityRole="button" accessibilityLabel="View the logo">
+            <Image source={require('../../../assets/jageer-logo.png')} style={{ width: 34, height: 34, borderRadius: 9 }} resizeMode="contain" />
+          </Pressable>
+          <Pressable onPress={() => items[0] && router.push(items[0].href as never)} accessibilityRole="link" accessibilityLabel="Go to the dashboard">
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#111827' }}>Jageer Nepal</Text>
+          </Pressable>
+        </View>
+        <LogoPopup visible={showLogo} onClose={() => setShowLogo(false)} />
 
         {/* The nav list scrolls on its own (minHeight: 0 lets a flex child
             shrink below its content), so a long open submenu like Finance's
