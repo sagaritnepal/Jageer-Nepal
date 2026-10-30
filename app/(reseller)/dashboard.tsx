@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
-import { CategoryGrid } from '../../lib/components/CategoryGrid';
+import { CategoryGrid, categoryColumnsFor } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import {
   usePendingHires,
@@ -204,9 +204,9 @@ export default function ResellerDashboard() {
   const [search, setSearch] = useState('');
   const [pickerCategory, setPickerCategory] = useState<ServiceCategory | null>(null);
   // Width of the wide layout's main column, so the category grid can add
-  // columns as the page gets wider (8 is what fits the narrowest wide page).
+  // columns as the page gets wider (6 to 10, see categoryColumnsFor).
   const [mainColumnWidth, setMainColumnWidth] = useState(0);
-  const categoryColumns = Math.min(12, Math.max(8, Math.floor(mainColumnWidth / 92)));
+  const categoryColumns = categoryColumnsFor(mainColumnWidth);
 
   // A phone browser hitting the website is still Platform.OS === 'web', so
   // that alone can't pick the desktop layout below - its fixed-width search
