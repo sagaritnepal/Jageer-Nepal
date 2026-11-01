@@ -5,6 +5,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
+import { useRentalWageSync } from '../../hooks/useRentalWageSync';
 import {
   useSupabaseRow,
   useSupabaseQuery,
@@ -16,6 +17,8 @@ import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { usePartyTypes } from '../../hooks/usePartyTypes';
 import { useFreshLedgerArea } from '../../hooks/useFreshLedgerArea';
 import { journalOf } from '../../utils/journalVoucher';
+import { itemListOf, itemNamesOf, sellsVehicles } from '../../utils/accountFeatures';
+import { formatMoney, round2 } from '../../utils/money';
 import { BankAccountPickerModal } from './BankAccountPickerModal';
 import { EntryWhenFields, PartyMoveField, PaymentMethodButton, stampOf, timeOf, useEntryParty, useEntryWhen } from './EntryEditParts';
 import { PartyTypeField } from './PartyTypeField';
@@ -343,7 +346,7 @@ function AddEntryForm({
     : 'Cash';
 
   async function handleSave() {
-    const value = Number(amount);
+    const value = round2(Number(amount));
     if (!amount.trim() || Number.isNaN(value) || value <= 0) {
       showAlert('Enter an amount', 'Add a valid amount in NPR.');
       return;
@@ -538,7 +541,7 @@ function AddVendorEntryForm({
   }
 
   async function handleSave() {
-    const value = Number(amount);
+    const value = round2(Number(amount));
     if (!amount.trim() || Number.isNaN(value) || value <= 0) {
       showAlert('Enter an amount', 'Add a valid amount in NPR.');
       return;
@@ -555,8 +558,8 @@ function AddVendorEntryForm({
           showAlert(
             'Moved to Received',
             movedTo
-              ? `NPR ${value.toLocaleString()} is now a Received entry on ${nameCaps(movedTo.name)}'s ledger.`
-              : `NPR ${value.toLocaleString()} is now a Received entry on the customer ledger.`
+              ? `NPR ${formatMoney(value)} is now a Received entry on ${nameCaps(movedTo.name)}'s ledger.`
+              : `NPR ${formatMoney(value)} is now a Received entry on the customer ledger.`
           );
         }
       } else if (initial) {
@@ -708,6 +711,8 @@ export function CustomerDetailScreen({ basePath }: { basePath: string }) {
 function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   const [calendarMode] = useCalendarMode(); // the history's dates are drawn again when AD / BS changes
   const userId = useAuthStore((state) => state.session?.user.id);
+  // Employees' daily rental wages up to today (see useRentalWageSync).
+  useRentalWageSync(userId);
   // `all` on both ledger reads: the balance is a sum over every entry.
   const { data: entries } = useSupabaseQuery('customer_ledger_entries', {
     filters: { customer_id: id },
@@ -776,6 +781,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
 
   const { data: partyRow } = useSupabaseRow('customers', id);
   const profile = useAuthStore((state) => state.profile);
+  const showItems = sellsVehicles(profile?.business_name?.trim() || profile?.full_name);
   const { nameById: partyTypeName } = usePartyTypes(partyRow?.owner_id);
 
   // ---- The statement: both ledgers as one account (see ledgerStatement.ts) ----
@@ -788,7 +794,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
           id: e.id,
           side: 'customer',
           entryType: e.entry_type,
-          amount: Number(e.amount),
+          amount: round2(Number(e.amount)),
           day: entryDay(e.entry_date, e.created_at),
           createdAt: e.created_at,
         })
@@ -798,7 +804,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
           id: e.id,
           side: 'vendor',
           entryType: e.entry_type,
-          amount: Number(e.amount),
+          amount: round2(Number(e.amount)),
           day: entryDay(e.entry_date, e.created_at),
           createdAt: e.created_at,
         })
@@ -826,7 +832,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         key: `tx-${t.id}`,
         label: TX_TYPE_LABEL[t.type],
         tone: isSale ? IN_TONE : OUT_TONE,
-        detail: t.note ?? '',
+        // A vehicle account reads the item (car) on the bill here in place of its remark.
+        detail: (showItems ? itemNamesOf(t.items) : '') || (t.note ?? ''),
         reference: t.bill_no ?? '',
         dateLabel: toBsHistoryLabel(day),
         day,
@@ -836,7 +843,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         balance: 0,
         info,
         amount,
-        amountColor: isSale ? '#059669' : '#DC2626',
+        // A bill's amount is plain black; only money paid (red) and received (green) is coloured.
+        amountColor: t.type === 'expense' ? '#DC2626' : '#111827',
         icon: 'receipt-outline',
         iconColor: isSale ? '#059669' : '#DC2626',
         iconBg: isSale ? '#ECFDF5' : '#FEF2F2',
@@ -861,7 +869,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       const outgoing = owes && e.source === 'manual';
       lines.push({
         key: `ledger-${e.id}`,
-        label: journalOf(e.note) ? 'Journal' : syncedFromBill ? TX_TYPE_LABEL.sale : !owes ? 'Received' : outgoing ? 'Paid' : 'Receivable',
+        // Whoever a vehicle is rented to owes its rate for each day it is out (0020_rent_receivable_from_renter.sql).
+        label: journalOf(e.note) ? 'Journal' : e.source_type === 'rental_wage' ? 'Daily rent' : syncedFromBill ? TX_TYPE_LABEL.sale : !owes ? 'Received' : outgoing ? 'Paid' : 'Receivable',
         tone: outgoing ? OUT_TONE : IN_TONE,
         detail: journalText(e.note) ?? e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a booked job' : 'Manual entry'),
         reference: e.receipt_no ?? '',
@@ -872,7 +881,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         credit,
         balance: 0,
         amount: e.amount,
-        amountColor: outgoing ? '#DC2626' : '#059669',
+        amountColor: outgoing ? '#DC2626' : owes ? '#111827' : '#059669',
         icon: owes ? 'arrow-up' : 'arrow-down',
         iconColor: outgoing ? '#DC2626' : '#059669',
         iconBg: outgoing ? '#FEF2F2' : '#ECFDF5',
@@ -894,7 +903,16 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       const onCredit = e.entry_type === 'debit';
       lines.push({
         key: `vendor-${e.id}`,
-        label: journalOf(e.note) ? 'Journal' : onCredit ? (syncedFromBill ? TX_TYPE_LABEL.purchase : 'Bought on credit') : 'Paid',
+        // A rented vehicle's employee is owed a wage for each day it is out (0015_rental_employee_wages.sql).
+        label: journalOf(e.note)
+          ? 'Journal'
+          : e.source_type === 'rental_wage'
+            ? 'Daily rent'
+            : onCredit
+              ? syncedFromBill
+                ? TX_TYPE_LABEL.purchase
+                : 'Bought on credit'
+              : 'Paid',
         tone: OUT_TONE,
         detail: journalText(e.note) ?? e.note ?? (syncedFromBill ? '' : e.source === 'booking' ? 'From a credit purchase' : 'Manual entry'),
         reference: e.receipt_no ?? '',
@@ -905,7 +923,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         credit,
         balance: 0,
         amount: e.amount,
-        amountColor: '#DC2626',
+        amountColor: onCredit ? '#111827' : '#DC2626',
         icon: onCredit ? 'cart-outline' : 'arrow-up',
         iconColor: '#DC2626',
         iconBg: '#FEF2F2',
@@ -920,11 +938,91 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     }
     return lines.sort(compareItems);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, vendorEntries, linkedTransactions, calendarMode]);
+  }, [entries, vendorEntries, linkedTransactions, calendarMode, showItems]);
 
   // Every line with the running balance after it, oldest first - and shown newest first.
   const statementAsc = useMemo<HistoryRow[]>(() => withRunningBalance(allLines, 0), [allLines]);
   const rows = useMemo(() => [...statementAsc].reverse(), [statementAsc]);
+
+  // Every ledger reads as one line per vehicle (item), in the Ledger table's own columns: what it was
+  // bought or sold for (Balance), what has been paid or received on it, and what is left (Payable / Receivable).
+  // A bill names its vehicles as items (a bill of one vehicle counts in full, else each vehicle's own line); a
+  // payment names its vehicle first in its remark (the Paid and Received pages write it so). Anything that names
+  // no vehicle on a bill here is a line of its own, so the totals still match the name card. A line opens its
+  // entries in a popup; an entry there opens as it does everywhere (a bill's detail, a payment's edit form).
+  const vehicleGroups = useMemo<VehicleGroup[] | null>(() => {
+    const key = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const groups = new Map<string, VehicleGroup>();
+    const list: VehicleGroup[] = [];
+    const groupFor = (k: string, name: string) => {
+      let g = groups.get(k);
+      if (!g) {
+        g = { key: k, name, billed: 0, paid: 0, received: 0, lastDay: '', refs: [], rows: [], parts: new Map() };
+        groups.set(k, g);
+        list.push(g);
+      }
+      return g;
+    };
+    // Adds a line to the vehicle, with what it put on this vehicle (a bill of several vehicles puts each its own line).
+    const add = (g: VehicleGroup, r: HistoryRow, part: Partial<VehiclePart>) => {
+      const was = g.parts.get(r.key) ?? { billed: 0, paid: 0, received: 0 };
+      g.parts.set(r.key, { billed: was.billed + (part.billed ?? 0), paid: was.paid + (part.paid ?? 0), received: was.received + (part.received ?? 0) });
+      if (!g.rows.includes(r)) g.rows.push(r);
+      if (r.day > g.lastDay) g.lastDay = r.day;
+      if (r.reference && !g.refs.includes(r.reference)) g.refs.push(r.reference);
+    };
+    const used = new Set<string>();
+    // The bills first: they say which vehicles there are.
+    for (const r of statementAsc) {
+      const t = r.tx;
+      if (!t || r.info || (t.type !== 'sale' && t.type !== 'purchase')) continue;
+      const cars = itemListOf(t.items);
+      if (!cars.length) continue;
+      used.add(r.key);
+      const side = t.type === 'purchase' ? 'v' : 'c';
+      if (cars.length === 1) {
+        const g = groupFor(`${side}|${key(cars[0])}`, cars[0]);
+        g.billed += r.amount;
+        add(g, r, { billed: r.amount });
+      } else {
+        for (const i of t.items ?? []) {
+          if (!i.description?.trim()) continue;
+          const g = groupFor(`${side}|${key(i.description)}`, i.description.trim());
+          g.billed += Number(i.amount) || 0;
+          add(g, r, { billed: Number(i.amount) || 0 });
+        }
+      }
+    }
+    // Then the money, by the vehicle its remark names.
+    for (const r of statementAsc) {
+      if (used.has(r.key) || r.info) continue;
+      const e = r.vendor ?? r.ledger;
+      if (!e) continue;
+      const side = r.vendor ? 'v' : 'c';
+      const named = e.note ? groups.get(`${side}|${key(e.note.split(' · ')[0])}`) : undefined;
+      const g = named ?? groupFor(`row|${r.key}`, [r.label, r.detail].filter(Boolean).join(' · '));
+      const amount = Number(e.amount);
+      // Owed to a vendor without a bill (a daily wage ...); money paid back to a customer.
+      const part: Partial<VehiclePart> = r.vendor
+        ? e.entry_type === 'credit'
+          ? { paid: amount }
+          : { billed: amount }
+        : e.entry_type === 'credit'
+          ? { received: amount }
+          : e.source === 'manual'
+            ? { paid: amount }
+            : { billed: amount };
+      g.billed += part.billed ?? 0;
+      g.paid += part.paid ?? 0;
+      g.received += part.received ?? 0;
+      add(g, r, part);
+    }
+    for (const g of list) {
+      g.side = g.key.startsWith('v|') || (g.key.startsWith('row|') && !!g.rows[0]?.vendor) ? 'vendor' : 'customer';
+    }
+    return list;
+  }, [statementAsc]);
+  const [openGroup, setOpenGroup] = useState<VehicleGroup | null>(null);
 
   // Only one entry form is open at a time: a person with no entries yet is offered both
   // (Add Entry for the customer side, Payment Out for the vendor side), and opening one
@@ -945,6 +1043,44 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     } else if (row.ledger && row.manual) {
       setEditingEntry(row.ledger);
     }
+  }
+
+  // Every entry can be changed or taken out from the vehicle popup: a bill on its own form (deleting it takes its
+  // amount off the ledger too), a typed payment in its edit form. A line the system writes from somewhere else - a
+  // rental's daily wage, a job's payment - follows that record, so it says where to change it instead.
+  const deleteBill = useSupabaseDelete('business_transactions');
+  const lockedReason = (row: HistoryRow) =>
+    (row.vendor ?? row.ledger)?.source_type === 'rental_wage'
+      ? 'This daily rent comes from a rental. Change the rental (who it is rented to, its rate or Returned on) or remove it on the Rent & EMI page, and these lines follow.'
+      : 'This entry was written by another record (a job or a booking). Change that record and this follows.';
+  function editAnyRow(row: HistoryRow) {
+    if (row.tx) router.push(`${basePath}/transactions?type=${row.tx.type}&add=1&edit=${row.tx.id}` as never);
+    else if (row.manual) openRow(row);
+    else showAlert('Changed elsewhere', lockedReason(row));
+  }
+  function deleteAnyRow(row: HistoryRow) {
+    const tx = row.tx;
+    if (tx) {
+      showAlert(
+        `Delete this ${tx.type === 'purchase' ? 'purchase' : tx.type === 'sale' ? 'sale' : 'expense'} bill?`,
+        `NPR ${formatMoney(Number(tx.amount))}${tx.bill_no ? ` · Bill #${tx.bill_no}` : ''}. Its amount comes off the ledger too. This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteBill.mutateAsync(tx.id);
+              } catch (err) {
+                showAlert('Could not delete', getErrorMessage(err));
+              }
+            },
+          },
+        ]
+      );
+    } else if (row.manual) removeRow(row);
+    else showAlert('Changed elsewhere', lockedReason(row));
   }
 
   function removeRow(row: HistoryRow) {
@@ -1040,8 +1176,8 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
       totalCredit: totals.credit,
       closing: totals.closing,
       summary: [
-        ...(totals.hasCustomer ? [{ label: 'Total sales', value: `NPR ${Math.round(sides.billed).toLocaleString()}` }, { label: 'Total payments', value: `NPR ${Math.round(sides.received).toLocaleString()}` }] : []),
-        ...(totals.hasVendor ? [{ label: 'Total purchases', value: `NPR ${Math.round(sides.purchased).toLocaleString()}` }, { label: 'Paid out', value: `NPR ${Math.round(sides.paid).toLocaleString()}` }] : []),
+        ...(totals.hasCustomer ? [{ label: 'Total sales', value: `NPR ${formatMoney(sides.billed)}` }, { label: 'Total payments', value: `NPR ${formatMoney(sides.received)}` }] : []),
+        ...(totals.hasVendor ? [{ label: 'Total purchases', value: `NPR ${formatMoney(sides.purchased)}` }, { label: 'Paid out', value: `NPR ${formatMoney(sides.paid)}` }] : []),
         { label: 'Outstanding balance', value: `${drCrText(totals.closing)} · ${closingWords}` },
       ],
       lines: statementAsc
@@ -1097,12 +1233,12 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // not part of the balance (an Expense) has no figure of its own, so it gets none.
   const balanceNote = (row: HistoryRow) => {
     if (row.info) return null;
-    const left = Math.round(row.balance);
+    const left = round2(row.balance);
     const note =
       left > 0
-        ? { text: `To receive ${left.toLocaleString()}`, color: MONEY.in.text }
+        ? { text: `To receive ${formatMoney(left)}`, color: MONEY.in.text }
         : left < 0
-          ? { text: `To pay ${Math.abs(left).toLocaleString()}`, color: MONEY.out.text }
+          ? { text: `To pay ${formatMoney(Math.abs(left))}`, color: MONEY.out.text }
           : { text: 'Settled 0', color: '#6B7280' };
     return (
       <Text className="mt-0.5 text-[11px] font-semibold" style={{ color: note.color }} numberOfLines={1}>
@@ -1124,7 +1260,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     render: (row) => (
       <View className="items-end">
         <Text className="text-[13px] font-bold" style={{ color: row.amountColor }}>
-          {row.amount.toLocaleString()}
+          {formatMoney(row.amount)}
         </Text>
         {balanceNote(row)}
       </View>
@@ -1194,6 +1330,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         rowKey={(row) => row.key}
         onRowPress={openRow}
         rowPressable={(row) => !!row.tx || row.manual}
+        stickyHeader
       />
     ) : (
       <View>
@@ -1216,7 +1353,7 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
             </View>
             <View className="items-end">
               <Text className="text-sm font-extrabold" style={{ color: row.amountColor }}>
-                NPR {row.amount.toLocaleString()}
+                NPR {formatMoney(row.amount)}
               </Text>
               {balanceNote(row)}
             </View>
@@ -1229,14 +1366,14 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
   // The balance, shown in the name card itself rather than a row of their own: one figure,
   // both of their ledgers netted (as the Ledger list does), worded the way the Ledger
   // words it - "To receive" is money coming to you, "To pay" is money you owe.
-  const netBalance = Math.round(balance - vendorBalance);
+  const netBalance = round2(balance - vendorBalance);
   const words =
     netBalance > 0
       ? { label: 'To receive', color: MONEY.in.text }
       : netBalance < 0
         ? { label: 'To pay', color: MONEY.out.text }
         : { label: 'Balance', color: '#374151' };
-  const summary = <BalanceFigure label={words.label} value={`NPR ${Math.abs(netBalance).toLocaleString()}`} color={words.color} />;
+  const summary = <BalanceFigure label={words.label} value={`NPR ${formatMoney(Math.abs(netBalance))}`} color={words.color} />;
 
   return (
     <>
@@ -1258,8 +1395,32 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
           <AddVendorEntryForm vendorId={id} ownerId={userId} onDone={() => setShowAddVendorEntry(false)} />
         )}
 
-        {historyView}
+        {vehicleGroups && vehicleGroups.length > 0 ? (
+          <VehicleTable groups={vehicleGroups} full={tableMode} onOpen={setOpenGroup} />
+        ) : (
+          historyView
+        )}
       </KeyboardAwareScrollView>
+      {openGroup && (
+        <PopupCard title={openGroup.name} onClose={() => setOpenGroup(null)} maxWidth={1180} closeOnOutside>
+          <VehicleEntries
+            group={openGroup}
+            full={tableMode}
+            onEditRow={(r) => {
+              setOpenGroup(null);
+              editAnyRow(r);
+            }}
+            onDeleteRow={(r) => {
+              setOpenGroup(null);
+              deleteAnyRow(r);
+            }}
+            onOpenRow={(r) => {
+              setOpenGroup(null);
+              openRow(r);
+            }}
+          />
+        </PopupCard>
+      )}
       {/* Editing an entry: the form shows itself as a popup (see EntryShell). Keyed on the
           entry so reopening another one starts from its own values. */}
       {editingEntry && (
@@ -1292,5 +1453,257 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
         editOnPage
       />
     </>
+  );
+}
+
+interface VehicleGroup {
+  key: string;
+  /** The vehicle; or, for an entry that names none, what the entry is. */
+  name: string;
+  side?: 'vendor' | 'customer';
+  /** What it was bought / sold for (the bills), and what was owed without a bill. */
+  billed: number;
+  /** Money paid out: to the vendor, or back to the customer. */
+  paid: number;
+  received: number;
+  lastDay: string;
+  refs: string[];
+  /** Its entries, oldest first, and what each put on this vehicle. */
+  rows: HistoryRow[];
+  parts: Map<string, VehiclePart>;
+}
+
+interface VehiclePart {
+  billed: number;
+  paid: number;
+  received: number;
+}
+
+/** A vehicle account's ledger page: one line per vehicle, in the Ledger table's columns. */
+function VehicleTable({ groups, full, onOpen }: { groups: VehicleGroup[]; full: boolean; onOpen: (g: VehicleGroup) => void }) {
+  // What is left on the line, as the Ledger reads it: to pay a vendor, to receive from a customer.
+  const net = (g: VehicleGroup) => (g.side === 'vendor' ? round2(g.billed - g.paid + g.received) : round2(g.billed + g.paid - g.received));
+  const payable = (g: VehicleGroup) => {
+    const n = net(g);
+    return g.side === 'vendor' ? Math.max(0, n) : Math.max(0, -n);
+  };
+  const receivable = (g: VehicleGroup) => {
+    const n = net(g);
+    return g.side === 'vendor' ? Math.max(0, -n) : Math.max(0, n);
+  };
+  const fig = (v: number, color: string, bold = true) =>
+    v ? (
+      <Text className={`text-[12.5px] ${bold ? 'font-bold' : 'font-medium'}`} style={{ color }} numberOfLines={1}>
+        {formatMoney(v)}
+      </Text>
+    ) : (
+      <Text className="text-[12.5px] text-gray-300">—</Text>
+    );
+  const sum = (f: (g: VehicleGroup) => number) => round2(groups.reduce((s, g) => s + f(g), 0));
+  const columns: BookColumn<VehicleGroup>[] = full
+    ? [
+        { key: 'sn', label: 'SN', width: 52, render: (_g, i) => <Text className="text-[12.5px] text-gray-500">{i + 1}</Text> },
+        { key: 'vehicle', label: 'Vehicle', render: (g) => <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>{g.name}</Text> },
+        {
+          // The last date, with the line's reference numbers under it.
+          key: 'last',
+          label: 'Last Transaction',
+          width: 180,
+          render: (g) => (
+            <View style={{ minWidth: 0 }}>
+              <Text className="text-[12.5px] text-gray-700">{g.lastDay ? toBsHistoryLabel(g.lastDay) : '—'}</Text>
+              {g.refs.length > 0 && (
+                <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+                  {`Ref ${g.refs.join(', ')}`}
+                </Text>
+              )}
+            </View>
+          ),
+        },
+        { key: 'balance', label: 'Balance', width: 120, align: 'right', render: (g) => fig(g.billed, '#111827') },
+        { key: 'paid', label: 'Total Paid', width: 110, align: 'right', render: (g) => fig(g.paid, MONEY.out.text) },
+        { key: 'received', label: 'Total Received', width: 120, align: 'right', render: (g) => fig(g.received, MONEY.in.text) },
+        { key: 'payable', label: 'Payable', width: 110, align: 'right', render: (g) => fig(payable(g), MONEY.out.text) },
+        { key: 'receivable', label: 'Receivable', width: 110, align: 'right', render: (g) => fig(receivable(g), MONEY.in.text) },
+      ]
+    : [
+        {
+          key: 'vehicle',
+          label: 'Vehicle',
+          render: (g) => (
+            <View style={{ minWidth: 0, gap: 2 }}>
+              <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>{g.name}</Text>
+              <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+                {[g.billed ? `Balance ${formatMoney(g.billed)}` : null, g.paid ? `Paid ${formatMoney(g.paid)}` : null, g.received ? `Received ${formatMoney(g.received)}` : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </View>
+          ),
+        },
+        {
+          key: 'left',
+          label: 'Left',
+          width: 120,
+          align: 'right',
+          render: (g) => (payable(g) ? fig(payable(g), MONEY.out.text) : fig(receivable(g), MONEY.in.text)),
+        },
+      ];
+  return (
+    <BookTable
+      columns={columns}
+      rows={groups}
+      rowKey={(g) => g.key}
+      onRowPress={onOpen}
+      stickyHeader
+      footer={{
+        label: `${groups.length} ${groups.length === 1 ? 'line' : 'lines'} · Total`,
+        cells: full
+          ? {
+              balance: fig(sum((g) => g.billed), '#111827'),
+              paid: fig(sum((g) => g.paid), MONEY.out.text),
+              received: fig(sum((g) => g.received), MONEY.in.text),
+              payable: fig(sum(payable), MONEY.out.text),
+              receivable: fig(sum(receivable), MONEY.in.text),
+            }
+          : (() => {
+              const left = round2(sum(payable) - sum(receivable));
+              return { left: fig(Math.abs(left), left >= 0 ? MONEY.out.text : MONEY.in.text) };
+            })(),
+      }}
+    />
+  );
+}
+
+/** A vehicle's entries, oldest first, in the vehicle table's columns: what each put on it, and what is left on the
+ * vehicle after it. An entry opens as it does everywhere (a bill's detail, a payment's edit form). */
+function VehicleEntries({
+  group,
+  full,
+  onOpenRow,
+  onEditRow,
+  onDeleteRow,
+}: {
+  group: VehicleGroup;
+  full: boolean;
+  onOpenRow: (r: HistoryRow) => void;
+  onEditRow: (r: HistoryRow) => void;
+  onDeleteRow: (r: HistoryRow) => void;
+}) {
+  const vendor = group.side === 'vendor';
+  let running = 0;
+  // Oldest first (the bills were gathered before the payments), so "left" runs as the money came.
+  const ordered = [...group.rows].sort((a, b) => a.day.localeCompare(b.day) || a.createdAt.localeCompare(b.createdAt));
+  const lines = ordered.map((r) => {
+    const part = group.parts.get(r.key) ?? { billed: 0, paid: 0, received: 0 };
+    running = round2(running + (vendor ? part.billed - part.paid + part.received : part.billed + part.paid - part.received));
+    return {
+      row: r,
+      part,
+      payable: vendor ? Math.max(0, running) : Math.max(0, -running),
+      receivable: vendor ? Math.max(0, -running) : Math.max(0, running),
+    };
+  });
+  type Line = (typeof lines)[number];
+  const fig = (v: number, color: string) =>
+    v ? (
+      <Text className="text-[12.5px] font-bold" style={{ color }} numberOfLines={1}>
+        {formatMoney(v)}
+      </Text>
+    ) : (
+      <Text className="text-[12.5px] text-gray-300">—</Text>
+    );
+  const details = (l: Line) => (
+    <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+      {l.row.label}
+      {!!l.row.detail && <Text className="font-normal text-gray-500">{` · ${l.row.detail}`}</Text>}
+    </Text>
+  );
+  // Edit and Delete on every entry.
+  const actions: BookColumn<Line> = {
+    key: 'actions',
+    label: '',
+    width: 76,
+    align: 'right',
+    render: (l) => (
+      <View className="flex-row items-center justify-end" style={{ gap: 12 }}>
+        <Pressable onPress={() => onEditRow(l.row)} hitSlop={6} accessibilityLabel="Edit entry">
+          <Ionicons name="create-outline" size={16} color="#2563EB" />
+        </Pressable>
+        <Pressable onPress={() => onDeleteRow(l.row)} hitSlop={6} accessibilityLabel="Delete entry">
+          <Ionicons name="trash-outline" size={16} color="#DC2626" />
+        </Pressable>
+      </View>
+    ),
+  };
+  const last = lines[lines.length - 1];
+  const sum = (f: (l: Line) => number) => round2(lines.reduce((s, l) => s + f(l), 0));
+  const columns: BookColumn<Line>[] = full
+    ? [
+        { key: 'sn', label: 'SN', width: 52, render: (_l, i) => <Text className="text-[12.5px] text-gray-500">{i + 1}</Text> },
+        { key: 'details', label: 'Details', render: details },
+        {
+          // The date, with the entry's number under it.
+          key: 'date',
+          label: 'Date',
+          width: 150,
+          render: (l) => (
+            <View style={{ minWidth: 0 }}>
+              <Text className="text-[12.5px] text-gray-700">{l.row.dateLabel}</Text>
+              {!!l.row.reference && <Text className="text-[11px] text-gray-400">{`Ref ${l.row.reference}`}</Text>}
+            </View>
+          ),
+        },
+        { key: 'balance', label: 'Balance', width: 120, align: 'right', render: (l) => fig(l.part.billed, '#111827') },
+        { key: 'paid', label: 'Total Paid', width: 110, align: 'right', render: (l) => fig(l.part.paid, MONEY.out.text) },
+        { key: 'received', label: 'Total Received', width: 120, align: 'right', render: (l) => fig(l.part.received, MONEY.in.text) },
+        { key: 'payable', label: 'Payable', width: 110, align: 'right', render: (l) => fig(l.payable, MONEY.out.text) },
+        { key: 'receivable', label: 'Receivable', width: 110, align: 'right', render: (l) => fig(l.receivable, MONEY.in.text) },
+        actions,
+      ]
+    : [
+        {
+          key: 'details',
+          label: 'Details',
+          render: (l) => (
+            <View style={{ minWidth: 0, gap: 2 }}>
+              {details(l)}
+              <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+                {[l.row.dateLabel, l.row.reference || null].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          ),
+        },
+        {
+          key: 'amount',
+          label: 'Amount',
+          width: 110,
+          align: 'right',
+          render: (l) => fig(l.part.billed || l.part.paid || l.part.received, l.part.billed ? '#111827' : l.part.paid ? MONEY.out.text : MONEY.in.text),
+        },
+        { key: 'left', label: 'Left', width: 110, align: 'right', render: (l) => (l.payable ? fig(l.payable, MONEY.out.text) : fig(l.receivable, MONEY.in.text)) },
+        actions,
+      ];
+  return (
+    <BookTable
+      columns={columns}
+      rows={lines}
+      rowKey={(l) => l.row.key}
+      onRowPress={(l) => onOpenRow(l.row)}
+      stickyHeader
+      rowPressable={(l) => !!l.row.tx || l.row.manual}
+      footer={{
+        label: `${lines.length} ${lines.length === 1 ? 'entry' : 'entries'} · Total`,
+        cells: full
+          ? {
+              balance: fig(sum((l) => l.part.billed), '#111827'),
+              paid: fig(sum((l) => l.part.paid), MONEY.out.text),
+              received: fig(sum((l) => l.part.received), MONEY.in.text),
+              payable: fig(last?.payable ?? 0, MONEY.out.text),
+              receivable: fig(last?.receivable ?? 0, MONEY.in.text),
+            }
+          : { left: last?.payable ? fig(last.payable, MONEY.out.text) : fig(last?.receivable ?? 0, MONEY.in.text) },
+      }}
+    />
   );
 }

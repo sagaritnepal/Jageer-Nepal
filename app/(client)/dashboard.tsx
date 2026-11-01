@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
-import { CategoryGrid } from '../../lib/components/CategoryGrid';
+import { CategoryGrid, categoryColumnsFor } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
 import { SaveContactButton } from '../../lib/components/SaveContactButton';
@@ -33,9 +33,9 @@ export default function ClientDashboard() {
   const { width: screenWidth } = useWindowDimensions();
   const isWideWeb = Platform.OS === 'web' && screenWidth >= WEB_SIDEBAR_MIN_WIDTH;
   // Width of the wide layout's main column, so the category grid can add
-  // columns as the page gets wider (8 is what fits the narrowest wide page).
+  // columns as the page gets wider (6 to 10, see categoryColumnsFor).
   const [mainColumnWidth, setMainColumnWidth] = useState(0);
-  const categoryColumns = Math.min(12, Math.max(8, Math.floor(mainColumnWidth / 92)));
+  const categoryColumns = categoryColumnsFor(mainColumnWidth);
 
   const { data: resellers } = useSupabaseQuery('profiles', { filters: { role: 'reseller' } });
   const { data: myRequests } = useSupabaseQuery('service_requests', {

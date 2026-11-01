@@ -41,11 +41,14 @@ export function CategoryBadge({
     visualKey ?? matched?.visual_key
   );
 
+  // 16px corners (rounded-2xl) on the usual small badge; a big one (the services grid) rounds in proportion.
+  const radius = Math.max(16, Math.round(size * 0.29));
+
   if (image) {
     return (
       <Image
         source={image}
-        style={{ width: size, height: size, borderRadius: 16 }}
+        style={{ width: size, height: size, borderRadius: radius }}
         resizeMode="cover"
       />
     );
@@ -54,7 +57,7 @@ export function CategoryBadge({
   return (
     <View
       className={`items-center justify-center rounded-2xl ${bg}`}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, borderRadius: radius }}
     >
       {icon ? (
         <Ionicons name={icon} size={Math.round(size * 0.45)} color="white" />

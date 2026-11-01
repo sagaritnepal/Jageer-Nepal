@@ -4,10 +4,11 @@
 // customer's details and ledger entries): a small titled card, fields side by
 // side that wrap on a narrow screen, and Cancel / Save on the right.
 import { type ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Text } from './CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
+import { readKey } from '../../utils/webKeys';
 
 export const INPUT = 'rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900';
 
@@ -137,6 +138,7 @@ export function PopupCard({
   maxWidth = 560,
   headerRight,
   closeOnOutside = false,
+  hideClose = false,
   children,
 }: {
   title: string;
@@ -144,6 +146,8 @@ export function PopupCard({
   maxWidth?: number;
   /** Buttons in the blue bar, left of the close button - so they take no room from the form below. */
   headerRight?: ReactNode;
+  /** No cross in the blue bar: the popup is answered with its own buttons (Esc still closes it). */
+  hideClose?: boolean;
   /** A click on the dimmed area closes the card - for one with nothing typed in it. */
   closeOnOutside?: boolean;
   children: ReactNode;
@@ -166,9 +170,11 @@ export function PopupCard({
                 {title}
               </Text>
               {headerRight}
-              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </Pressable>
+              {!hideClose && (
+                <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+                  <Ionicons name="close" size={22} color="#FFFFFF" />
+                </Pressable>
+              )}
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 14 }}>
               {children}
@@ -177,5 +183,52 @@ export function PopupCard({
         </View>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+/** Fixing the name of a customer, vendor or payee, from the page it is picked on - a popup over the page,
+ * the same one on every page (the name card behind it stays as it is). Enter saves, Esc closes. */
+export function RenamePartyPopup({
+  title,
+  value,
+  onChange,
+  onSave,
+  onClose,
+  saving,
+}: {
+  title: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+  saving?: boolean;
+}) {
+  return (
+    <PopupCard title={title} onClose={onClose} maxWidth={460}>
+      {/* In a row, as the ledger's Edit popup has it: a Field's width setting is a height in a column. */}
+      <FieldRow>
+        <Field label="Name" basis={240}>
+          <TextInput
+            value={value}
+            onChangeText={onChange}
+            autoFocus
+            placeholder="Name"
+            placeholderTextColor="#9CA3AF"
+            onKeyPress={(e) => {
+              const k = readKey(e);
+              if (k.key === 'Enter') {
+                k.prevent();
+                onSave();
+              } else if (k.key === 'Escape') {
+                k.prevent();
+                onClose();
+              }
+            }}
+            className={INPUT}
+          />
+        </Field>
+      </FieldRow>
+      <FormActions onCancel={onClose} onSave={onSave} saving={saving} />
+    </PopupCard>
   );
 }

@@ -8,11 +8,12 @@ import { supabase } from '../../supabase';
 import { useSupabaseQuery } from '../../hooks/useSupabase';
 import { DateField } from '../DateTimeFields';
 import { Field, FieldRow, FormActions, INPUT } from './FormKit';
-import { SuggestInput } from './SuggestInput';
+import { SuggestInput, type SuggestOption } from './SuggestInput';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { localTodayIso } from '../../utils/localDate';
 import { journalNote, newJournalCode } from '../../utils/journalVoucher';
 import { tidyName } from '../../utils/nameCaps';
+import { formatMoney } from '../../utils/money';
 
 type Person = { id: string; name: string };
 type Side = 'debit' | 'credit';
@@ -38,7 +39,7 @@ async function hasEntries(table: 'customer_ledger_entries' | 'vendor_ledger_entr
   return (count ?? 0) > 0;
 }
 
-const money = (n: number) => `NPR ${Math.round(n * 100) / 100 === Math.round(n) ? Math.round(n).toLocaleString() : (Math.round(n * 100) / 100).toLocaleString()}`;
+const money = (n: number) => `NPR ${formatMoney(n)}`;
 
 /** The Journal voucher form: any number of Debit lines and Credit lines that add up to the same total.
  * A line is a person's ledger (either side) or an expense head (debit only, e.g. Salary Expenses
@@ -79,7 +80,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
   });
 
   // One search over both: people (either side) and expense heads (debit only).
-  const accountOptions = (text: string, side: Side) => {
+  const accountOptions = (text: string, side: Side): SuggestOption[] => {
     const q = text.trim().toLowerCase();
     const match = (name: string) => !q || name.toLowerCase().includes(q);
     const persons = (people ?? []).filter((c) => match(c.name)).map((c) => ({ key: `p:${c.id}`, label: c.name, hint: 'Person' }));
@@ -91,11 +92,11 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
     const adds =
       typed && !exact
         ? [
-            ...(side === 'debit' ? [{ key: 'new-h', label: typed, add: 'expense head' }] : []),
-            { key: 'new-p', label: typed, add: 'ledger' },
+            ...(side === 'debit' ? [{ key: 'new-h', label: `Add "${typed}" as new expense head`, kind: 'add' as const }] : []),
+            { key: 'new-p', label: `Add "${typed}" as new ledger (person)`, kind: 'add' as const },
           ]
         : [];
-    return [...heads, ...persons].slice(0, 14).concat(adds);
+    return [...[...heads, ...persons].slice(0, 14), ...adds];
   };
   const pick = async (key: number, optionKey: string, label: string) => {
     if (optionKey === 'new-p' || optionKey === 'new-h') {
@@ -262,7 +263,7 @@ export function JournalVoucherForm({ ownerId, onDone }: { ownerId: string; onDon
             // typing again drops the earlier pick, so a stale person is never posted under a new name
             onChangeText={(v) => patch(l.key, { head: v, person: null, kind: 'expense', confirmed: false })}
             options={accountOptions(l.head, l.side)}
-            onSelectOption={(o) => pick(l.key, o.key, o.label)}
+            onSelectOption={(o) => pick(l.key, o.key, o.key.startsWith('new-') ? l.head.trim() : o.label)}
             inputRef={(el) => nameRefs.current.set(l.key, el)}
             onKeyPress={(e) => {
               const k = readKey(e);
