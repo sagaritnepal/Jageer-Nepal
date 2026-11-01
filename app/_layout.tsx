@@ -16,6 +16,7 @@ import { ClientAssistantChat } from '../lib/components/ClientAssistantChat';
 import { AppAlertHost } from '../lib/components/AppAlertHost';
 import { CancelWorkHost } from '../lib/components/CancelWorkHost';
 import { PushTapHandler } from '../lib/components/PushTapHandler';
+import { UpdateBanner } from '../lib/components/UpdateBanner';
 import { installWebAppManifest } from '../lib/utils/webAppManifest';
 import '../global.css';
 
@@ -144,6 +145,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     <>
       {content}
       <PushTapHandler />
+      <UpdateBanner />
       {showFinanceAssistant && <FloatingAssistantChat basePath={`/(${role})`} />}
       {showClientAssistant && <ClientAssistantChat basePath="/(client)" />}
     </>
