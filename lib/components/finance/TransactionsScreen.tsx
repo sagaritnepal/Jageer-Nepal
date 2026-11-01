@@ -1055,8 +1055,15 @@ function TransactionForm({
     if (saving) return;
     if (isBill) {
       const validItems = items.filter(isSavableItem);
-      if (validItems.length === 0) {
-        showAlert('Add at least one item', 'Enter a description, quantity, and rate for at least one item.');
+      // A sale for a service alone (an installation or repair with no parts sold, the usual bill made from
+      // a job) has no items - its service charges are what is billed - so it saves without one.
+      if (validItems.length === 0 && installationAmount <= 0) {
+        showAlert(
+          type === 'sale' ? 'Add an item or a service' : 'Add at least one item',
+          type === 'sale'
+            ? 'Enter an item (description, quantity and rate), or a service with its amount.'
+            : 'Enter a description, quantity, and rate for at least one item.'
+        );
         return;
       }
       if (grandTotal <= 0) {
@@ -1074,7 +1081,7 @@ function TransactionForm({
         title: `${initial ? 'Save changes to this' : 'Save this'} ${TYPE_META[type].label.toLowerCase()}?`,
         rows: [
           { label: type === 'purchase' ? 'Vendor' : 'Customer', value: partyName.trim() },
-          { label: 'Items', value: String(validItems.length) },
+          ...(validItems.length > 0 ? [{ label: 'Items', value: String(validItems.length) }] : []),
           ...(billNo.trim() ? [{ label: 'Bill no.', value: billNo.trim() }] : []),
           ...(discountAmount > 0 ? [{ label: 'Discount', value: `− NPR ${discountAmount.toLocaleString()}` }] : []),
           ...(vatAmount > 0 ? [{ label: 'VAT', value: `+ NPR ${vatAmount.toLocaleString()}` }] : []),
