@@ -1,0 +1,120 @@
+# Builds the Android APK on GitHub (no Expo / EAS servers) and publishes it as a GitHub Release.
+#
+# The native project is NOT in the repo (/android and /ios are git-ignored): `expo prebuild` generates it
+# from app.json on every run, and Gradle turns it into an APK. app.json stays the single source of truth
+# for the package id, permissions and plugins.
+#
+# Secrets to add in GitHub (Settings > Secrets and variables > Actions):
+#   EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, ANDROID_KEYSTORE_BASE64
+#
+# The keystore signs every APK. Keep it forever: a build signed with a different one cannot be installed
+# over the app already on a phone - the phone must uninstall first.
+#
+# versionCode = 100 + the run number of THIS workflow, so it only ever goes up. Do not rename this file or
+# delete and re-create it: the run number would start again from 1.
+
+name: Build Android APK
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - 'supabase/**'
+      - 'finance-port/**'
+      - '**/*.md'
+      - '.impeccable/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: '1'
+      # Read by the app at bundle time (lib/supabase.ts). Without them the APK would crash on launch.
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets are set
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          missing=0
+          for name in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then echo "::error::Secret $name is not set"; missing=1; fi
+          done
+          if [ -z "$KEYSTORE" ]; then echo "::error::Secret ANDROID_KEYSTORE_BASE64 is not set"; missing=1; fi
+          exit $missing
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Work out the version
+        id: version
+        run: |
+          CODE=$((100 + GITHUB_RUN_NUMBER))
+          NAME="1.0.$CODE"
+          CODE="$CODE" NAME="$NAME" node -e '
+            const fs = require("fs");
+            const app = JSON.parse(fs.readFileSync("app.json", "utf8"));
+            app.expo.version = process.env.NAME;
+            app.expo.android = { ...app.expo.android, versionCode: Number(process.env.CODE) };
+            fs.writeFileSync("app.json", JSON.stringify(app, null, 2) + "\n");
+          '
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Building $NAME (versionCode $CODE)"
+
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      # Expo's generated release build signs with android/app/debug.keystore (alias androiddebugkey,
+      # password android), so putting our keystore at that path is all it takes.
+      - name: Restore the signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/debug.keystore
+
+      - name: Build the release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Show the signing certificate
+        continue-on-error: true
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          ls -lh "$APK"
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+          "$APKSIGNER" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)"
+
+      - name: Publish the APK as a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.code }}
+          target_commitish: ${{ github.sha }}
+          name: Jageer ${{ steps.version.outputs.name }}
+          files: android/app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: true
+          make_latest: true
