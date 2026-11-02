@@ -207,6 +207,15 @@ export default function ResellerLayout() {
           }}
         />
         <Tabs.Screen name="request/[id]" options={{ href: null, title: 'Service Request' }} />
+        {/* Requests > View details. Its own screen, with a back arrow, so Back returns to the Requests list. */}
+        <Tabs.Screen
+          name="requests/board"
+          options={{
+            href: null,
+            title: 'Who is carrying what',
+            header: ({ options }) => <PortalHeaderBar title={options.title} backTo="/(reseller)/requests" showNotifications />,
+          }}
+        />
         <Tabs.Screen name="new-request" options={{ href: null, title: 'Request a technician' }} />
         <Tabs.Screen name="request-details" options={{ href: null, title: 'Service details' }} />
         <Tabs.Screen name="edit-request" options={{ href: null, title: 'Edit request' }} />

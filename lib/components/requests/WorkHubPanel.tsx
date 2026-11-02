@@ -1056,11 +1056,14 @@ export function WorkHubPanel({
   wide,
   stage,
   jobs,
+  boardOnly = false,
 }: {
   wide: boolean;
   stage: keyof typeof STAGE_COPY;
   /** This stage's jobs. */
   jobs: ServiceRequest[];
+  /** Show the board - the requests/board screen - instead of the stage's list. */
+  boardOnly?: boolean;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const businessName = useAuthStore((state) => state.profile?.business_name);
@@ -1083,8 +1086,13 @@ export function WorkHubPanel({
   // One short row per job (default on a wide screen) so many jobs fit at once; off shows the full cards.
   const [dense, setDense] = useState(true);
   // The sheet answers "what is on today"; the board answers "who is
-  // carrying it". Opening on the lighter of the two.
-  const [view, setView] = useState<'sheet' | 'board'>('sheet');
+  // carrying it". The board is a screen of its own (requests/board), not a
+  // switch inside this one: a switch adds nothing to the history, so the
+  // device's Back button skipped past the list to whatever page came before
+  // Requests (usually Services).
+  const view: 'sheet' | 'board' = boardOnly ? 'board' : 'sheet';
+  const openBoard = () => router.push('/(reseller)/requests/board' as any);
+  const closeBoard = () => (router.canGoBack() ? router.back() : router.replace('/(reseller)/requests' as any));
   // Beside the sidebar a "wide" page can still leave this panel a narrow column.
   const [boxWidth, setBoxWidth] = useState(0);
   const headerInRow = wide && !(boxWidth > 0 && boxWidth < 760);
@@ -1495,7 +1503,7 @@ export function WorkHubPanel({
 
         {view === 'board' && (
           <Pressable
-            onPress={() => setView('sheet')}
+            onPress={closeBoard}
             className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
           >
             <Ionicons name="list-outline" size={15} color="#374151" />
@@ -1599,7 +1607,7 @@ export function WorkHubPanel({
       />
 
       <Pressable
-        onPress={() => setView('board')}
+        onPress={openBoard}
         className="flex-row items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white py-3.5"
       >
         <Ionicons name="grid-outline" size={17} color={BLUE} />

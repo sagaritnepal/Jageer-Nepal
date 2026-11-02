@@ -25,7 +25,7 @@ export const ROLE_ROUTES: Record<UserRole, string[]> = {
   reseller: [
     'bank-accounts', 'bank-balances', 'checkout', 'company', 'customers', 'dashboard', 'daybook', 'edit-request',
     'employees', 'expense-report', 'finance', 'import-statement', 'inventory', 'new-request', 'notifications', 'paid', 'profile',
-    'purchase-report', 'quick-payment', 'quotation/new', 'received', 'report', 'request-details', 'requests', 'rewards',
+    'purchase-report', 'quick-payment', 'quotation/new', 'received', 'report', 'request-details', 'requests', 'requests/board', 'rewards',
     'sales-report', 'shop', 'to-give', 'to-receive',
     'transactions', 'wholesale',
   ],
