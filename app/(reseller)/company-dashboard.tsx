@@ -19,6 +19,7 @@ import { useRequestsStageStore } from '../../lib/hooks/useRequestsStage';
 import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
 import { adStringToBs, bsToAdString, bsDaysInMonth, numericDateLabel, BS_MONTHS } from '../../lib/utils/nepaliDate';
 import { localTodayIso } from '../../lib/utils/localDate';
+import { newJobHref } from '../../lib/utils/newJobHref';
 import { supabase } from '../../lib/supabase';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { CARD_SHADOW, RecentActivityCard } from '../../lib/components/finance/dashboard/FinanceDashboard';
@@ -943,7 +944,7 @@ export default function CompanyDashboard() {
           { label: 'New purchase', icon: 'cart' as const, path: '/(reseller)/transactions?type=purchase&add=1' },
           { label: 'Received', icon: 'arrow-down-circle' as const, path: '/(reseller)/quick-payment?type=in' },
           { label: 'Payment out', icon: 'arrow-up-circle' as const, path: '/(reseller)/quick-payment?type=out' },
-          { label: 'New job', icon: 'add-circle' as const, path: '/(reseller)/new-request?from=requests' },
+          { label: 'New job', icon: 'add-circle' as const, path: newJobHref() },
           { label: 'Ledger', icon: 'people' as const, path: '/(reseller)/customers' },
           { label: 'Day book', icon: 'book' as const, path: '/(reseller)/daybook' },
           { label: 'My team', icon: 'construct' as const, path: '/(reseller)/employees' },

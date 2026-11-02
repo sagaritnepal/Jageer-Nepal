@@ -1,0 +1,8 @@
+// lib/utils/newJobHref.ts
+
+/** The reseller's "new job" form. It opens with no service chosen - the service is picked inside the form (see
+ * ServicePickerModal) - so there is no page of services in front of it. A fresh `n` gives each opening a clean form,
+ * and `from` is the tab to land back on when the job is saved or cancelled (see returnPathOr). */
+export function newJobHref(from = 'requests'): string {
+  return `/(reseller)/request-details?n=${Date.now()}&from=${encodeURIComponent(from)}`;
+}

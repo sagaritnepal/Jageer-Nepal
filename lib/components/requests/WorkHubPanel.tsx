@@ -17,6 +17,7 @@ import { assignTechnician, showJobSentAlert } from '../../utils/assignTechnician
 import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
 import { canDeleteJob, useDeleteJob } from '../../hooks/useDeleteJob';
 import { useBackStep } from '../../hooks/useBackStep';
+import { newJobHref } from '../../utils/newJobHref';
 import { canMarkJobDone, useMarkJobDone } from '../../hooks/useMarkJobDone';
 import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
@@ -1469,7 +1470,7 @@ export function WorkHubPanel({
         )}
 
         <Pressable
-          onPress={() => router.push('/(reseller)/new-request?from=requests' as any)}
+          onPress={() => router.push(newJobHref() as any)}
           className="h-9 flex-row items-center gap-1.5 rounded-lg px-3"
           style={{ backgroundColor: BLUE }}
         >

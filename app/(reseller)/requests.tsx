@@ -15,6 +15,7 @@ import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { ChalanPhotos } from '../../lib/components/ChalanPhotos';
 import { WorkHubPanel } from '../../lib/components/requests/WorkHubPanel';
+import { newJobHref } from '../../lib/utils/newJobHref';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { ticketLabel } from '../../lib/utils/ticket';
@@ -1211,7 +1212,7 @@ export default function ResellerRequestQueue() {
             {SIDE_STAGES.map(sidePill)}
           </View>
           <Pressable
-            onPress={() => router.push('/(reseller)/new-request?from=requests')}
+            onPress={() => router.push(newJobHref() as any)}
             className="flex-row items-center gap-1.5 rounded-lg bg-orange-500 px-4"
             style={{ height: 38 }}
           >
@@ -1324,7 +1325,7 @@ export default function ResellerRequestQueue() {
       )}
 
       <Pressable
-        onPress={() => router.push('/(reseller)/new-request?from=requests')}
+        onPress={() => router.push(newJobHref() as any)}
         className="absolute bottom-6 right-6 h-14 w-14 items-center justify-center rounded-full bg-orange-500 shadow-lg"
         style={{ elevation: 4, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
       >
