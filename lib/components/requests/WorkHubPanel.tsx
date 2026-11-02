@@ -1084,8 +1084,6 @@ export function WorkHubPanel({
   }
   const [sending, setSending] = useState(false);
   const [maximised, setMaximised] = useState(false);
-  // One short row per job (default on a wide screen) so many jobs fit at once; off shows the full cards.
-  const [dense, setDense] = useState(true);
   // The sheet answers "what is on today"; the board answers "who is
   // carrying it". The board is a screen of its own (requests/board), not a
   // switch inside this one: a switch adds nothing to the history, so the
@@ -1094,8 +1092,7 @@ export function WorkHubPanel({
   const view: 'sheet' | 'board' = boardOnly ? 'board' : 'sheet';
   const openBoard = () => router.push('/(reseller)/requests/board' as any);
   const closeBoard = () => (router.canGoBack() ? router.back() : router.replace('/(reseller)/requests' as any));
-  // These two are settings of this page, not pages: Back undoes them before it leaves.
-  useBackStep(wide && !dense, () => setDense(true));
+  // Full screen is a setting of this page, not a page: Back closes it before it leaves.
   useBackStep(maximised, () => setMaximised(false));
   // Beside the sidebar a "wide" page can still leave this panel a narrow column.
   const [boxWidth, setBoxWidth] = useState(0);
@@ -1452,12 +1449,12 @@ export function WorkHubPanel({
       <View className="flex-row flex-wrap items-center" style={{ gap: 10 }}>
         {view === 'sheet' && wide && (
           <Pressable
-            onPress={() => setDense((v) => !v)}
+            onPress={openBoard}
             className="h-9 flex-row items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3"
-            accessibilityLabel={dense ? 'Show detailed cards' : 'Show compact rows'}
+            accessibilityLabel="Detailed: who is carrying what"
           >
-            <Ionicons name={dense ? 'albums-outline' : 'reorder-three-outline'} size={15} color="#374151" />
-            <Text className="text-[12.5px] font-semibold text-gray-700">{dense ? 'Detailed' : 'Compact'}</Text>
+            <Ionicons name="grid-outline" size={15} color="#374151" />
+            <Text className="text-[12.5px] font-semibold text-gray-700">Detailed</Text>
           </Pressable>
         )}
         {view === 'sheet' && (
@@ -1548,7 +1545,7 @@ export function WorkHubPanel({
         onOpenToTeam={setOpenToTeam}
         busyId={cancellingId ?? deletingId ?? doingId ?? busyId}
         wide={wide}
-        dense={dense}
+        dense
         emptyText={STAGE_COPY[stage].empty}
       />
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
@@ -1590,7 +1587,7 @@ export function WorkHubPanel({
               busyId={cancellingId ?? deletingId ?? doingId ?? busyId}
               wide={wide}
               expanded
-              dense={dense}
+              dense
               emptyText={STAGE_COPY[stage].empty}
             />
           </ScrollView>
