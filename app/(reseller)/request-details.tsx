@@ -1,5 +1,5 @@
 // app/(reseller)/request-details.tsx
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useSupabaseInsert, useSupabaseQuery, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
+import { useSupabaseInsert, useSupabaseQuery, useSupabaseRow, useSupabaseUpdate } from '../../lib/hooks/useSupabase';
 import { supabase } from '../../lib/supabase';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
+import { RequestPhotos } from '../../lib/components/RequestDetailsExtras';
+import { ticketLabel } from '../../lib/utils/ticket';
 import { DateField, TimeField } from '../../lib/components/DateTimeFields';
 import { ToggleSwitch } from '../../lib/components/ToggleSwitch';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
@@ -47,11 +49,22 @@ export default function ResellerRequestDetailsScreen() {
 }
 
 function ResellerRequestDetails() {
-  const { category: presetCategory, action: presetAction, from } = useLocalSearchParams<{
+  const { category: presetCategory, action: presetAction, from, edit: editId } = useLocalSearchParams<{
     category?: string;
     action?: string;
     from?: string;
+    edit?: string;
   }>();
+  // With `edit` set this is the same form opened on an existing job: filled in with what the job has, and
+  // saving writes back to that one job. It never touches the saved customer (Ledger) the job is linked to -
+  // that record can be shared with other jobs, and renaming it here would rename them all.
+  const { data: editRequest, isLoading: loadingEdit } = useSupabaseRow('service_requests', editId);
+  const updateRequest = useSupabaseUpdate('service_requests');
+  const [hydrated, setHydrated] = useState(!editId);
+  // The service the job had when it opened - issue_type is only rewritten if it is changed.
+  const initialService = useRef<{ category: string; action: string } | null>(null);
+  // Photos already on the job: kept as they are, new ones are added after them.
+  const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
   // A "new job" button opens this form with nothing chosen; the service is picked here (see ServiceDropdown).
   // A service tile on the Services page opens it with the service already set.
   const [service, setService] = useState<{ category: string; action: string } | null>(
@@ -100,6 +113,33 @@ function ResellerRequestDetails() {
   // double tap could otherwise create the same job twice.
   const submittingRef = useRef(false);
   const [registeringCustomer, setRegisteringCustomer] = useState(false);
+
+  // Fills the form once the job loads - only once, so a refetch never clobbers what is being typed.
+  useEffect(() => {
+    if (!editRequest || hydrated) return;
+    // issue_type is "Category - Action"; the action is the last part.
+    const issue = editRequest.issue_type ?? '';
+    const cut = issue.lastIndexOf(' - ');
+    const jobService = cut > 0 ? { category: issue.slice(0, cut), action: issue.slice(cut + 3) } : { category: issue, action: 'Repair' };
+    initialService.current = jobService;
+    setService(jobService);
+    setCustomerId(editRequest.customer_id);
+    setCustomerName(editRequest.customer_name ?? '');
+    setCustomerPhone(editRequest.customer_phone ?? '');
+    const company = editRequest.company_name ?? '';
+    setCompanySameAsCustomer(!!company && company === editRequest.customer_name);
+    setCompanyName(company);
+    setDate(editRequest.scheduled_date ?? '');
+    setTime(editRequest.scheduled_time?.slice(0, 5) ?? '');
+    setAddress(editRequest.location_data?.address ?? '');
+    const lat = editRequest.location_data?.latitude;
+    const lng = editRequest.location_data?.longitude;
+    setCoords(lat != null && lng != null ? { latitude: lat, longitude: lng } : null);
+    setNotes(editRequest.description ?? '');
+    setQuotedPrice(editRequest.quoted_price != null ? String(Number(editRequest.quoted_price)) : '');
+    setExistingPhotos(editRequest.photo_urls ?? []);
+    setHydrated(true);
+  }, [editRequest, hydrated]);
 
   async function handlePickNewCustFromContacts() {
     const picked = await pickPhoneContact();
@@ -257,7 +297,8 @@ function ResellerRequestDetails() {
       showAlert('Add date and time', 'Let us know when you need this service.');
       return;
     }
-    if (isPastDate(date)) {
+    // An overdue job can still be edited: only a date that was changed has to be in the future.
+    if ((!editRequest || date !== editRequest.scheduled_date) && isPastDate(date)) {
       showAlert('Pick a future date', "The visit date can't be in the past.");
       return;
     }
@@ -279,6 +320,41 @@ function ResellerRequestDetails() {
       for (let i = 0; i < photos.length; i++) {
         const uri = photos[i];
         if (uri) photoUrls.push(await uploadPhoto(uri, i));
+      }
+
+      if (editRequest) {
+        // Saves to this job only. The saved customer it is linked to is left as it is (see above).
+        const addressChanged = address.trim() !== (editRequest.location_data?.address ?? '').trim();
+        const pinMoved =
+          (coords?.latitude ?? null) !== (editRequest.location_data?.latitude ?? null) ||
+          (coords?.longitude ?? null) !== (editRequest.location_data?.longitude ?? null);
+        // A changed address no longer matches the saved map pin - drop it rather than send the technician to the old place.
+        const location_data =
+          addressChanged && !pinMoved ? { address: address.trim() } : { ...coords, address: address.trim() };
+        const serviceChanged =
+          service.category !== initialService.current?.category || service.action !== initialService.current?.action;
+        await updateRequest.mutateAsync({
+          id: editRequest.id,
+          values: {
+            customer_id: customerId,
+            customer_name: customerName.trim(),
+            customer_phone: customerPhone.trim(),
+            contact_person_name: customerName.trim(),
+            contact_person_phone: customerPhone.trim(),
+            company_name: (companySameAsCustomer ? customerName : companyName).trim() || null,
+            issue_type: serviceChanged ? `${category} - ${action}` : editRequest.issue_type,
+            description: notes.trim() || null,
+            quoted_price: price,
+            scheduled_date: date.trim(),
+            scheduled_time: time.trim(),
+            location_data,
+            photo_urls: [...existingPhotos, ...photoUrls],
+          } as any,
+        });
+        saved = true;
+        showAlert('Job updated', 'Your changes have been saved.');
+        router.replace(returnPath);
+        return;
       }
 
       // Keep the customer directory in sync: update the saved record if one
@@ -372,9 +448,10 @@ function ResellerRequestDetails() {
     </Pressable>
   );
 
+  // A job being edited keeps the photos it has; only the room left over is for new ones.
   const photoSlots = (
     <View className="flex-row gap-2.5">
-      {photos.map((uri, index) => (
+      {photos.slice(0, Math.max(0, PHOTO_SLOTS - existingPhotos.length)).map((uri, index) => (
         <Pressable
           key={index}
           onPress={() => (uri ? removePhoto(index) : handlePickPhoto(index))}
@@ -406,6 +483,14 @@ function ResellerRequestDetails() {
     />
   );
 
+  if (!hydrated) {
+    return (
+      <View className="flex-1 items-center justify-center bg-gray-50">
+        <Text className="text-gray-500">{loadingEdit ? 'Loading…' : 'This job could not be found.'}</Text>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-gray-50">
       <ScrollView
@@ -413,6 +498,14 @@ function ResellerRequestDetails() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: isWideWeb ? 32 : 16, paddingTop: isWideWeb ? 24 : 16, paddingBottom: 24 }}
       >
+        {!!editRequest && (
+          <View className="mb-3 flex-row items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
+            <Ionicons name="create-outline" size={15} color="#1D4ED8" />
+            <Text className="flex-1 text-[13px] font-semibold text-blue-700">
+              Editing job {ticketLabel(editRequest.ticket_no) ?? ''} - changes save to this job only.
+            </Text>
+          </View>
+        )}
         <ServiceDropdown value={service} onChange={setService} />
 
         <View style={{ flexDirection: isWideWeb ? 'row' : 'column', flexWrap: 'wrap', gap: isWideWeb ? 16 : 12 }}>
@@ -538,6 +631,12 @@ function ResellerRequestDetails() {
             wide={isWideWeb}
             width={cardWidth}
           >
+            {existingPhotos.length > 0 && (
+              <View className="mb-3">
+                <Text className="mb-1.5 text-xs font-medium text-gray-500">Already on this job</Text>
+                <RequestPhotos photoUrls={existingPhotos} />
+              </View>
+            )}
             {isWideWeb ? (
               <View className="flex-row gap-4">
                 {photoSlots}
@@ -595,14 +694,16 @@ function ResellerRequestDetails() {
         )}
         <View className="flex-1" style={isWideWeb ? { alignItems: 'flex-end' } : undefined}>
           <Text className={`text-[13px] font-bold ${missing.length ? 'text-amber-700' : 'text-emerald-600'}`}>
-            {missing.length ? `${missing.length} required left` : 'Ready to submit'}
+            {missing.length ? `${missing.length} required left` : editRequest ? 'Ready to save' : 'Ready to submit'}
           </Text>
           <Text className="text-xs text-gray-500" numberOfLines={1}>
             {missing.length
               ? missingText
-              : quotedPrice.trim()
-                ? 'Ready to assign a technician'
-                : 'You can add a price later'}
+              : editRequest
+                ? 'Changes save to this job only'
+                : quotedPrice.trim()
+                  ? 'Ready to assign a technician'
+                  : 'You can add a price later'}
           </Text>
         </View>
         {isWideWeb && (
@@ -616,7 +717,9 @@ function ResellerRequestDetails() {
           className="h-12 items-center justify-center rounded-lg bg-orange-500 px-6"
           style={{ opacity: submitting ? 0.5 : missing.length ? 0.6 : 1 }}
         >
-          <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
+          <Text className="text-base font-semibold text-white">
+            {editRequest ? (submitting ? 'Saving…' : 'Save changes') : submitting ? 'Submitting…' : 'Submit request'}
+          </Text>
         </Pressable>
       </View>
 

@@ -12,12 +12,11 @@ import { jobJourney, jobStages, type JobTimes } from '../../utils/jobTimeline';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
 import { useMyEmployees } from '../../hooks/useTechnicianEmployment';
-import { useRankedTechnicians } from '../../hooks/useTechnicianRanking';
 import { assignTechnician, showJobSentAlert } from '../../utils/assignTechnician';
 import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
 import { canDeleteJob, useDeleteJob } from '../../hooks/useDeleteJob';
 import { useBackStep } from '../../hooks/useBackStep';
-import { newJobHref } from '../../utils/newJobHref';
+import { editJobHref, newJobHref } from '../../utils/newJobHref';
 import { canMarkJobDone, useMarkJobDone } from '../../hooks/useMarkJobDone';
 import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
@@ -27,7 +26,6 @@ import { numericDateLabel } from '../../utils/nepaliDate';
 import { formatDurationBetween } from '../../utils/duration';
 import { entryDay } from '../../utils/ledgerStatement';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
-import { canEditJobPrice } from '../../utils/jobPrice';
 import {
   EditableAmount,
   FULL_TABLE_WIDTH,
@@ -82,6 +80,11 @@ function dueAt(request: ServiceRequest): number {
  * chasing, which is what this page is for. */
 function isOverdue(request: ServiceRequest): boolean {
   return Date.now() - dueAt(request) > DAY_MS;
+}
+
+/** Your own walk-in jobs can be edited in the Add work form; an app customer's details are theirs. */
+function canEditJob(request: ServiceRequest): boolean {
+  return request.origin === 'reseller' && canCancelWork(request);
 }
 
 function money(n: number | null | undefined): string {
@@ -300,37 +303,28 @@ interface PickPerson {
   free?: boolean;
 }
 
-/** Who should do this job. Two lists, because they are two decisions: the
- * people who work for you (pick one, it goes straight to them) and the
- * freelancers nearby (sending one is a request they can turn down). */
+/** Who should do this job: the people who work for you. Pick one and it goes straight to them. */
 function AssignSheet({
   request,
-  mode,
   people,
-  loading,
   onPick,
   onClose,
   busy,
 }: {
   request: ServiceRequest | null;
-  mode: 'staff' | 'freelance';
   people: PickPerson[];
-  loading: boolean;
   onPick: (person: PickPerson) => void;
   onClose: () => void;
   busy: boolean;
 }) {
   if (!request) return null;
-  const staff = mode === 'staff';
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable className="flex-1 items-center justify-center bg-black/50 px-4" onPress={onClose}>
         <Pressable onPress={() => {}} className="w-full overflow-hidden rounded-2xl bg-white" style={{ maxWidth: 420, maxHeight: '85%' }}>
-          <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: staff ? BLUE : '#6D28D9' }}>
+          <View className="flex-row items-center gap-2.5 px-5 py-4" style={{ backgroundColor: BLUE }}>
             <View className="flex-1">
-              <Text className="text-[16px] font-bold text-white">
-                {staff ? 'Give this to your staff' : 'Request a freelance technician'}
-              </Text>
+              <Text className="text-[16px] font-bold text-white">Give this to your staff</Text>
               <Text className="mt-0.5 text-[11.5px] text-white/85" numberOfLines={1}>
                 {request.issue_type} · {request.customer_name ?? 'Customer'}
               </Text>
@@ -341,14 +335,8 @@ function AssignSheet({
           </View>
 
           <ScrollView>
-            {loading ? (
-              <Text className="px-5 py-5 text-sm text-gray-500">Loading…</Text>
-            ) : people.length === 0 ? (
-              <Text className="px-5 py-5 text-sm text-gray-500">
-                {staff
-                  ? 'Nobody works for you yet - add your team under My team.'
-                  : 'No freelance technician is free right now.'}
-              </Text>
+            {people.length === 0 ? (
+              <Text className="px-5 py-5 text-sm text-gray-500">Nobody works for you yet - add your team under My team.</Text>
             ) : (
               people.map((person, i) => (
                 <Pressable
@@ -357,7 +345,7 @@ function AssignSheet({
                   disabled={busy}
                   className={`flex-row items-center gap-3 px-5 py-3.5 disabled:opacity-60 ${i === people.length - 1 ? '' : 'border-b border-gray-100'}`}
                 >
-                  <PersonAvatar name={person.name} photoUrl={person.photoUrl} size={36} bg={staff ? 'bg-blue-600' : 'bg-purple-600'} />
+                  <PersonAvatar name={person.name} photoUrl={person.photoUrl} size={36} bg="bg-blue-600" />
                   <View className="flex-1">
                     <Text className="text-[14px] font-semibold text-gray-900" numberOfLines={1}>
                       {person.name ?? 'Technician'}
@@ -366,8 +354,8 @@ function AssignSheet({
                       {person.line}
                     </Text>
                   </View>
-                  <Text className="text-[12px] font-semibold" style={{ color: staff ? BLUE : '#6D28D9' }}>
-                    {staff ? 'Assign' : 'Request'}
+                  <Text className="text-[12px] font-semibold" style={{ color: BLUE }}>
+                    Assign
                   </Text>
                 </Pressable>
               ))
@@ -375,9 +363,7 @@ function AssignSheet({
           </ScrollView>
 
           <Text className="border-t border-gray-100 px-5 py-3 text-[11px] leading-[16px] text-gray-500">
-            {staff
-              ? 'It rings on their phone; they accept or reject it.'
-              : "A freelancer isn't on your team - they get the same ringing request and can turn it down."}
+            It rings on their phone; they accept or reject it.
           </Text>
         </Pressable>
       </Pressable>
@@ -438,12 +424,11 @@ function Fact({
   );
 }
 
-type CardAction = { label: string; icon: keyof typeof Ionicons.glyphMap; tone: 'primary' | 'ghost' | 'violet' | 'done'; onPress: () => void };
+type CardAction = { label: string; icon: keyof typeof Ionicons.glyphMap; tone: 'primary' | 'ghost' | 'done'; onPress: () => void };
 
 const ACTION_TONE = {
   primary: { bg: '#0F766E', border: '#0F766E', fg: '#FFFFFF' },
   ghost: { bg: '#FFFFFF', border: '#D1D5DB', fg: '#374151' },
-  violet: { bg: '#FFFFFF', border: '#DDD6FE', fg: '#6D28D9' },
   done: { bg: '#F0FDF4', border: '#86EFAC', fg: '#166534' },
 } as const;
 
@@ -456,7 +441,6 @@ function JobRowCard({
   now,
   technicianName,
   onAssign,
-  onRequest,
   onCancelWork,
   onDeleteWork,
   onMarkDone,
@@ -470,7 +454,6 @@ function JobRowCard({
   now: number;
   technicianName: (id: string) => string;
   onAssign: (request: ServiceRequest) => void;
-  onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
   onDeleteWork: (request: ServiceRequest) => void;
   onMarkDone: (request: ServiceRequest) => void;
@@ -512,7 +495,9 @@ function JobRowCard({
   if (canMarkJobDone(r)) {
     actions.push({ label: 'Mark as done', icon: 'checkmark-done-outline', tone: 'done', onPress: () => onMarkDone(r) });
   }
-  actions.push({ label: 'Request Outsource', icon: 'paper-plane-outline', tone: 'violet', onPress: () => onRequest(r) });
+  if (canEditJob(r)) {
+    actions.push({ label: 'Edit', icon: 'create-outline', tone: 'ghost', onPress: () => router.push(editJobHref(r.id) as any) });
+  }
 
   return (
     <View
@@ -673,12 +658,12 @@ function JobRowCard({
                   style={{
                     backgroundColor: tone.bg,
                     borderWidth: 1,
-                    borderColor: a.tone === 'violet' ? '#A78BFA' : tone.border,
+                    borderColor: tone.border,
                     ...(roomy ? null : { flexGrow: 1, flexBasis: 120 }),
                   }}
                 >
-                  <Ionicons name={a.icon} size={18} color={a.tone === 'violet' ? '#5B21B6' : tone.fg} />
-                  <Text className="text-[14px] font-semibold" style={{ color: a.tone === 'violet' ? '#5B21B6' : tone.fg }}>
+                  <Ionicons name={a.icon} size={18} color={tone.fg} />
+                  <Text className="text-[14px] font-semibold" style={{ color: tone.fg }}>
                     {label}
                   </Text>
                 </Pressable>
@@ -702,7 +687,6 @@ function JobCompactRow({
   technicianName,
   tier,
   onAssign,
-  onRequest,
   onCancelWork,
   onDeleteWork,
   onMarkDone,
@@ -715,15 +699,12 @@ function JobCompactRow({
   technicianName: (id: string) => string;
   tier: Tier;
   onAssign: (request: ServiceRequest) => void;
-  onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
   onDeleteWork: (request: ServiceRequest) => void;
   onMarkDone: (request: ServiceRequest) => void;
   busy: boolean;
 }) {
   useCalendarMode(); // draws the date again when the AD / BS toggle changes
-  const userId = useAuthStore((state) => state.session?.user.id);
-  const updateRequest = useSupabaseUpdate('service_requests');
   const open = () => router.push(`/(reseller)/request/${r.id}` as any);
   const chip = r.status === 'in_progress' ? { label: 'Working on it', color: '#166534', bg: '#DCFCE7' } : statusChip(r);
   const pay = PAY_CHIP[r.payment_status] ?? PAY_CHIP.unpaid;
@@ -732,7 +713,7 @@ function JobCompactRow({
   const overdue = isOverdue(r);
   const dateText = numericDateLabel(r.scheduled_date ?? entryDay(null, r.created_at));
 
-  // The one action that moves the job on, then Request Outsource; a hold waiting on you comes first.
+  // The one action that moves the job on, then Edit; a hold waiting on you comes first.
   const mainLabel = r.hold_status === 'requested' ? 'Review hold' : r.technician_id ? 'Reassign' : 'Assign';
   const mainIcon: keyof typeof Ionicons.glyphMap = r.hold_status === 'requested' ? 'pause-circle-outline' : 'person-add-outline';
   const mainPress = r.hold_status === 'requested' ? open : () => onAssign(r);
@@ -835,18 +816,8 @@ function JobCompactRow({
         </View>
       )}
 
-      <EditableAmount
-        display={r.quoted_price != null ? money(r.quoted_price) : ''}
-        value={r.quoted_price}
-        width={w.amount}
-        onSave={
-          canEditJobPrice(r, userId)
-            ? async (amount) => {
-                await updateRequest.mutateAsync({ id: r.id, values: { quoted_price: amount } as any });
-              }
-            : undefined
-        }
-      />
+      {/* No pencil here: a job is changed on purpose, with the Edit button, not by a stray tap on its price. */}
+      <EditableAmount display={r.quoted_price != null ? money(r.quoted_price) : ''} value={r.quoted_price} width={w.amount} />
 
       {has('tech') && (
         <View className="flex-row items-center" style={{ width: w.tech, flexShrink: 0, gap: 6, ...cell }}>
@@ -885,15 +856,17 @@ function JobCompactRow({
             {mainLabel}
           </Text>
         </Pressable>
-        <Pressable
-          onPress={() => onRequest(r)}
-          disabled={busy}
-          accessibilityLabel="Request Outsource"
-          className="items-center justify-center rounded-lg disabled:opacity-50"
-          style={{ width: ROW_BUTTON_HEIGHT, height: ROW_BUTTON_HEIGHT, flexShrink: 0, borderWidth: 1, borderColor: '#A78BFA' }}
-        >
-          <Ionicons name="paper-plane-outline" size={15} color="#5B21B6" />
-        </Pressable>
+        {canEditJob(r) && (
+          <Pressable
+            onPress={() => router.push(editJobHref(r.id) as any)}
+            disabled={busy}
+            accessibilityLabel="Edit job"
+            className="items-center justify-center rounded-lg disabled:opacity-50"
+            style={{ width: ROW_BUTTON_HEIGHT, height: ROW_BUTTON_HEIGHT, flexShrink: 0, borderWidth: 1, borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}
+          >
+            <Ionicons name="create-outline" size={16} color="#1D4ED8" />
+          </Pressable>
+        )}
         {canMarkJobDone(r) && (
           <Pressable
             onPress={() => onMarkDone(r)}
@@ -941,7 +914,6 @@ function JobList({
   now,
   technicianName,
   onAssign,
-  onRequest,
   onCancelWork,
   onDeleteWork,
   onMarkDone,
@@ -958,7 +930,6 @@ function JobList({
   now: number;
   technicianName: (id: string) => string;
   onAssign: (request: ServiceRequest) => void;
-  onRequest: (request: ServiceRequest) => void;
   onCancelWork: (request: ServiceRequest) => void;
   onDeleteWork: (request: ServiceRequest) => void;
   onMarkDone: (request: ServiceRequest) => void;
@@ -1001,7 +972,6 @@ function JobList({
               technicianName={technicianName}
               tier={tier}
               onAssign={onAssign}
-              onRequest={onRequest}
               onCancelWork={onCancelWork}
               onDeleteWork={onDeleteWork}
               onMarkDone={onMarkDone}
@@ -1018,7 +988,6 @@ function JobList({
             now={now}
             technicianName={technicianName}
             onAssign={onAssign}
-            onRequest={onRequest}
             onCancelWork={onCancelWork}
             onDeleteWork={onDeleteWork}
             onMarkDone={onMarkDone}
@@ -1079,12 +1048,12 @@ export function WorkHubPanel({
   const { confirmDeleteJob, deletingId } = useDeleteJob();
   const { confirmMarkDone, doingId } = useMarkJobDone();
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
-  const [assigning, setAssigning] = useState<{ request: ServiceRequest; mode: 'staff' | 'freelance' } | null>(null);
+  const [assigning, setAssigning] = useState<{ request: ServiceRequest } | null>(null);
 
   /** Opens the technician picker. A job still waiting to be accepted is simply offered to the new
    * person; one already in progress is handed over by the server (hand_over_job) - see sendJobTo. */
-  function openPicker(request: ServiceRequest, mode: 'staff' | 'freelance') {
-    setAssigning({ request, mode });
+  function openPicker(request: ServiceRequest) {
+    setAssigning({ request });
   }
   const [sending, setSending] = useState(false);
   const [maximised, setMaximised] = useState(false);
@@ -1102,7 +1071,7 @@ export function WorkHubPanel({
       `/(reseller)/requests/board?find=${encodeURIComponent(ticketLabel(request.ticket_no) ?? request.customer_name ?? '')}` as any
     );
   const assignFromList = (request: ServiceRequest) =>
-    request.technician_id ? openPicker(request, 'staff') : openBoardFor(request);
+    request.technician_id ? openPicker(request) : openBoardFor(request);
   // The board's search box: a ticket, customer, phone, job, address or technician.
   const [query, setQuery] = useState(initialQuery ?? '');
   useEffect(() => setQuery(initialQuery ?? ''), [initialQuery]);
@@ -1132,12 +1101,6 @@ export function WorkHubPanel({
   const jobTimes = useJobTimes(useMemo(() => requests.map((r) => r.id).sort(), [requests]));
   const now = useNow();
   const { data: employees } = useMyEmployees(userId);
-  // Freelancers are ranked by the same rules the job page uses - nearest
-  // and free first, and never someone else's employee while on duty.
-  const { rankedTechnicians, isLoading: loadingTechnicians } = useRankedTechnicians(
-    assigning?.request.location_data,
-    userId
-  );
 
   // The list is this stage's jobs: overdue ones first, then by when they were due. The customer's
   // name is the job's own, exactly as the job page shows it - the Ledger customer a job happens to
@@ -1257,24 +1220,6 @@ export function WorkHubPanel({
     [employees]
   );
 
-  const freelanceChoices: PickPerson[] = useMemo(
-    () =>
-      rankedTechnicians
-        .filter((t) => !t.isYourEmployee)
-        .map((t) => ({
-          id: t.id,
-          name: t.full_name,
-          photoUrl: t.avatar_url,
-          line: [
-            t.distance != null ? `${t.distance.toFixed(1)} km away` : t.city ?? 'Location unknown',
-            t.is_available ? 'Free now' : 'Busy',
-          ]
-            .filter(Boolean)
-            .join(' · '),
-        })),
-    [rankedTechnicians]
-  );
-
   async function sendJobTo(person: PickPerson) {
     if (!assigning) return;
     const request = assigning.request;
@@ -1370,7 +1315,7 @@ export function WorkHubPanel({
                 request={r}
                 footer={
                   <View className="mt-2.5 flex-row" style={{ gap: 8 }}>
-                    {smallButton('Assign', 'person-add-outline', () => openPicker(r, 'staff'), 'blue')}
+                    {smallButton('Assign', 'person-add-outline', () => openPicker(r), 'blue')}
                     {smallButton(busyId === r.id ? 'Opening…' : 'Open to team', 'megaphone-outline', () => setOpenToTeam(r, true), 'ghost')}
                   </View>
                 }
@@ -1396,7 +1341,7 @@ export function WorkHubPanel({
                 request={r}
                 footer={
                   <View className="mt-2.5 flex-row" style={{ gap: 8 }}>
-                    {smallButton('Assign instead', 'person-add-outline', () => openPicker(r, 'staff'), 'ghost')}
+                    {smallButton('Assign instead', 'person-add-outline', () => openPicker(r), 'ghost')}
                     {smallButton(busyId === r.id ? 'Removing…' : 'Take back', 'close-circle-outline', () => setOpenToTeam(r, false), 'ghost')}
                   </View>
                 }
@@ -1567,7 +1512,6 @@ export function WorkHubPanel({
         now={now}
         technicianName={technicianName}
         onAssign={assignFromList}
-        onRequest={(r) => openPicker(r, 'freelance')}
         onCancelWork={confirmCancelWork}
         onDeleteWork={confirmDeleteJob}
         onMarkDone={confirmMarkDone}
@@ -1612,7 +1556,6 @@ export function WorkHubPanel({
                 if (!r.technician_id) setMaximised(false);
                 assignFromList(r);
               }}
-              onRequest={(r) => openPicker(r, 'freelance')}
               onCancelWork={confirmCancelWork}
               onDeleteWork={confirmDeleteJob}
               onMarkDone={confirmMarkDone}
@@ -1686,12 +1629,8 @@ export function WorkHubPanel({
       {/* On both the list and the board: the board's Assign buttons open it too. */}
       <AssignSheet
         request={assigning?.request ?? null}
-        mode={assigning?.mode ?? 'staff'}
         // Not the technician who already has the job - handing it to them would be a no-op.
-        people={(assigning?.mode === 'freelance' ? freelanceChoices : staffChoices).filter(
-          (p) => p.id !== assigning?.request.technician_id
-        )}
-        loading={assigning?.mode === 'freelance' && loadingTechnicians}
+        people={staffChoices.filter((p) => p.id !== assigning?.request.technician_id)}
         onPick={sendJobTo}
         onClose={() => setAssigning(null)}
         busy={sending}
