@@ -26,7 +26,7 @@ import { MapPreview } from '../../lib/components/MapPreview';
 import { showAlert, getErrorMessage } from '../../lib/utils/alert';
 import { resizeImageForUpload } from '../../lib/utils/resizeImage';
 import { returnPathOr } from '../../lib/utils/returnPath';
-import { ServicePickerModal } from '../../lib/components/ServicePickerModal';
+import { ServiceDropdown } from '../../lib/components/ServiceDropdown';
 import { pickPhoneContact } from '../../lib/utils/pickPhoneContact';
 import { usePhoneContacts } from '../../lib/hooks/usePhoneContacts';
 import { ContactPickerModal } from '../../lib/components/ContactPickerModal';
@@ -52,12 +52,11 @@ function ResellerRequestDetails() {
     action?: string;
     from?: string;
   }>();
-  // A "new job" button opens this form with nothing chosen; the service is picked here (see ServicePickerModal).
+  // A "new job" button opens this form with nothing chosen; the service is picked here (see ServiceDropdown).
   // A service tile on the Services page opens it with the service already set.
   const [service, setService] = useState<{ category: string; action: string } | null>(
     presetCategory ? { category: presetCategory, action: presetAction || 'Repair' } : null
   );
-  const [showServicePicker, setShowServicePicker] = useState(false);
   const category = service?.category;
   const action = service?.action;
   // Back to whichever tab opened this form, not always Requests.
@@ -356,10 +355,6 @@ function ResellerRequestDetails() {
 
   const cardWidth = isWideWeb ? ('calc((100% - 16px) / 2)' as unknown as number) : undefined;
 
-  function changeService() {
-    setShowServicePicker(true);
-  }
-
   function cancel() {
     router.replace(returnPath);
   }
@@ -418,41 +413,7 @@ function ResellerRequestDetails() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: isWideWeb ? 32 : 16, paddingTop: isWideWeb ? 24 : 16, paddingBottom: 24 }}
       >
-        {service ? (
-          <View className="mb-3 flex-row items-center gap-3 rounded-2xl border border-gray-200 bg-white px-3 py-2.5">
-            <CategoryBadge category={category} size={40} />
-            <View className="flex-1" style={{ gap: 3 }}>
-              <Text className="text-[15px] font-bold text-gray-900" numberOfLines={1}>
-                {category}
-              </Text>
-              <View className="self-start rounded-full border border-orange-200 bg-orange-50 px-2 py-px">
-                <Text className="text-[11px] font-semibold text-orange-700">{action}</Text>
-              </View>
-            </View>
-            <Pressable
-              onPress={changeService}
-              hitSlop={8}
-              className={isWideWeb ? 'rounded-lg border border-orange-200 px-3 py-2' : 'px-1 py-2.5'}
-            >
-              <Text className="text-sm font-semibold text-orange-600">{isWideWeb ? 'Change service' : 'Change'}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={changeService}
-            accessibilityRole="button"
-            className="mb-3 flex-row items-center gap-3 rounded-2xl border border-dashed border-orange-300 bg-orange-50 px-3 py-3"
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-xl bg-white">
-              <Ionicons name="construct-outline" size={20} color="#EA580C" />
-            </View>
-            <View className="flex-1" style={{ gap: 2 }}>
-              <Text className="text-[15px] font-bold text-gray-900">Choose a service</Text>
-              <Text className="text-xs text-gray-500">What does the technician need to do?</Text>
-            </View>
-            <Text className="text-sm font-semibold text-orange-600">Choose</Text>
-          </Pressable>
-        )}
+        <ServiceDropdown value={service} onChange={(c, a) => setService({ category: c, action: a })} />
 
         <View style={{ flexDirection: isWideWeb ? 'row' : 'column', flexWrap: 'wrap', gap: isWideWeb ? 16 : 12 }}>
           <NumberedCard n={1} title="Who is it for?" subtitle="Saved customer or phone contact" wide={isWideWeb} width={cardWidth}>
@@ -658,16 +619,6 @@ function ResellerRequestDetails() {
           <Text className="text-base font-semibold text-white">{submitting ? 'Submitting…' : 'Submit request'}</Text>
         </Pressable>
       </View>
-
-      <ServicePickerModal
-        visible={showServicePicker}
-        initialAction={action === 'Installation' ? 'Installation' : 'Repair'}
-        onPick={(pickedCategory, pickedAction) => {
-          setService({ category: pickedCategory, action: pickedAction });
-          setShowServicePicker(false);
-        }}
-        onClose={() => setShowServicePicker(false)}
-      />
 
       <ContactPickerModal
         visible={showNameSuggestions}
