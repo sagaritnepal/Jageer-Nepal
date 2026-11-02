@@ -1064,14 +1064,12 @@ export function WorkHubPanel({
   // Requests (usually Services).
   const view: 'sheet' | 'board' = boardOnly ? 'board' : 'sheet';
   const openBoard = () => router.push('/(reseller)/requests/board' as any);
-  // "Assign" on a job with nobody on it opens the board on that job, where the team's workload is in
-  // view; one that already has someone ("Reassign") has no card to act on there, so it keeps the picker.
-  const openBoardFor = (request: ServiceRequest) =>
+  // "Assign" and "Reassign" on a job open the board on that job, where the team's workload is in view
+  // and the job's card has the buttons to give it to someone.
+  const assignFromList = (request: ServiceRequest) =>
     router.push(
       `/(reseller)/requests/board?find=${encodeURIComponent(ticketLabel(request.ticket_no) ?? request.customer_name ?? '')}` as any
     );
-  const assignFromList = (request: ServiceRequest) =>
-    request.technician_id ? openPicker(request) : openBoardFor(request);
   // The board's search box: a ticket, customer, phone, job, address or technician.
   const [query, setQuery] = useState(initialQuery ?? '');
   useEffect(() => setQuery(initialQuery ?? ''), [initialQuery]);
@@ -1293,6 +1291,13 @@ export function WorkHubPanel({
 
   const emptyNote = (text: string) => <Text className="py-2 text-[12px] text-gray-400">{text}</Text>;
 
+  // A job somebody already carries: the one thing to do from here is hand it to someone else.
+  const reassignFooter = (r: ServiceRequest) => (
+    <View className="mt-2.5 flex-row" style={{ gap: 8 }}>
+      {smallButton('Reassign', 'person-add-outline', () => openPicker(r), 'ghost')}
+    </View>
+  );
+
   // While searching, a column with nothing in it is left out, so the match is what is on screen.
   const columns = (
     <>
@@ -1368,7 +1373,9 @@ export function WorkHubPanel({
             phone={profile.phone}
             wide={wide}
           >
-            {jobs.length === 0 ? emptyNote('Free right now.') : jobs.map((r) => <JobCard key={r.id} request={r} />)}
+            {jobs.length === 0
+              ? emptyNote('Free right now.')
+              : jobs.map((r) => <JobCard key={r.id} request={r} footer={reassignFooter(r)} />)}
           </Column>
         );
       })}
@@ -1390,7 +1397,7 @@ export function WorkHubPanel({
             wide={wide}
           >
             {jobs.map((r) => (
-              <JobCard key={r.id} request={r} />
+              <JobCard key={r.id} request={r} footer={reassignFooter(r)} />
             ))}
           </Column>
         );
@@ -1553,7 +1560,7 @@ export function WorkHubPanel({
               technicianName={technicianName}
               onAssign={(r) => {
                 // The board is another page; this full-screen list is a pop-up over this one.
-                if (!r.technician_id) setMaximised(false);
+                setMaximised(false);
                 assignFromList(r);
               }}
               onCancelWork={confirmCancelWork}
