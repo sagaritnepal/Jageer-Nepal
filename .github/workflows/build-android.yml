@@ -95,11 +95,18 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/debug.keystore
 
+      # Both settings are what the first real build needed. Expo's default gives Gradle only 512 MB for loaded
+      # classes, and it ran out in the lint step, which then hung. Lint is a code-quality check, not part of
+      # making the APK, so it is skipped.
+      - name: Give Gradle more memory
+        run: |
+          printf '\norg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g\n' >> android/gradle.properties
+
       - name: Build the release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease -x lintVitalAnalyzeRelease -x lintVitalReportRelease -x lintVitalRelease
 
       - name: Show the signing certificate
         continue-on-error: true
