@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery, useSupabaseRow, subscribeToTable } from '../../lib/hooks/useSupabase';
 import { useIsWideWeb } from '../../lib/hooks/useWideGrid';
+import { useBackStep } from '../../lib/hooks/useBackStep';
 import { WideFlatList } from '../../lib/components/web/WideFlatList';
 import { STATUS_STYLES } from '../../lib/constants/requestStatus';
 import { formatScheduledWhen } from '../../lib/utils/scheduledTime';
@@ -130,6 +131,8 @@ function ClientRequestCard({ item }: { item: ServiceRequest }) {
 export default function ClientRequests() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [viewMode, setViewMode] = useState<ViewMode>('active');
+  // History is a view of this page, not a page: Back returns to Active before it leaves.
+  useBackStep(viewMode === 'history', () => setViewMode('active'));
   const wide = useIsWideWeb();
 
   const { data: requests, isLoading: loadingRequests } = useSupabaseQuery('service_requests', {

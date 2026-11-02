@@ -9,6 +9,7 @@ import { Text } from './CapsText';
 import { Ionicons } from '@expo/vector-icons';
 import { FINANCE_ENTRY_ACCENT, FINANCE_ENTRY_SHADOW } from './entryTheme';
 import { readKey } from '../../utils/webKeys';
+import { useBackStep } from '../../hooks/useBackStep';
 
 export const INPUT = 'rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900';
 
@@ -152,6 +153,9 @@ export function PopupCard({
   closeOnOutside?: boolean;
   children: ReactNode;
 }) {
+  // The card is on screen exactly while it is mounted, so Back (the browser's; Android's closes the Modal) closes it
+  // rather than leaving the page behind it.
+  useBackStep(true, onClose);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>

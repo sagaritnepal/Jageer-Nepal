@@ -14,6 +14,7 @@ import { ticketLabel } from '../../utils/ticket';
 import { useSupabaseInsert, useSupabaseQuery, useSupabaseRow, useSupabaseUpdate, useSupabaseUpsert, useSupabaseDelete } from '../../hooks/useSupabase';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { useScreenHeader } from '../../hooks/useScreenHeader';
+import { useBackStep } from '../../hooks/useBackStep';
 import { useIsWideWeb } from '../../hooks/useWideGrid';
 import { usePhoneContacts } from '../../hooks/usePhoneContacts';
 import { useScanBill } from '../../hooks/useScanBill';
@@ -2955,6 +2956,8 @@ export function TransactionDetailModal({
   /** A Sale / Purchase opens to read, with Edit (-> `onEdit`) in place of Save. */
   editOnPage?: boolean;
 }) {
+  // A Sale / Purchase opens as a PopupCard, which handles Back itself; the expense sheet below is its own Modal.
+  useBackStep(!!tx && tx.type === 'expense', onClose);
   if (!tx) return null;
   // A Sale / Purchase opens straight into its edit popup (see BillEditPopup), laid out like a ledger
   // entry's - there is no read-only sheet in front of it. The full form, with the items, is one step

@@ -16,6 +16,7 @@ import { useRankedTechnicians } from '../../hooks/useTechnicianRanking';
 import { assignTechnician, showJobSentAlert } from '../../utils/assignTechnician';
 import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
 import { canDeleteJob, useDeleteJob } from '../../hooks/useDeleteJob';
+import { useBackStep } from '../../hooks/useBackStep';
 import { canMarkJobDone, useMarkJobDone } from '../../hooks/useMarkJobDone';
 import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
@@ -1093,6 +1094,9 @@ export function WorkHubPanel({
   const view: 'sheet' | 'board' = boardOnly ? 'board' : 'sheet';
   const openBoard = () => router.push('/(reseller)/requests/board' as any);
   const closeBoard = () => (router.canGoBack() ? router.back() : router.replace('/(reseller)/requests' as any));
+  // These two are settings of this page, not pages: Back undoes them before it leaves.
+  useBackStep(wide && !dense, () => setDense(true));
+  useBackStep(maximised, () => setMaximised(false));
   // Beside the sidebar a "wide" page can still leave this panel a narrow column.
   const [boxWidth, setBoxWidth] = useState(0);
   const headerInRow = wide && !(boxWidth > 0 && boxWidth < 760);

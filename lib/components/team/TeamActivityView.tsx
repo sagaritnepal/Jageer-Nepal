@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../hooks/useAuth';
 import { useMyEmployees } from '../../hooks/useTechnicianEmployment';
 import { useTeamJobs, useTeamLocations, type TeamJob } from '../../hooks/useTeamActivity';
+import { useBackStep } from '../../hooks/useBackStep';
 import { PersonAvatar } from '../PersonAvatar';
 import { AssignJobSheet } from '../AssignJobToEmployee';
 import { useWideDetail } from '../detail/DetailLayout';
@@ -184,6 +185,8 @@ export function TeamActivityView({ onOpenPeople, onAttentionCount }: { onOpenPeo
 
   const [stateFilter, setStateFilter] = useState<MemberState | null>(null);
   const [view, setView] = useState<'today' | 'history'>('today');
+  // History is a view of this page, not a page: Back returns to Today before it leaves.
+  useBackStep(view === 'history', () => setView('today'));
   const [who, setWho] = useState<string | null>(null);
   const [shown, setShown] = useState(HISTORY_PAGE);
   const [assignTo, setAssignTo] = useState<{ id: string; name: string } | null>(null);
