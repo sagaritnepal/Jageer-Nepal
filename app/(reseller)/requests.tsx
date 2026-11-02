@@ -619,8 +619,8 @@ function RequestJobRow({
   const deleting = busyId === item.id;
   useCalendarMode(); // the start / end dates under the job are drawn again when AD / BS is switched
 
-  // Delete a job for good, at any stage: one with no payment and no bill on it (the server refuses
-  // otherwise, with its reason - see delete_finished_job, migrations 0098 and 0102).
+  // Delete a job for good, once it is cancelled: one with no payment and no bill on it (the server
+  // refuses otherwise, with its reason - see delete_finished_job, migrations 0098 and 0102).
   const { confirmDeleteJob, deletingId } = useDeleteJob();
   const removing = deletingId === item.id;
   const canRemove = !isIncoming && canDeleteJob(item);

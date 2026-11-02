@@ -13,16 +13,25 @@ export type DeletableRequest = Pick<
   ticket_no?: number | string | null;
 };
 
-/** True for a job its reseller may delete: one with no payment on it. The server decides the rest (it
- * also refuses a job that is on a bill) and says why - see delete_finished_job (migrations 0098, 0102).
- * A request nobody has claimed (no reseller) is not theirs to delete. */
-export function canDeleteJob(request: Pick<ServiceRequest, 'reseller_id' | 'payment_status' | 'amount_paid'>): boolean {
-  return !!request.reseller_id && request.payment_status === 'unpaid' && !(Number(request.amount_paid) > 0);
+/** True for a job its reseller may delete: one that has been cancelled, with no payment on it - a job
+ * is cancelled first, and only then deleted. The server decides the rest (it also refuses a job that
+ * is on a bill) and says why - see delete_finished_job (migrations 0098, 0102). A request nobody has
+ * claimed (no reseller) is not theirs to delete. */
+export function canDeleteJob(
+  request: Pick<ServiceRequest, 'status' | 'reseller_id' | 'payment_status' | 'amount_paid'>
+): boolean {
+  return (
+    request.status === 'cancelled' &&
+    !!request.reseller_id &&
+    request.payment_status === 'unpaid' &&
+    !(Number(request.amount_paid) > 0)
+  );
 }
 
 /** "Delete job" for a reseller, on any screen: asks "Are you sure?", then removes the job for good
- * (with its job card, chalan and chat), at any stage. Unlike Cancel, nothing is kept: a cancelled job
- * stays in the Cancelled tab with its reason, a deleted one is gone. A technician who had the job (and
+ * (with its job card, chalan and chat). Only a cancelled job is offered for it (see canDeleteJob).
+ * Unlike Cancel, nothing is kept: a cancelled job stays in the Cancelled tab with its reason, a
+ * deleted one is gone. A technician who had the job (and
  * an app customer who asked for it) is told by the database. `deletingId` is the job being deleted,
  * to disable its button. */
 export function useDeleteJob() {

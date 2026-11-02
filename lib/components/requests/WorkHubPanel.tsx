@@ -782,8 +782,8 @@ function JobCompactRow({
         <CategoryBadge category={r.issue_type} size={60} />
         <View style={{ flex: 1, gap: 1, ...cell }}>
           {!!issue.eyebrow && (
-            <Text className="text-[12px] font-bold text-gray-900" numberOfLines={1}>
-              {issue.eyebrow}
+            <Text className="text-[13px] font-bold text-gray-900" numberOfLines={2}>
+              {issue.eyebrow.toUpperCase()}
             </Text>
           )}
           <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>

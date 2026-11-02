@@ -40,8 +40,6 @@ export const TIER_GAP: Record<Tier, number> = { full: 12, compact: 10, tight: 8 
 /** The My Jobs table gives the Assign button a column of its own, in front of Actions. The room for
  * it (and the gap that comes with it) is taken from Actions, so the table is as wide as before. */
 export const ASSIGN_WIDTH: Record<Tier, number> = { full: 100, compact: 98, tight: 94 };
-/** What Actions must keep: its four icon buttons (ROW_BUTTON_HEIGHT wide) and the 4px between them. */
-const ACTIONS_MIN_WIDTH = 4 * 30 + 3 * 4;
 export function columnsOf(tier: Tier, splitAssign?: boolean): ColKey[] {
   const keys = TIER_COLUMNS[tier];
   return splitAssign ? keys.flatMap((key): ColKey[] => (key === 'actions' ? ['assign', 'actions'] : [key])) : keys;
@@ -49,9 +47,7 @@ export function columnsOf(tier: Tier, splitAssign?: boolean): ColKey[] {
 export function widthOf(tier: Tier, key: ColKey, splitAssign?: boolean): number | undefined {
   if (key === 'assign') return ASSIGN_WIDTH[tier];
   const width = TIER_WIDTH[tier][key];
-  return splitAssign && key === 'actions' && width != null
-    ? Math.max(width - ASSIGN_WIDTH[tier] - TIER_GAP[tier], ACTIONS_MIN_WIDTH)
-    : width;
+  return splitAssign && key === 'actions' && width != null ? width - ASSIGN_WIDTH[tier] - TIER_GAP[tier] : width;
 }
 /** A column's width and whether it may give some back - for the header and every row alike. */
 export function columnStyle(tier: Tier, key: ColKey, splitAssign?: boolean) {
