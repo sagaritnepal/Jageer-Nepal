@@ -17,7 +17,7 @@ import { getErrorMessage, showAlert } from '../../utils/alert';
 // The Date is a column of its own at every size.
 // Below that it keeps the tight size and scrolls sideways (JobTableScroll) instead of squeezing.
 export type Tier = 'full' | 'compact' | 'tight';
-export type ColKey = 'token' | 'when' | 'job' | 'customer' | 'where' | 'amount' | 'tech' | 'status' | 'actions';
+export type ColKey = 'token' | 'when' | 'job' | 'customer' | 'where' | 'amount' | 'tech' | 'status' | 'assign' | 'actions';
 
 export const TIER_COLUMNS: Record<Tier, ColKey[]> = {
   full: ['token', 'when', 'job', 'customer', 'where', 'amount', 'tech', 'status', 'actions'],
@@ -35,12 +35,29 @@ export const TIER_WIDTH: Record<Tier, Partial<Record<ColKey, number>>> = {
 };
 /** The columns that may shrink a little to fit; every other one keeps its width. */
 const SHRINKS: ColKey[] = ['job', 'customer', 'where'];
-/** A column's width and whether it may give some back - for the header and every row alike. */
-export function columnStyle(tier: Tier, key: ColKey) {
+export const TIER_GAP: Record<Tier, number> = { full: 12, compact: 10, tight: 8 };
+
+/** The My Jobs table gives the Assign button a column of its own, in front of Actions. The room for
+ * it (and the gap that comes with it) is taken from Actions, so the table is as wide as before. */
+export const ASSIGN_WIDTH: Record<Tier, number> = { full: 100, compact: 98, tight: 94 };
+/** What Actions must keep: its four icon buttons (ROW_BUTTON_HEIGHT wide) and the 4px between them. */
+const ACTIONS_MIN_WIDTH = 4 * 30 + 3 * 4;
+export function columnsOf(tier: Tier, splitAssign?: boolean): ColKey[] {
+  const keys = TIER_COLUMNS[tier];
+  return splitAssign ? keys.flatMap((key): ColKey[] => (key === 'actions' ? ['assign', 'actions'] : [key])) : keys;
+}
+export function widthOf(tier: Tier, key: ColKey, splitAssign?: boolean): number | undefined {
+  if (key === 'assign') return ASSIGN_WIDTH[tier];
   const width = TIER_WIDTH[tier][key];
+  return splitAssign && key === 'actions' && width != null
+    ? Math.max(width - ASSIGN_WIDTH[tier] - TIER_GAP[tier], ACTIONS_MIN_WIDTH)
+    : width;
+}
+/** A column's width and whether it may give some back - for the header and every row alike. */
+export function columnStyle(tier: Tier, key: ColKey, splitAssign?: boolean) {
+  const width = widthOf(tier, key, splitAssign);
   return SHRINKS.includes(key) ? ({ width, flexShrink: 1, minWidth: 0 } as const) : ({ width, flexShrink: 0 } as const);
 }
-export const TIER_GAP: Record<Tier, number> = { full: 12, compact: 10, tight: 8 };
 /** The amount is left-aligned, under its header; this much empty room on its right keeps it from
  * running into the technician beside it. It is part of the column's width, in the header and every
  * row alike. */
@@ -54,6 +71,7 @@ export const HEAD_LABEL: Record<ColKey, string> = {
   amount: 'Amount',
   tech: 'Technician',
   status: 'Progress',
+  assign: 'Assign',
   actions: 'Actions',
 };
 
@@ -75,8 +93,8 @@ export function tierFor(width: number): Tier {
 export const TierContext = createContext<Tier>('full');
 
 /** The column names above the rows, in the same widths and gaps as the cells under them.
- * `leading` leaves room for the tick box some rows start with. */
-export function JobTableHeader({ tier, leading }: { tier: Tier; leading?: boolean }) {
+ * `leading` leaves room for the tick box some rows start with; `splitAssign` adds the Assign column. */
+export function JobTableHeader({ tier, leading, splitAssign }: { tier: Tier; leading?: boolean; splitAssign?: boolean }) {
   return (
     <View
       className="flex-row items-center rounded-md"
@@ -91,9 +109,9 @@ export function JobTableHeader({ tier, leading }: { tier: Tier; leading?: boolea
       }}
     >
       {leading && <View style={{ width: 20 }} />}
-      {TIER_COLUMNS[tier].map((key) => {
+      {columnsOf(tier, splitAssign).map((key) => {
         const style = {
-          ...columnStyle(tier, key),
+          ...columnStyle(tier, key, splitAssign),
           textAlign: key === 'actions' ? ('right' as const) : undefined,
           paddingRight: key === 'amount' ? AMOUNT_PAD : undefined,
         };

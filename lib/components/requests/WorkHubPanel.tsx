@@ -35,10 +35,11 @@ import {
   ROW_BUTTON_HEIGHT,
   ROW_PAD_X,
   ROW_PAD_Y,
-  TIER_COLUMNS,
   TIER_GAP,
   TIER_WIDTH,
+  columnsOf,
   tierFor,
+  widthOf,
   type ColKey,
   type Tier,
 } from './JobTable';
@@ -723,7 +724,8 @@ function JobCompactRow({
   const mainIcon: keyof typeof Ionicons.glyphMap = r.hold_status === 'requested' ? 'pause-circle-outline' : 'person-add-outline';
   const mainPress = r.hold_status === 'requested' ? open : () => onAssign(r);
 
-  const has = (key: ColKey) => TIER_COLUMNS[tier].includes(key);
+  // The Assign button has a column of its own (see JobTableHeader splitAssign), apart from the icons.
+  const has = (key: ColKey) => columnsOf(tier, true).includes(key);
   const w = TIER_WIDTH[tier];
   const cell = { minWidth: 0 } as const;
   const stages = jobStages(r, times);
@@ -777,10 +779,10 @@ function JobCompactRow({
 
       {/* Not a button: the row does not open the job page; its buttons on the right are the way in. */}
       <View className="flex-row items-center" style={{ gap: 8, width: w.job, flexShrink: 1, ...cell }}>
-        <CategoryBadge category={r.issue_type} size={30} />
+        <CategoryBadge category={r.issue_type} size={60} />
         <View style={{ flex: 1, gap: 1, ...cell }}>
           {!!issue.eyebrow && (
-            <Text className="text-[10.5px] font-semibold text-gray-500" numberOfLines={1}>
+            <Text className="text-[12px] font-bold text-gray-900" numberOfLines={1}>
               {issue.eyebrow}
             </Text>
           )}
@@ -859,19 +861,22 @@ function JobCompactRow({
         <JobProgressBars steps={stages} note={statusLine} details={timeLines} />
       </View>
 
-      <View className="flex-row items-center justify-end" style={{ gap: 4, width: w.actions, flexShrink: 0 }}>
+      <View style={{ width: widthOf(tier, 'assign', true), flexShrink: 0 }}>
         <Pressable
           onPress={mainPress}
           disabled={busy}
           accessibilityLabel={mainLabel}
           className="flex-row items-center justify-center rounded-lg disabled:opacity-50"
-          style={{ height: ROW_BUTTON_HEIGHT, paddingHorizontal: 9, gap: 5, flexShrink: 1, minWidth: 0, backgroundColor: '#0F766E' }}
+          style={{ height: ROW_BUTTON_HEIGHT, paddingHorizontal: 8, gap: 5, minWidth: 0, backgroundColor: '#0F766E' }}
         >
           <Ionicons name={mainIcon} size={14} color="#FFFFFF" />
           <Text className="text-[12px] font-semibold text-white" style={{ flexShrink: 1 }} numberOfLines={1}>
             {mainLabel}
           </Text>
         </Pressable>
+      </View>
+
+      <View className="flex-row items-center justify-end" style={{ gap: 4, width: widthOf(tier, 'actions', true), flexShrink: 0 }}>
         {canEditJob(r) && (
           <Pressable
             onPress={() => router.push(editJobHref(r.id) as any)}
@@ -978,7 +983,7 @@ function JobList({
     <View style={{ gap: compact ? 6 : 12 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
       {compact ? (
         <JobTableScroll available={boxWidth}>
-          <JobTableHeader tier={tier} />
+          <JobTableHeader tier={tier} splitAssign />
           {jobs.map((r) => (
             <JobCompactRow
               key={r.id}
