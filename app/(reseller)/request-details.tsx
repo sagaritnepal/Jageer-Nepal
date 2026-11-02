@@ -413,7 +413,7 @@ function ResellerRequestDetails() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: isWideWeb ? 32 : 16, paddingTop: isWideWeb ? 24 : 16, paddingBottom: 24 }}
       >
-        <ServiceDropdown value={service} onChange={(c, a) => setService({ category: c, action: a })} />
+        <ServiceDropdown value={service} onChange={setService} />
 
         <View style={{ flexDirection: isWideWeb ? 'row' : 'column', flexWrap: 'wrap', gap: isWideWeb ? 16 : 12 }}>
           <NumberedCard n={1} title="Who is it for?" subtitle="Saved customer or phone contact" wide={isWideWeb} width={cardWidth}>
