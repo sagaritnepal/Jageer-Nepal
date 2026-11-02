@@ -1,6 +1,6 @@
 // lib/components/requests/WorkHubPanel.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -1059,6 +1059,7 @@ export function WorkHubPanel({
   stage,
   jobs,
   boardOnly = false,
+  initialQuery,
 }: {
   wide: boolean;
   stage: keyof typeof STAGE_COPY;
@@ -1066,6 +1067,8 @@ export function WorkHubPanel({
   jobs: ServiceRequest[];
   /** Show the board - the requests/board screen - instead of the stage's list. */
   boardOnly?: boolean;
+  /** What the board's search box starts with - "Assign" on a job in the list opens the board on that job. */
+  initialQuery?: string;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const businessName = useAuthStore((state) => state.profile?.business_name);
@@ -1092,6 +1095,17 @@ export function WorkHubPanel({
   // Requests (usually Services).
   const view: 'sheet' | 'board' = boardOnly ? 'board' : 'sheet';
   const openBoard = () => router.push('/(reseller)/requests/board' as any);
+  // "Assign" on a job with nobody on it opens the board on that job, where the team's workload is in
+  // view; one that already has someone ("Reassign") has no card to act on there, so it keeps the picker.
+  const openBoardFor = (request: ServiceRequest) =>
+    router.push(
+      `/(reseller)/requests/board?find=${encodeURIComponent(ticketLabel(request.ticket_no) ?? request.customer_name ?? '')}` as any
+    );
+  const assignFromList = (request: ServiceRequest) =>
+    request.technician_id ? openPicker(request, 'staff') : openBoardFor(request);
+  // The board's search box: a ticket, customer, phone, job, address or technician.
+  const [query, setQuery] = useState(initialQuery ?? '');
+  useEffect(() => setQuery(initialQuery ?? ''), [initialQuery]);
   const closeBoard = () => (router.canGoBack() ? router.back() : router.replace('/(reseller)/requests' as any));
   // Full screen is a setting of this page, not a page: Back closes it before it leaves.
   useBackStep(maximised, () => setMaximised(false));
@@ -1137,7 +1151,6 @@ export function WorkHubPanel({
   // The board is about who is carrying work right now - all of it, not just
   // the jobs the list shows.
   const live = useMemo(() => requests.filter((r) => LIVE_STATUSES.includes(r.status)), [requests]);
-  const overdueCount = useMemo(() => live.filter(isOverdue).length, [live]);
 
   const byTechnician = useMemo(() => {
     const map = new Map<string, ServiceRequest[]>();
@@ -1166,6 +1179,25 @@ export function WorkHubPanel({
     employees.find((e) => e.profile.id === id)?.profile.full_name ??
     profileById.get(id)?.full_name ??
     'Technician';
+
+  // What the board shows once the search box is filled in; with nothing typed, all the live work.
+  const needle = query.trim().toLowerCase();
+  const searching = needle.length > 0;
+  const matchesSearch = (r: ServiceRequest) =>
+    [
+      ticketLabel(r.ticket_no),
+      r.customer_name,
+      r.customer_phone,
+      r.company_name,
+      r.issue_type,
+      r.location_data?.address,
+      r.technician_id ? technicianName(r.technician_id) : null,
+    ].some((text) => !!text && text.toLowerCase().includes(needle));
+  const found = searching ? live.filter(matchesSearch) : live;
+  const foundUnassigned = found.filter((r) => !r.technician_id && !r.open_to_team);
+  const foundOpenToTeam = found.filter((r) => !r.technician_id && r.open_to_team);
+  const foundWith = (technicianId: string) => found.filter((r) => r.technician_id === technicianId);
+  const foundOverdue = found.filter(isOverdue).length;
 
   // The page shows open work only; the saved record is the whole month,
   // finished jobs included - that is the point of keeping it.
@@ -1316,19 +1348,23 @@ export function WorkHubPanel({
 
   const emptyNote = (text: string) => <Text className="py-2 text-[12px] text-gray-400">{text}</Text>;
 
+  // While searching, a column with nothing in it is left out, so the match is what is on screen.
   const columns = (
     <>
+      {searching && found.length === 0 && emptyNote(`No work matches "${query.trim()}".`)}
+
+      {(!searching || foundUnassigned.length > 0) && (
       <Column
         title="Nobody yet"
         subtitle="Assign someone, or open it to the team"
-        count={unassigned.length}
+        count={foundUnassigned.length}
         color="#4B5563"
         tint="#F3F4F6"
         wide={wide}
       >
-        {unassigned.length === 0
+        {foundUnassigned.length === 0
           ? emptyNote('Every job has someone on it.')
-          : unassigned.map((r) => (
+          : foundUnassigned.map((r) => (
               <JobCard
                 key={r.id}
                 request={r}
@@ -1341,18 +1377,20 @@ export function WorkHubPanel({
               />
             ))}
       </Column>
+      )}
 
+      {(!searching || foundOpenToTeam.length > 0) && (
       <Column
         title="Open to the team"
         subtitle="First of your employees to accept gets it"
-        count={openToTeam.length}
+        count={foundOpenToTeam.length}
         color="#059669"
         tint="#ECFDF5"
         wide={wide}
       >
-        {openToTeam.length === 0
+        {foundOpenToTeam.length === 0
           ? emptyNote('Nothing is waiting to be picked up.')
-          : openToTeam.map((r) => (
+          : foundOpenToTeam.map((r) => (
               <JobCard
                 key={r.id}
                 request={r}
@@ -1365,9 +1403,11 @@ export function WorkHubPanel({
               />
             ))}
       </Column>
+      )}
 
       {employees.map(({ employment, profile }) => {
-        const jobs = byTechnician.get(profile.id) ?? [];
+        const jobs = foundWith(profile.id);
+        if (searching && jobs.length === 0) return null;
         return (
           <Column
             key={employment.id}
@@ -1389,7 +1429,8 @@ export function WorkHubPanel({
       })}
 
       {outsideHolders.map((id) => {
-        const jobs = byTechnician.get(id) ?? [];
+        const jobs = foundWith(id);
+        if (searching && jobs.length === 0) return null;
         const profile = profileById.get(id);
         return (
           <Column
@@ -1420,15 +1461,17 @@ export function WorkHubPanel({
         <Text className="text-[15px] font-bold text-gray-900">
           {view === 'sheet'
             ? STAGE_COPY[stage].title(shown.length)
-            : `${live.length} job${live.length === 1 ? '' : 's'} in play`}
+            : searching
+              ? `${found.length} of ${live.length} job${live.length === 1 ? '' : 's'} match`
+              : `${live.length} job${live.length === 1 ? '' : 's'} in play`}
         </Text>
         <Text className="mt-0.5 text-[12px] text-gray-500">
           {view === 'sheet'
             ? [shownOverdue > 0 && `${shownOverdue} overdue`, openToTeam.length > 0 && `${openToTeam.length} open to the team`]
                 .filter(Boolean)
                 .join(' · ') || 'Nothing overdue'
-            : `${unassigned.length} waiting for someone · ${openToTeam.length} open to the team${
-                overdueCount > 0 ? ` · ${overdueCount} overdue` : ''
+            : `${foundUnassigned.length} waiting for someone · ${foundOpenToTeam.length} open to the team${
+                foundOverdue > 0 ? ` · ${foundOverdue} overdue` : ''
               }`}
         </Text>
       </View>
@@ -1523,7 +1566,7 @@ export function WorkHubPanel({
         times={jobTimes}
         now={now}
         technicianName={technicianName}
-        onAssign={(r) => openPicker(r, 'staff')}
+        onAssign={assignFromList}
         onRequest={(r) => openPicker(r, 'freelance')}
         onCancelWork={confirmCancelWork}
         onDeleteWork={confirmDeleteJob}
@@ -1564,7 +1607,11 @@ export function WorkHubPanel({
               times={jobTimes}
               now={now}
               technicianName={technicianName}
-              onAssign={(r) => openPicker(r, 'staff')}
+              onAssign={(r) => {
+                // The board is another page; this full-screen list is a pop-up over this one.
+                if (!r.technician_id) setMaximised(false);
+                assignFromList(r);
+              }}
               onRequest={(r) => openPicker(r, 'freelance')}
               onCancelWork={confirmCancelWork}
               onDeleteWork={confirmDeleteJob}
@@ -1579,19 +1626,6 @@ export function WorkHubPanel({
           </ScrollView>
         </View>
       </Modal>
-
-      <AssignSheet
-        request={assigning?.request ?? null}
-        mode={assigning?.mode ?? 'staff'}
-        // Not the technician who already has the job - handing it to them would be a no-op.
-        people={(assigning?.mode === 'freelance' ? freelanceChoices : staffChoices).filter(
-          (p) => p.id !== assigning?.request.technician_id
-        )}
-        loading={assigning?.mode === 'freelance' && loadingTechnicians}
-        onPick={sendJobTo}
-        onClose={() => setAssigning(null)}
-        busy={sending}
-      />
 
       <Pressable
         onPress={openBoard}
@@ -1609,6 +1643,30 @@ export function WorkHubPanel({
   return (
     <View style={{ gap: wide ? 16 : 14 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
       {header}
+      {view === 'board' && (
+        <View
+          className="h-10 flex-row items-center gap-2 rounded-lg border border-gray-300 bg-white px-3"
+          style={wide ? { maxWidth: 520 } : undefined}
+        >
+          <Ionicons name="search" size={16} color="#6B7280" />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search work: ticket, customer, phone, job, technician"
+            placeholderTextColor="#9CA3AF"
+            autoCorrect={false}
+            autoCapitalize="none"
+            accessibilityLabel="Search work"
+            className="flex-1 text-[13px] text-gray-900"
+            style={{ outlineStyle: 'none' } as object}
+          />
+          {searching && (
+            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+              <Ionicons name="close-circle" size={17} color="#9CA3AF" />
+            </Pressable>
+          )}
+        </View>
+      )}
       {view === 'sheet' ? (
         sheet
       ) : wide ? (
@@ -1624,6 +1682,20 @@ export function WorkHubPanel({
       ) : (
         columns
       )}
+
+      {/* On both the list and the board: the board's Assign buttons open it too. */}
+      <AssignSheet
+        request={assigning?.request ?? null}
+        mode={assigning?.mode ?? 'staff'}
+        // Not the technician who already has the job - handing it to them would be a no-op.
+        people={(assigning?.mode === 'freelance' ? freelanceChoices : staffChoices).filter(
+          (p) => p.id !== assigning?.request.technician_id
+        )}
+        loading={assigning?.mode === 'freelance' && loadingTechnicians}
+        onPick={sendJobTo}
+        onClose={() => setAssigning(null)}
+        busy={sending}
+      />
     </View>
   );
 }
