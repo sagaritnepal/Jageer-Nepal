@@ -1,5 +1,5 @@
 // app/(client)/request-details.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,6 +64,9 @@ function RequestDetails() {
   const [photos, setPhotos] = useState<(string | null)[]>(Array(PHOTO_SLOTS).fill(null));
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Set the instant Submit is pressed - `submitting` above only changes on the next render, so two presses
+  // that land before it would each create the job. It stays set once the job is saved: one form, one job.
+  const submittingRef = useRef(false);
   const wide = useIsWideWeb();
 
   // The chat assistant's prefill - only fills fields, Submit is still a
@@ -108,6 +111,7 @@ function RequestDetails() {
   }
 
   async function handleSubmit() {
+    if (submittingRef.current) return;
     if (!userId) {
       showAlert('Please sign in', 'Your session may have expired — sign in again and retry.');
       return;
@@ -125,7 +129,9 @@ function RequestDetails() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
+    let saved = false;
     try {
       const photoUrls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
@@ -144,12 +150,17 @@ function RequestDetails() {
         photo_urls: photoUrls,
       });
 
+      saved = true;
       showAlert('Request submitted', 'A reseller will review it and assign a technician soon.');
       router.replace(returnPathOr('/(client)', from, 'requests'));
     } catch (err) {
       showAlert('Something went wrong', getErrorMessage(err));
     } finally {
-      setSubmitting(false);
+      // Only a failed save can be tried again; a saved one leaves the form locked while the page navigates away.
+      if (!saved) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   }
 

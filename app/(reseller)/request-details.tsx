@@ -258,6 +258,7 @@ function ResellerRequestDetails({ formKey }: { formKey: string }) {
 
     submittingRef.current = true;
     setSubmitting(true);
+    let saved = false;
     try {
       const photoUrls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
@@ -314,13 +315,18 @@ function ResellerRequestDetails({ formKey }: { formKey: string }) {
         photo_urls: photoUrls,
       });
 
+      saved = true;
       showAlert('Request submitted', 'Assign a technician from the Requests tab whenever you’re ready.');
       router.replace(returnPath);
     } catch (err) {
       showAlert('Something went wrong', getErrorMessage(err));
     } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
+      // Only a failed save can be tried again; a saved one leaves the form locked while the page navigates away,
+      // so a late second press cannot create the same job twice.
+      if (!saved) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   }
 
