@@ -83,7 +83,7 @@ const STAGE_META: Record<
   Stage,
   { label: string; todo: string; icon: keyof typeof Ionicons.glyphMap; color: string; tint: string }
 > = {
-  requests: { label: 'Customer App Jobs', todo: 'Accept, quote and wait for approval', icon: 'download-outline', color: '#EA580C', tint: '#FFF7ED' },
+  requests: { label: 'App Jobs', todo: 'Accept, quote and wait for approval', icon: 'download-outline', color: '#EA580C', tint: '#FFF7ED' },
   waiting_customer: { label: 'Waiting on customer', todo: 'Quote & wait for approval', icon: 'time-outline', color: '#D97706', tint: '#FFFBEB' },
   my_jobs: { label: 'My Jobs', todo: 'Assign a technician and follow the work', icon: 'briefcase', color: '#2563EB', tint: '#EFF6FF' },
   in_progress: { label: 'Job in progress', todo: 'Technician is working', icon: 'build', color: '#2563EB', tint: '#EFF6FF' },
@@ -1186,11 +1186,11 @@ export default function ResellerRequestQueue() {
                   style={{ borderWidth: active ? 2 : 1, borderColor: active ? meta.color : '#E5E7EB' }}
                 >
                   <View className="h-7 w-7 items-center justify-center rounded-full" style={{ backgroundColor: meta.color }}>
-                    <Text className="text-[13px] font-extrabold text-white">{countOf(stage)}</Text>
+                    <Ionicons name={meta.icon} size={15} color="#FFFFFF" />
                   </View>
                   <View className="flex-1">
                     <Text className="text-[13px] font-bold leading-4 text-gray-900" numberOfLines={2}>
-                      {meta.label}
+                      {meta.label} ({countOf(stage)})
                     </Text>
                     <Text className="mt-0.5 text-[11.5px] leading-4 text-gray-500" numberOfLines={2}>
                       {meta.todo}
@@ -1211,14 +1211,6 @@ export default function ResellerRequestQueue() {
           <View className="flex-row" style={{ gap: 8 }}>
             {SIDE_STAGES.map(sidePill)}
           </View>
-          <Pressable
-            onPress={() => router.push(newJobHref() as any)}
-            className="flex-row items-center gap-1.5 rounded-lg bg-orange-500 px-4"
-            style={{ height: 38 }}
-          >
-            <Ionicons name="add" size={18} color="white" />
-            <Text className="text-sm font-semibold text-white">New request</Text>
-          </Pressable>
         </View>
 
         {hubView ?? (
