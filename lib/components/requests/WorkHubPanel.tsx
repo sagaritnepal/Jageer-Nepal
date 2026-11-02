@@ -712,6 +712,11 @@ function JobCompactRow({
   const issue = splitIssue(r.issue_type);
   const overdue = isOverdue(r);
   const dateText = numericDateLabel(r.scheduled_date ?? entryDay(null, r.created_at));
+  // The time the job was put in, under the date.
+  const registered = new Date(r.created_at);
+  const registeredTime = `${String(registered.getHours()).padStart(2, '0')}:${String(registered.getMinutes()).padStart(2, '0')}`;
+  // What the customer wrote when they asked for the job.
+  const customerRequest = r.description?.trim();
 
   // The one action that moves the job on, then Edit; a hold waiting on you comes first.
   const mainLabel = r.hold_status === 'requested' ? 'Review hold' : r.technician_id ? 'Reassign' : 'Assign';
@@ -760,12 +765,18 @@ function JobCompactRow({
       </Text>
 
       {has('when') && (
-        <Text className="text-[12px] text-gray-800" style={{ width: w.when, flexShrink: 0 }} numberOfLines={1}>
-          {dateText || '—'}
-        </Text>
+        <View style={{ width: w.when, flexShrink: 0 }}>
+          <Text className="text-[12px] text-gray-800" numberOfLines={1}>
+            {dateText || '—'}
+          </Text>
+          <Text className="text-[10.5px] text-gray-500" numberOfLines={1}>
+            {`Added ${registeredTime}`}
+          </Text>
+        </View>
       )}
 
-      <Pressable onPress={open} className="flex-row items-center" style={{ gap: 8, width: w.job, flexShrink: 1, ...cell }}>
+      {/* Not a button: the row does not open the job page; its buttons on the right are the way in. */}
+      <View className="flex-row items-center" style={{ gap: 8, width: w.job, flexShrink: 1, ...cell }}>
         <CategoryBadge category={r.issue_type} size={30} />
         <View style={{ flex: 1, gap: 1, ...cell }}>
           {!!issue.eyebrow && (
@@ -776,13 +787,18 @@ function JobCompactRow({
           <Text className="text-[13px] font-bold text-gray-900" numberOfLines={1}>
             {issue.title}
           </Text>
+          {!!customerRequest && (
+            <Text className="text-[11px] text-gray-600" numberOfLines={2}>
+              {customerRequest}
+            </Text>
+          )}
           {!!r.chalan_no?.trim() && (
             <Text className="text-[11px] font-semibold text-gray-600" numberOfLines={1}>
               {`Chalan no. ${r.chalan_no.trim()}${r.chalan_urls.length > 0 ? ' · photo added' : ''}`}
             </Text>
           )}
         </View>
-      </Pressable>
+      </View>
 
       <View style={{ width: w.customer, flexShrink: 1, ...cell }}>
         <Text className="text-[12.5px] font-semibold text-gray-900" numberOfLines={1}>
@@ -1100,11 +1116,11 @@ export function WorkHubPanel({
   const now = useNow();
   const { data: employees } = useMyEmployees(userId);
 
-  // The list is this stage's jobs: overdue ones first, then by when they were due. The customer's
-  // name is the job's own, exactly as the job page shows it - the Ledger customer a job happens to
-  // be linked to can carry a different name.
+  // The list is this stage's jobs, the newest first - by the date and time each was put in. The
+  // customer's name is the job's own, exactly as the job page shows it - the Ledger customer a job
+  // happens to be linked to can carry a different name.
   const shown = useMemo(
-    () => [...jobs].sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a)) || dueAt(a) - dueAt(b)),
+    () => [...jobs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || (b.ticket_no ?? 0) - (a.ticket_no ?? 0)),
     [jobs]
   );
   const shownOverdue = shown.filter(isOverdue).length;
