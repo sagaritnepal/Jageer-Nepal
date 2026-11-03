@@ -10,7 +10,7 @@ import { TicketChip } from '../TicketChip';
 import { ticketLabel } from '../../utils/ticket';
 import { jobJourney, jobStages, type JobTimes } from '../../utils/jobTimeline';
 import { useAuthStore } from '../../hooks/useAuth';
-import { useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
+import { subscribeToTable, useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
 import { useMyEmployees } from '../../hooks/useTechnicianEmployment';
 import { assignTechnician, showJobSentAlert } from '../../utils/assignTechnician';
 import { canCancelWork, useCancelWork } from '../../hooks/useCancelWork';
@@ -254,6 +254,43 @@ function workedToday(
   return spans.sort((a, b) => a.from - b.from);
 }
 
+/** One stretch of today a job was offered to a technician and not yet answered: from when it was
+ * assigned to when they accepted it - or to now, while it is still waiting. */
+type OfferSpan = { id: string; ticket: string | null; title: string; from: number; to: number; waiting: boolean };
+
+/** The jobs assigned to a technician today, each as the stretch it waited for them to accept. Once
+ * accepted it stays here as how long the wait was, and its work shows on the other side of the rail. */
+function offeredToday(
+  requests: ServiceRequest[],
+  times: Map<string, JobTimes> | undefined,
+  technicianId: string,
+  now: number
+): OfferSpan[] {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const dayStart = midnight.getTime();
+  const offers: OfferSpan[] = [];
+  for (const r of requests) {
+    if (r.technician_id !== technicianId || !r.assigned_at) continue;
+    const offered = new Date(r.assigned_at).getTime();
+    const startedIso = times?.get(r.id)?.started_at;
+    const accepted = startedIso ? new Date(startedIso).getTime() : NaN;
+    const waiting = r.status === 'assigned' && Number.isNaN(accepted);
+    const answered = Number.isNaN(accepted) ? (waiting ? now : NaN) : accepted;
+    if (Number.isNaN(offered) || Number.isNaN(answered) || answered < offered) continue;
+    if (answered < dayStart || offered >= dayStart + DAY_MS) continue;
+    offers.push({
+      id: r.id,
+      ticket: ticketLabel(r.ticket_no),
+      title: r.issue_type,
+      from: (Math.max(offered, dayStart) - dayStart) / 60_000,
+      to: (Math.min(answered, dayStart + DAY_MS) - dayStart) / 60_000,
+      waiting,
+    });
+  }
+  return offers.sort((a, b) => a.from - b.from);
+}
+
 /** "09:00:00" -> 540 minutes from midnight. */
 function minutesOf(time: string | null | undefined, fallback: number): number {
   const match = /^(\d{1,2}):(\d{2})/.exec(time ?? '');
@@ -297,126 +334,197 @@ const UNUSED_RED = '#F87171';
 /** How tall one hour is in an employee's day rail. */
 const HOUR_PX = 36;
 const DAY_PX = 24 * HOUR_PX;
-/** The rail's width, and the part of it down the left edge that holds the hour numbers. */
-const RAIL_PX = 132;
+/** The rail's parts, left to right: the lane of assigned work, the hour numbers with the day's colour,
+ * and the lane of accepted work. */
+const OFFER_LANE_PX = 88;
 const HOURS_PX = 22;
+const WORK_LANE_PX = 104;
+const RAIL_PX = OFFER_LANE_PX + HOURS_PX + WORK_LANE_PX;
 
-/** An employee's day, 0 to 24 hours from top to bottom, beside their jobs: every job they worked holds
- * its own stretch of the rail from the moment they started it to the moment they finished it (green
- * while it is still going) - so what the time went on, and how long each job held them, can be read
- * straight off it. A red line marks now. */
+/** Things that overlap in time sit side by side in lanes; one with nothing alongside it takes the
+ * whole width. `items` come in start order. */
+function inLanes<T extends { from: number; to: number }>(items: T[]) {
+  const placed: { item: T; lane: number; lanes: number }[] = [];
+  let group: typeof placed = [];
+  let laneEnds: number[] = [];
+  let groupEnd = 0;
+  const closeGroup = () => {
+    for (const entry of group) entry.lanes = Math.max(1, laneEnds.length);
+    placed.push(...group);
+    group = [];
+    laneEnds = [];
+  };
+  for (const item of items) {
+    if (group.length > 0 && item.from >= groupEnd) closeGroup();
+    let lane = laneEnds.findIndex((end) => end <= item.from);
+    if (lane < 0) lane = laneEnds.length;
+    laneEnds[lane] = item.to;
+    groupEnd = Math.max(groupEnd, item.to);
+    group.push({ item, lane, lanes: 1 });
+  }
+  closeGroup();
+  return placed;
+}
+
+/** An employee's day, 0 to 24 hours from top to bottom, beside their jobs. The hour numbers run down
+ * the middle, over the day's colour; a job assigned to them stands on the left from the moment it was
+ * assigned until they accept it (still waiting, it runs to now), and once accepted its work stands on
+ * the right from the moment they accepted it to the moment they finished (green while it is still
+ * going) - so every job can be followed from being given out to being done. A red line marks now. */
 function EmployeeDayRail({
   spans,
+  offers,
   dutyFrom,
   dutyTo,
   nowMin,
 }: {
   spans: DaySpan[];
+  offers: OfferSpan[];
   dutyFrom: number;
   dutyTo: number;
   nowMin: number;
 }) {
   const px = (minutes: number) => (Math.min(Math.max(minutes, 0), 1440) / 60) * HOUR_PX;
-  // Two jobs under way at once sit side by side, not over each other; a job with nothing alongside
-  // it takes the whole width.
-  const placed: { s: DaySpan; lane: number; lanes: number }[] = [];
-  let group: typeof placed = [];
-  let laneEnds: number[] = [];
-  let groupEnd = 0;
-  const closeGroup = () => {
-    for (const item of group) item.lanes = Math.max(1, laneEnds.length);
-    placed.push(...group);
-    group = [];
-    laneEnds = [];
-  };
-  for (const s of spans) {
-    if (group.length > 0 && s.from >= groupEnd) closeGroup();
-    let lane = laneEnds.findIndex((end) => end <= s.from);
-    if (lane < 0) lane = laneEnds.length;
-    laneEnds[lane] = s.to;
-    groupEnd = Math.max(groupEnd, s.to);
-    group.push({ s, lane, lanes: 1 });
-  }
-  closeGroup();
   const busy = busyIntervals(spans);
   const passed = Math.min(dutyTo, nowMin);
-  // One band: down its left edge, as wide as the hour numbers, runs the colour of the day - white for
-  // duty hours still to come, red for duty time that went unused, green for time worked, grey off duty -
-  // and the jobs fill the rest of its width.
-  return (
-    <View style={{ width: RAIL_PX, height: DAY_PX, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: HOURS_PX, backgroundColor: '#E5E7EB', borderRightWidth: 1, borderRightColor: '#D1D5DB' }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }} />
-        <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: Math.max(0, px(passed) - px(dutyFrom)), backgroundColor: UNUSED_RED }} />
-        {busy.map(([from, to]) => (
-          <View key={from} style={{ position: 'absolute', left: 0, right: 0, top: px(from), height: Math.max(px(to) - px(from), 2), backgroundColor: WORKED_GREEN }} />
-        ))}
-      </View>
-      {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
+  const block = (
+    key: string,
+    from: number,
+    to: number,
+    lane: number,
+    lanes: number,
+    fill: string,
+    content: (height: number) => React.ReactNode
+  ) => {
+    const top = px(from);
+    const height = Math.max(px(to) - top, 14);
+    return (
+      <View key={key} style={{ position: 'absolute', top, height, left: `${(lane / lanes) * 100}%`, width: `${100 / lanes}%`, padding: 1 }}>
         <View
-          key={h}
+          style={{
+            flex: 1,
+            borderRadius: 4,
+            paddingHorizontal: 4,
+            paddingVertical: height >= 22 ? 1 : 0,
+            overflow: 'hidden',
+            justifyContent: 'center',
+            backgroundColor: fill,
+          }}
+        >
+          {content(height)}
+        </View>
+      </View>
+    );
+  };
+  return (
+    <View style={{ width: RAIL_PX }}>
+      <View className="flex-row" style={{ height: 16 }}>
+        <Text className="text-center text-[9.5px] font-bold" style={{ width: OFFER_LANE_PX, color: '#B45309' }}>
+          Assigned
+        </Text>
+        <View style={{ width: HOURS_PX }} />
+        <Text className="text-center text-[9.5px] font-bold" style={{ width: WORK_LANE_PX, color: '#15803D' }}>
+          Accepted
+        </Text>
+      </View>
+      <View style={{ height: DAY_PX, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
+        {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
+          <View
+            key={h}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: px(h * 60),
+              height: 1,
+              backgroundColor: h % 6 === 0 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.07)',
+            }}
+          />
+        ))}
+        {/* The middle strip, as wide as the hour numbers: white for duty hours still to come, red for duty
+            time that went unused, green for time worked, grey off duty. */}
+        <View
           style={{
             position: 'absolute',
-            left: HOURS_PX,
-            right: 0,
-            top: px(h * 60),
-            height: 1,
-            backgroundColor: h % 6 === 0 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.07)',
+            top: 0,
+            bottom: 0,
+            left: OFFER_LANE_PX,
+            width: HOURS_PX,
+            backgroundColor: '#E5E7EB',
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderColor: '#D1D5DB',
           }}
-        />
-      ))}
-      {Array.from({ length: 24 }, (_, h) => (
-        <Text key={h} className="text-[9px] font-semibold text-gray-800" style={{ position: 'absolute', left: 4, top: px(h * 60) + 1 }}>
-          {h}
-        </Text>
-      ))}
-      <View style={{ position: 'absolute', top: 0, bottom: 0, left: HOURS_PX, right: 0 }}>
-        {placed.map(({ s, lane, lanes }) => {
-          const top = px(s.from);
-          const height = Math.max(px(s.to) - top, 14);
-          return (
-            <View
-              key={s.id}
-              style={{ position: 'absolute', top, height, left: `${(lane / lanes) * 100}%`, width: `${100 / lanes}%`, padding: 1 }}
-            >
-              <View
-                style={{
-                  flex: 1,
-                  borderRadius: 4,
-                  paddingHorizontal: 4,
-                  paddingVertical: height >= 22 ? 1 : 0,
-                  overflow: 'hidden',
-                  justifyContent: 'center',
-                  backgroundColor: s.running ? '#16A34A' : BLUE,
-                }}
-              >
-                {height >= 22 ? (
-                  <>
-                    <Text className="text-[10.5px] font-bold text-white" numberOfLines={height >= 70 ? 2 : 1}>
-                      {`${s.ticket ?? ''} ${s.title}`.trim()}
-                    </Text>
-                    {height >= 38 && (
-                      <Text className="text-[9.5px] text-white" numberOfLines={1}>
-                        {`${clock(s.from)}–${s.running ? 'now' : clock(s.to)}`}
-                      </Text>
-                    )}
-                    {height >= 50 && (
-                      <Text className="text-[9.5px] text-white" numberOfLines={1}>
-                        {formatDuration((s.to - s.from) * 60_000)}
-                      </Text>
-                    )}
-                  </>
-                ) : (
-                  <Text className="text-[9px] font-bold text-white" style={{ lineHeight: 12 }} numberOfLines={1}>
-                    {s.ticket ?? s.title}
+        >
+          <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }} />
+          <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: Math.max(0, px(passed) - px(dutyFrom)), backgroundColor: UNUSED_RED }} />
+          {busy.map(([from, to]) => (
+            <View key={from} style={{ position: 'absolute', left: 0, right: 0, top: px(from), height: Math.max(px(to) - px(from), 2), backgroundColor: WORKED_GREEN }} />
+          ))}
+        </View>
+        {Array.from({ length: 24 }, (_, h) => (
+          <Text key={h} className="text-[9px] font-semibold text-gray-800" style={{ position: 'absolute', left: OFFER_LANE_PX + 4, top: px(h * 60) + 1 }}>
+            {h}
+          </Text>
+        ))}
+
+        <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: OFFER_LANE_PX }}>
+          {inLanes(offers).map(({ item: o, lane, lanes }) =>
+            block(o.id, o.from, o.to, lane, lanes, o.waiting ? '#FBBF24' : '#FDE68A', (height) =>
+              height >= 22 ? (
+                <>
+                  <Text className="text-[10.5px] font-bold" style={{ color: '#78350F' }} numberOfLines={height >= 70 ? 2 : 1}>
+                    {`${o.ticket ?? ''} ${o.title}`.trim()}
                   </Text>
-                )}
-              </View>
-            </View>
-          );
-        })}
+                  {height >= 38 && (
+                    <Text className="text-[9.5px]" style={{ color: '#78350F' }} numberOfLines={1}>
+                      {`${clock(o.from)}–${o.waiting ? 'now' : clock(o.to)}`}
+                    </Text>
+                  )}
+                  {height >= 50 && (
+                    <Text className="text-[9.5px]" style={{ color: '#78350F' }} numberOfLines={1}>
+                      {o.waiting ? `waiting ${formatDuration((o.to - o.from) * 60_000)}` : `accepted in ${formatDuration((o.to - o.from) * 60_000)}`}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text className="text-[9px] font-bold" style={{ color: '#78350F', lineHeight: 12 }} numberOfLines={1}>
+                  {`${o.ticket ?? o.title} ${clock(o.from)}`}
+                </Text>
+              )
+            )
+          )}
+        </View>
+
+        <View style={{ position: 'absolute', top: 0, bottom: 0, left: OFFER_LANE_PX + HOURS_PX, right: 0 }}>
+          {inLanes(spans).map(({ item: s, lane, lanes }) =>
+            block(s.id, s.from, s.to, lane, lanes, s.running ? '#16A34A' : BLUE, (height) =>
+              height >= 22 ? (
+                <>
+                  <Text className="text-[10.5px] font-bold text-white" numberOfLines={height >= 70 ? 2 : 1}>
+                    {`${s.ticket ?? ''} ${s.title}`.trim()}
+                  </Text>
+                  {height >= 38 && (
+                    <Text className="text-[9.5px] text-white" numberOfLines={1}>
+                      {`${clock(s.from)}–${s.running ? 'now' : clock(s.to)}`}
+                    </Text>
+                  )}
+                  {height >= 50 && (
+                    <Text className="text-[9.5px] text-white" numberOfLines={1}>
+                      {formatDuration((s.to - s.from) * 60_000)}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text className="text-[9px] font-bold text-white" style={{ lineHeight: 12 }} numberOfLines={1}>
+                  {`${s.ticket ?? s.title} ${clock(s.from)}`}
+                </Text>
+              )
+            )
+          )}
+        </View>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />
       </View>
-      <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />
     </View>
   );
 }
@@ -451,7 +559,7 @@ function Column({
   return (
     <View
       className="rounded-2xl border border-gray-200 bg-gray-50"
-      style={wide ? { minWidth: side ? 470 : 320, flexBasis: side ? 470 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
+      style={wide ? { minWidth: side ? 540 : 320, flexBasis: side ? 540 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
     >
       <View className="rounded-t-2xl px-3.5 py-3" style={{ backgroundColor: tint, gap: 8 }}>
         <View className="flex-row items-center gap-2.5">
@@ -1345,6 +1453,20 @@ export function WorkHubPanel({
   }, [mine, incomingRaw]);
   // Each job's timeline needs when its technician started and finished it.
   const jobTimes = useJobTimes(useMemo(() => requests.map((r) => r.id).sort(), [requests]));
+  // A technician accepting or finishing a job shows on the board - and on the employee's day rail - at
+  // once, not on the next refresh.
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToTable(
+      'service_requests',
+      () => {
+        queryClient.invalidateQueries({ queryKey: ['service_requests'] });
+        queryClient.invalidateQueries({ queryKey: ['job-card-times'] });
+      },
+      `reseller_id=eq.${userId}`,
+      'work-hub'
+    );
+  }, [userId, queryClient]);
   const now = useNow();
   // How far into today it is, for the red "now" line in each employee's day bar.
   const nowMinutes = new Date(now).getHours() * 60 + new Date(now).getMinutes();
@@ -1612,6 +1734,7 @@ export function WorkHubPanel({
         const jobs = foundWith(profile.id);
         if (searching && jobs.length === 0) return null;
         const spans = workedToday(requests, jobTimes, profile.id, now);
+        const offers = offeredToday(requests, jobTimes, profile.id, now);
         const dutyFrom = minutesOf(employment.work_start_time, 9 * 60);
         const dutyTo = minutesOf(employment.work_end_time, 17 * 60);
         const figures = dayFigures(spans, dutyFrom, dutyTo, nowMinutes);
@@ -1643,7 +1766,9 @@ export function WorkHubPanel({
                     <Text className="text-[11px] font-semibold text-gray-700">Not used {minutesLabel(figures.unused)}</Text>
                   </View>
                   <Text className="text-[11px] text-gray-600">
-                    {`${spans.length} job${spans.length === 1 ? '' : 's'} today${spans.some((s) => s.running) ? ' · working now' : ''}`}
+                    {`${spans.length} job${spans.length === 1 ? '' : 's'} today${spans.some((s) => s.running) ? ' · working now' : ''}${
+                      offers.some((o) => o.waiting) ? ` · ${offers.filter((o) => o.waiting).length} waiting to accept` : ''
+                    }`}
                   </Text>
                 </View>
               </View>
@@ -1652,6 +1777,7 @@ export function WorkHubPanel({
               wide ? (
                 <EmployeeDayRail
                   spans={spans}
+                  offers={offers}
                   dutyFrom={dutyFrom}
                   dutyTo={dutyTo}
                   nowMin={nowMinutes}
