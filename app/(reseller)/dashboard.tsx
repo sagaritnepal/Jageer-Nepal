@@ -10,6 +10,8 @@ import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { MyStorefront } from '../../lib/components/MyStorefront';
 import { filterBySearch } from '../../lib/utils/search';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
+import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
+import { ToolbarSearch } from '../../lib/components/finance/BookKit';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import type { Profile, ServiceCategory } from '../../types/database.types';
 
@@ -124,34 +126,33 @@ export default function ResellerDashboard() {
     />
   );
 
-  // The page, one arrangement that reflows: its title and the one search box (for services and products
-  // alike), the switch between All / Services / Products, the services in a card, the products, then
-  // outsource technicians.
+  // The page, one arrangement that reflows: the switch between All / Services / Products, the services in
+  // a card, the products, then outsource technicians. Its name is in the top bar already, so it is not
+  // repeated here; the one search box (for services and products alike) is in the top bar too, beside
+  // AD / BS, on a wide screen - on a phone there is no room there, so it is the first thing on the page.
   const wide = isWideWeb;
   const pad = wide ? 32 : 16;
 
-  const band = (
-    <View className="flex-row flex-wrap items-end justify-between" style={{ gap: 12 }}>
-      <View style={{ flexShrink: 1 }}>
-        <Text className="text-2xl font-extrabold text-gray-900" numberOfLines={2}>
-          Marketplace
-        </Text>
-        <Text className="mt-1 text-sm text-gray-600">The work you take on and the stock you sell, in one place.</Text>
-      </View>
-      <View
-        className="flex-row items-center rounded-xl border border-gray-200 bg-white px-4 py-2.5"
-        style={{ width: wide ? 340 : '100%' }}
-      >
-        <Ionicons name="search" size={16} color="#9CA3AF" />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search services and products"
-          placeholderTextColor="#9CA3AF"
-          accessibilityLabel="Search services and products"
-          className="ml-2 flex-1 text-sm text-gray-900"
-        />
-      </View>
+  useScreenHeader(
+    {
+      headerRight: wide
+        ? () => <ToolbarSearch value={search} onChange={setSearch} placeholder="Search services and products" wide />
+        : undefined,
+    },
+    [wide, search]
+  );
+
+  const band = wide ? null : (
+    <View className="flex-row items-center rounded-xl border border-gray-200 bg-white px-4 py-2.5">
+      <Ionicons name="search" size={16} color="#9CA3AF" />
+      <TextInput
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search services and products"
+        placeholderTextColor="#9CA3AF"
+        accessibilityLabel="Search services and products"
+        className="ml-2 flex-1 text-sm text-gray-900"
+      />
     </View>
   );
 
