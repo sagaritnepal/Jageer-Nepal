@@ -305,8 +305,13 @@ export function MyStorefront({
     if (category) {
       list = list.filter((p) => p.category === category);
     }
-    return [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [visible, search, category]);
+    // The Marketplace reads A to Z; a seller's own stock list keeps its newest first.
+    return [...list].sort((a, b) =>
+      marketplaceOnly
+        ? a.name.trim().localeCompare(b.name.trim(), undefined, { sensitivity: 'base', numeric: true })
+        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [visible, search, category, marketplaceOnly]);
 
   // Matching item names as you type, so you can jump straight to one instead
   // of scanning the whole (already-filtered) grid below.

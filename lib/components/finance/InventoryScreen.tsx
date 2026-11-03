@@ -25,6 +25,7 @@ import {
   type BookColumn,
 } from './BookKit';
 import { PopupCard } from './FormKit';
+import { ProductPicture } from '../ProductPicture';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 import { useReportActions } from './PrintButton';
 import { TransactionDetailModal } from './TransactionsScreen';
@@ -72,6 +73,8 @@ interface InventoryRow {
   value: number | null;
   /** The product behind the row; null for an item that only exists as a name typed into a bill. */
   productId: string | null;
+  /** The product's picture; null when it has none (and for a bill-only item). */
+  imageUrl: string | null;
   /** Switched on for the marketplace (products.is_listed). */
   listed: boolean;
 }
@@ -484,6 +487,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
         status: stock <= 0 ? 'out' : 'ok',
         value: cost != null && stock > 0 ? stock * cost : null,
         productId: product.id,
+        imageUrl: product.image_url,
         listed: product.is_listed !== false,
       };
     });
@@ -509,12 +513,16 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
           status: 'untracked',
           value: null,
           productId: null,
+          imageUrl: null,
           listed: false,
         };
       })
       .filter((r): r is InventoryRow => r !== null);
 
-    return [...productRows, ...financeItemRows].sort((a, b) => a.name.localeCompare(b.name));
+    // A to Z: case and stray spaces do not matter, and 2 comes before 10.
+    return [...productRows, ...financeItemRows].sort((a, b) =>
+      a.name.trim().localeCompare(b.name.trim(), undefined, { sensitivity: 'base', numeric: true })
+    );
   }, [products, financeItems, movementsByName]);
 
   const stats = useMemo(
@@ -573,21 +581,24 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
     );
 
   const itemCell = (r: InventoryRow, compact: boolean) => (
-    <View style={{ minWidth: 0, gap: 2 }}>
-      <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
-        {highlightText(r.name, search)}
-      </Text>
-      {compact && <Pill text={STATUS[r.status].label} color={STATUS[r.status].color} bg={STATUS[r.status].bg} />}
-      {!!r.category && (
-        <Text className="text-[11px] text-gray-400" numberOfLines={1}>
-          {highlightText(r.category, search)}
+    <View className="flex-row items-center" style={{ minWidth: 0, gap: 10 }}>
+      <ProductPicture uri={r.imageUrl} style={{ width: compact ? 44 : 40, height: compact ? 44 : 40 }} iconSize={18} />
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
+          {highlightText(r.name, search)}
         </Text>
-      )}
-      {compact && (
-        <Text className="text-[11px] text-gray-400" numberOfLines={1}>
-          Sold {qty(r.sold)} · Bought {qty(r.purchased)}
-        </Text>
-      )}
+        {compact && <Pill text={STATUS[r.status].label} color={STATUS[r.status].color} bg={STATUS[r.status].bg} />}
+        {!!r.category && (
+          <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+            {highlightText(r.category, search)}
+          </Text>
+        )}
+        {compact && (
+          <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+            Sold {qty(r.sold)} · Bought {qty(r.purchased)}
+          </Text>
+        )}
+      </View>
     </View>
   );
 
@@ -606,6 +617,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
       className="rounded-xl border border-gray-200 bg-white p-3.5"
       style={{ flexGrow: 1, flexBasis: 250, minWidth: 220, maxWidth: layout.wide ? 420 : undefined, gap: 10 }}
     >
+      <ProductPicture uri={r.imageUrl} style={{ width: '100%', height: 132 }} iconSize={32} />
       <View className="flex-row items-start justify-between" style={{ gap: 8 }}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Text className="text-[14px] font-bold text-gray-900" numberOfLines={2}>
