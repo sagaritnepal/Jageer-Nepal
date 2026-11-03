@@ -54,6 +54,7 @@ export const FINANCE_WIDE_ROUTES = [
   '/party-report',
   '/to-receive',
   '/to-give',
+  '/ageing-report',
   '/bank-accounts',
   '/bank-balances',
   '/import-statement',

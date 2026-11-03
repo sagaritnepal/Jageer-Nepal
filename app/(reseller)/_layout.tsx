@@ -48,6 +48,7 @@ const REPORT_FAMILY: WebNavItem[] = [
   { href: '/(reseller)/expense-report', label: 'Expenses Report', icon: 'receipt' },
   { href: '/(reseller)/to-receive', label: 'Receivable Report', icon: 'people' },
   { href: '/(reseller)/to-give', label: 'Payable Report', icon: 'storefront' },
+  { href: '/(reseller)/ageing-report', label: 'Ageing Report', icon: 'time' },
 ];
 
 // Every entry form lives under Day Book in the side panel (Expenses are charged through a Voucher).
@@ -237,6 +238,7 @@ export default function ResellerLayout() {
         <Tabs.Screen name="expense-report" options={{ href: null, title: 'Expenses Report' }} />
         <Tabs.Screen name="party-report" options={{ href: null, title: 'Ledger' }} />
         <Tabs.Screen name="to-receive" options={{ href: null, title: 'Receivable Report' }} />
+        <Tabs.Screen name="ageing-report" options={{ href: null, title: 'Ageing Report' }} />
         <Tabs.Screen name="to-give" options={{ href: null, title: 'Payable Report' }} />
         <Tabs.Screen name="bank-accounts" options={{ href: null, title: 'Bank Accounts' }} />
         <Tabs.Screen name="bank-balances" options={{ href: null, title: 'Available Balance' }} />

@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 const PLACES = {
   'balance-sheet': { label: 'Balance Sheet', path: '/finance' },
   'profit-loss': { label: 'Profit & Loss', path: '/report' },
+  dashboard: { label: 'Dashboard', path: '/company-dashboard' },
 } as const;
 export type CameFromPlace = keyof typeof PLACES;
 
