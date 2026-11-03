@@ -868,8 +868,16 @@ export default function CompanyDashboard() {
   );
 
   const trend = (
-    <Panel title="Sales and purchases" subtitle="Last 12 months" right={<Legend items={[{ label: 'Sales', color: '#2563EB' }, { label: 'Purchases', color: '#F59E0B' }]} />}>
-      <TrendChart labels={months.map((m) => m.label)} sales={series.sale} purchases={series.purchase} onSales={() => go('/(reseller)/sales-report')} onPurchases={() => go('/(reseller)/purchase-report')} />
+    <Panel title="Sales and purchases" subtitle="Last 12 months" right={<Legend items={[{ label: 'Sales', color: '#2563EB' }, { label: 'Purchases', color: '#DC2626' }]} />}>
+      <TrendChart
+        labels={months.map((m) => m.label)}
+        sales={series.sale}
+        purchases={series.purchase}
+        purchaseColor="#DC2626"
+        purchaseText="#B91C1C"
+        onSales={() => go('/(reseller)/sales-report')}
+        onPurchases={() => go('/(reseller)/purchase-report')}
+      />
     </Panel>
   );
 
