@@ -265,10 +265,30 @@ function clock(minutes: number): string {
   return `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-/** An employee's day as one thin bar from 0 to 24 hours: their duty hours in white, each job they
- * worked on as a block from its start to its finish (green while it is still going), and a red line
- * for now. Under it, how long they worked in all; tap it for each job's start, finish and time. */
-function EmployeeDayBar({
+/** What an employee's header says about their day: how long they were busy in all. Jobs that overlap
+ * count once - it is the time they were busy, not the sum of the jobs. */
+function daySummary(spans: DaySpan[]): string {
+  if (spans.length === 0) return 'No work started today';
+  let busy = 0;
+  let reach = 0;
+  for (const s of spans) {
+    busy += Math.max(0, s.to - Math.max(s.from, reach));
+    reach = Math.max(reach, s.to);
+  }
+  return `Worked ${formatDuration(busy * 60_000)} today · ${spans.length} job${spans.length === 1 ? '' : 's'}${
+    spans.some((s) => s.running) ? ' · working now' : ''
+  }`;
+}
+
+/** How tall one hour is in an employee's day rail. */
+const HOUR_PX = 36;
+const DAY_PX = 24 * HOUR_PX;
+
+/** An employee's day, 0 to 24 hours from top to bottom, beside their jobs: the hours of their duty in
+ * white, and every job they worked holding its own stretch of the rail from the moment they started
+ * it to the moment they finished it (green while it is still going) - so what the time went on, and
+ * how long each job held them, can be read straight off it. A red line marks now. */
+function EmployeeDayRail({
   spans,
   dutyFrom,
   dutyTo,
@@ -279,78 +299,104 @@ function EmployeeDayBar({
   dutyTo: number;
   nowMin: number;
 }) {
-  const [open, setOpen] = useState(false);
-  const pct = (minutes: number) => `${(Math.min(Math.max(minutes, 0), 1440) / 1440) * 100}%` as `${number}%`;
-  // Jobs that overlap count once: it is the time they were busy, not the sum of the jobs.
-  let busy = 0;
-  let reach = 0;
+  const px = (minutes: number) => (Math.min(Math.max(minutes, 0), 1440) / 60) * HOUR_PX;
+  // Two jobs under way at once sit side by side, not over each other; a job with nothing alongside
+  // it takes the whole width.
+  const placed: { s: DaySpan; lane: number; lanes: number }[] = [];
+  let group: typeof placed = [];
+  let laneEnds: number[] = [];
+  let groupEnd = 0;
+  const closeGroup = () => {
+    for (const item of group) item.lanes = Math.max(1, laneEnds.length);
+    placed.push(...group);
+    group = [];
+    laneEnds = [];
+  };
   for (const s of spans) {
-    busy += Math.max(0, s.to - Math.max(s.from, reach));
-    reach = Math.max(reach, s.to);
+    if (group.length > 0 && s.from >= groupEnd) closeGroup();
+    let lane = laneEnds.findIndex((end) => end <= s.from);
+    if (lane < 0) lane = laneEnds.length;
+    laneEnds[lane] = s.to;
+    groupEnd = Math.max(groupEnd, s.to);
+    group.push({ s, lane, lanes: 1 });
   }
-  const summary =
-    spans.length === 0
-      ? 'No work started today'
-      : `Worked ${formatDuration(busy * 60_000)} today · ${spans.length} job${spans.length === 1 ? '' : 's'}${
-          spans.some((s) => s.running) ? ' · working now' : ''
-        }`;
+  closeGroup();
   return (
-    <View style={{ gap: 3 }}>
-      <Pressable
-        onPress={() => setOpen((v) => !v)}
-        accessibilityRole="button"
-        accessibilityLabel="Today, hour by hour"
-        style={{ gap: 3 }}
-      >
-        <View style={{ height: 14, borderRadius: 7, backgroundColor: '#D1D5DB', overflow: 'hidden' }}>
-          <View style={{ position: 'absolute', top: 0, bottom: 0, left: pct(dutyFrom), width: pct(dutyTo - dutyFrom), backgroundColor: '#FFFFFF' }} />
-          {[360, 720, 1080].map((m) => (
-            <View key={m} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(m), width: 1, backgroundColor: 'rgba(0,0,0,0.12)' }} />
-          ))}
-          {spans.map((s) => (
-            <View
-              key={s.id}
-              style={{
-                position: 'absolute',
-                top: 2,
-                bottom: 2,
-                left: pct(s.from),
-                width: pct(s.to - s.from),
-                minWidth: 3,
-                borderRadius: 3,
-                backgroundColor: s.running ? '#16A34A' : BLUE,
-              }}
-            />
-          ))}
-          <View style={{ position: 'absolute', top: 0, bottom: 0, left: pct(nowMin), width: 2, backgroundColor: '#DC2626' }} />
-        </View>
-        <View style={{ height: 12 }}>
-          {[0, 6, 12, 18, 24].map((h) => (
-            <Text
-              key={h}
-              className="text-[9.5px] text-gray-500"
-              style={
-                h === 0
-                  ? { position: 'absolute', left: 0 }
-                  : h === 24
-                    ? { position: 'absolute', right: 0 }
-                    : { position: 'absolute', left: pct(h * 60), transform: [{ translateX: -6 }] }
-              }
-            >
-              {h}
-            </Text>
-          ))}
-        </View>
-      </Pressable>
-      <Text className="text-[11px] font-semibold text-gray-700" numberOfLines={1}>
-        {summary}
-      </Text>
-      {open &&
-        spans.map((s) => (
-          <Text key={s.id} className="text-[11px] text-gray-600" numberOfLines={1}>
-            {`${s.ticket ?? ''} ${s.title} · ${clock(s.from)}–${s.running ? 'now' : clock(s.to)} · ${formatDuration((s.to - s.from) * 60_000)}`.trim()}
+    <View style={{ width: 210, height: DAY_PX + 12, flexDirection: 'row' }}>
+      <View style={{ width: 26 }}>
+        {Array.from({ length: 25 }, (_, h) => (
+          <Text
+            key={h}
+            className="text-right text-[9.5px] text-gray-500"
+            style={{ position: 'absolute', top: px(h * 60), right: 4, height: 12 }}
+          >
+            {h}
           </Text>
         ))}
+      </View>
+      <View style={{ flex: 1, marginTop: 6, height: DAY_PX, borderRadius: 8, backgroundColor: '#D1D5DB', overflow: 'hidden' }}>
+        <View
+          style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }}
+        />
+        {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
+          <View
+            key={h}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: px(h * 60),
+              height: 1,
+              backgroundColor: h % 6 === 0 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.07)',
+            }}
+          />
+        ))}
+        {placed.map(({ s, lane, lanes }) => {
+          const top = px(s.from);
+          const height = Math.max(px(s.to) - top, 14);
+          return (
+            <View
+              key={s.id}
+              style={{ position: 'absolute', top, height, left: `${(lane / lanes) * 100}%`, width: `${100 / lanes}%`, padding: 1 }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                  borderRadius: 4,
+                  paddingHorizontal: 4,
+                  paddingVertical: height >= 22 ? 1 : 0,
+                  overflow: 'hidden',
+                  justifyContent: 'center',
+                  backgroundColor: s.running ? '#16A34A' : BLUE,
+                }}
+              >
+                {height >= 22 ? (
+                  <>
+                    <Text className="text-[10.5px] font-bold text-white" numberOfLines={height >= 70 ? 2 : 1}>
+                      {`${s.ticket ?? ''} ${s.title}`.trim()}
+                    </Text>
+                    {height >= 38 && (
+                      <Text className="text-[9.5px] text-white" numberOfLines={1}>
+                        {`${clock(s.from)}–${s.running ? 'now' : clock(s.to)}`}
+                      </Text>
+                    )}
+                    {height >= 50 && (
+                      <Text className="text-[9.5px] text-white" numberOfLines={1}>
+                        {formatDuration((s.to - s.from) * 60_000)}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text className="text-[9px] font-bold text-white" style={{ lineHeight: 12 }} numberOfLines={1}>
+                    {s.ticket ?? s.title}
+                  </Text>
+                )}
+              </View>
+            </View>
+          );
+        })}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />
+      </View>
     </View>
   );
 }
@@ -364,6 +410,7 @@ function Column({
   avatar,
   phone,
   headerExtra,
+  side,
   children,
   wide,
 }: {
@@ -374,15 +421,17 @@ function Column({
   tint: string;
   avatar?: { name: string | null; photoUrl: string | null };
   phone?: string | null;
-  /** Under the name in the column's header - an employee's day bar. */
+  /** Under the name in the column's header - how long an employee worked today. */
   headerExtra?: React.ReactNode;
+  /** Beside the column's cards - an employee's day rail. */
+  side?: React.ReactNode;
   children: React.ReactNode;
   wide: boolean;
 }) {
   return (
     <View
       className="rounded-2xl border border-gray-200 bg-gray-50"
-      style={wide ? { minWidth: 320, flexBasis: 320, flexGrow: 1, flexShrink: 0 } : undefined}
+      style={wide ? { minWidth: side ? 520 : 320, flexBasis: side ? 520 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
     >
       <View className="rounded-t-2xl px-3.5 py-3" style={{ backgroundColor: tint, gap: 8 }}>
         <View className="flex-row items-center gap-2.5">
@@ -417,7 +466,14 @@ function Column({
         </View>
         {headerExtra}
       </View>
-      <View className="p-3" style={{ gap: 10 }}>{children}</View>
+      {side ? (
+        <View className="flex-row p-3" style={{ gap: 12 }}>
+          {side}
+          <View style={{ flex: 1, gap: 10, minWidth: 0 }}>{children}</View>
+        </View>
+      ) : (
+        <View className="p-3" style={{ gap: 10 }}>{children}</View>
+      )}
     </View>
   );
 }
@@ -1245,7 +1301,7 @@ export function WorkHubPanel({
   const [slideContent, setSlideContent] = useState(0);
   const canSlide = slideContent > slideView + 4;
   const slide = (direction: -1 | 1) =>
-    columnsRef.current?.scrollTo({ x: Math.max(0, slideX + direction * 334), animated: true });
+    columnsRef.current?.scrollTo({ x: Math.max(0, slideX + direction * Math.max(334, Math.round(slideView * 0.6))), animated: true });
   // Full screen is a setting of this page, not a page: Back closes it before it leaves.
   useBackStep(maximised, () => setMaximised(false));
   // Beside the sidebar a "wide" page can still leave this panel a narrow column.
@@ -1532,6 +1588,7 @@ export function WorkHubPanel({
       {employees.map(({ employment, profile }) => {
         const jobs = foundWith(profile.id);
         if (searching && jobs.length === 0) return null;
+        const spans = workedToday(requests, jobTimes, profile.id, now);
         return (
           <Column
             key={employment.id}
@@ -1546,12 +1603,19 @@ export function WorkHubPanel({
             avatar={{ name: profile.full_name, photoUrl: profile.avatar_url }}
             phone={profile.phone}
             headerExtra={
-              <EmployeeDayBar
-                spans={workedToday(requests, jobTimes, profile.id, now)}
-                dutyFrom={minutesOf(employment.work_start_time, 9 * 60)}
-                dutyTo={minutesOf(employment.work_end_time, 17 * 60)}
-                nowMin={nowMinutes}
-              />
+              <Text className="text-[11px] font-semibold text-gray-700" numberOfLines={1}>
+                {daySummary(spans)}
+              </Text>
+            }
+            side={
+              wide ? (
+                <EmployeeDayRail
+                  spans={spans}
+                  dutyFrom={minutesOf(employment.work_start_time, 9 * 60)}
+                  dutyTo={minutesOf(employment.work_end_time, 17 * 60)}
+                  nowMin={nowMinutes}
+                />
+              ) : undefined
             }
             wide={wide}
           >
