@@ -8,6 +8,7 @@ import { useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
+import { useInventoryViewStore, type InventoryView } from '../../hooks/useInventoryView';
 import {
   BackButton,
   BookPage,
@@ -48,11 +49,10 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'out', label: 'Out' },
 ];
 
-/** The list as a table (one row per item) or as tiles (one card per item). */
-type ViewMode = 'table' | 'tiles';
-const VIEWS: { key: ViewMode; label: string }[] = [
+/** The list as a grid (one card per item) or as a table (one row per item). */
+const VIEWS: { key: InventoryView; label: string }[] = [
+  { key: 'grid', label: 'Grid' },
   { key: 'table', label: 'Table' },
-  { key: 'tiles', label: 'Tiles' },
 ];
 
 const IN_TONE = { label: 'Stock in', color: '#047857', bg: '#ECFDF5' };
@@ -381,7 +381,8 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
   });
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<StatusFilter>('all');
-  const [view, setView] = useState<ViewMode>('table');
+  const view = useInventoryViewStore((state) => state.view);
+  const setView = useInventoryViewStore((state) => state.setView);
   // The item whose stock history is open in a popup, and a bill opened from it.
   const [viewingKey, setViewingKey] = useState<string | null>(null);
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
@@ -590,7 +591,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
     </View>
   );
 
-  // The tile view: one card per item, with the same figures as the table's columns. Tapping it opens the
+  // The grid view: one card per item, with the same figures as the table's columns. Tapping it opens the
   // item's history, as a table row does; the Marketplace switch is a press target of its own.
   const fact = (label: string, value: ReactNode) => (
     <View style={{ minWidth: 0, gap: 1 }}>
@@ -598,7 +599,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
       {value}
     </View>
   );
-  const tile = (r: InventoryRow) => (
+  const gridCard = (r: InventoryRow) => (
     <Pressable
       key={r.key}
       onPress={() => setViewingKey(r.key)}
@@ -742,10 +743,10 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
           <Ionicons name="cube-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">{rows.length > 0 ? 'No matches.' : 'Nothing bought or sold yet.'}</Text>
         </View>
-      ) : canList && view === 'tiles' ? (
+      ) : canList && view === 'grid' ? (
         <>
           <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-            {filteredRows.map(tile)}
+            {filteredRows.map(gridCard)}
           </View>
           <Text className="px-1 text-[12.5px] font-semibold text-gray-700">
             {`${filteredRows.length} ${filteredRows.length === 1 ? 'item' : 'items'} · Sold ${qty(totals.sold)} · Purchased ${qty(totals.purchased)} · Stock value NPR ${money(totals.value)}`}
