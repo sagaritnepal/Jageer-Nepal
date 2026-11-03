@@ -227,13 +227,25 @@ export function MyStorefront({
   sellerRole,
   emptyText,
   basePath,
+  search: searchFromPage,
+  hideOverview,
+  title,
 }: {
   sellerRole: UserRole;
   emptyText: string;
   basePath: string;
+  /** The page has one search box for everything on it: this is what was typed there, so the storefront
+   * shows no search box of its own. */
+  search?: string;
+  /** Leave out the stock figures (item types, units, stock value) above the products. */
+  hideOverview?: boolean;
+  /** A heading for the products ("Products"), with how many there are and how many need stock, and the
+   * category filter beside it. */
+  title?: string;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
-  const [search, setSearch] = useState('');
+  const [ownSearch, setSearch] = useState('');
+  const search = searchFromPage ?? ownSearch;
   const [category, setCategory] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -276,13 +288,51 @@ export function MyStorefront({
     return visible.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
   }, [visible, search]);
 
+  const outOfStock = visible.filter((p) => p.stock_level <= 0).length;
+  const lowOnStock = visible.filter((p) => p.stock_level > 0 && p.stock_level < LOW_STOCK_THRESHOLD).length;
+  const heading = title ? (
+    <View className="mb-3 flex-row flex-wrap items-center justify-between" style={{ gap: 8 }}>
+      <View style={{ flexShrink: 1 }}>
+        <Text className="text-[18px] font-extrabold leading-[22px] text-gray-900">{title}</Text>
+        {visible.length > 0 && (
+          <Text className="mt-0.5 text-[13px] text-gray-500">
+            {[
+              `${visible.length} ${visible.length === 1 ? 'product' : 'products'}`,
+              lowOnStock > 0 && `${lowOnStock} low on stock`,
+              outOfStock > 0 && `${outOfStock} out of stock`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+        )}
+      </View>
+      {categories.length > 0 && (
+        <Pressable
+          onPress={() => setSheetOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Filter products by category"
+          className="h-10 flex-row items-center rounded-xl border border-gray-300 bg-white px-3.5"
+          style={{ gap: 6 }}
+        >
+          <Ionicons name="options-outline" size={16} color={category ? '#2563EB' : '#374151'} />
+          <Text className="text-[13px] font-semibold" style={{ color: category ? '#2563EB' : '#374151' }}>
+            {category ?? 'Filter'}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  ) : null;
+
   if (!isLoading && visible.length === 0) {
     return (
-      <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-12">
-        <Ionicons name="storefront-outline" size={36} color="#D1D5DB" />
-        <Text className="mt-3 text-sm font-semibold text-gray-700">Nothing live yet</Text>
-        <Text className="mt-1 px-8 text-center text-xs text-gray-400">{emptyText}</Text>
-      </View>
+      <>
+        {heading}
+        <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-12">
+          <Ionicons name="storefront-outline" size={36} color="#D1D5DB" />
+          <Text className="mt-3 text-sm font-semibold text-gray-700">Nothing live yet</Text>
+          <Text className="mt-1 px-8 text-center text-xs text-gray-400">{emptyText}</Text>
+        </View>
+      </>
     );
   }
 
@@ -299,8 +349,11 @@ export function MyStorefront({
 
   return (
     <>
-      {sellerRole === 'reseller' && <ShopOverviewSection />}
+      {sellerRole === 'reseller' && !hideOverview && <ShopOverviewSection />}
 
+      {heading}
+
+      {searchFromPage === undefined && (
       <View className="mb-4">
         <SearchBar
           value={search}
@@ -328,6 +381,7 @@ export function MyStorefront({
           </View>
         )}
       </View>
+      )}
 
       <SearchFilterSheet
         visible={sheetOpen}

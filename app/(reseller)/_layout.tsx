@@ -1,5 +1,5 @@
 // app/(reseller)/_layout.tsx
-import { Platform, View, useWindowDimensions } from 'react-native';
+import { Platform, Text, View, useWindowDimensions } from 'react-native';
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { freshScreenLayout } from '../../lib/components/FreshScreen';
@@ -61,8 +61,7 @@ const DAYBOOK_ENTRIES: WebNavItem[] = [
 
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/company-dashboard', label: 'Dashboard', icon: 'grid' },
-  { href: '/(reseller)/dashboard', label: 'Services', icon: 'construct' },
-  { href: '/(reseller)/shop', label: 'Shop', icon: 'bag' },
+  { href: '/(reseller)/dashboard', label: 'Shop & Services', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
   {
     href: '/(reseller)/finance',
@@ -140,14 +139,21 @@ export default function ResellerLayout() {
             tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} />,
           }}
         />
+        {/* Shop and Services are one page; the old Shop route only forwards to its Products tab. */}
         <Tabs.Screen
           name="dashboard"
-          options={{ title: 'Services', tabBarIcon: ({ color, focused }) => <TabIcon name="construct" color={color} focused={focused} /> }}
+          options={{
+            title: 'Shop & Services',
+            // Longer than the other tab names, so on a phone it wraps to two lines rather than being cut off.
+            tabBarLabel: ({ color }) => (
+              <Text style={{ color, fontSize: 10, lineHeight: 11, textAlign: 'center' }} numberOfLines={2}>
+                Shop & Services
+              </Text>
+            ),
+            tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} />,
+          }}
         />
-        <Tabs.Screen
-          name="shop"
-          options={{ title: 'Shop', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
-        />
+        <Tabs.Screen name="shop" options={{ href: null, title: 'Shop & Services' }} />
         <Tabs.Screen
           name="requests"
           options={{
