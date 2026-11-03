@@ -68,3 +68,35 @@ export function computeOwed(
   });
   return { receivable, payable, debtors, ageing, owing };
 }
+
+/** What was owed to you, and what you owed, at the end of each of the last `months` months. `monthOf` says which
+ * month (0 = the oldest shown) a date falls in: below 0 for earlier ones, and anything past the last is counted in
+ * the last, so the final point is the balance right now (the same figures `computeOwed` gives). */
+export function owedByMonth(
+  customerEntries: (LedgerEntryLike & { customer_id: string })[],
+  vendorEntries: (LedgerEntryLike & { vendor_id: string })[],
+  monthOf: (date: string) => number,
+  months: number
+) {
+  // for each party, what changed in each month - slot 0 holds everything before the first month shown
+  const steps = new Map<string, number[]>();
+  const add = (id: string, date: string, delta: number) => {
+    const slot = Math.max(0, Math.min(months - 1, monthOf(date)) + 1);
+    const list = steps.get(id) ?? new Array<number>(months + 1).fill(0);
+    list[slot] += delta;
+    steps.set(id, list);
+  };
+  customerEntries.forEach((e) => add(e.customer_id, e.entry_date ?? e.created_at, e.entry_type === 'debit' ? e.amount : -e.amount));
+  vendorEntries.forEach((e) => add(e.vendor_id, e.entry_date ?? e.created_at, e.entry_type === 'debit' ? -e.amount : e.amount));
+  const receivable = new Array<number>(months).fill(0);
+  const payable = new Array<number>(months).fill(0);
+  steps.forEach((list) => {
+    let running = list[0];
+    for (let i = 0; i < months; i++) {
+      running += list[i + 1];
+      if (running > 0.5) receivable[i] += running;
+      else if (running < -0.5) payable[i] -= running;
+    }
+  });
+  return { receivable, payable };
+}

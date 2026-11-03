@@ -19,7 +19,7 @@ import { useRequestsStageStore } from '../../lib/hooks/useRequestsStage';
 import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
 import { adStringToBs, bsToAdString, bsDaysInMonth, numericDateLabel, toBsHistoryLabel, BS_MONTHS } from '../../lib/utils/nepaliDate';
 import { ticketLabel } from '../../lib/utils/ticket';
-import { computeOwed } from '../../lib/utils/receivableAgeing';
+import { computeOwed, owedByMonth } from '../../lib/utils/receivableAgeing';
 import { withFrom } from '../../lib/hooks/useCameFrom';
 import { localTodayIso } from '../../lib/utils/localDate';
 import { newJobHref } from '../../lib/utils/newJobHref';
@@ -50,6 +50,11 @@ function keyOf(date: string, mode: 'bs' | 'ad'): string | null {
   }
   return day.slice(0, 7);
 }
+/** A month key as a number, so earlier and later months can be told apart (BS keys are not zero-padded). */
+const ordOf = (key: string) => {
+  const [y, m] = key.split('-').map(Number);
+  return y * 12 + m;
+};
 /** The last `count` months, oldest first, ending with the one that holds today. */
 function lastMonths(count: number, mode: 'bs' | 'ad'): Bucket[] {
   const today = localTodayIso();
@@ -197,15 +202,17 @@ function Kpi({
 }
 
 type TableRow = { label: string; amount: number; share: number | null; color: string; count?: number; note?: string; onPress?: () => void };
-/** The table style used by Top customers: header, a row per item with a share bar, and a total line. */
-function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: { firstHead: string; rows: TableRow[]; total?: { label: string; amount: number; count?: number; share?: string; onPress?: () => void }; showCount?: boolean; shareHead?: string }) {
+/** The table style used by Top customers: header, a row per item with a share bar, and a total line.
+ * `signed` shows the amounts as balances - green when in the plus, red with a minus sign when short - and
+ * `hideShare` leaves the share column out (a bar still shows each row against the biggest). */
+function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share', amountHead = 'Amount', signed, hideShare }: { firstHead: string; rows: TableRow[]; total?: { label: string; amount: number; count?: number; share?: string; onPress?: () => void }; showCount?: boolean; shareHead?: string; amountHead?: string; signed?: boolean; hideShare?: boolean }) {
   return (
     <View>
       <View className="flex-row border-b border-gray-200 pb-2" style={{ gap: 8 }}>
         <Text className="flex-1 text-[11px] font-bold uppercase text-gray-500">{firstHead}</Text>
         {showCount && <Text className="w-12 text-right text-[11px] font-bold uppercase text-gray-500">Jobs</Text>}
-        <Text className="w-28 text-right text-[11px] font-bold uppercase text-gray-500">Amount</Text>
-        <Text className="w-14 text-right text-[11px] font-bold uppercase text-gray-500">{shareHead}</Text>
+        <Text className="w-28 text-right text-[11px] font-bold uppercase text-gray-500">{amountHead}</Text>
+        {!hideShare && <Text className="w-14 text-right text-[11px] font-bold uppercase text-gray-500">{shareHead}</Text>}
       </View>
       {rows.map((r) => (
         <Pressable key={r.label} onPress={r.onPress} disabled={!r.onPress} className="border-b border-gray-100 py-2.5" style={({ hovered }: any) => (hovered && r.onPress ? { backgroundColor: '#F8FAFC' } : null)}>
@@ -222,8 +229,11 @@ function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: 
               {!!r.note && <Text className="mt-1 text-[11px] text-gray-500" style={{ marginLeft: 17 }}>{r.note}</Text>}
             </View>
             {showCount && <Text className="w-12 text-right text-[13px] text-gray-600">{r.count ?? 0}</Text>}
-            <Text className="w-28 text-right text-[13px] font-semibold text-gray-900">{npr(r.amount)}</Text>
-            <Text className="w-14 text-right text-[13px] font-bold text-blue-700">{r.share == null ? '–' : `${r.share.toFixed(1)}%`}</Text>
+            <Text className="w-28 text-right text-[13px] font-semibold text-gray-900" style={signed ? { color: r.amount < 0 ? '#B91C1C' : '#15803D', fontWeight: '800' } : undefined}>
+              {signed && r.amount < 0 ? '−' : ''}
+              {npr(signed ? Math.abs(r.amount) : r.amount)}
+            </Text>
+            {!hideShare && <Text className="w-14 text-right text-[13px] font-bold text-blue-700">{r.share == null ? '–' : `${r.share.toFixed(1)}%`}</Text>}
           </View>
         </Pressable>
       ))}
@@ -232,7 +242,7 @@ function ShareTable({ firstHead, rows, total, showCount, shareHead = 'Share' }: 
           <Text className="flex-1 text-[12px] font-bold text-gray-600">{total.label}</Text>
           {showCount && <Text className="w-12 text-right text-[12px] font-bold text-gray-700">{total.count ?? 0}</Text>}
           <Text className="w-28 text-right text-[12px] font-bold text-gray-900">{npr(total.amount)}</Text>
-          <Text className="w-14 text-right text-[12px] font-bold text-gray-600">{total.share ?? '100%'}</Text>
+          {!hideShare && <Text className="w-14 text-right text-[12px] font-bold text-gray-600">{total.share ?? '100%'}</Text>}
         </Pressable>
       )}
     </View>
@@ -284,8 +294,8 @@ function pressable(onPress?: () => void): any {
   };
 }
 
-/** Two lines over twelve months, sales filled. */
-function TrendChart({ labels, sales, purchases, onSales, onPurchases }: { labels: string[]; sales: number[]; purchases: number[]; onSales?: () => void; onPurchases?: () => void }) {
+/** Two lines over twelve months, the first (sales) filled. The second is amber unless `purchaseColor` / `purchaseText` say otherwise. */
+function TrendChart({ labels, sales, purchases, onSales, onPurchases, purchaseColor = '#F59E0B', purchaseText = '#B45309' }: { labels: string[]; sales: number[]; purchases: number[]; onSales?: () => void; onPurchases?: () => void; purchaseColor?: string; purchaseText?: string }) {
   const W = 760;
   const H = 320;
   const left = 46;
@@ -341,10 +351,10 @@ function TrendChart({ labels, sales, purchases, onSales, onPurchases }: { labels
         );
       })}
       {area ? <Path d={area} fill="url(#salesFill)" /> : null}
-      <Path d={purchaseLine} fill="none" stroke="#F59E0B" strokeWidth={2.5} strokeLinecap="round" {...pressable(onPurchases)} />
+      <Path d={purchaseLine} fill="none" stroke={purchaseColor} strokeWidth={2.5} strokeLinecap="round" {...pressable(onPurchases)} />
       <Path d={salesLine} fill="none" stroke="#2563EB" strokeWidth={3.5} strokeLinecap="round" {...pressable(onSales)} />
       {purchases.map((v, i) => (
-        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={5} fill="#FFFFFF" stroke="#F59E0B" strokeWidth={2} {...pressable(onPurchases)} />
+        <Circle key={`p${i}`} cx={x(i)} cy={y(v)} r={5} fill="#FFFFFF" stroke={purchaseColor} strokeWidth={2} {...pressable(onPurchases)} />
       ))}
       {sales.map((v, i) => {
         const best = i === bestIdx && v > 0;
@@ -370,7 +380,7 @@ function TrendChart({ labels, sales, purchases, onSales, onPurchases }: { labels
               </SvgText>
             )}
             {pv > 0 && (
-              <SvgText x={x(i)} y={purchaseY} fontSize={10.5} fontWeight="600" fill="#B45309" textAnchor="middle">
+              <SvgText x={x(i)} y={purchaseY} fontSize={10.5} fontWeight="600" fill={purchaseText} textAnchor="middle">
                 {lakh(pv)}
               </SvgText>
             )}
@@ -416,48 +426,6 @@ function Donut({ parts, centre, caption }: { parts: { value: number; color: stri
       <SvgText x={85} y={82} fontSize={11} fill="#6B7280" textAnchor="middle">{caption}</SvgText>
       <SvgText x={85} y={103} fontSize={17} fontWeight="700" fill="#0F172A" textAnchor="middle">{centre}</SvgText>
     </Svg>
-  );
-}
-
-/** One bar for each account: green to the right of the zero line for money in it, red to the left for money
- * it is short of - so a minus balance is as plain as a plus one. */
-function BalanceBars({ rows, onPress }: { rows: { label: string; value: number }[]; onPress?: () => void }) {
-  const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1);
-  const hasMinus = rows.some((r) => r.value < 0);
-  return (
-    <View style={{ gap: 14 }}>
-      {rows.map((r) => {
-        const plus = r.value >= 0;
-        const color = plus ? '#16A34A' : '#DC2626';
-        const share = `${Math.max(3, (Math.abs(r.value) / max) * 100)}%` as `${number}%`;
-        return (
-          <Pressable key={r.label} onPress={onPress} style={{ gap: 6 }}>
-            <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
-              <Text className="flex-1 text-[13px] font-semibold text-gray-800" numberOfLines={1}>{r.label}</Text>
-              <Text className="text-[13px] font-extrabold" style={{ color: plus ? '#15803D' : '#B91C1C' }}>
-                {plus ? '' : '−'}
-                {npr(Math.abs(r.value))}
-              </Text>
-            </View>
-            {hasMinus ? (
-              <View className="flex-row" style={{ height: 14 }}>
-                <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                  {!plus && <View style={{ width: share, height: 14, backgroundColor: color, borderTopLeftRadius: 7, borderBottomLeftRadius: 7 }} />}
-                </View>
-                <View style={{ width: 2, backgroundColor: '#9CA3AF' }} />
-                <View style={{ flex: 1 }}>
-                  {plus && <View style={{ width: share, height: 14, backgroundColor: color, borderTopRightRadius: 7, borderBottomRightRadius: 7 }} />}
-                </View>
-              </View>
-            ) : (
-              <View style={{ height: 14, borderRadius: 7, backgroundColor: '#F3F4F6' }}>
-                <View style={{ width: share, height: 14, borderRadius: 7, backgroundColor: color }} />
-              </View>
-            )}
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }
 
@@ -594,6 +562,18 @@ export default function CompanyDashboard() {
     return { received, paid };
   }, [customerEntries, vendorEntries, transactions, months, mode]);
 
+  // ---- what was owed to you and by you at the end of each of the last twelve months ----
+  const owedTrail = useMemo(() => {
+    const index = new Map(months.map((m, i) => [m.key, i]));
+    const firstOrd = ordOf(months[0].key);
+    const monthOf = (date: string) => {
+      const k = keyOf(date, mode);
+      if (k == null) return -1;
+      return index.get(k) ?? (ordOf(k) < firstOrd ? -1 : months.length);
+    };
+    return owedByMonth(customerEntries ?? [], vendorEntries ?? [], monthOf, months.length);
+  }, [customerEntries, vendorEntries, months, mode]);
+
   // ---- expenses by category in the period ----
   const expenseParts = useMemo(() => {
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
@@ -725,12 +705,13 @@ export default function CompanyDashboard() {
   };
 
   // Every account that holds an amount - cash in hand and each bank - the minus ones too, biggest first.
-  const accountBars = [
+  const accounts = [
     { label: 'Cash in hand', value: balances.cash },
     ...balances.perAccount.map((a) => ({ label: a.name, value: a.balance })),
   ]
     .filter((a) => Math.round(a.value) !== 0)
     .sort((a, b) => b.value - a.value);
+  const accountMax = Math.max(...accounts.map((a) => Math.abs(a.value)), 1);
 
   const sc = change(totals.now.sale, totals.before.sale);
   const pc = change(totals.now.purchase, totals.before.purchase);
@@ -915,35 +896,33 @@ export default function CompanyDashboard() {
     </Panel>
   );
 
-  // Money position, in two cards: what is in the bank (cash in hand and every account), and what is owed
-  // and what has moved (to receive, to pay, received, paid).
+  // Money position: what is in the bank (cash in hand and every account, in a table like Jobs by stage), then what is
+  // owed to you and by you, then what moved - each with its own graph.
   const banksCard = (
     <Panel
-      title="Balance in all banks"
-      subtitle="Cash in hand and every bank account with a balance"
+      title="In cash and banks"
       right={<Pressable onPress={() => go('/(reseller)/bank-balances')} hitSlop={6}><Text className="text-[12.5px] font-semibold" style={{ color: '#2563EB' }}>Open balances</Text></Pressable>}
     >
-      <View className="mb-5">
-        <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">In cash and banks</Text>
-        <Text className="mt-1 text-[28px] font-extrabold" style={{ color: balances.total >= 0 ? '#15803D' : '#B91C1C' }}>
-          {balances.total < 0 ? '−' : ''}
-          {npr(Math.abs(balances.total))}
-        </Text>
-        <View className="mt-1.5 flex-row flex-wrap items-center" style={{ gap: 14 }}>
-          <View className="flex-row items-center" style={{ gap: 5 }}>
-            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#16A34A' }} />
-            <Text className="text-[11.5px] text-gray-600">In the plus</Text>
-          </View>
-          <View className="flex-row items-center" style={{ gap: 5 }}>
-            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#DC2626' }} />
-            <Text className="text-[11.5px] text-gray-600">In the minus</Text>
-          </View>
-        </View>
-      </View>
-      {accountBars.length === 0 ? (
+      <Text className="mb-4 text-[28px] font-extrabold" style={{ color: balances.total >= 0 ? '#15803D' : '#B91C1C' }}>
+        {balances.total < 0 ? '−' : ''}
+        {npr(Math.abs(balances.total))}
+      </Text>
+      {accounts.length === 0 ? (
         <Text className="py-3 text-sm text-gray-400">No balance on any account</Text>
       ) : (
-        <BalanceBars rows={accountBars} onPress={() => go('/(reseller)/bank-balances')} />
+        <ShareTable
+          firstHead="Account"
+          amountHead="Balance"
+          signed
+          hideShare
+          rows={accounts.map((a) => ({
+            label: a.label,
+            amount: a.value,
+            color: a.value < 0 ? '#DC2626' : '#16A34A',
+            share: (Math.abs(a.value) / accountMax) * 100,
+            onPress: () => go('/(reseller)/bank-balances'),
+          }))}
+        />
       )}
     </Panel>
   );
@@ -972,7 +951,7 @@ export default function CompanyDashboard() {
     </View>
   );
   const owedCard = (
-    <Panel title="Receivable & payable" subtitle={`What is owed to you and by you, and what moved · ${periodLabel}`}>
+    <Panel title="Receivable & payable" subtitle="What is owed to you and by you">
       <Text className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Owed right now</Text>
       <View className="flex-row flex-wrap" style={{ gap: 10 }}>
         {moneyTile({ label: 'To receive', value: owed.receivable, caption: `From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`, icon: 'arrow-down-circle-outline', color: '#1D4ED8', tint: '#EFF6FF', onPress: () => go('/(reseller)/to-receive') })}
@@ -980,7 +959,24 @@ export default function CompanyDashboard() {
       </View>
       <View className="mt-2">{netLine('Net owed (to receive − to pay)', owed.receivable - owed.payable)}</View>
 
-      <Text className="mb-2 mt-5 text-[11px] font-bold uppercase tracking-wider text-gray-500">Received and paid · {periodLabel}</Text>
+      <View className="mb-2 mt-5 flex-row flex-wrap items-center justify-between" style={{ gap: 8 }}>
+        <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Receivable and payable · last 12 months</Text>
+        <Legend items={[{ label: 'To receive', color: '#2563EB' }, { label: 'To pay', color: '#DC2626' }]} />
+      </View>
+      <TrendChart
+        labels={months.map((m) => m.label)}
+        sales={owedTrail.receivable}
+        purchases={owedTrail.payable}
+        purchaseColor="#DC2626"
+        purchaseText="#B91C1C"
+        onSales={() => go('/(reseller)/to-receive')}
+        onPurchases={() => go('/(reseller)/to-give')}
+      />
+    </Panel>
+  );
+
+  const movedCard = (
+    <Panel title="Received & paid" subtitle={`What came in and what went out · ${periodLabel}`}>
       <View className="flex-row flex-wrap" style={{ gap: 10 }}>
         {moneyTile({
           label: 'Received',
@@ -1163,8 +1159,9 @@ export default function CompanyDashboard() {
       {periodMenu}
       {row([trend, <RecentActivityCard key="recent" basePath="/(reseller)" />], [1.5, 1])}
       {section('Money')}
-      {row([banksCard, owedCard], [1, 1.25])}
-      {row([ageing, expenses], [1, 1.25])}
+      {row([banksCard, ageing], [1, 1])}
+      {row([owedCard, movedCard], [1, 1])}
+      {expenses}
       {section('Work and customers')}
       {row([stages, updatesCard], [1, 1])}
       {customersCard}
