@@ -867,20 +867,6 @@ export default function CompanyDashboard() {
     </View>
   );
 
-  const trend = (
-    <Panel title="Sales and purchases" subtitle="Last 12 months" right={<Legend items={[{ label: 'Sales', color: '#2563EB' }, { label: 'Purchases', color: '#DC2626' }]} />}>
-      <TrendChart
-        labels={months.map((m) => m.label)}
-        sales={series.sale}
-        purchases={series.purchase}
-        purchaseColor="#DC2626"
-        purchaseText="#B91C1C"
-        onSales={() => go('/(reseller)/sales-report')}
-        onPurchases={() => go('/(reseller)/purchase-report')}
-      />
-    </Panel>
-  );
-
   const expenses = (
     <Panel title="Expense Diagram" subtitle={`Expenses by category · ${periodLabel}`}>
       {expenseParts.total <= 0 ? (
@@ -958,6 +944,39 @@ export default function CompanyDashboard() {
       <Text className="text-[14px] font-extrabold" style={{ color: value >= 0 ? '#0F766E' : '#B91C1C' }}>{value < 0 ? '−' : ''}{npr(Math.abs(value))}</Text>
     </View>
   );
+  // Sales and purchases over the last twelve months: the two totals and what is left, then the graph - laid out like
+  // the Receivable & payable card.
+  const salesTotal = series.sale.reduce((x, y) => x + y, 0);
+  const purchaseTotal = series.purchase.reduce((x, y) => x + y, 0);
+  const bestOf = (list: number[], none: string) => {
+    const top = Math.max(...list);
+    return top > 0 ? `Best month ${months[list.indexOf(top)].label} · ${lakh(top)}` : none;
+  };
+  const trend = (
+    <Panel title="Sales and purchases" subtitle="What you sold and what you bought">
+      <Text className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Last 12 months</Text>
+      <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+        {moneyTile({ label: 'Sales', value: salesTotal, caption: bestOf(series.sale, 'No sales in 12 months'), icon: 'trending-up-outline', color: '#1D4ED8', tint: '#EFF6FF', onPress: () => go('/(reseller)/sales-report') })}
+        {moneyTile({ label: 'Purchases', value: purchaseTotal, caption: bestOf(series.purchase, 'No purchases in 12 months'), icon: 'cart-outline', color: '#B91C1C', tint: '#FEF2F2', onPress: () => go('/(reseller)/purchase-report') })}
+      </View>
+      <View className="mt-2">{netLine('Sales − purchases', salesTotal - purchaseTotal)}</View>
+
+      <View className="mb-2 mt-5 flex-row flex-wrap items-center justify-between" style={{ gap: 8 }}>
+        <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Sales and purchases · last 12 months</Text>
+        <Legend items={[{ label: 'Sales', color: '#2563EB' }, { label: 'Purchases', color: '#DC2626' }]} />
+      </View>
+      <TrendChart
+        labels={months.map((m) => m.label)}
+        sales={series.sale}
+        purchases={series.purchase}
+        purchaseColor="#DC2626"
+        purchaseText="#B91C1C"
+        onSales={() => go('/(reseller)/sales-report')}
+        onPurchases={() => go('/(reseller)/purchase-report')}
+      />
+    </Panel>
+  );
+
   const owedCard = (
     <Panel title="Receivable & payable" subtitle="What is owed to you and by you">
       <Text className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Owed right now</Text>
