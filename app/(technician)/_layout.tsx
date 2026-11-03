@@ -11,21 +11,19 @@ import { TechnicianHoldNotice } from '../../lib/components/HoldNotice';
 import { TechnicianLeaveNotice } from '../../lib/components/LeaveRequestNotice';
 import { NotificationPopup } from '../../lib/components/NotificationPopup';
 import { useAuthStore } from '../../lib/hooks/useAuth';
-import { useMyStaffRole } from '../../lib/hooks/useTechnicianEmployment';
+import { useMyEmployment, useMyStaffRole } from '../../lib/hooks/useTechnicianEmployment';
 import { useShareLiveLocation } from '../../lib/hooks/useShareLiveLocation';
 
-const NAV_ITEMS: WebNavItem[] = [
-  { href: '/(technician)/dashboard', label: 'Dashboard', icon: 'home' },
-  { href: '/(technician)/jobs', label: 'My Jobs', icon: 'briefcase' },
-  { href: '/(technician)/earnings', label: 'Earnings', icon: 'wallet' },
-];
-
-// A supervisor gets one extra place: their employer's work, to hand out.
-const SUPERVISOR_NAV: WebNavItem[] = [
-  ...NAV_ITEMS.slice(0, 2),
-  { href: '/(technician)/workhub', label: 'Work Hub', icon: 'grid' },
-  ...NAV_ITEMS.slice(2),
-];
+// An employee also gets the Worksheet (their employer's work, to choose from), and a supervisor the Work Hub (to hand it out).
+function navItems(isStaff: boolean, isSupervisor: boolean): WebNavItem[] {
+  return [
+    { href: '/(technician)/dashboard', label: 'Dashboard', icon: 'home' },
+    { href: '/(technician)/jobs', label: 'My Jobs', icon: 'briefcase' },
+    ...(isStaff ? [{ href: '/(technician)/worksheet', label: 'Worksheet', icon: 'clipboard' } as WebNavItem] : []),
+    ...(isSupervisor ? [{ href: '/(technician)/workhub', label: 'Work Hub', icon: 'grid' } as WebNavItem] : []),
+    { href: '/(technician)/earnings', label: 'Earnings', icon: 'wallet' },
+  ];
+}
 
 // Every technician page uses the wider content column (see WebSidebarShell's
 // `wideRoutes`), so there is no empty strip beside them on a big screen.
@@ -33,6 +31,7 @@ const WIDE_ROUTES = [
   '/dashboard',
   '/jobs',
   '/earnings',
+  '/worksheet',
   '/workhub',
   '/profile',
   '/rewards',
@@ -47,6 +46,7 @@ export default function TechnicianLayout() {
   const { width } = useWindowDimensions();
   const userId = useAuthStore((state) => state.session?.user.id);
   const isSupervisor = useMyStaffRole(userId) === 'supervisor';
+  const isStaff = useMyEmployment(userId).current?.status === 'accepted';
   useShareLiveLocation(userId);
   const isWideWeb = Platform.OS === 'web' && width >= WEB_SIDEBAR_MIN_WIDTH;
   const tabs = (
@@ -73,6 +73,15 @@ export default function TechnicianLayout() {
       <Tabs.Screen
         name="jobs"
         options={{ title: 'My Jobs', tabBarIcon: ({ color, focused }) => <TabIcon name="briefcase" color={color} focused={focused} /> }}
+      />
+      <Tabs.Screen
+        name="worksheet"
+        options={{
+          title: 'Worksheet',
+          // Only for someone on a team; the screen says as much if it's reached directly.
+          href: isStaff ? undefined : null,
+          tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
+        }}
       />
       <Tabs.Screen
         name="workhub"
@@ -126,7 +135,7 @@ export default function TechnicianLayout() {
           whichever tab (or the sidebar) is open when an offer comes in. */}
       <View style={{ flex: 1 }}>
         {isWideWeb ? (
-          <WebSidebarShell items={isSupervisor ? SUPERVISOR_NAV : NAV_ITEMS} roleLabel="Technician" wideRoutes={WIDE_ROUTES}>
+          <WebSidebarShell items={navItems(isStaff, isSupervisor)} roleLabel="Technician" wideRoutes={WIDE_ROUTES}>
             {tabs}
           </WebSidebarShell>
         ) : (

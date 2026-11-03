@@ -11,7 +11,6 @@ import {
   useMyStaffRole,
   useTeamRoster,
   supervisorAssignJob,
-  supervisorSetOpenToTeam,
   type TeamMate,
 } from '../../lib/hooks/useTechnicianEmployment';
 import { PersonAvatar } from '../../lib/components/PersonAvatar';
@@ -34,7 +33,7 @@ function money(n: number | null | undefined): string {
 function statusChip(request: ServiceRequest): { label: string; color: string; bg: string } {
   if (request.status === 'in_progress') return { label: 'Working on it', color: '#1D4ED8', bg: '#EFF6FF' };
   if (request.status === 'assigned') return { label: 'Waiting to accept', color: '#B45309', bg: '#FFFBEB' };
-  if (request.open_to_team) return { label: 'Open to the team', color: '#047857', bg: '#ECFDF5' };
+  if (request.open_to_team) return { label: 'Outsource Technician', color: '#047857', bg: '#ECFDF5' };
   return { label: 'Nobody yet', color: '#6B7280', bg: '#F3F4F6' };
 }
 
@@ -94,10 +93,11 @@ function PickTeammate({
   );
 }
 
-/** A supervisor's version of the reseller's Work Hub: the same jobs, the
- * same two moves (give it to someone, or open it to everyone), without
- * being able to touch the price, the customer or anything else - the
- * server only exposes those two actions (migration 0077). */
+/** A supervisor's version of the reseller's Work Hub: the same jobs, and one
+ * move - give it to a teammate - without being able to touch the price, the
+ * customer or anything else. Outsource Technician (a job opened to everyone,
+ * or held by an outside technician) stays the owner's: the server refuses it
+ * (migrations 0077, 0108). */
 export default function TechnicianWorkHub() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const staffRole = useMyStaffRole(userId);
@@ -140,18 +140,6 @@ export default function TechnicianWorkHub() {
     }
   }
 
-  async function openToTeam(request: ServiceRequest, open: boolean) {
-    setBusyId(request.id);
-    try {
-      await supervisorSetOpenToTeam(request.id, open);
-      await queryClient.invalidateQueries({ queryKey: ['service_requests'] });
-    } catch (err) {
-      showAlert('Could not update', getErrorMessage(err));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   if (!isSupervisor) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-50 px-8">
@@ -189,6 +177,8 @@ export default function TechnicianWorkHub() {
         jobs.map((r) => {
           const chip = statusChip(r);
           const holder = nameOf(r.technician_id);
+          // In Outsource Technician, or with someone not on the team: the owner's to change.
+          const ownersOnly = r.open_to_team || (!!r.technician_id && !roster.some((m) => m.technician_id === r.technician_id));
           return (
             <View key={r.id} className="rounded-2xl border border-gray-200 bg-white p-3.5">
               <Pressable onPress={() => router.push(`/(technician)/job/${r.id}` as any)} className="flex-row items-start gap-2.5">
@@ -238,26 +228,21 @@ export default function TechnicianWorkHub() {
                     <Text className="text-[12.5px] font-semibold text-white">Record payment</Text>
                   </Pressable>
                 ) : null}
-                <Pressable
-                  onPress={() => setPicking(r)}
-                  disabled={busyId === r.id}
-                  className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg disabled:opacity-60"
-                  style={{ backgroundColor: BLUE }}
-                >
-                  <Ionicons name="person-add-outline" size={15} color="#FFFFFF" />
-                  <Text className="text-[12.5px] font-semibold text-white">
-                    {r.technician_id ? 'Give to someone else' : 'Give to someone'}
-                  </Text>
-                </Pressable>
-                {!r.technician_id && (
+                {r.status === 'resolved' ? null : ownersOnly ? (
+                  <View className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg bg-gray-100">
+                    <Ionicons name="lock-closed-outline" size={14} color="#6B7280" />
+                    <Text className="text-[12px] font-semibold text-gray-500">Only the owner can change this</Text>
+                  </View>
+                ) : (
                   <Pressable
-                    onPress={() => openToTeam(r, !r.open_to_team)}
+                    onPress={() => setPicking(r)}
                     disabled={busyId === r.id}
-                    className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white disabled:opacity-60"
+                    className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg disabled:opacity-60"
+                    style={{ backgroundColor: BLUE }}
                   >
-                    <Ionicons name={r.open_to_team ? 'close-circle-outline' : 'megaphone-outline'} size={15} color="#374151" />
-                    <Text className="text-[12.5px] font-semibold text-gray-700">
-                      {busyId === r.id ? 'Saving…' : r.open_to_team ? 'Take back' : 'Open to team'}
+                    <Ionicons name="person-add-outline" size={15} color="#FFFFFF" />
+                    <Text className="text-[12.5px] font-semibold text-white">
+                      {r.technician_id ? 'Give to someone else' : 'Give to someone'}
                     </Text>
                   </Pressable>
                 )}

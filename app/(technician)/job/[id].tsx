@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { respondToJobOffer, reopenCompletedJob } from '../../../lib/hooks/useJobOffers';
 import { requestJobHold, resumeJobHold } from '../../../lib/hooks/useJobHold';
 import { useAuthStore } from '../../../lib/hooks/useAuth';
+import { useMyEmployment } from '../../../lib/hooks/useTechnicianEmployment';
 import { useIsWideWeb } from '../../../lib/hooks/useWideGrid';
 import { useSupabaseRow, useSupabaseUpdate, useSupabaseInsert, useSupabaseQuery } from '../../../lib/hooks/useSupabase';
 import { RequestDetailsExtras } from '../../../lib/components/RequestDetailsExtras';
@@ -103,6 +104,7 @@ export default function JobCardScreen() {
 
 function JobCard({ id }: { id: string }) {
   const userId = useAuthStore((state) => state.session?.user.id);
+  const isStaff = useMyEmployment(userId).current?.status === 'accepted';
   const { data: request, isLoading, isError } = useSupabaseRow('service_requests', id);
   const { data: jobCards } = useSupabaseQuery('job_cards', {
     filters: id ? { service_request_id: id } : {},
@@ -352,6 +354,16 @@ function JobCard({ id }: { id: string }) {
         <View className="mb-4 -mt-3 flex-row">
           <PaymentChip request={request} total={paymentTotal} />
         </View>
+      )}
+      {/* Finished: on to the next one, from the Worksheet. */}
+      {request.status === 'resolved' && isStaff && (
+        <Pressable
+          onPress={() => router.push('/(technician)/worksheet' as never)}
+          className="mb-4 h-11 flex-row items-center justify-center gap-2 rounded-xl bg-blue-600"
+        >
+          <Ionicons name="clipboard-outline" size={17} color="#FFFFFF" />
+          <Text className="text-[14px] font-semibold text-white">Choose your next work</Text>
+        </Pressable>
       )}
     </>
   );

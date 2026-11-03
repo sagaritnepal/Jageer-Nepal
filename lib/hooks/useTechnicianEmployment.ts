@@ -306,7 +306,7 @@ export function useTeamRoster(enabled: boolean) {
 }
 
 /** A supervisor hands a job to a teammate - it rings on their phone like
- * any other offer - or opens it to the whole team. */
+ * any other offer. Outsource Technician stays the owner's (migration 0108). */
 export async function supervisorAssignJob(requestId: string, technicianId: string) {
   const { error } = await (supabase as any).rpc('supervisor_assign_job', {
     p_request_id: requestId,
@@ -315,10 +315,14 @@ export async function supervisorAssignJob(requestId: string, technicianId: strin
   if (error) throw error;
 }
 
-export async function supervisorSetOpenToTeam(requestId: string, open: boolean) {
-  const { error } = await (supabase as any).rpc('supervisor_set_open_to_team', {
-    p_request_id: requestId,
-    p_open: open,
+/** An employee adds work to their employer's list, for the team to choose from (migration 0108). */
+export async function staffAddJob(work: { service: string; customer: string; phone: string; address: string; note: string }) {
+  const { error } = await (supabase as any).rpc('staff_add_job', {
+    p_issue_type: work.service,
+    p_customer_name: work.customer,
+    p_customer_phone: work.phone,
+    p_address: work.address,
+    p_description: work.note,
   });
   if (error) throw error;
 }
