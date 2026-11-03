@@ -22,7 +22,7 @@ import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { formatScheduledWhen } from '../../utils/scheduledTime';
-import { numericDateLabel } from '../../utils/nepaliDate';
+import { numericDateLabel, toAdLabel, toBsLabel } from '../../utils/nepaliDate';
 import { formatDuration, formatDurationBetween } from '../../utils/duration';
 import { entryDay } from '../../utils/ledgerStatement';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
@@ -283,6 +283,9 @@ function daySummary(spans: DaySpan[]): string {
 /** How tall one hour is in an employee's day rail. */
 const HOUR_PX = 36;
 const DAY_PX = 24 * HOUR_PX;
+/** The rail's width, and the part of it down the left edge that holds the hour numbers. */
+const RAIL_PX = 132;
+const HOURS_PX = 22;
 
 /** An employee's day, 0 to 24 hours from top to bottom, beside their jobs: the hours of their duty in
  * white, and every job they worked holding its own stretch of the rail from the moment they started
@@ -321,36 +324,31 @@ function EmployeeDayRail({
     group.push({ s, lane, lanes: 1 });
   }
   closeGroup();
+  // One band: the hour numbers sit inside it down the left edge, and the jobs fill the rest of its width.
   return (
-    <View style={{ width: 210, height: DAY_PX + 12, flexDirection: 'row' }}>
-      <View style={{ width: 26 }}>
-        {Array.from({ length: 25 }, (_, h) => (
-          <Text
-            key={h}
-            className="text-right text-[9.5px] text-gray-500"
-            style={{ position: 'absolute', top: px(h * 60), right: 4, height: 12 }}
-          >
-            {h}
-          </Text>
-        ))}
-      </View>
-      <View style={{ flex: 1, marginTop: 6, height: DAY_PX, borderRadius: 8, backgroundColor: '#D1D5DB', overflow: 'hidden' }}>
+    <View style={{ width: RAIL_PX, height: DAY_PX, borderRadius: 8, backgroundColor: '#D1D5DB', overflow: 'hidden' }}>
+      <View
+        style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }}
+      />
+      {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
         <View
-          style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }}
+          key={h}
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: px(h * 60),
+            height: 1,
+            backgroundColor: h % 6 === 0 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.07)',
+          }}
         />
-        {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
-          <View
-            key={h}
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              top: px(h * 60),
-              height: 1,
-              backgroundColor: h % 6 === 0 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.07)',
-            }}
-          />
-        ))}
+      ))}
+      {Array.from({ length: 24 }, (_, h) => (
+        <Text key={h} className="text-[9px] text-gray-500" style={{ position: 'absolute', left: 4, top: px(h * 60) + 1 }}>
+          {h}
+        </Text>
+      ))}
+      <View style={{ position: 'absolute', top: 0, bottom: 0, left: HOURS_PX, right: 0 }}>
         {placed.map(({ s, lane, lanes }) => {
           const top = px(s.from);
           const height = Math.max(px(s.to) - top, 14);
@@ -395,8 +393,8 @@ function EmployeeDayRail({
             </View>
           );
         })}
-        <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />
       </View>
+      <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />
     </View>
   );
 }
@@ -431,7 +429,7 @@ function Column({
   return (
     <View
       className="rounded-2xl border border-gray-200 bg-gray-50"
-      style={wide ? { minWidth: side ? 520 : 320, flexBasis: side ? 520 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
+      style={wide ? { minWidth: side ? 470 : 320, flexBasis: side ? 470 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
     >
       <View className="rounded-t-2xl px-3.5 py-3" style={{ backgroundColor: tint, gap: 8 }}>
         <View className="flex-row items-center gap-2.5">
@@ -1328,6 +1326,9 @@ export function WorkHubPanel({
   const now = useNow();
   // How far into today it is, for the red "now" line in each employee's day bar.
   const nowMinutes = new Date(now).getHours() * 60 + new Date(now).getMinutes();
+  // Which day the bars are for, in both calendars: "Tue, Nov 3, 2026 AD · Kartik 17, 2083 BS".
+  const today = entryDay(null, new Date(now).toISOString());
+  const todayLabel = `${toAdLabel(today)} AD · ${toBsLabel(today)} BS`;
   const { data: employees } = useMyEmployees(userId);
 
   // The list is this stage's jobs, the newest first - by the date and time each was put in. The
@@ -1603,9 +1604,14 @@ export function WorkHubPanel({
             avatar={{ name: profile.full_name, photoUrl: profile.avatar_url }}
             phone={profile.phone}
             headerExtra={
-              <Text className="text-[11px] font-semibold text-gray-700" numberOfLines={1}>
-                {daySummary(spans)}
-              </Text>
+              <View style={{ gap: 1 }}>
+                <Text className="text-[11px] font-bold text-gray-900" numberOfLines={1}>
+                  {todayLabel}
+                </Text>
+                <Text className="text-[11px] font-semibold text-gray-700" numberOfLines={1}>
+                  {daySummary(spans)}
+                </Text>
+              </View>
             }
             side={
               wide ? (
