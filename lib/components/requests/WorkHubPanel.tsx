@@ -265,20 +265,34 @@ function clock(minutes: number): string {
   return `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-/** What an employee's header says about their day: how long they were busy in all. Jobs that overlap
- * count once - it is the time they were busy, not the sum of the jobs. */
-function daySummary(spans: DaySpan[]): string {
-  if (spans.length === 0) return 'No work started today';
-  let busy = 0;
-  let reach = 0;
+/** The stretches of the day an employee was busy, minutes from midnight, with jobs that overlap merged
+ * into one: it is the time they were busy, not the sum of the jobs. `spans` come in start order. */
+function busyIntervals(spans: DaySpan[]): [number, number][] {
+  const merged: [number, number][] = [];
   for (const s of spans) {
-    busy += Math.max(0, s.to - Math.max(s.from, reach));
-    reach = Math.max(reach, s.to);
+    const last = merged[merged.length - 1];
+    if (last && s.from <= last[1]) last[1] = Math.max(last[1], s.to);
+    else merged.push([s.from, s.to]);
   }
-  return `Worked ${formatDuration(busy * 60_000)} today · ${spans.length} job${spans.length === 1 ? '' : 's'}${
-    spans.some((s) => s.running) ? ' · working now' : ''
-  }`;
+  return merged;
 }
+
+/** How long an employee has worked today, and how much of their duty time so far no job filled. */
+function dayFigures(spans: DaySpan[], dutyFrom: number, dutyTo: number, nowMin: number) {
+  const busy = busyIntervals(spans);
+  const worked = busy.reduce((sum, [from, to]) => sum + (to - from), 0);
+  // Only duty time that has already gone by can have gone unused.
+  const passed = Math.min(dutyTo, nowMin);
+  const duty = Math.max(0, passed - dutyFrom);
+  const used = busy.reduce((sum, [from, to]) => sum + Math.max(0, Math.min(to, passed) - Math.max(from, dutyFrom)), 0);
+  return { worked, unused: Math.max(0, duty - used) };
+}
+
+const minutesLabel = (minutes: number) => (minutes < 1 ? '0m' : formatDuration(minutes * 60_000));
+
+/** In an employee's day: green for the time they worked, red for the duty time that went unused. */
+const WORKED_GREEN = '#4ADE80';
+const UNUSED_RED = '#F87171';
 
 /** How tall one hour is in an employee's day rail. */
 const HOUR_PX = 36;
@@ -287,10 +301,10 @@ const DAY_PX = 24 * HOUR_PX;
 const RAIL_PX = 132;
 const HOURS_PX = 22;
 
-/** An employee's day, 0 to 24 hours from top to bottom, beside their jobs: the hours of their duty in
- * white, and every job they worked holding its own stretch of the rail from the moment they started
- * it to the moment they finished it (green while it is still going) - so what the time went on, and
- * how long each job held them, can be read straight off it. A red line marks now. */
+/** An employee's day, 0 to 24 hours from top to bottom, beside their jobs: every job they worked holds
+ * its own stretch of the rail from the moment they started it to the moment they finished it (green
+ * while it is still going) - so what the time went on, and how long each job held them, can be read
+ * straight off it. A red line marks now. */
 function EmployeeDayRail({
   spans,
   dutyFrom,
@@ -324,18 +338,26 @@ function EmployeeDayRail({
     group.push({ s, lane, lanes: 1 });
   }
   closeGroup();
-  // One band: the hour numbers sit inside it down the left edge, and the jobs fill the rest of its width.
+  const busy = busyIntervals(spans);
+  const passed = Math.min(dutyTo, nowMin);
+  // One band: down its left edge, as wide as the hour numbers, runs the colour of the day - white for
+  // duty hours still to come, red for duty time that went unused, green for time worked, grey off duty -
+  // and the jobs fill the rest of its width.
   return (
-    <View style={{ width: RAIL_PX, height: DAY_PX, borderRadius: 8, backgroundColor: '#D1D5DB', overflow: 'hidden' }}>
-      <View
-        style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }}
-      />
+    <View style={{ width: RAIL_PX, height: DAY_PX, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: HOURS_PX, backgroundColor: '#E5E7EB', borderRightWidth: 1, borderRightColor: '#D1D5DB' }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: Math.max(0, px(passed) - px(dutyFrom)), backgroundColor: UNUSED_RED }} />
+        {busy.map(([from, to]) => (
+          <View key={from} style={{ position: 'absolute', left: 0, right: 0, top: px(from), height: Math.max(px(to) - px(from), 2), backgroundColor: WORKED_GREEN }} />
+        ))}
+      </View>
       {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
         <View
           key={h}
           style={{
             position: 'absolute',
-            left: 0,
+            left: HOURS_PX,
             right: 0,
             top: px(h * 60),
             height: 1,
@@ -344,7 +366,7 @@ function EmployeeDayRail({
         />
       ))}
       {Array.from({ length: 24 }, (_, h) => (
-        <Text key={h} className="text-[9px] text-gray-500" style={{ position: 'absolute', left: 4, top: px(h * 60) + 1 }}>
+        <Text key={h} className="text-[9px] font-semibold text-gray-800" style={{ position: 'absolute', left: 4, top: px(h * 60) + 1 }}>
           {h}
         </Text>
       ))}
@@ -1590,6 +1612,9 @@ export function WorkHubPanel({
         const jobs = foundWith(profile.id);
         if (searching && jobs.length === 0) return null;
         const spans = workedToday(requests, jobTimes, profile.id, now);
+        const dutyFrom = minutesOf(employment.work_start_time, 9 * 60);
+        const dutyTo = minutesOf(employment.work_end_time, 17 * 60);
+        const figures = dayFigures(spans, dutyFrom, dutyTo, nowMinutes);
         return (
           <Column
             key={employment.id}
@@ -1608,17 +1633,27 @@ export function WorkHubPanel({
                 <Text className="text-[11px] font-bold text-gray-900" numberOfLines={1}>
                   {todayLabel}
                 </Text>
-                <Text className="text-[11px] font-semibold text-gray-700" numberOfLines={1}>
-                  {daySummary(spans)}
-                </Text>
+                <View className="flex-row flex-wrap items-center" style={{ columnGap: 10 }}>
+                  <View className="flex-row items-center" style={{ gap: 4 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: WORKED_GREEN }} />
+                    <Text className="text-[11px] font-semibold text-gray-700">Worked {minutesLabel(figures.worked)}</Text>
+                  </View>
+                  <View className="flex-row items-center" style={{ gap: 4 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: UNUSED_RED }} />
+                    <Text className="text-[11px] font-semibold text-gray-700">Not used {minutesLabel(figures.unused)}</Text>
+                  </View>
+                  <Text className="text-[11px] text-gray-600">
+                    {`${spans.length} job${spans.length === 1 ? '' : 's'} today${spans.some((s) => s.running) ? ' · working now' : ''}`}
+                  </Text>
+                </View>
               </View>
             }
             side={
               wide ? (
                 <EmployeeDayRail
                   spans={spans}
-                  dutyFrom={minutesOf(employment.work_start_time, 9 * 60)}
-                  dutyTo={minutesOf(employment.work_end_time, 17 * 60)}
+                  dutyFrom={dutyFrom}
+                  dutyTo={dutyTo}
                   nowMin={nowMinutes}
                 />
               ) : undefined
