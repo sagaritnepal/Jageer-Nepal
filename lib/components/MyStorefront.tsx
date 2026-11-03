@@ -123,12 +123,16 @@ function StorefrontCard({
   basePath,
   fill,
   showSwitch = true,
+  showStock = true,
 }: {
   item: Product;
   basePath: string;
   fill?: boolean;
   /** The Available switch. A reseller turns an item on or off in Inventory, not here. */
   showSwitch?: boolean;
+  /** How many are in stock and what they cost. These are the reseller's own figures, for Inventory; the
+   * Marketplace shows what a customer sees. */
+  showStock?: boolean;
 }) {
   const updateProduct = useSupabaseUpdate('products');
   const isAvailable = item.is_listed ?? true;
@@ -209,15 +213,17 @@ function StorefrontCard({
 
       <EditablePrice item={item} />
 
-      {purchasePrice != null && (
+      {showStock && purchasePrice != null && (
         <Text className="mt-1 text-[10px] text-gray-500" numberOfLines={1}>
           Bought at NPR {Number(purchasePrice).toLocaleString()}
         </Text>
       )}
 
-      <Text className={`mt-0.5 text-[10px] ${outOfStock ? 'text-red-500' : 'text-gray-400'}`}>
-        {outOfStock ? 'Restock to sell' : `${item.stock_level} in stock`}
-      </Text>
+      {showStock && (
+        <Text className={`mt-0.5 text-[10px] ${outOfStock ? 'text-red-500' : 'text-gray-400'}`}>
+          {outOfStock ? 'Restock to sell' : `${item.stock_level} in stock`}
+        </Text>
+      )}
 
       {showSwitch && (
         <View className="mt-1.5 flex-row items-center justify-between">
@@ -420,10 +426,10 @@ export function MyStorefront({
         {filtered.map((item) =>
           wideGrid ? (
             <View key={item.id} style={cellStyle}>
-              <StorefrontCard item={item} basePath={basePath} fill showSwitch={!marketplaceOnly} />
+              <StorefrontCard item={item} basePath={basePath} fill showSwitch={!marketplaceOnly} showStock={!marketplaceOnly} />
             </View>
           ) : (
-            <StorefrontCard key={item.id} item={item} basePath={basePath} showSwitch={!marketplaceOnly} />
+            <StorefrontCard key={item.id} item={item} basePath={basePath} showSwitch={!marketplaceOnly} showStock={!marketplaceOnly} />
           )
         )}
       </View>

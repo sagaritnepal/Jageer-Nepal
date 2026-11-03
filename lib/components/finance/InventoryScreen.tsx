@@ -1,5 +1,5 @@
 // lib/components/finance/InventoryScreen.tsx
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { View, Text, Pressable, Switch, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +46,13 @@ const STATUS = {
 const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'out', label: 'Out' },
+];
+
+/** The list as a table (one row per item) or as tiles (one card per item). */
+type ViewMode = 'table' | 'tiles';
+const VIEWS: { key: ViewMode; label: string }[] = [
+  { key: 'table', label: 'Table' },
+  { key: 'tiles', label: 'Tiles' },
 ];
 
 const IN_TONE = { label: 'Stock in', color: '#047857', bg: '#ECFDF5' };
@@ -374,6 +381,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
   });
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [view, setView] = useState<ViewMode>('table');
   // The item whose stock history is open in a popup, and a bill opened from it.
   const [viewingKey, setViewingKey] = useState<string | null>(null);
   const [viewingTx, setViewingTx] = useState<BusinessTransaction | null>(null);
@@ -406,13 +414,14 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
         <>
           <ToolbarSearch value={search} onChange={setSearch} placeholder="Search your products" wide={inBar} />
           <FilterTabs options={FILTERS} value={filter} onChange={setFilter} />
+          {canList && <FilterTabs options={VIEWS} value={view} onChange={setView} />}
           {reportButtons}
           <ToolbarButton icon="add" label="Add stock" onPress={() => router.push(`${basePath}/transactions?type=purchase&add=1` as never)} />
           {buyStockHref && <ToolbarButton icon="storefront" label="Buy Stock" onPress={() => router.push(buyStockHref as never)} />}
         </>
       ),
     },
-    [search, filter, buyStockHref]
+    [search, filter, view, buyStockHref]
   );
 
   // Every bill line of every item, by item name: a Purchase brings units in, a Sale takes them out.
@@ -581,6 +590,53 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
     </View>
   );
 
+  // The tile view: one card per item, with the same figures as the table's columns. Tapping it opens the
+  // item's history, as a table row does; the Marketplace switch is a press target of its own.
+  const fact = (label: string, value: ReactNode) => (
+    <View style={{ minWidth: 0, gap: 1 }}>
+      <Text className="text-[10.5px] text-gray-400">{label}</Text>
+      {value}
+    </View>
+  );
+  const tile = (r: InventoryRow) => (
+    <Pressable
+      key={r.key}
+      onPress={() => setViewingKey(r.key)}
+      className="rounded-xl border border-gray-200 bg-white p-3.5"
+      style={{ flexGrow: 1, flexBasis: 250, minWidth: 220, maxWidth: layout.wide ? 420 : undefined, gap: 10 }}
+    >
+      <View className="flex-row items-start justify-between" style={{ gap: 8 }}>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text className="text-[14px] font-bold text-gray-900" numberOfLines={2}>
+            {highlightText(r.name, search)}
+          </Text>
+          {!!r.category && (
+            <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+              {highlightText(r.category, search)}
+            </Text>
+          )}
+        </View>
+        <Pill text={STATUS[r.status].label} color={STATUS[r.status].color} bg={STATUS[r.status].bg} />
+      </View>
+      <View className="flex-row flex-wrap" style={{ columnGap: 18, rowGap: 8 }}>
+        {fact('In stock', r.stockLevel != null ? num(qty(r.stockLevel), stockColor(r), true) : dash)}
+        {fact('Cost price', r.cost != null ? num(rs(r.cost), '#4B5563') : dash)}
+        {fact('Selling price', r.price != null ? num(rs(r.price)) : dash)}
+        {fact('Stock value', r.value != null ? num(money(r.value)) : dash)}
+      </View>
+      <View className="flex-row" style={{ columnGap: 18 }}>
+        {fact('Sold', num(qty(r.sold), '#047857', true))}
+        {fact('Purchased', num(qty(r.purchased), '#B91C1C', true))}
+      </View>
+      {canList && !!r.productId && (
+        <View className="flex-row items-center justify-between border-t border-gray-100 pt-2">
+          <Text className="text-[12px] font-semibold text-gray-600">On the Marketplace</Text>
+          {marketCell(r)}
+        </View>
+      )}
+    </Pressable>
+  );
+
   const snColumn = (width: number): BookColumn<InventoryRow> => ({
     key: 'sn',
     label: 'SN',
@@ -686,6 +742,15 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
           <Ionicons name="cube-outline" size={28} color="#D1D5DB" />
           <Text className="mt-2 text-gray-500">{rows.length > 0 ? 'No matches.' : 'Nothing bought or sold yet.'}</Text>
         </View>
+      ) : canList && view === 'tiles' ? (
+        <>
+          <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+            {filteredRows.map(tile)}
+          </View>
+          <Text className="px-1 text-[12.5px] font-semibold text-gray-700">
+            {`${filteredRows.length} ${filteredRows.length === 1 ? 'item' : 'items'} · Sold ${qty(totals.sold)} · Purchased ${qty(totals.purchased)} · Stock value NPR ${money(totals.value)}`}
+          </Text>
+        </>
       ) : (
         <BookTable columns={columns} rows={filteredRows} rowKey={(r) => r.key} onRowPress={(r) => setViewingKey(r.key)} footer={footer} />
       )}
