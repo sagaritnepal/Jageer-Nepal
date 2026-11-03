@@ -1,5 +1,5 @@
 // lib/components/requests/WorkHubPanel.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +23,7 @@ import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { formatScheduledWhen } from '../../utils/scheduledTime';
 import { numericDateLabel } from '../../utils/nepaliDate';
-import { formatDurationBetween } from '../../utils/duration';
+import { formatDuration, formatDurationBetween } from '../../utils/duration';
 import { entryDay } from '../../utils/ledgerStatement';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import {
@@ -219,6 +219,142 @@ function JobCard({ request, footer }: { request: ServiceRequest; footer?: React.
   );
 }
 
+/** One stretch of today a technician had a job under way, in minutes from midnight (0 - 1440). */
+type DaySpan = { id: string; ticket: string | null; title: string; from: number; to: number; running: boolean };
+
+/** The stretches of today a technician spent on jobs: from when they started it (the job card) to when
+ * they finished it - or to now, while it is still under way. A job that began yesterday starts at
+ * midnight; one with no recorded start or finish is left out rather than guessed. */
+function workedToday(
+  requests: ServiceRequest[],
+  times: Map<string, JobTimes> | undefined,
+  technicianId: string,
+  now: number
+): DaySpan[] {
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const dayStart = midnight.getTime();
+  const spans: DaySpan[] = [];
+  for (const r of requests) {
+    if (r.technician_id !== technicianId) continue;
+    const card = times?.get(r.id);
+    const started = card?.started_at ? new Date(card.started_at).getTime() : NaN;
+    const running = r.status === 'in_progress' && !card?.completed_at;
+    const ended = card?.completed_at ? new Date(card.completed_at).getTime() : running ? now : NaN;
+    if (Number.isNaN(started) || Number.isNaN(ended) || ended <= dayStart || started >= dayStart + DAY_MS) continue;
+    spans.push({
+      id: r.id,
+      ticket: ticketLabel(r.ticket_no),
+      title: r.issue_type,
+      from: (Math.max(started, dayStart) - dayStart) / 60_000,
+      to: (Math.min(ended, dayStart + DAY_MS) - dayStart) / 60_000,
+      running,
+    });
+  }
+  return spans.sort((a, b) => a.from - b.from);
+}
+
+/** "09:00:00" -> 540 minutes from midnight. */
+function minutesOf(time: string | null | undefined, fallback: number): number {
+  const match = /^(\d{1,2}):(\d{2})/.exec(time ?? '');
+  return match ? Number(match[1]) * 60 + Number(match[2]) : fallback;
+}
+
+function clock(minutes: number): string {
+  const m = Math.round(minutes);
+  return `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/** An employee's day as one thin bar from 0 to 24 hours: their duty hours in white, each job they
+ * worked on as a block from its start to its finish (green while it is still going), and a red line
+ * for now. Under it, how long they worked in all; tap it for each job's start, finish and time. */
+function EmployeeDayBar({
+  spans,
+  dutyFrom,
+  dutyTo,
+  nowMin,
+}: {
+  spans: DaySpan[];
+  dutyFrom: number;
+  dutyTo: number;
+  nowMin: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const pct = (minutes: number) => `${(Math.min(Math.max(minutes, 0), 1440) / 1440) * 100}%` as `${number}%`;
+  // Jobs that overlap count once: it is the time they were busy, not the sum of the jobs.
+  let busy = 0;
+  let reach = 0;
+  for (const s of spans) {
+    busy += Math.max(0, s.to - Math.max(s.from, reach));
+    reach = Math.max(reach, s.to);
+  }
+  const summary =
+    spans.length === 0
+      ? 'No work started today'
+      : `Worked ${formatDuration(busy * 60_000)} today · ${spans.length} job${spans.length === 1 ? '' : 's'}${
+          spans.some((s) => s.running) ? ' · working now' : ''
+        }`;
+  return (
+    <View style={{ gap: 3 }}>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        accessibilityRole="button"
+        accessibilityLabel="Today, hour by hour"
+        style={{ gap: 3 }}
+      >
+        <View style={{ height: 14, borderRadius: 7, backgroundColor: '#D1D5DB', overflow: 'hidden' }}>
+          <View style={{ position: 'absolute', top: 0, bottom: 0, left: pct(dutyFrom), width: pct(dutyTo - dutyFrom), backgroundColor: '#FFFFFF' }} />
+          {[360, 720, 1080].map((m) => (
+            <View key={m} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(m), width: 1, backgroundColor: 'rgba(0,0,0,0.12)' }} />
+          ))}
+          {spans.map((s) => (
+            <View
+              key={s.id}
+              style={{
+                position: 'absolute',
+                top: 2,
+                bottom: 2,
+                left: pct(s.from),
+                width: pct(s.to - s.from),
+                minWidth: 3,
+                borderRadius: 3,
+                backgroundColor: s.running ? '#16A34A' : BLUE,
+              }}
+            />
+          ))}
+          <View style={{ position: 'absolute', top: 0, bottom: 0, left: pct(nowMin), width: 2, backgroundColor: '#DC2626' }} />
+        </View>
+        <View style={{ height: 12 }}>
+          {[0, 6, 12, 18, 24].map((h) => (
+            <Text
+              key={h}
+              className="text-[9.5px] text-gray-500"
+              style={
+                h === 0
+                  ? { position: 'absolute', left: 0 }
+                  : h === 24
+                    ? { position: 'absolute', right: 0 }
+                    : { position: 'absolute', left: pct(h * 60), transform: [{ translateX: -6 }] }
+              }
+            >
+              {h}
+            </Text>
+          ))}
+        </View>
+      </Pressable>
+      <Text className="text-[11px] font-semibold text-gray-700" numberOfLines={1}>
+        {summary}
+      </Text>
+      {open &&
+        spans.map((s) => (
+          <Text key={s.id} className="text-[11px] text-gray-600" numberOfLines={1}>
+            {`${s.ticket ?? ''} ${s.title} · ${clock(s.from)}–${s.running ? 'now' : clock(s.to)} · ${formatDuration((s.to - s.from) * 60_000)}`.trim()}
+          </Text>
+        ))}
+    </View>
+  );
+}
+
 function Column({
   title,
   subtitle,
@@ -227,6 +363,7 @@ function Column({
   tint,
   avatar,
   phone,
+  headerExtra,
   children,
   wide,
 }: {
@@ -237,6 +374,8 @@ function Column({
   tint: string;
   avatar?: { name: string | null; photoUrl: string | null };
   phone?: string | null;
+  /** Under the name in the column's header - an employee's day bar. */
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
   wide: boolean;
 }) {
@@ -245,35 +384,38 @@ function Column({
       className="rounded-2xl border border-gray-200 bg-gray-50"
       style={wide ? { minWidth: 320, flexBasis: 320, flexGrow: 1, flexShrink: 0 } : undefined}
     >
-      <View className="flex-row items-center gap-2.5 rounded-t-2xl px-3.5 py-3" style={{ backgroundColor: tint }}>
-        {avatar ? (
-          <PersonAvatar name={avatar.name} photoUrl={avatar.photoUrl} size={34} bg="bg-blue-600" />
-        ) : (
-          <View className="h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: color }}>
-            <Ionicons name="people" size={16} color="#FFFFFF" />
+      <View className="rounded-t-2xl px-3.5 py-3" style={{ backgroundColor: tint, gap: 8 }}>
+        <View className="flex-row items-center gap-2.5">
+          {avatar ? (
+            <PersonAvatar name={avatar.name} photoUrl={avatar.photoUrl} size={34} bg="bg-blue-600" />
+          ) : (
+            <View className="h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: color }}>
+              <Ionicons name="people" size={16} color="#FFFFFF" />
+            </View>
+          )}
+          <View className="flex-1">
+            <Text className="text-[14px] font-bold text-gray-900" numberOfLines={1}>
+              {title}
+            </Text>
+            <Text className="text-[11px] text-gray-600" numberOfLines={1}>
+              {subtitle}
+            </Text>
           </View>
-        )}
-        <View className="flex-1">
-          <Text className="text-[14px] font-bold text-gray-900" numberOfLines={1}>
-            {title}
-          </Text>
-          <Text className="text-[11px] text-gray-600" numberOfLines={1}>
-            {subtitle}
-          </Text>
+          {!!phone && (
+            <Pressable
+              onPress={() => Linking.openURL(`tel:${phone}`)}
+              hitSlop={6}
+              className="h-8 w-8 items-center justify-center rounded-full bg-white"
+              accessibilityLabel={`Call ${title}`}
+            >
+              <Ionicons name="call-outline" size={15} color={color} />
+            </Pressable>
+          )}
+          <View className="h-6 min-w-6 items-center justify-center rounded-full px-1.5" style={{ backgroundColor: color }}>
+            <Text className="text-[11.5px] font-extrabold text-white">{count}</Text>
+          </View>
         </View>
-        {!!phone && (
-          <Pressable
-            onPress={() => Linking.openURL(`tel:${phone}`)}
-            hitSlop={6}
-            className="h-8 w-8 items-center justify-center rounded-full bg-white"
-            accessibilityLabel={`Call ${title}`}
-          >
-            <Ionicons name="call-outline" size={15} color={color} />
-          </Pressable>
-        )}
-        <View className="h-6 min-w-6 items-center justify-center rounded-full px-1.5" style={{ backgroundColor: color }}>
-          <Text className="text-[11.5px] font-extrabold text-white">{count}</Text>
-        </View>
+        {headerExtra}
       </View>
       <View className="p-3" style={{ gap: 10 }}>{children}</View>
     </View>
@@ -1095,6 +1237,15 @@ export function WorkHubPanel({
   const [query, setQuery] = useState(initialQuery ?? '');
   useEffect(() => setQuery(initialQuery ?? ''), [initialQuery]);
   const closeBoard = () => (router.canGoBack() ? router.back() : router.replace('/(reseller)/requests' as any));
+  // The board's columns slide sideways; the arrows over them do it with one click, as a mouse wheel
+  // only scrolls up and down.
+  const columnsRef = useRef<ScrollView>(null);
+  const [slideX, setSlideX] = useState(0);
+  const [slideView, setSlideView] = useState(0);
+  const [slideContent, setSlideContent] = useState(0);
+  const canSlide = slideContent > slideView + 4;
+  const slide = (direction: -1 | 1) =>
+    columnsRef.current?.scrollTo({ x: Math.max(0, slideX + direction * 334), animated: true });
   // Full screen is a setting of this page, not a page: Back closes it before it leaves.
   useBackStep(maximised, () => setMaximised(false));
   // Beside the sidebar a "wide" page can still leave this panel a narrow column.
@@ -1119,6 +1270,8 @@ export function WorkHubPanel({
   // Each job's timeline needs when its technician started and finished it.
   const jobTimes = useJobTimes(useMemo(() => requests.map((r) => r.id).sort(), [requests]));
   const now = useNow();
+  // How far into today it is, for the red "now" line in each employee's day bar.
+  const nowMinutes = new Date(now).getHours() * 60 + new Date(now).getMinutes();
   const { data: employees } = useMyEmployees(userId);
 
   // The list is this stage's jobs, the newest first - by the date and time each was put in. The
@@ -1392,6 +1545,14 @@ export function WorkHubPanel({
             tint="#EFF6FF"
             avatar={{ name: profile.full_name, photoUrl: profile.avatar_url }}
             phone={profile.phone}
+            headerExtra={
+              <EmployeeDayBar
+                spans={workedToday(requests, jobTimes, profile.id, now)}
+                dutyFrom={minutesOf(employment.work_start_time, 9 * 60)}
+                dutyTo={minutesOf(employment.work_end_time, 17 * 60)}
+                nowMin={nowMinutes}
+              />
+            }
             wide={wide}
           >
             {jobs.length === 0
@@ -1615,26 +1776,49 @@ export function WorkHubPanel({
     <View style={{ gap: wide ? 16 : 14 }} onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}>
       {header}
       {view === 'board' && (
-        <View
-          className="h-10 flex-row items-center gap-2 rounded-lg border border-gray-300 bg-white px-3"
-          style={wide ? { maxWidth: 520 } : undefined}
-        >
-          <Ionicons name="search" size={16} color="#6B7280" />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search work: ticket, customer, phone, job, technician"
-            placeholderTextColor="#9CA3AF"
-            autoCorrect={false}
-            autoCapitalize="none"
-            accessibilityLabel="Search work"
-            className="flex-1 text-[13px] text-gray-900"
-            style={{ outlineStyle: 'none' } as object}
-          />
-          {searching && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
-              <Ionicons name="close-circle" size={17} color="#9CA3AF" />
-            </Pressable>
+        <View className="flex-row items-center" style={{ gap: 10 }}>
+          <View
+            className="h-10 flex-1 flex-row items-center gap-2 rounded-lg border border-gray-300 bg-white px-3"
+            style={wide ? { maxWidth: 520 } : undefined}
+          >
+            <Ionicons name="search" size={16} color="#6B7280" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search work: ticket, customer, phone, job, technician"
+              placeholderTextColor="#9CA3AF"
+              autoCorrect={false}
+              autoCapitalize="none"
+              accessibilityLabel="Search work"
+              className="flex-1 text-[13px] text-gray-900"
+              style={{ outlineStyle: 'none' } as object}
+            />
+            {searching && (
+              <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+                <Ionicons name="close-circle" size={17} color="#9CA3AF" />
+              </Pressable>
+            )}
+          </View>
+          {wide && canSlide && (
+            <View className="ml-auto flex-row items-center" style={{ gap: 6 }}>
+              <Text className="text-[11.5px] text-gray-500">More columns</Text>
+              {([-1, 1] as const).map((direction) => {
+                const disabled = direction === -1 ? slideX <= 4 : slideX + slideView >= slideContent - 4;
+                return (
+                  <Pressable
+                    key={direction}
+                    onPress={() => slide(direction)}
+                    disabled={disabled}
+                    accessibilityRole="button"
+                    accessibilityLabel={direction === -1 ? 'Show columns on the left' : 'Show columns on the right'}
+                    className="h-10 w-10 items-center justify-center rounded-lg border border-gray-300 bg-white"
+                    style={{ opacity: disabled ? 0.4 : 1 }}
+                  >
+                    <Ionicons name={direction === -1 ? 'chevron-back' : 'chevron-forward'} size={18} color="#374151" />
+                  </Pressable>
+                );
+              })}
+            </View>
           )}
         </View>
       )}
@@ -1644,8 +1828,13 @@ export function WorkHubPanel({
         // flexGrow/minWidth let the columns (each 320px at least) share any
         // extra room instead of leaving an empty strip on the right.
         <ScrollView
+          ref={columnsRef}
           horizontal
           showsHorizontalScrollIndicator
+          scrollEventThrottle={16}
+          onScroll={(e) => setSlideX(e.nativeEvent.contentOffset.x)}
+          onLayout={(e) => setSlideView(e.nativeEvent.layout.width)}
+          onContentSizeChange={(width) => setSlideContent(width)}
           contentContainerStyle={{ gap: 14, paddingBottom: 8, flexGrow: 1, minWidth: '100%' }}
         >
           {columns}
