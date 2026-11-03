@@ -155,9 +155,7 @@ function Spark({ values, color, width = 150, height = 34 }: { values: number[]; 
 function Kpi({
   label,
   value,
-  icon,
   color,
-  tint,
   caption,
   captionColor,
   series,
@@ -165,34 +163,29 @@ function Kpi({
 }: {
   label: string;
   value: string;
-  icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  tint: string;
   caption?: string;
   captionColor?: string;
   series?: number[];
   onPress?: () => void;
 }) {
+  // two cards to a row on every screen, so on a phone the figure is set a little smaller to fit its half
+  const compact = useWindowDimensions().width < 560;
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
       className="rounded-2xl bg-white p-4"
-      style={[{ flexGrow: 1, flexBasis: 220, minWidth: 200 }, CARD_SHADOW]}
+      style={[{ flex: 1, minWidth: 0 }, CARD_SHADOW]}
     >
-      <View className="flex-row items-center" style={{ gap: 10 }}>
-        <View className="items-center justify-center rounded-xl" style={{ width: 36, height: 36, backgroundColor: tint }}>
-          <Ionicons name={icon} size={18} color={color} />
-        </View>
-        <Text className="flex-1 text-[12.5px] font-semibold text-gray-500" numberOfLines={1}>
-          {label}
-        </Text>
-      </View>
-      <Text className="mt-2.5 text-[22px] font-extrabold text-gray-900" numberOfLines={1}>
+      <Text className="text-[12.5px] font-semibold text-gray-500" numberOfLines={compact ? 2 : 1}>
+        {label}
+      </Text>
+      <Text className={`mt-2 font-extrabold text-gray-900 ${compact ? 'text-[18px]' : 'text-[22px]'}`} numberOfLines={1}>
         {value}
       </Text>
       {!!caption && (
-        <Text className="mt-0.5 text-[12px] font-semibold" style={{ color: captionColor ?? '#6B7280' }} numberOfLines={1}>
+        <Text className="mt-0.5 text-[12px] font-semibold" style={{ color: captionColor ?? '#6B7280' }} numberOfLines={compact ? 2 : 1}>
           {caption}
         </Text>
       )}
@@ -817,35 +810,34 @@ export default function CompanyDashboard() {
     </Text>
   );
 
-  const kpiGroup = (title: string, tiles: React.ReactNode) => (
+  // Cards two to a row: a grid of two columns.
+  const kpiGroup = (title: string, tiles: React.ReactNode[]) => (
     <View style={{ gap: 8 }}>
       <Text className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500">{title}</Text>
-      <View className="flex-row flex-wrap" style={{ gap: 14 }}>
-        {tiles}
+      <View style={{ gap: 14 }}>
+        {Array.from({ length: Math.ceil(tiles.length / 2) }, (_, r) => (
+          <View key={r} className="flex-row" style={{ gap: 14 }}>
+            {tiles.slice(r * 2, r * 2 + 2)}
+          </View>
+        ))}
       </View>
     </View>
   );
 
   const kpis = (
     <View style={{ gap: 18 }}>
-      {kpiGroup(
-        `The period · ${periodLabel}`,
-        <>
-      <Kpi label={`Sales · ${periodLabel}`} value={npr(totals.now.sale)} icon="trending-up-outline" color="#047857" tint="#ECFDF5" caption={sc.text} captionColor={sc.color} series={series.sale} onPress={() => go('/(reseller)/sales-report')} />
-      <Kpi label={`Purchases · ${periodLabel}`} value={npr(totals.now.purchase)} icon="cart-outline" color="#B45309" tint="#FFFBEB" caption={pc.text} captionColor="#6B7280" series={series.purchase} onPress={() => go('/(reseller)/purchase-report')} />
-      <Kpi label={`Expenses · ${periodLabel}`} value={npr(totals.now.expense)} icon="receipt-outline" color="#B91C1C" tint="#FEF2F2" caption={ec.text} captionColor="#6B7280" series={series.expense} onPress={() => go('/(reseller)/expense-report')} />
-      <Kpi label={`Result · ${periodLabel}`} value={npr(monthResult)} icon="calculator-outline" color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} tint="#F0FDFA" caption="Sales − purchases − expenses" onPress={() => go('/(reseller)/report')} />
-        </>
-      )}
-      {kpiGroup(
-        'Money right now',
-        <>
-      <Kpi label="Cash & bank" value={npr(balances.total)} icon="wallet-outline" color="#047857" tint="#ECFDF5" caption={`Cash ${npr(balances.cash)}`} onPress={() => go('/(reseller)/bank-balances')} />
-      <Kpi label="To receive" value={npr(owed.receivable)} icon="arrow-down-circle-outline" color="#1D4ED8" tint="#EFF6FF" caption={`From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`} onPress={() => go('/(reseller)/to-receive')} />
-      <Kpi label="To pay" value={npr(owed.payable)} icon="arrow-up-circle-outline" color="#B91C1C" tint="#FEF2F2" caption="Owed to vendors" onPress={() => go('/(reseller)/to-give')} />
-      <Kpi label="Net position" value={npr(net)} icon="stats-chart-outline" color={net >= 0 ? '#7C3AED' : '#B91C1C'} tint="#F5F3FF" caption="Cash + receivable − payable" captionColor={net < 0 ? '#B91C1C' : '#6B7280'} onPress={() => go('/(reseller)/bank-balances')} />
-        </>
-      )}
+      {kpiGroup(`The period · ${periodLabel}`, [
+        <Kpi key="sales" label={`Sales · ${periodLabel}`} value={npr(totals.now.sale)} color="#047857" caption={sc.text} captionColor={sc.color} series={series.sale} onPress={() => go('/(reseller)/sales-report')} />,
+        <Kpi key="purchases" label={`Purchases · ${periodLabel}`} value={npr(totals.now.purchase)} color="#B45309" caption={pc.text} captionColor="#6B7280" series={series.purchase} onPress={() => go('/(reseller)/purchase-report')} />,
+        <Kpi key="expenses" label={`Expenses · ${periodLabel}`} value={npr(totals.now.expense)} color="#B91C1C" caption={ec.text} captionColor="#6B7280" series={series.expense} onPress={() => go('/(reseller)/expense-report')} />,
+        <Kpi key="result" label={`Result · ${periodLabel}`} value={npr(monthResult)} color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} caption="Sales − purchases − expenses" onPress={() => go('/(reseller)/report')} />,
+      ])}
+      {kpiGroup('Money right now', [
+        <Kpi key="cash" label="Cash & bank" value={npr(balances.total)} color="#047857" caption={`Cash ${npr(balances.cash)}`} onPress={() => go('/(reseller)/bank-balances')} />,
+        <Kpi key="receive" label="To receive" value={npr(owed.receivable)} color="#1D4ED8" caption={`From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`} onPress={() => go('/(reseller)/to-receive')} />,
+        <Kpi key="pay" label="To pay" value={npr(owed.payable)} color="#B91C1C" caption="Owed to vendors" onPress={() => go('/(reseller)/to-give')} />,
+        <Kpi key="net" label="Net position" value={npr(net)} color={net >= 0 ? '#7C3AED' : '#B91C1C'} caption="Cash + receivable − payable" captionColor={net < 0 ? '#B91C1C' : '#6B7280'} onPress={() => go('/(reseller)/bank-balances')} />,
+      ])}
     </View>
   );
 
