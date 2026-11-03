@@ -9,7 +9,7 @@ import { View, Text, Pressable, ScrollView, Image, Modal, useWindowDimensions, P
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Defs, G, LinearGradient as SvgGradient, Path, Polyline, Polygon, Line, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient as SvgGradient, Path, Polygon, Line, Stop, Text as SvgText } from 'react-native-svg';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useAccountBalances } from '../../lib/hooks/useAccountBalances';
@@ -137,63 +137,6 @@ const inRange = (date: string | null | undefined, r: Range) => {
 };
 
 // ---------- small drawing pieces ----------
-function Spark({ values, color, width = 150, height = 34 }: { values: number[]; color: string; width?: number; height?: number }) {
-  if (values.length < 2) return <View style={{ height }} />;
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values, 0);
-  const span = max - min || 1;
-  const pts = values
-    .map((v, i) => `${(i / (values.length - 1)) * width},${height - 3 - ((v - min) / span) * (height - 8)}`)
-    .join(' ');
-  return (
-    <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-      <Polyline points={pts} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  color,
-  caption,
-  captionColor,
-  series,
-  onPress,
-}: {
-  label: string;
-  value: string;
-  color: string;
-  caption?: string;
-  captionColor?: string;
-  series?: number[];
-  onPress?: () => void;
-}) {
-  // two cards to a row on every screen, so on a phone the figure is set a little smaller to fit its half
-  const compact = useWindowDimensions().width < 560;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      className="rounded-2xl bg-white p-4"
-      style={[{ flex: 1, minWidth: 0 }, CARD_SHADOW]}
-    >
-      <Text className="text-[12.5px] font-semibold text-gray-500" numberOfLines={compact ? 2 : 1}>
-        {label}
-      </Text>
-      <Text className={`mt-2 font-extrabold text-gray-900 ${compact ? 'text-[18px]' : 'text-[22px]'}`} numberOfLines={1}>
-        {value}
-      </Text>
-      {!!caption && (
-        <Text className="mt-0.5 text-[12px] font-semibold" style={{ color: captionColor ?? '#6B7280' }} numberOfLines={compact ? 2 : 1}>
-          {caption}
-        </Text>
-      )}
-      {series && <View style={{ marginTop: 6 }}><Spark values={series} color={color} /></View>}
-    </Pressable>
-  );
-}
-
 type TableRow = { label: string; amount: number; share: number | null; color: string; count?: number; note?: string; onPress?: () => void };
 /** The table style used by Top customers: header, a row per item with a share bar, and a total line.
  * `signed` shows the amounts as balances - green when in the plus, red with a minus sign when short - and
@@ -454,7 +397,6 @@ export default function CompanyDashboard() {
   const [periodOpen, setPeriodOpen] = useState(false);
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? 'This fiscal year';
   const range = useMemo(() => periodRange(period, mode), [period, mode]);
-  const prevRange = useMemo(() => periodRange(period, mode, 1), [period, mode]);
 
   const balances = useAccountBalances(userId);
   const { data: employees } = useMyEmployees(userId);
@@ -468,45 +410,28 @@ export default function CompanyDashboard() {
   const { data: incomingRaw } = useSupabaseQuery('service_requests', { filters: { status: 'pending', origin: 'app' }, enabled: !!userId });
   const { data: orders } = useSupabaseQuery('orders', { filters: userId ? { seller_id: userId } : {}, enabled: !!userId });
 
-  // ---- the last twelve months of sales / purchases / expenses, by the bill's own date ----
+  // ---- the last twelve months of sales and purchases, by the bill's own date ----
   const months = useMemo(() => lastMonths(12, mode), [mode]);
   const series = useMemo(() => {
     const index = new Map(months.map((m, i) => [m.key, i]));
     const sale = months.map(() => 0);
     const purchase = months.map(() => 0);
-    const expense = months.map(() => 0);
     for (const t of transactions ?? []) {
       const k = keyOf(t.bill_date ?? t.created_at, mode);
       const i = k != null ? index.get(k) : undefined;
       if (i == null) continue;
       if (t.type === 'sale') sale[i] += t.amount;
       else if (t.type === 'purchase') purchase[i] += t.amount;
-      else if (t.type === 'expense') expense[i] += t.amount;
     }
-    return { sale, purchase, expense };
+    return { sale, purchase };
   }, [transactions, months, mode]);
   const last = months.length - 1;
 
-  // ---- the chosen period against the one before it ----
-  const totals = useMemo(() => {
-    const now = { sale: 0, purchase: 0, expense: 0 };
-    const before = { sale: 0, purchase: 0, expense: 0 };
-    for (const t of transactions ?? []) {
-      if (t.type !== 'sale' && t.type !== 'purchase' && t.type !== 'expense') continue;
-      const d = t.bill_date ?? t.created_at;
-      if (inRange(d, range)) now[t.type] += t.amount;
-      else if (inRange(d, prevRange)) before[t.type] += t.amount;
-    }
-    return { now, before };
-  }, [transactions, range, prevRange]);
-
-  const change = (now: number, before: number): { text?: string; color?: string } => {
-    if (before < 1) return now > 0 ? { text: 'Nothing in the previous period', color: '#16A34A' } : {};
-    const pct = Math.round(((now - before) / before) * 100);
-    const arrow = pct >= 0 ? '▲' : '▼';
-    const shown = Math.abs(pct) > 999 ? '999%+' : `${Math.abs(pct)}%`;
-    return { text: `${arrow} ${shown} vs previous period`, color: pct >= 0 ? '#16A34A' : '#DC2626' };
-  };
+  // ---- sales billed in the chosen period ----
+  const billedInPeriod = useMemo(
+    () => (transactions ?? []).reduce((sum, t) => (t.type === 'sale' && inRange(t.bill_date ?? t.created_at, range) ? sum + t.amount : sum), 0),
+    [transactions, range]
+  );
 
   // ---- who owes whom (the Ageing Report reads the same calculation) ----
   const owed = useMemo(() => computeOwed(customerEntries ?? [], vendorEntries ?? []), [customerEntries, vendorEntries]);
@@ -517,9 +442,9 @@ export default function CompanyDashboard() {
     (customerEntries ?? []).forEach((e) => {
       if (e.entry_type === 'credit' && inRange(e.entry_date ?? e.created_at, range)) received += e.amount;
     });
-    const billed = totals.now.sale;
+    const billed = billedInPeriod;
     return { received, billed, percent: billed > 0 ? (received / billed) * 100 : null };
-  }, [customerEntries, range, totals]);
+  }, [customerEntries, range, billedInPeriod]);
 
   // ---- paid out in the period: what the Total Paid page adds up (expenses, payments out to a customer, payments to a vendor) ----
   const paidOut = useMemo(() => {
@@ -706,12 +631,6 @@ export default function CompanyDashboard() {
     .sort((a, b) => b.value - a.value);
   const accountMax = Math.max(...accounts.map((a) => Math.abs(a.value)), 1);
 
-  const sc = change(totals.now.sale, totals.before.sale);
-  const pc = change(totals.now.purchase, totals.before.purchase);
-  const ec = change(totals.now.expense, totals.before.expense);
-  const monthResult = totals.now.sale - totals.now.purchase - totals.now.expense;
-  const net = balances.total + owed.receivable - owed.payable;
-
   // The stages a job passes through, in order - and, once it is done, Billed and Paid as on the Requests page
   // (a done job is counted once: not billed yet, or billed and waiting for the money).
   const stageRows = [
@@ -808,37 +727,6 @@ export default function CompanyDashboard() {
     <Text className="text-right text-[12px] text-gray-500">
       {periodLabel} · {range.from === range.to ? numericDateLabel(range.from) : `${numericDateLabel(range.from)} → ${numericDateLabel(range.to)}`}
     </Text>
-  );
-
-  // Cards two to a row: a grid of two columns.
-  const kpiGroup = (title: string, tiles: React.ReactNode[]) => (
-    <View style={{ gap: 8 }}>
-      <Text className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500">{title}</Text>
-      <View style={{ gap: 14 }}>
-        {Array.from({ length: Math.ceil(tiles.length / 2) }, (_, r) => (
-          <View key={r} className="flex-row" style={{ gap: 14 }}>
-            {tiles.slice(r * 2, r * 2 + 2)}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-
-  const kpis = (
-    <View style={{ gap: 18 }}>
-      {kpiGroup(`The period · ${periodLabel}`, [
-        <Kpi key="sales" label={`Sales · ${periodLabel}`} value={npr(totals.now.sale)} color="#047857" caption={sc.text} captionColor={sc.color} series={series.sale} onPress={() => go('/(reseller)/sales-report')} />,
-        <Kpi key="purchases" label={`Purchases · ${periodLabel}`} value={npr(totals.now.purchase)} color="#B45309" caption={pc.text} captionColor="#6B7280" series={series.purchase} onPress={() => go('/(reseller)/purchase-report')} />,
-        <Kpi key="expenses" label={`Expenses · ${periodLabel}`} value={npr(totals.now.expense)} color="#B91C1C" caption={ec.text} captionColor="#6B7280" series={series.expense} onPress={() => go('/(reseller)/expense-report')} />,
-        <Kpi key="result" label={`Result · ${periodLabel}`} value={npr(monthResult)} color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} caption="Sales − purchases − expenses" onPress={() => go('/(reseller)/report')} />,
-      ])}
-      {kpiGroup('Money right now', [
-        <Kpi key="cash" label="Cash & bank" value={npr(balances.total)} color="#047857" caption={`Cash ${npr(balances.cash)}`} onPress={() => go('/(reseller)/bank-balances')} />,
-        <Kpi key="receive" label="To receive" value={npr(owed.receivable)} color="#1D4ED8" caption={`From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`} onPress={() => go('/(reseller)/to-receive')} />,
-        <Kpi key="pay" label="To pay" value={npr(owed.payable)} color="#B91C1C" caption="Owed to vendors" onPress={() => go('/(reseller)/to-give')} />,
-        <Kpi key="net" label="Net position" value={npr(net)} color={net >= 0 ? '#7C3AED' : '#B91C1C'} caption="Cash + receivable − payable" captionColor={net < 0 ? '#B91C1C' : '#6B7280'} onPress={() => go('/(reseller)/bank-balances')} />,
-      ])}
-    </View>
   );
 
   /** A heading that opens a group of cards. */
@@ -1174,16 +1062,16 @@ export default function CompanyDashboard() {
       {hero}
       {quick}
       {periodBar}
-      {kpis}
       {periodMenu}
-      {row([trend, <RecentActivityCard key="recent" basePath="/(reseller)" />], [1.5, 1])}
+      {/* beside the chart the list shows as many entries as fill the card; stacked on a phone it has no height to fill */}
+      {row([trend, <RecentActivityCard key="recent" basePath="/(reseller)" fill={twoColumns} compact={false} />])}
       {section('Money')}
-      {row([banksCard, ageing], [1, 1])}
-      {row([owedCard, movedCard], [1, 1])}
-      {expenses}
-      {section('Work and customers')}
-      {row([stages, updatesCard], [1, 1])}
-      {customersCard}
+      {row([banksCard, ageing])}
+      {row([owedCard, movedCard])}
+      {section('Expenses and customers')}
+      {row([expenses, customersCard])}
+      {section('Work')}
+      {row([stages, updatesCard])}
     </ScrollView>
   );
 }

@@ -149,8 +149,10 @@ const ACTIVITY_ROW_HEIGHT = 58;
 const MIN_ACTIVITY_ROWS = 2;
 
 /** The latest sales, purchases and expenses, newest first. With `fill` it shows as
- * many as fit the height the card has (2 to 10); otherwise the latest 6. */
-export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?: boolean }) {
+ * many as fit the height the card has (2 to 10); otherwise the latest 6. `compact`
+ * (the card's padding) follows `fill` unless it is given, so a card beside others
+ * that use the usual padding can fill without looking squeezed. */
+export function RecentActivityCard({ basePath, fill, compact = fill }: { basePath: string; fill?: boolean; compact?: boolean }) {
   useCalendarMode(); // draws its dates again when the AD / BS toggle changes
   const txs = useTransactions();
   const [bodyHeight, setBodyHeight] = useState(0);
@@ -201,7 +203,7 @@ export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?
 
   return (
     <Card
-      compact={fill}
+      compact={compact}
       title="Recent activity"
       subtitle="Latest sales, purchases and expenses"
       right={
