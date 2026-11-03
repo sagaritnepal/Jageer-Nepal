@@ -81,7 +81,11 @@ export function shortcuts(basePath: string): {
     { key: 'bank-accounts', label: 'Bank Accounts', icon: 'business', href: `${basePath}/bank-accounts` },
     // Import Statement is not a page of its own in the menu any more: it is the Import button in the
     // Statement page's header, which opens the same import flow (the /import-statement route).
-    { key: 'inventory', label: 'Stock and Inventory', icon: 'cube', href: `${basePath}/inventory` },
+    // A reseller's Inventory has a place of its own in the menu, just below Requests, so it is not in
+    // Finance's list.
+    ...(basePath === '/(reseller)'
+      ? []
+      : [{ key: 'inventory', label: 'Stock and Inventory', icon: 'cube' as const, href: `${basePath}/inventory` }]),
     { key: 'report', label: 'Report', icon: 'bar-chart', href: `${basePath}/report` },
     // Quotation only exists under (reseller) for now - a wholesaler basePath has no matching
     // route, so it would be a dead link there. Buying stock is not a page of its own here any more:

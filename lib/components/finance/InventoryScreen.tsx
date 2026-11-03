@@ -1,10 +1,11 @@
 // lib/components/finance/InventoryScreen.tsx
 import { useMemo, useState } from 'react';
-import { View, Text, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, Switch, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore, useRole } from '../../hooks/useAuth';
-import { useSupabaseQuery } from '../../hooks/useSupabase';
+import { useSupabaseQuery, useSupabaseUpdate } from '../../hooks/useSupabase';
+import { showAlert, getErrorMessage } from '../../utils/alert';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
 import {
@@ -62,6 +63,10 @@ interface InventoryRow {
   status: StockStatus;
   /** Stock on hand at cost price; null when there's no stock level or no cost. */
   value: number | null;
+  /** The product behind the row; null for an item that only exists as a name typed into a bill. */
+  productId: string | null;
+  /** Switched on for the marketplace (products.is_listed). */
+  listed: boolean;
 }
 
 /** One line of an item on a bill: units that came in (a Purchase) or went out (a Sale). */
@@ -356,6 +361,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
     orderBy: { column: 'name' },
     enabled: !!userId && !!role,
   });
+  const updateProduct = useSupabaseUpdate('products');
   const { data: financeItems } = useSupabaseQuery('finance_items', {
     filters: userId ? { owner_id: userId } : {},
     enabled: !!userId,
@@ -374,6 +380,17 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
 
   // Buying stock is one of this page's jobs: the wholesale marketplace (a reseller's page only).
   const buyStockHref = basePath === '/(reseller)' ? `${basePath}/wholesale` : null;
+  // So is choosing what is on the Marketplace: the switch on each product (a reseller's page only).
+  const canList = basePath === '/(reseller)';
+
+  async function setListed(row: InventoryRow, next: boolean) {
+    if (!row.productId) return;
+    try {
+      await updateProduct.mutateAsync({ id: row.productId, values: { is_listed: next } });
+    } catch (err) {
+      showAlert('Could not update the marketplace', getErrorMessage(err));
+    }
+  }
 
   // Print and Excel: the list as it is on screen (see buildReport, below).
   const reportButtons = useReportActions(() => buildReport());
@@ -456,6 +473,8 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
         purchased: purchasedByName.get(key) ?? 0,
         status: stock <= 0 ? 'out' : 'ok',
         value: cost != null && stock > 0 ? stock * cost : null,
+        productId: product.id,
+        listed: product.is_listed !== false,
       };
     });
 
@@ -479,6 +498,8 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
           purchased,
           status: 'untracked',
           value: null,
+          productId: null,
+          listed: false,
         };
       })
       .filter((r): r is InventoryRow => r !== null);
@@ -521,6 +542,26 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
 
   const stockColor = (r: InventoryRow) => (r.status === 'out' ? '#B91C1C' : '#111827');
 
+  // On: the item shows on the Marketplace, and so to customers (once it has a price and is in stock). It
+  // cannot be switched on before it has a selling price. A press target of its own, so flipping it does
+  // not open the item's history behind it.
+  const marketCell = (r: InventoryRow) =>
+    r.productId ? (
+      <Pressable onPress={() => {}} style={{ alignSelf: 'flex-start' }}>
+        <Switch
+          value={r.listed}
+          onValueChange={(next) => setListed(r, next)}
+          disabled={!r.listed && !(Number(r.price) > 0)}
+          accessibilityLabel={`${r.name} on the marketplace`}
+          style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+          trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
+          thumbColor={r.listed ? '#3b82f6' : '#F3F4F6'}
+        />
+      </Pressable>
+    ) : (
+      dash
+    );
+
   const itemCell = (r: InventoryRow, compact: boolean) => (
     <View style={{ minWidth: 0, gap: 2 }}>
       <Text className="text-[13px] font-medium text-gray-900" numberOfLines={1}>
@@ -552,6 +593,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
         { key: 'item', label: 'Item', render: (r) => itemCell(r, false) },
         { key: 'stock', label: 'In stock', width: 96, align: 'right', render: (r) => (r.stockLevel != null ? num(qty(r.stockLevel), stockColor(r), true) : dash) },
         { key: 'status', label: 'Status', width: 90, render: (r) => <Pill text={STATUS[r.status].label} color={STATUS[r.status].color} bg={STATUS[r.status].bg} /> },
+        ...(canList ? [{ key: 'market', label: 'Marketplace', width: 104, render: marketCell }] : []),
         { key: 'cost', label: 'Cost price', width: 90, align: 'right', render: (r) => (r.cost != null ? num(rs(r.cost), '#4B5563') : dash) },
         { key: 'price', label: 'Selling price', width: 100, align: 'right', render: (r) => (r.price != null ? num(rs(r.price)) : dash) },
         { key: 'sold', label: 'Sold', width: 72, align: 'right', render: (r) => num(qty(r.sold), '#047857', true) },
@@ -564,6 +606,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
         { key: 'item', label: 'Item', render: (r) => itemCell(r, true) },
         { key: 'stock', label: 'In stock', width: 84, align: 'right', render: (r) => (r.stockLevel != null ? num(qty(r.stockLevel), stockColor(r), true) : dash) },
         { key: 'price', label: 'Price', width: 80, align: 'right', render: (r) => (r.price != null ? num(rs(r.price)) : dash) },
+        ...(canList ? [{ key: 'market', label: 'Market', width: 72, render: marketCell }] : []),
       ];
 
   const footer = layout.full
@@ -650,6 +693,9 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
       <Text className="px-1 text-[11.5px] leading-[17px] text-gray-400">
         Tap an item to see every unit that came in and went out. Sold and Purchased count the units on your Sale and Purchase bills, matched to products by
         item name. Items marked "Bills only" were typed into a bill and are not catalog products, so they have no tracked stock.
+        {canList
+          ? ' The Marketplace switch puts an item on your Marketplace, and so in front of customers once it has a price and is in stock.'
+          : ''}
       </Text>
 
       {viewingRow && (

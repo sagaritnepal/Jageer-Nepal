@@ -118,7 +118,18 @@ function ProductThumbnail({ item, zoomed }: { item: Product; zoomed?: boolean })
 
 /** `fill` makes the card take its whole cell instead of the phone layout's
  * fixed 48% (two to a row) - used by the wide web grid below. */
-function StorefrontCard({ item, basePath, fill }: { item: Product; basePath: string; fill?: boolean }) {
+function StorefrontCard({
+  item,
+  basePath,
+  fill,
+  showSwitch = true,
+}: {
+  item: Product;
+  basePath: string;
+  fill?: boolean;
+  /** The Available switch. A reseller turns an item on or off in Inventory, not here. */
+  showSwitch?: boolean;
+}) {
   const updateProduct = useSupabaseUpdate('products');
   const isAvailable = item.is_listed ?? true;
   const hasPrice = Number(item.price) > 0;
@@ -208,17 +219,19 @@ function StorefrontCard({ item, basePath, fill }: { item: Product; basePath: str
         {outOfStock ? 'Restock to sell' : `${item.stock_level} in stock`}
       </Text>
 
-      <View className="mt-1.5 flex-row items-center justify-between">
-        <Text className="text-[10px] font-medium text-gray-500">Available</Text>
-        <Switch
-          value={effectiveAvailable}
-          onValueChange={handleToggleAvailable}
-          disabled={!hasPrice}
-          style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
-          trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
-          thumbColor={effectiveAvailable ? '#3b82f6' : '#F3F4F6'}
-        />
-      </View>
+      {showSwitch && (
+        <View className="mt-1.5 flex-row items-center justify-between">
+          <Text className="text-[10px] font-medium text-gray-500">Available</Text>
+          <Switch
+            value={effectiveAvailable}
+            onValueChange={handleToggleAvailable}
+            disabled={!hasPrice}
+            style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+            trackColor={{ false: '#D1D5DB', true: '#93c5fd' }}
+            thumbColor={effectiveAvailable ? '#3b82f6' : '#F3F4F6'}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -230,6 +243,7 @@ export function MyStorefront({
   search: searchFromPage,
   hideOverview,
   title,
+  marketplaceOnly,
 }: {
   sellerRole: UserRole;
   emptyText: string;
@@ -242,6 +256,9 @@ export function MyStorefront({
   /** A heading for the products ("Products"), with how many there are and how many need stock, and the
    * category filter beside it. */
   title?: string;
+  /** Only what is switched on for the marketplace (products.is_listed), as the Inventory page sets it -
+   * the same switch customers' app goes by. The cards then carry no switch of their own. */
+  marketplaceOnly?: boolean;
 }) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const [ownSearch, setSearch] = useState('');
@@ -260,11 +277,16 @@ export function MyStorefront({
   });
 
   // This screen is the seller's own view of everything they've stocked, so
-  // it always shows every product regardless of is_listed or stock level -
-  // turning Available off never removes anything here, only from the real
+  // it shows every product regardless of is_listed or stock level - turning
+  // Available off never removes anything here, only from the real
   // customer-facing marketplace query in (client)/market.tsx, which already
   // filters on is_listed and stock_level independently of this component.
-  const visible = useMemo(() => products ?? [], [products]);
+  // The reseller's Marketplace page asks for `marketplaceOnly` instead: just what is
+  // switched on in Inventory (is_listed), the first thing customers' app goes by too.
+  const visible = useMemo(
+    () => (marketplaceOnly ? (products ?? []).filter((p) => p.is_listed !== false) : (products ?? [])),
+    [products, marketplaceOnly]
+  );
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -398,10 +420,10 @@ export function MyStorefront({
         {filtered.map((item) =>
           wideGrid ? (
             <View key={item.id} style={cellStyle}>
-              <StorefrontCard item={item} basePath={basePath} fill />
+              <StorefrontCard item={item} basePath={basePath} fill showSwitch={!marketplaceOnly} />
             </View>
           ) : (
-            <StorefrontCard key={item.id} item={item} basePath={basePath} />
+            <StorefrontCard key={item.id} item={item} basePath={basePath} showSwitch={!marketplaceOnly} />
           )
         )}
       </View>

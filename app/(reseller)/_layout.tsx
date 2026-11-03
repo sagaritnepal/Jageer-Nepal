@@ -1,5 +1,5 @@
 // app/(reseller)/_layout.tsx
-import { Platform, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, View, useWindowDimensions } from 'react-native';
 import { Tabs } from 'expo-router';
 import { RoleGuard } from '../../lib/components/RoleGuard';
 import { freshScreenLayout } from '../../lib/components/FreshScreen';
@@ -61,8 +61,9 @@ const DAYBOOK_ENTRIES: WebNavItem[] = [
 
 const NAV_ITEMS: WebNavItem[] = [
   { href: '/(reseller)/company-dashboard', label: 'Dashboard', icon: 'grid' },
-  { href: '/(reseller)/dashboard', label: 'Shop & Services', icon: 'bag' },
+  { href: '/(reseller)/dashboard', label: 'Marketplace', icon: 'bag' },
   { href: '/(reseller)/requests', label: 'Requests', icon: 'clipboard' },
+  { href: '/(reseller)/inventory', label: 'Inventory', icon: 'cube' },
   {
     href: '/(reseller)/finance',
     label: 'Finance',
@@ -139,21 +140,12 @@ export default function ResellerLayout() {
             tabBarIcon: ({ color, focused }) => <TabIcon name="grid" color={color} focused={focused} />,
           }}
         />
-        {/* Shop and Services are one page; the old Shop route only forwards to its Products tab. */}
+        {/* Shop and Services are one page, the Marketplace; the old Shop route only forwards to its Products tab. */}
         <Tabs.Screen
           name="dashboard"
-          options={{
-            title: 'Shop & Services',
-            // Longer than the other tab names, so on a phone it wraps to two lines rather than being cut off.
-            tabBarLabel: ({ color }) => (
-              <Text style={{ color, fontSize: 10, lineHeight: 11, textAlign: 'center' }} numberOfLines={2}>
-                Shop & Services
-              </Text>
-            ),
-            tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} />,
-          }}
+          options={{ title: 'Marketplace', tabBarIcon: ({ color, focused }) => <TabIcon name="bag" color={color} focused={focused} /> }}
         />
-        <Tabs.Screen name="shop" options={{ href: null, title: 'Shop & Services' }} />
+        <Tabs.Screen name="shop" options={{ href: null, title: 'Marketplace' }} />
         <Tabs.Screen
           name="requests"
           options={{
@@ -162,12 +154,12 @@ export default function ResellerLayout() {
             tabBarIcon: ({ color, focused }) => <TabIcon name="clipboard" color={color} focused={focused} />,
           }}
         />
-        {/* Stock and Inventory: a tab of its own on a phone (on the wide web layout it sits under Finance in the side panel). */}
+        {/* Inventory: just below Requests, on a phone's tabs and in the side panel alike. */}
         <Tabs.Screen
           name="inventory"
           options={{
-            title: 'Stock and Inventory',
-            tabBarLabel: 'Stock',
+            title: 'Inventory',
+            tabBarLabel: 'Inventory',
             tabBarIcon: ({ color, focused }) => <TabIcon name="cube" color={color} focused={focused} />,
           }}
         />

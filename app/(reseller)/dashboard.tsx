@@ -9,18 +9,7 @@ import { CategoryGrid, categoryColumnsFor } from '../../lib/components/CategoryG
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { MyStorefront } from '../../lib/components/MyStorefront';
 import { filterBySearch } from '../../lib/utils/search';
-import {
-  usePendingHires,
-  useMyEmployees,
-  useRespondToHire,
-  useLeaveRequests,
-  useDecideLeaveRequest,
-} from '../../lib/hooks/useTechnicianEmployment';
-import { useTeamJobs, useTeamLocations } from '../../lib/hooks/useTeamActivity';
-import { useTick } from '../../lib/components/TeamActivity';
-import { PersonAvatar } from '../../lib/components/PersonAvatar';
-import { buildMember, sortMembers } from '../../lib/utils/teamStatus';
-import { showAlert, getErrorMessage } from '../../lib/utils/alert';
+import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import type { Profile, ServiceCategory } from '../../types/database.types';
 
@@ -34,174 +23,9 @@ function initialsOf(name: string | null | undefined) {
     .join('');
 }
 
-function HiringSections({ userId }: { userId: string }) {
-  const { data: pendingHires } = usePendingHires(userId);
-  const { data: employees } = useMyEmployees(userId);
-  const respondToHire = useRespondToHire();
-  const leaveRequests = useLeaveRequests(userId);
-  const decideLeave = useDecideLeaveRequest();
-
-  async function handleLeave(id: string, approve: boolean) {
-    try {
-      await decideLeave.decide(id, approve);
-    } catch (err) {
-      showAlert('Could not respond', getErrorMessage(err));
-    }
-  }
-
-  async function handleRespond(id: string, accept: boolean) {
-    try {
-      await respondToHire.respond(id, accept);
-    } catch (err) {
-      showAlert('Could not respond', getErrorMessage(err));
-    }
-  }
-
-  const { data: jobs } = useTeamJobs(userId, employees.map((e) => e.profile.id));
-  const locations = useTeamLocations(userId);
-  const now = useTick();
-  const members = useMemo(
-    () => sortMembers(employees.map((e) => buildMember(e.employment, e.profile, jobs, locations.get(e.profile.id), now))),
-    [employees, jobs, locations, now]
-  );
-  const attention = members.reduce((n, m) => n + m.attention.length, 0);
-
-  return (
-    <>
-      {leaveRequests.length > 0 && (
-        <>
-          <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Requests to Leave</Text>
-          {leaveRequests.map(({ employment, profile }) => (
-            <View key={employment.id} className="mb-2.5 rounded-2xl border border-blue-200 bg-blue-50 p-3.5">
-              <View className="mb-2.5 flex-row items-center gap-3">
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-900">
-                  <Text className="text-xs font-bold text-white">{initialsOf(profile.full_name)}</Text>
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[13.5px] font-bold text-gray-900">{profile.full_name ?? 'Technician'}</Text>
-                  <Text className="mt-0.5 text-[11.5px] text-gray-600" numberOfLines={2}>
-                    {employment.leave_reason ? `Wants to leave · ${employment.leave_reason}` : 'Wants to leave your team'}
-                  </Text>
-                </View>
-              </View>
-              <View className="flex-row gap-2.5">
-                <Pressable
-                  onPress={() => handleLeave(employment.id, false)}
-                  disabled={decideLeave.isPending}
-                  className="flex-1 items-center rounded-lg border border-gray-300 bg-white py-2 disabled:opacity-50"
-                >
-                  <Text className="text-xs font-semibold text-gray-600">Reject</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleLeave(employment.id, true)}
-                  disabled={decideLeave.isPending}
-                  className="flex-1 items-center rounded-lg bg-blue-600 py-2 disabled:opacity-50"
-                >
-                  <Text className="text-xs font-semibold text-white">Approve</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-        </>
-      )}
-
-      {pendingHires.length > 0 && (
-        <>
-          <Text className="mb-3 mt-3 text-[15px] font-bold text-gray-900">Hiring Requests</Text>
-          {pendingHires.map(({ employment, profile }) => (
-            <View key={employment.id} className="mb-2.5 rounded-2xl border border-blue-200 bg-blue-50 p-3.5">
-              <View className="mb-2.5 flex-row items-center gap-3">
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-600">
-                  <Text className="text-xs font-bold text-white">{initialsOf(profile.full_name)}</Text>
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[13.5px] font-bold text-gray-900">{profile.full_name ?? 'Technician'}</Text>
-                  <Text className="mt-0.5 text-[11.5px] text-gray-500">
-                    Wants to work {employment.work_start_time?.slice(0, 5)}–{employment.work_end_time?.slice(0, 5)}
-                  </Text>
-                </View>
-              </View>
-              <View className="flex-row gap-2.5">
-                <Pressable
-                  onPress={() => handleRespond(employment.id, false)}
-                  disabled={respondToHire.isPending}
-                  className="flex-1 items-center rounded-lg border border-gray-300 py-2 disabled:opacity-50"
-                >
-                  <Text className="text-xs font-semibold text-gray-600">Reject</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleRespond(employment.id, true)}
-                  disabled={respondToHire.isPending}
-                  className="flex-1 items-center rounded-lg bg-blue-600 py-2 disabled:opacity-50"
-                >
-                  <Text className="text-xs font-semibold text-white">Accept</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-        </>
-      )}
-
-      {members.length > 0 && (
-        <Pressable
-          onPress={() => router.push('/(reseller)/employees' as any)}
-          accessibilityRole="button"
-          accessibilityLabel="Open team"
-          className="mb-2.5 mt-3 rounded-2xl border border-gray-200 bg-white p-4 active:bg-gray-50"
-          style={{ gap: 12 }}
-        >
-          <View className="flex-row items-center justify-between">
-            <Text className="text-[15px] font-bold text-gray-900">My team</Text>
-            {attention > 0 && (
-              <View className="rounded-full bg-blue-50 px-2.5 py-0.5">
-                <Text className="text-[11px] font-bold text-blue-900">{attention} need attention</Text>
-              </View>
-            )}
-          </View>
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row">
-              {members.slice(0, 5).map((m, i) => (
-                <View key={m.employment.id} style={{ marginLeft: i === 0 ? 0 : -10 }}>
-                  <View className="rounded-full border-2 border-white">
-                    <PersonAvatar name={m.profile.full_name} photoUrl={m.profile.avatar_url} size={38} bg={m.profile.avatar_url ? 'bg-blue-600' : 'bg-gray-500'} />
-                  </View>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      right: 0,
-                      bottom: 0,
-                      width: 12,
-                      height: 12,
-                      borderRadius: 6,
-                      borderWidth: 2,
-                      borderColor: '#FFFFFF',
-                      backgroundColor: m.state === 'working' ? '#1E3A8A' : m.state === 'offer' ? '#93C5FD' : m.state === 'free' ? '#2563EB' : '#CBD5E1',
-                    }}
-                  />
-                </View>
-              ))}
-              {members.length > 5 && (
-                <View className="ml-[-10px] h-[38px] w-[38px] items-center justify-center rounded-full border-2 border-white bg-gray-100">
-                  <Text className="text-xs font-bold text-gray-600">+{members.length - 5}</Text>
-                </View>
-              )}
-            </View>
-            <Text className="text-[13px] text-gray-600">
-              {members.filter((m) => m.state === 'working').length} working · {members.filter((m) => m.state === 'free').length} free
-            </Text>
-          </View>
-          <View className="h-11 flex-row items-center justify-center rounded-xl bg-blue-600" style={{ gap: 6 }}>
-            <Text className="text-[14px] font-bold text-white">Open team</Text>
-            <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-          </View>
-        </Pressable>
-      )}
-    </>
-  );
-}
-
-/** Shop & Services is one page: the services you take jobs for and the products you stock, shown together
- * or one at a time. The `tab` in the link opens it on one of them (the old Shop link comes in as products). */
+/** Marketplace is one page: the services you take jobs for and the products you have switched on in
+ * Inventory, shown together or one at a time. The `tab` in the link opens it on one of them (the old Shop
+ * link comes in as products). */
 type Section = 'all' | 'services' | 'products';
 const VIEWS: { key: Section; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -242,12 +66,16 @@ export default function ResellerDashboard() {
     return (categories ?? []).filter((c) => c.label.toLowerCase().includes(q));
   }, [categories, search]);
 
-  // The products too, for the counts on the switch (the Products section reads the same list).
+  // The products too, for the counts on the switch (the Products section reads the same list): the ones
+  // switched on in Inventory.
   const { data: myProducts } = useSupabaseQuery('products', {
     filters: { seller_id: userId ?? '', seller_role: 'reseller' },
     enabled: !!userId,
   });
-  const productCount = useMemo(() => filterBySearch(myProducts ?? [], search).length, [myProducts, search]);
+  const productCount = useMemo(
+    () => filterBySearch((myProducts ?? []).filter((p) => p.is_listed !== false), search).length,
+    [myProducts, search]
+  );
 
   const { data: technicians } = useSupabaseQuery('profiles', {
     filters: { role: 'technician' },
@@ -298,7 +126,7 @@ export default function ResellerDashboard() {
 
   // The page, one arrangement that reflows: its title and the one search box (for services and products
   // alike), the switch between All / Services / Products, the services in a card, the products, then
-  // outsource technicians and the team.
+  // outsource technicians.
   const wide = isWideWeb;
   const pad = wide ? 32 : 16;
 
@@ -306,7 +134,7 @@ export default function ResellerDashboard() {
     <View className="flex-row flex-wrap items-end justify-between" style={{ gap: 12 }}>
       <View style={{ flexShrink: 1 }}>
         <Text className="text-2xl font-extrabold text-gray-900" numberOfLines={2}>
-          Shop & Services
+          Marketplace
         </Text>
         <Text className="mt-1 text-sm text-gray-600">The work you take on and the stock you sell, in one place.</Text>
       </View>
@@ -414,16 +242,16 @@ export default function ResellerDashboard() {
             <View>
               <MyStorefront
                 sellerRole="reseller"
-                emptyText="Buy stock from a wholesaler and it'll show up here."
+                emptyText="Switch an item on in Inventory and it shows here, and to your customers."
                 basePath="/(reseller)"
                 search={search}
                 hideOverview
+                marketplaceOnly
                 title="Products"
               />
             </View>
           )}
           {view !== 'products' && outsourceCard}
-          {view !== 'products' && userId ? <HiringSections userId={userId} /> : null}
         </View>
       </ScrollView>
 
