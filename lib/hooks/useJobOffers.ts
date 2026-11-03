@@ -52,6 +52,33 @@ export function useOpenTeamJobs(technicianId: string | undefined) {
   return (data ?? []).filter((job) => !job.technician_id);
 }
 
+/** All the employer's work with nobody on it that is ready to be done, for the Worksheet: what the owner could assign,
+ * plus anything in Outsource Technician. Oldest first. RLS only lets an accepted employee read this (migration 0109). */
+export function useUnassignedTeamJobs(resellerId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { data } = useSupabaseQuery('service_requests', {
+    filters: resellerId ? { reseller_id: resellerId } : {},
+    orderBy: { column: 'created_at', ascending: true },
+    enabled: !!resellerId,
+    queryOptions: { refetchInterval: 20_000 },
+  });
+
+  useEffect(() => {
+    if (!resellerId) return;
+    return subscribeToTable('service_requests', () =>
+      queryClient.invalidateQueries({ queryKey: ['service_requests'] })
+    );
+  }, [resellerId, queryClient]);
+
+  return (data ?? []).filter(
+    (job) =>
+      !job.technician_id &&
+      (job.status === 'approved' ||
+        (job.status === 'pending' && job.origin === 'reseller') ||
+        (job.open_to_team && job.status !== 'resolved' && job.status !== 'cancelled'))
+  );
+}
+
 /** Take an open job. First come, first served - the server locks the row,
  * so a second person tapping at the same moment is told it is gone
  * (migration 0076). */

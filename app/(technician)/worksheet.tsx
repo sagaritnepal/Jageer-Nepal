@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/hooks/useAuth';
 import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { useMyEmployment, staffAddJob } from '../../lib/hooks/useTechnicianEmployment';
-import { claimOpenJob, useOpenTeamJobs } from '../../lib/hooks/useJobOffers';
+import { claimOpenJob, useUnassignedTeamJobs } from '../../lib/hooks/useJobOffers';
 import { CategoryBadge } from '../../lib/components/CategoryBadge';
 import { SuggestInput } from '../../lib/components/finance/SuggestInput';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
@@ -17,10 +17,11 @@ import type { ServiceRequest } from '../../types/database.types';
 const BLUE = '#2563EB';
 const INPUT = 'rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900';
 
-function WorkRow({ job, action }: { job: ServiceRequest; action: React.ReactNode }) {
+/** `linked`: the job page opens from it. Work nobody has taken yet has no job page of its own to act on, so its row doesn't. */
+function WorkRow({ job, action, linked = true }: { job: ServiceRequest; action: React.ReactNode; linked?: boolean }) {
   return (
     <View className="rounded-2xl border border-gray-200 bg-white p-3.5">
-      <Pressable onPress={() => router.push(`/(technician)/job/${job.id}` as never)} className="flex-row items-start gap-2.5">
+      <Pressable disabled={!linked} onPress={() => router.push(`/(technician)/job/${job.id}` as never)} className="flex-row items-start gap-2.5">
         <CategoryBadge category={job.issue_type} size={36} />
         <View className="flex-1">
           <Text className="text-[14px] font-bold text-gray-900" numberOfLines={2}>
@@ -168,8 +169,8 @@ function AddWork({ visible, onClose }: { visible: boolean; onClose: () => void }
   );
 }
 
-/** A technician's Worksheet: the job they are on, what has been offered to them, and the team's open work to choose
- * from once they are free. Only for someone employed - an outside technician does not see their employer's work. */
+/** A technician's Worksheet: the job they are on, what has been offered to them, and all their employer's unassigned
+ * work to choose from once they are free. Only for someone employed - an outside technician does not see it. */
 export default function TechnicianWorksheet() {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { current, employer } = useMyEmployment(userId);
@@ -185,7 +186,7 @@ export default function TechnicianWorksheet() {
     orderBy: { column: 'created_at', ascending: false },
     enabled: !!userId && isStaff,
   });
-  const openJobs = useOpenTeamJobs(isStaff ? userId : undefined);
+  const openJobs = useUnassignedTeamJobs(isStaff ? current?.reseller_id : undefined);
 
   const working = useMemo(() => (mine ?? []).filter((j) => j.status === 'in_progress' && j.hold_status !== 'on_hold'), [mine]);
   const onHold = useMemo(() => (mine ?? []).filter((j) => j.status === 'in_progress' && j.hold_status === 'on_hold'), [mine]);
@@ -252,13 +253,14 @@ export default function TechnicianWorksheet() {
         {openJobs.length === 0 ? (
           <View className="items-center rounded-2xl border border-dashed border-gray-200 bg-white py-10">
             <Ionicons name="clipboard-outline" size={26} color="#D1D5DB" />
-            <Text className="mt-2 text-sm text-gray-500">No open work right now.</Text>
+            <Text className="mt-2 text-sm text-gray-500">No unassigned work right now.</Text>
           </View>
         ) : (
           openJobs.map((j) => (
             <WorkRow
               key={j.id}
               job={j}
+              linked={false}
               action={<ButtonRow label={busyId === j.id ? 'Taking…' : 'Take this job'} icon="checkmark-circle-outline" onPress={() => take(j)} disabled={busy || !!busyId} />}
             />
           ))
