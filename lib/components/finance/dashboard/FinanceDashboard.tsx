@@ -137,6 +137,12 @@ export function SalesTrendCard({ fill }: { fill?: boolean }) {
   );
 }
 
+/** "14:05": the time of day an entry was put in, 24-hour (the date shown with it is the bill's own). */
+function entryTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 /** One row of the recent-activity list: 20px of padding, two lines of text, a 1px rule -
  * a little over what it measures, so the last row shown is never clipped. */
 const ACTIVITY_ROW_HEIGHT = 58;
@@ -180,7 +186,7 @@ export function RecentActivityCard({ basePath, fill }: { basePath: string; fill?
                     {tidyName(t.party_name) || meta.label}
                   </Text>
                   <Text className="text-[11px] text-gray-400" numberOfLines={1}>
-                    {toBsHistoryLabel(t.bill_date ?? t.created_at)}
+                    {`${toBsHistoryLabel(t.bill_date ?? t.created_at)} · ${entryTime(t.created_at)}`}
                   </Text>
                 </View>
               </View>

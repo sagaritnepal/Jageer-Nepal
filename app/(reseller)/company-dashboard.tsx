@@ -17,7 +17,8 @@ import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
 import { useRequestsStageStore } from '../../lib/hooks/useRequestsStage';
 import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
-import { adStringToBs, bsToAdString, bsDaysInMonth, numericDateLabel, BS_MONTHS } from '../../lib/utils/nepaliDate';
+import { adStringToBs, bsToAdString, bsDaysInMonth, numericDateLabel, toBsHistoryLabel, BS_MONTHS } from '../../lib/utils/nepaliDate';
+import { ticketLabel } from '../../lib/utils/ticket';
 import { localTodayIso } from '../../lib/utils/localDate';
 import { newJobHref } from '../../lib/utils/newJobHref';
 import { supabase } from '../../lib/supabase';
@@ -436,23 +437,6 @@ function HBars({ rows, color }: { rows: { label: string; value: number; display:
   );
 }
 
-function Columns({ rows, color, onPress }: { rows: { label: string; value: number }[]; color: string; onPress?: () => void }) {
-  const max = Math.max(...rows.map((r) => r.value), 1);
-  return (
-    <View className="flex-row items-end" style={{ gap: 12, height: 170 }}>
-      {rows.map((r) => (
-        <Pressable key={r.label} onPress={onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 170, gap: 5 }}>
-          <Text className="text-[12px] font-bold text-gray-900">{r.value}</Text>
-          <View style={{ width: '100%', maxWidth: 46, height: Math.max(6, (r.value / max) * 110), borderRadius: 7, backgroundColor: color }} />
-          <Text className="text-[11px] text-gray-600" numberOfLines={1}>
-            {r.label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 export default function CompanyDashboard() {
   const profile = useAuthStore((state) => state.profile);
   const userId = profile?.id;
@@ -556,6 +540,21 @@ export default function CompanyDashboard() {
     return { received, billed, percent: billed > 0 ? (received / billed) * 100 : null };
   }, [customerEntries, range, totals]);
 
+  // ---- paid out in the period: what the Total Paid page adds up (expenses, payments out to a customer, payments to a vendor) ----
+  const paidOut = useMemo(() => {
+    let total = 0;
+    for (const t of transactions ?? []) {
+      if (t.type === 'expense' && inRange(t.bill_date ?? t.created_at, range)) total += t.amount;
+    }
+    for (const e of customerEntries ?? []) {
+      if (e.entry_type === 'debit' && e.source === 'manual' && inRange(e.entry_date ?? e.created_at, range)) total += e.amount;
+    }
+    for (const e of vendorEntries ?? []) {
+      if (e.entry_type === 'credit' && inRange(e.entry_date ?? e.created_at, range)) total += e.amount;
+    }
+    return total;
+  }, [transactions, customerEntries, vendorEntries, range]);
+
   // ---- expenses by category in the period ----
   const expenseParts = useMemo(() => {
     const names = new Map((categories ?? []).map((c) => [c.id, c.name]));
@@ -592,16 +591,26 @@ export default function CompanyDashboard() {
   }, [transactions, customers, range]);
 
   // ---- jobs ----
+  // The jobs a bill has been made for - a finished one is "billed" from then on (as on the Requests page).
+  const billedJobs = useMemo(
+    () =>
+      new Set(
+        (transactions ?? [])
+          .filter((t) => t.source_type === 'service_request_bill')
+          .flatMap((t) => [...(t.source_id ? [t.source_id] : []), ...(t.source_job_ids ?? [])])
+      ),
+    [transactions]
+  );
   const jobStats = useMemo(() => {
     const now = Date.now();
     let waiting = 0;
     let assigned = 0;
     let working = 0;
     let overdue = 0;
-    const money = { newRequests: 0, waiting: 0, assigned: 0, working: 0, toBill: 0, unpaid: 0 };
+    const money = { newRequests: 0, pending: 0, waiting: 0, assigned: 0, working: 0, toBill: 0, unpaid: 0 };
+    let pending = 0;
     let toBill = 0;
     let unpaid = 0;
-    const done = new Map<string, number>();
     for (const j of jobs ?? []) {
       if (j.status === 'cancelled') continue;
       const slot = j.scheduled_date
@@ -612,26 +621,52 @@ export default function CompanyDashboard() {
       if (j.status === 'approved' || (j.status === 'pending' && j.origin === 'reseller')) { waiting += 1; money.waiting += price; }
       if (j.status === 'assigned') { assigned += 1; money.assigned += price; }
       if (j.status === 'in_progress') { working += 1; money.working += price; }
-      if (j.status === 'resolved' && j.payment_status !== 'paid') { unpaid += 1; money.unpaid += price; }
-      if (j.status === 'resolved' && j.payment_status === 'unpaid') { toBill += 1; money.toBill += price; }
-      if (j.status === 'resolved' && j.technician_id && inRange(j.updated_at, range)) {
-        done.set(j.technician_id, (done.get(j.technician_id) ?? 0) + 1);
+      // An app customer's job I have taken: it still needs a quote, or the customer has not answered it.
+      if (j.status === 'quoted' || (j.status === 'pending' && j.origin === 'app')) { pending += 1; money.pending += price; }
+      // Done and not paid: not billed yet, or billed (a bill made for it, or part paid) and waiting for the money.
+      if (j.status === 'resolved' && j.payment_status !== 'paid') {
+        if (j.payment_status === 'partial' || billedJobs.has(j.id)) { unpaid += 1; money.unpaid += price; }
+        else { toBill += 1; money.toBill += price; }
       }
     }
     const incoming = (incomingRaw ?? []).filter((r) => !r.reseller_id);
     const newRequests = incoming.length;
     money.newRequests = incoming.reduce((sum, r) => sum + (Number(r.quoted_price) || 0), 0);
     const shopOrders = (orders ?? []).filter((o) => o.status === 'pending' || o.status === 'confirmed').length;
-    return { waiting, assigned, working, overdue, toBill, unpaid, newRequests, shopOrders, done, money };
-  }, [jobs, incomingRaw, orders, range]);
+    return { pending, waiting, assigned, working, overdue, toBill, unpaid, newRequests, shopOrders, money };
+  }, [jobs, incomingRaw, orders, billedJobs]);
 
-  const team = useMemo(() => {
+  // The latest change on each job (its last update, whatever it was), newest first.
+  const updates = useMemo(() => {
     const names = new Map((employees ?? []).map((e) => [e.employment.technician_id, e.profile.full_name ?? 'Technician']));
-    return [...jobStats.done.entries()]
-      .map(([id, value]) => ({ label: (names.get(id) ?? 'Technician').split(' ')[0], value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6);
-  }, [jobStats.done, employees]);
+    const who = (id: string | null) => (id ? (names.get(id) ?? 'a technician') : null);
+    const describe = (j: NonNullable<typeof jobs>[number]): { text: string; color: string; icon: keyof typeof Ionicons.glyphMap } => {
+      switch (j.status) {
+        case 'pending':
+          return { text: j.origin === 'app' ? 'Request taken - needs a quote' : 'Job added', color: '#F59E0B', icon: 'download-outline' };
+        case 'quoted':
+          return { text: 'Quote sent - waiting for the customer', color: '#F59E0B', icon: 'pricetag-outline' };
+        case 'approved':
+          return { text: 'Approved - waiting for a technician', color: '#2563EB', icon: 'briefcase-outline' };
+        case 'assigned':
+          return { text: j.technician_id ? `Given to ${who(j.technician_id)} - waiting for them to accept` : 'Open to the team', color: '#0EA5E9', icon: 'person-add-outline' };
+        case 'in_progress':
+          return { text: j.hold_status === 'on_hold' ? 'On hold' : `${who(j.technician_id) ?? 'A technician'} accepted - working on it`, color: '#16A34A', icon: 'build-outline' };
+        case 'resolved':
+          return {
+            text: j.payment_status === 'paid' ? 'Completed and paid' : billedJobs.has(j.id) || j.payment_status === 'partial' ? 'Completed and billed' : 'Completed - not billed yet',
+            color: '#7C3AED',
+            icon: 'checkmark-circle-outline',
+          };
+        default:
+          return { text: 'Cancelled', color: '#9CA3AF', icon: 'close-circle-outline' };
+      }
+    };
+    return [...(jobs ?? [])]
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, 7)
+      .map((j) => ({ job: j, ...describe(j) }));
+  }, [jobs, employees, billedJobs]);
 
   const logoUrl = profile?.business_logo_path
     ? supabase.storage.from('business-assets').getPublicUrl(profile.business_logo_path).data.publicUrl
@@ -662,13 +697,16 @@ export default function CompanyDashboard() {
   const monthResult = totals.now.sale - totals.now.purchase - totals.now.expense;
   const net = balances.total + owed.receivable - owed.payable;
 
+  // The stages a job passes through, in order - and, once it is done, Billed and Paid as on the Requests page
+  // (a done job is counted once: not billed yet, or billed and waiting for the money).
   const stageRows = [
     { label: 'New app requests', value: jobStats.newRequests, amount: jobStats.money.newRequests, color: '#F59E0B' , stage: 'requests' },
+    { label: 'Pending - quote / approval', value: jobStats.pending, amount: jobStats.money.pending, color: '#FBBF24' , stage: 'requests' },
     { label: 'Waiting for a technician', value: jobStats.waiting, amount: jobStats.money.waiting, color: '#2563EB' , stage: 'my_jobs' },
     { label: 'Assigned', value: jobStats.assigned, amount: jobStats.money.assigned, color: '#0EA5E9' , stage: 'my_jobs' },
     { label: 'In progress', value: jobStats.working, amount: jobStats.money.working, color: '#16A34A' , stage: 'my_jobs' },
-    { label: 'Done, to be billed', value: jobStats.toBill, amount: jobStats.money.toBill, color: '#7C3AED' , stage: 'completed' },
-    { label: 'Awaiting payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' , stage: 'completed' },
+    { label: 'Done, not billed yet', value: jobStats.toBill, amount: jobStats.money.toBill, color: '#7C3AED' , stage: 'completed' },
+    { label: 'Billed, waiting for payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' , stage: 'completed' },
   ];
   const stageTotal = stageRows.reduce((s_, r) => s_ + r.value, 0);
   const stageAmount = stageRows.reduce((s_, r) => s_ + r.amount, 0);
@@ -757,16 +795,43 @@ export default function CompanyDashboard() {
     </Text>
   );
 
+  const kpiGroup = (title: string, tiles: React.ReactNode) => (
+    <View style={{ gap: 8 }}>
+      <Text className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500">{title}</Text>
+      <View className="flex-row flex-wrap" style={{ gap: 14 }}>
+        {tiles}
+      </View>
+    </View>
+  );
+
   const kpis = (
-    <View className="flex-row flex-wrap" style={{ gap: 14 }}>
+    <View style={{ gap: 18 }}>
+      {kpiGroup(
+        `The period · ${periodLabel}`,
+        <>
       <Kpi label={`Sales · ${periodLabel}`} value={npr(totals.now.sale)} icon="trending-up-outline" color="#047857" tint="#ECFDF5" caption={sc.text} captionColor={sc.color} series={series.sale} onPress={() => go('/(reseller)/sales-report')} />
       <Kpi label={`Purchases · ${periodLabel}`} value={npr(totals.now.purchase)} icon="cart-outline" color="#B45309" tint="#FFFBEB" caption={pc.text} captionColor="#6B7280" series={series.purchase} onPress={() => go('/(reseller)/purchase-report')} />
       <Kpi label={`Expenses · ${periodLabel}`} value={npr(totals.now.expense)} icon="receipt-outline" color="#B91C1C" tint="#FEF2F2" caption={ec.text} captionColor="#6B7280" series={series.expense} onPress={() => go('/(reseller)/expense-report')} />
       <Kpi label={`Result · ${periodLabel}`} value={npr(monthResult)} icon="calculator-outline" color={monthResult >= 0 ? '#0F766E' : '#B91C1C'} tint="#F0FDFA" caption="Sales − purchases − expenses" onPress={() => go('/(reseller)/report')} />
+        </>
+      )}
+      {kpiGroup(
+        'Money right now',
+        <>
       <Kpi label="Cash & bank" value={npr(balances.total)} icon="wallet-outline" color="#047857" tint="#ECFDF5" caption={`Cash ${npr(balances.cash)}`} onPress={() => go('/(reseller)/bank-balances')} />
       <Kpi label="To receive" value={npr(owed.receivable)} icon="arrow-down-circle-outline" color="#1D4ED8" tint="#EFF6FF" caption={`From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`} onPress={() => go('/(reseller)/to-receive')} />
       <Kpi label="To pay" value={npr(owed.payable)} icon="arrow-up-circle-outline" color="#B91C1C" tint="#FEF2F2" caption="Owed to vendors" onPress={() => go('/(reseller)/to-give')} />
       <Kpi label="Net position" value={npr(net)} icon="stats-chart-outline" color={net >= 0 ? '#7C3AED' : '#B91C1C'} tint="#F5F3FF" caption="Cash + receivable − payable" captionColor={net < 0 ? '#B91C1C' : '#6B7280'} onPress={() => go('/(reseller)/bank-balances')} />
+        </>
+      )}
+    </View>
+  );
+
+  /** A heading that opens a group of cards. */
+  const section = (title: string) => (
+    <View className="flex-row items-center" style={{ gap: 12, marginTop: 6 }}>
+      <Text className="text-[13px] font-extrabold uppercase tracking-wider text-gray-700">{title}</Text>
+      <View style={{ flex: 1, height: 1, backgroundColor: '#E5E7EB' }} />
     </View>
   );
 
@@ -813,32 +878,82 @@ export default function CompanyDashboard() {
   const moneyRows: TableRow[] = [
     ...cashParts.map((p) => ({ onPress: () => go('/(reseller)/bank-balances'), label: p.label === 'Cash' ? 'Cash in hand' : `Bank · ${p.label}`, amount: p.value, color: p.color, share: cashTotal > 0 ? (p.value / cashTotal) * 100 : null })),
   ];
-  const money = (
-    <Panel title="Money position" subtitle={`What you hold, are owed and owe · received for ${periodLabel}`}>
-      <Text className="mb-1 text-[12px] font-bold uppercase text-gray-500">Cash &amp; bank balance</Text>
+  // Money position, in two cards: what is in the bank (cash in hand and every account), and what is owed
+  // and what has moved (to receive, to pay, received, paid).
+  const banksCard = (
+    <Panel
+      title="Balance in all banks"
+      subtitle="Cash in hand and every bank account"
+      right={<Pressable onPress={() => go('/(reseller)/bank-balances')} hitSlop={6}><Text className="text-[12.5px] font-semibold" style={{ color: '#2563EB' }}>Open balances</Text></Pressable>}
+    >
+      <View className="mb-4 flex-row items-center justify-between" style={{ gap: 16 }}>
+        <View style={{ flexShrink: 1 }}>
+          <Text className="text-[11px] font-bold uppercase tracking-wider text-gray-500">In cash and banks</Text>
+          <Text className="mt-1 text-[28px] font-extrabold text-gray-900">{npr(balances.total)}</Text>
+          <Text className="mt-0.5 text-[12px] text-gray-500">
+            {cashParts.length} {cashParts.length === 1 ? 'account holds' : 'accounts hold'} money
+          </Text>
+        </View>
+        {cashTotal > 0 && (
+          <Pressable onPress={() => go('/(reseller)/bank-balances')}>
+            <Donut parts={cashParts.map((p) => ({ value: p.value, color: p.color }))} centre={lakh(cashTotal)} caption="Total" />
+          </Pressable>
+        )}
+      </View>
       {moneyRows.length === 0 ? (
         <Text className="py-3 text-sm text-gray-400">No balance on any account</Text>
       ) : (
         <ShareTable firstHead="Account" rows={moneyRows} total={{ label: 'Total cash & bank', amount: cashAll, onPress: () => go('/(reseller)/bank-balances') }} shareHead="Share" />
       )}
-      <Text className="mb-1 mt-5 text-[12px] font-bold uppercase text-gray-500">Receivable, payable and received</Text>
-      <ShareTable
-        firstHead="Item"
-        shareHead="% of cash"
-        rows={[
-          { onPress: () => go('/(reseller)/to-receive'), label: `To receive · ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`, amount: owed.receivable, color: '#2563EB', share: cashAll > 0 ? (owed.receivable / cashAll) * 100 : null },
-          { onPress: () => go('/(reseller)/to-give'), label: 'To pay · vendors', amount: owed.payable, color: '#DC2626', share: cashAll > 0 ? (owed.payable / cashAll) * 100 : null },
-          {
-            onPress: () => go('/(reseller)/received'),
-            label: `Received · ${periodLabel}`,
-            amount: collection.received,
-            color: '#16A34A',
-            share: collection.percent,
-            note: collection.percent == null ? 'No sales billed in this period' : `${npr(collection.received)} collected of ${npr(collection.billed)} billed (share = % of billed)`,
-          },
-        ]}
-        total={{ label: 'Net position (cash + receivable − payable)', amount: net, share: '', onPress: () => go('/(reseller)/bank-balances') }}
-      />
+    </Panel>
+  );
+
+  const moneyTile = (t: { label: string; value: number; caption: string; icon: keyof typeof Ionicons.glyphMap; color: string; tint: string; onPress: () => void }) => (
+    <Pressable
+      key={t.label}
+      onPress={t.onPress}
+      className="rounded-xl border border-gray-100 p-3.5"
+      style={{ flexGrow: 1, flexBasis: 170, minWidth: 150, backgroundColor: t.tint, gap: 6 }}
+    >
+      <View className="flex-row items-center" style={{ gap: 8 }}>
+        <View className="h-7 w-7 items-center justify-center rounded-lg" style={{ backgroundColor: '#FFFFFF' }}>
+          <Ionicons name={t.icon} size={15} color={t.color} />
+        </View>
+        <Text className="flex-1 text-[12px] font-bold text-gray-700" numberOfLines={1}>{t.label}</Text>
+      </View>
+      <Text className="text-[20px] font-extrabold" style={{ color: t.color }} numberOfLines={1}>{npr(t.value)}</Text>
+      <Text className="text-[11.5px] text-gray-600" numberOfLines={2}>{t.caption}</Text>
+    </Pressable>
+  );
+  const netLine = (label: string, value: number) => (
+    <View className="flex-row items-center justify-between rounded-xl bg-gray-50 px-3.5 py-2.5">
+      <Text className="flex-1 text-[12.5px] font-semibold text-gray-700">{label}</Text>
+      <Text className="text-[14px] font-extrabold" style={{ color: value >= 0 ? '#0F766E' : '#B91C1C' }}>{value < 0 ? '−' : ''}{npr(Math.abs(value))}</Text>
+    </View>
+  );
+  const owedCard = (
+    <Panel title="Receivable & payable" subtitle={`What is owed to you and by you, and what moved · ${periodLabel}`}>
+      <Text className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Owed right now</Text>
+      <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+        {moneyTile({ label: 'To receive', value: owed.receivable, caption: `From ${owed.debtors} ${owed.debtors === 1 ? 'party' : 'parties'}`, icon: 'arrow-down-circle-outline', color: '#1D4ED8', tint: '#EFF6FF', onPress: () => go('/(reseller)/to-receive') })}
+        {moneyTile({ label: 'To pay', value: owed.payable, caption: 'Owed to vendors', icon: 'arrow-up-circle-outline', color: '#B91C1C', tint: '#FEF2F2', onPress: () => go('/(reseller)/to-give') })}
+      </View>
+      <View className="mt-2">{netLine('Net owed (to receive − to pay)', owed.receivable - owed.payable)}</View>
+
+      <Text className="mb-2 mt-5 text-[11px] font-bold uppercase tracking-wider text-gray-500">Received and paid · {periodLabel}</Text>
+      <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+        {moneyTile({
+          label: 'Received',
+          value: collection.received,
+          caption: collection.percent == null ? 'No sales billed in this period' : `${Math.round(collection.percent)}% of ${npr(collection.billed)} billed`,
+          icon: 'download-outline',
+          color: '#047857',
+          tint: '#ECFDF5',
+          onPress: () => go('/(reseller)/received'),
+        })}
+        {moneyTile({ label: 'Paid', value: paidOut, caption: 'Expenses and payments out', icon: 'share-outline', color: '#B45309', tint: '#FFFBEB', onPress: () => go('/(reseller)/paid') })}
+      </View>
+      <View className="mt-2">{netLine('Net movement (received − paid)', collection.received - paidOut)}</View>
     </Panel>
   );
 
@@ -926,12 +1041,43 @@ export default function CompanyDashboard() {
     </Panel>
   );
 
-  const teamCard = (
-    <Panel title="Team" subtitle={`Jobs finished · ${periodLabel}`}>
-      {team.length === 0 ? (
-        <Text className="py-8 text-center text-sm text-gray-400">No finished jobs in this period</Text>
+  const updatesCard = (
+    <Panel
+      title="Recent updates"
+      subtitle="The latest change on your jobs"
+      right={<Pressable onPress={() => go('/(reseller)/requests')} hitSlop={6}><Text className="text-[12.5px] font-semibold" style={{ color: '#2563EB' }}>View all</Text></Pressable>}
+    >
+      {updates.length === 0 ? (
+        <Text className="py-8 text-center text-sm text-gray-400">No jobs yet</Text>
       ) : (
-        <Columns rows={team} color="#2563EB" onPress={() => go('/(reseller)/team-activity')} />
+        <View>
+          {updates.map((u, i) => {
+            const at = new Date(u.job.updated_at);
+            const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+            return (
+              <Pressable
+                key={u.job.id}
+                onPress={() => go(`/(reseller)/request/${u.job.id}`)}
+                className={`flex-row items-center py-2.5 ${i < updates.length - 1 ? 'border-b border-gray-100' : ''}`}
+                style={{ gap: 10 }}
+              >
+                <View className="h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${u.color}1A` }}>
+                  <Ionicons name={u.icon} size={15} color={u.color} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text className="text-[13px] font-semibold text-gray-900" numberOfLines={1}>
+                    {`${ticketLabel(u.job.ticket_no) ?? ''} ${u.job.issue_type}`.trim()}
+                  </Text>
+                  <Text className="text-[11.5px] font-medium" style={{ color: u.color }} numberOfLines={1}>{u.text}</Text>
+                  <Text className="text-[11px] text-gray-400" numberOfLines={1}>
+                    {`${toBsHistoryLabel(u.job.updated_at)} · ${time}${u.job.customer_name ? ` · ${u.job.customer_name}` : ''}`}
+                  </Text>
+                </View>
+                {u.job.quoted_price != null && <Text className="text-[12.5px] font-bold text-gray-800">{npr(Number(u.job.quoted_price))}</Text>}
+              </Pressable>
+            );
+          })}
+        </View>
       )}
     </Panel>
   );
@@ -961,14 +1107,17 @@ export default function CompanyDashboard() {
   return (
     <ScrollView className="flex-1" style={{ backgroundColor: '#F6F7FB' }} contentContainerStyle={{ padding: wide ? 28 : 14, gap: 18, paddingBottom: 60 }}>
       {hero}
+      {quick}
       {periodBar}
       {kpis}
       {periodMenu}
       {row([trend, <RecentActivityCard key="recent" basePath="/(reseller)" />], [1.5, 1])}
-      {row([money, ageing], [1.3, 1])}
-      {row([stages, teamCard], [1, 1])}
-      {row([expenses, customersCard], [1, 1.4])}
-      {quick}
+      {section('Money')}
+      {row([banksCard, owedCard], [1, 1.25])}
+      {row([ageing, expenses], [1, 1.25])}
+      {section('Work and customers')}
+      {row([stages, updatesCard], [1, 1])}
+      {customersCard}
     </ScrollView>
   );
 }
