@@ -26,6 +26,7 @@ import {
 } from './BookKit';
 import { PopupCard } from './FormKit';
 import { ProductPicture } from '../ProductPicture';
+import { EditablePrice } from '../MyStorefront';
 import { ExcelButton, PrintButton, exportReportDocument, printReportDocument } from './PrintButton';
 import { useReportActions } from './PrintButton';
 import { TransactionDetailModal } from './TransactionsScreen';
@@ -563,6 +564,19 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
   // On: the item shows on the Marketplace, and so to customers (once it has a price and is in stock). It
   // cannot be switched on before it has a selling price. A press target of its own, so flipping it does
   // not open the item's history behind it.
+  // The selling price, a reseller's to set here - an item with none cannot be switched on, and only an item
+  // with one shows on the Marketplace. Its own press target, so editing does not open the item's history.
+  const priceCell = (r: InventoryRow) =>
+    canList && r.productId ? (
+      <Pressable onPress={() => {}} style={{ alignSelf: 'flex-start' }}>
+        <EditablePrice item={{ id: r.productId, price: Number(r.price) || 0 }} compact />
+      </Pressable>
+    ) : r.price != null ? (
+      num(rs(r.price))
+    ) : (
+      dash
+    );
+
   const marketCell = (r: InventoryRow) =>
     r.productId ? (
       <Pressable onPress={() => {}} style={{ alignSelf: 'flex-start' }}>
@@ -634,7 +648,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
       <View className="flex-row flex-wrap" style={{ columnGap: 18, rowGap: 8 }}>
         {fact('In stock', r.stockLevel != null ? num(qty(r.stockLevel), stockColor(r), true) : dash)}
         {fact('Cost price', r.cost != null ? num(rs(r.cost), '#4B5563') : dash)}
-        {fact('Selling price', r.price != null ? num(rs(r.price)) : dash)}
+        {fact('Selling price', priceCell(r))}
         {fact('Stock value', r.value != null ? num(money(r.value)) : dash)}
       </View>
       <View className="flex-row" style={{ columnGap: 18 }}>
@@ -664,7 +678,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
         { key: 'status', label: 'Status', width: 90, render: (r) => <Pill text={STATUS[r.status].label} color={STATUS[r.status].color} bg={STATUS[r.status].bg} /> },
         ...(canList ? [{ key: 'market', label: 'Marketplace', width: 104, render: marketCell }] : []),
         { key: 'cost', label: 'Cost price', width: 90, align: 'right', render: (r) => (r.cost != null ? num(rs(r.cost), '#4B5563') : dash) },
-        { key: 'price', label: 'Selling price', width: 100, align: 'right', render: (r) => (r.price != null ? num(rs(r.price)) : dash) },
+        { key: 'price', label: 'Selling price', width: canList ? 150 : 100, align: canList ? 'left' : 'right', render: priceCell },
         { key: 'sold', label: 'Sold', width: 72, align: 'right', render: (r) => num(qty(r.sold), '#047857', true) },
         { key: 'purchased', label: 'Purchased', width: 92, align: 'right', render: (r) => num(qty(r.purchased), '#B91C1C', true) },
         { key: 'value', label: 'Stock value', width: 108, align: 'right', render: (r) => (r.value != null ? num(money(r.value)) : dash) },
@@ -674,7 +688,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
         snColumn(38),
         { key: 'item', label: 'Item', render: (r) => itemCell(r, true) },
         { key: 'stock', label: 'In stock', width: 84, align: 'right', render: (r) => (r.stockLevel != null ? num(qty(r.stockLevel), stockColor(r), true) : dash) },
-        { key: 'price', label: 'Price', width: 80, align: 'right', render: (r) => (r.price != null ? num(rs(r.price)) : dash) },
+        { key: 'price', label: 'Price', width: canList ? 130 : 80, align: canList ? 'left' : 'right', render: priceCell },
         ...(canList ? [{ key: 'market', label: 'Market', width: 72, render: marketCell }] : []),
       ];
 

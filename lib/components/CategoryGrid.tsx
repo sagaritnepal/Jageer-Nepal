@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { CategoryBadge } from './CategoryBadge';
+import { highlightText } from './finance/Highlight';
 import type { ServiceCategory } from '../../types/database.types';
 
 /** The service icon's size. A cell narrower than this (a small phone) shrinks the icon to fit instead of clipping it. */
@@ -16,8 +17,11 @@ export function CategoryGrid({
   categories,
   onSelect,
   columns = 3,
+  highlight,
 }: {
   categories: ServiceCategory[];
+  /** What was typed in a search: the part of each name that matches it is marked. */
+  highlight?: string;
   onSelect: (category: ServiceCategory) => void;
   /** Defaults to 3 (the phone layout) - the wider web sidebar shell passes
    * more (see categoryColumnsFor) so the grid uses laptop width instead of
@@ -34,7 +38,7 @@ export function CategoryGrid({
           <CategoryBadge category={c.label} size={iconSize} emoji={c.icon} categoryId={c.id} visualKey={c.visual_key} />
           {/* Full name, never truncated: the cell grows, and a flex row stretches its siblings to match so labels stay top-aligned. */}
           <Text className="mt-1.5 text-center text-[13px] font-semibold leading-[17px] text-gray-900">
-            {c.label}
+            {highlight ? highlightText(c.label, highlight) : c.label}
           </Text>
         </Pressable>
       ))}

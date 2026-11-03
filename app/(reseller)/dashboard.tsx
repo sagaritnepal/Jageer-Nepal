@@ -8,7 +8,7 @@ import { useSupabaseQuery } from '../../lib/hooks/useSupabase';
 import { CategoryGrid, categoryColumnsFor } from '../../lib/components/CategoryGrid';
 import { ServiceActionSheet } from '../../lib/components/ServiceActionSheet';
 import { MyStorefront } from '../../lib/components/MyStorefront';
-import { filterBySearch } from '../../lib/utils/search';
+import { isOnMarketplace, matchesItemSearch } from '../../lib/utils/marketplace';
 import { useMyEmployees } from '../../lib/hooks/useTechnicianEmployment';
 import { useScreenHeader } from '../../lib/hooks/useScreenHeader';
 import { ToolbarSearch } from '../../lib/components/finance/BookKit';
@@ -69,13 +69,13 @@ export default function ResellerDashboard() {
   }, [categories, search]);
 
   // The products too, for the counts on the switch (the Products section reads the same list): the ones
-  // switched on in Inventory.
+  // customers can see - switched on in Inventory, in stock and priced.
   const { data: myProducts } = useSupabaseQuery('products', {
     filters: { seller_id: userId ?? '', seller_role: 'reseller' },
     enabled: !!userId,
   });
   const productCount = useMemo(
-    () => filterBySearch((myProducts ?? []).filter((p) => p.is_listed !== false), search).length,
+    () => (myProducts ?? []).filter((p) => isOnMarketplace(p) && matchesItemSearch(p.name, p.category, search)).length,
     [myProducts, search]
   );
 
@@ -200,7 +200,7 @@ export default function ResellerDashboard() {
         <Text className="text-[18px] font-extrabold leading-[22px] text-gray-900">Services</Text>
         <Text className="text-[13px] text-gray-500">Tap a service to start a job</Text>
       </View>
-      <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} columns={wide ? categoryColumns : undefined} />
+      <CategoryGrid categories={filteredCategories} onSelect={setPickerCategory} columns={wide ? categoryColumns : undefined} highlight={search} />
     </View>
   );
 
@@ -243,7 +243,7 @@ export default function ResellerDashboard() {
             <View>
               <MyStorefront
                 sellerRole="reseller"
-                emptyText="Switch an item on in Inventory and it shows here, and to your customers."
+                emptyText="An item shows here, and to your customers, once it is switched on in Inventory, has a price and is in stock."
                 basePath="/(reseller)"
                 search={search}
                 hideOverview

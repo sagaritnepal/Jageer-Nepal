@@ -13,6 +13,8 @@ import { filterBySearch } from '../utils/search';
 import { decimalInput } from '../utils/number';
 import { showAlert, getErrorMessage } from '../utils/alert';
 import { toSafeImageUri } from '../utils/image';
+import { isOnMarketplace, matchesItemSearch } from '../utils/marketplace';
+import { highlightText } from './finance/Highlight';
 import { LOW_STOCK_THRESHOLD } from '../constants/stock';
 import type { Product, UserRole } from '../../types/database.types';
 
@@ -23,7 +25,8 @@ function stockBadge(item: Product, effectiveAvailable: boolean) {
   return { label: 'In stock', bg: 'bg-emerald-600/90' };
 }
 
-function EditablePrice({ item }: { item: Product }) {
+/** A product's selling price, tap to change it. `compact` is the smaller one for a table row. */
+export function EditablePrice({ item, compact }: { item: Pick<Product, 'id' | 'price'>; compact?: boolean }) {
   const updateProduct = useSupabaseUpdate('products');
   const [editing, setEditing] = useState(Number(item.price) <= 0);
   const [price, setPrice] = useState(Number(item.price) > 0 ? String(item.price) : '');
@@ -69,7 +72,7 @@ function EditablePrice({ item }: { item: Product }) {
           placeholder="Set price"
           keyboardType="decimal-pad"
           autoFocus={Number(item.price) > 0}
-          className="w-24 rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900"
+          className={`${compact ? 'w-[68px] text-[12.5px]' : 'w-24 text-sm'} rounded-lg border border-gray-300 px-2 py-1 text-gray-900`}
         />
         <Pressable
           onPress={handleSave}
@@ -84,8 +87,10 @@ function EditablePrice({ item }: { item: Product }) {
 
   return (
     <Pressable onPress={() => setEditing(true)} className="flex-row items-center gap-1.5">
-      <Text className="text-base font-bold text-gray-900">NPR {Number(item.price).toLocaleString()}</Text>
-      <Ionicons name="create-outline" size={15} color="#6B7280" />
+      <Text className={compact ? 'text-[12.5px] font-medium text-gray-900' : 'text-base font-bold text-gray-900'}>
+        {compact ? Number(item.price).toLocaleString() : `NPR ${Number(item.price).toLocaleString()}`}
+      </Text>
+      <Ionicons name="create-outline" size={compact ? 13 : 15} color="#6B7280" />
     </Pressable>
   );
 }
@@ -124,6 +129,7 @@ function StorefrontCard({
   fill,
   showSwitch = true,
   showStock = true,
+  highlight = '',
 }: {
   item: Product;
   basePath: string;
@@ -133,6 +139,8 @@ function StorefrontCard({
   /** How many are in stock and what they cost. These are the reseller's own figures, for Inventory; the
    * Marketplace shows what a customer sees. */
   showStock?: boolean;
+  /** What was typed in a search: the part of the name and category that matches it is marked. */
+  highlight?: string;
 }) {
   const updateProduct = useSupabaseUpdate('products');
   const isAvailable = item.is_listed ?? true;
@@ -203,11 +211,11 @@ function StorefrontCard({
       <Pressable onPress={() => detailHref && router.push(detailHref)}>
         {item.category && (
           <Text className="text-[10px] capitalize tracking-wide text-orange-600" numberOfLines={1}>
-            {item.category}
+            {highlightText(item.category, highlight)}
           </Text>
         )}
         <Text className="mb-1 text-sm font-semibold text-gray-900" numberOfLines={2}>
-          {item.name}
+          {highlightText(item.name, highlight)}
         </Text>
       </Pressable>
 
@@ -287,10 +295,10 @@ export function MyStorefront({
   // Available off never removes anything here, only from the real
   // customer-facing marketplace query in (client)/market.tsx, which already
   // filters on is_listed and stock_level independently of this component.
-  // The reseller's Marketplace page asks for `marketplaceOnly` instead: just what is
-  // switched on in Inventory (is_listed), the first thing customers' app goes by too.
+  // The reseller's Marketplace page asks for `marketplaceOnly` instead: just what customers can see -
+  // switched on in Inventory, in stock and priced (isOnMarketplace, the customers' app's own rule).
   const visible = useMemo(
-    () => (marketplaceOnly ? (products ?? []).filter((p) => p.is_listed !== false) : (products ?? [])),
+    () => (marketplaceOnly ? (products ?? []).filter(isOnMarketplace) : (products ?? [])),
     [products, marketplaceOnly]
   );
 
@@ -301,7 +309,8 @@ export function MyStorefront({
   }, [visible]);
 
   const filtered = useMemo(() => {
-    let list = filterBySearch(visible, search);
+    // On the Marketplace the search is Inventory's: the name or the category, anywhere in it.
+    let list = marketplaceOnly ? visible.filter((p) => matchesItemSearch(p.name, p.category, search)) : filterBySearch(visible, search);
     if (category) {
       list = list.filter((p) => p.category === category);
     }
@@ -431,10 +440,10 @@ export function MyStorefront({
         {filtered.map((item) =>
           wideGrid ? (
             <View key={item.id} style={cellStyle}>
-              <StorefrontCard item={item} basePath={basePath} fill showSwitch={!marketplaceOnly} showStock={!marketplaceOnly} />
+              <StorefrontCard item={item} basePath={basePath} fill showSwitch={!marketplaceOnly} showStock={!marketplaceOnly} highlight={marketplaceOnly ? search : ''} />
             </View>
           ) : (
-            <StorefrontCard key={item.id} item={item} basePath={basePath} showSwitch={!marketplaceOnly} showStock={!marketplaceOnly} />
+            <StorefrontCard key={item.id} item={item} basePath={basePath} showSwitch={!marketplaceOnly} showStock={!marketplaceOnly} highlight={marketplaceOnly ? search : ''} />
           )
         )}
       </View>
