@@ -220,7 +220,7 @@ function JobCard({ request, footer }: { request: ServiceRequest; footer?: React.
 }
 
 /** One stretch of today a technician had a job under way, in minutes from midnight (0 - 1440). */
-type DaySpan = { id: string; ticket: string | null; title: string; from: number; to: number; running: boolean };
+type DaySpan = { id: string; request: ServiceRequest; ticket: string | null; title: string; from: number; to: number; running: boolean };
 
 /** The stretches of today a technician spent on jobs: from when they started it (the job card) to when
  * they finished it - or to now, while it is still under way. A job that began yesterday starts at
@@ -244,6 +244,7 @@ function workedToday(
     if (Number.isNaN(started) || Number.isNaN(ended) || ended <= dayStart || started >= dayStart + DAY_MS) continue;
     spans.push({
       id: r.id,
+      request: r,
       ticket: ticketLabel(r.ticket_no),
       title: r.issue_type,
       from: (Math.max(started, dayStart) - dayStart) / 60_000,
@@ -256,7 +257,7 @@ function workedToday(
 
 /** One stretch of today a job was offered to a technician and not yet answered: from when it was
  * assigned to when they accepted it - or to now, while it is still waiting. */
-type OfferSpan = { id: string; ticket: string | null; title: string; from: number; to: number; waiting: boolean };
+type OfferSpan = { id: string; request: ServiceRequest; ticket: string | null; title: string; from: number; to: number; waiting: boolean };
 
 /** The jobs assigned to a technician today, each as the stretch it waited for them to accept. Once
  * accepted it stays here as how long the wait was, and its work shows on the other side of the rail. */
@@ -281,6 +282,7 @@ function offeredToday(
     if (answered < dayStart || offered >= dayStart + DAY_MS) continue;
     offers.push({
       id: r.id,
+      request: r,
       ticket: ticketLabel(r.ticket_no),
       title: r.issue_type,
       from: (Math.max(offered, dayStart) - dayStart) / 60_000,
@@ -331,15 +333,19 @@ const minutesLabel = (minutes: number) => (minutes < 1 ? '0m' : formatDuration(m
 const WORKED_GREEN = '#4ADE80';
 const UNUSED_RED = '#F87171';
 
-/** How tall one hour is in an employee's day rail. */
+/** How tall one hour is in an employee's day. */
 const HOUR_PX = 36;
 const DAY_PX = 24 * HOUR_PX;
-/** The rail's parts, left to right: the lane of assigned work, the hour numbers with the day's colour,
- * and the lane of accepted work. */
-const OFFER_LANE_PX = 88;
+/** The hour numbers (and the day's colour behind them) run down the middle of the day. */
 const HOURS_PX = 22;
-const WORK_LANE_PX = 104;
-const RAIL_PX = OFFER_LANE_PX + HOURS_PX + WORK_LANE_PX;
+/** Each job holds a bar, to the minute, beside the hour numbers - up to three side by side - and its
+ * label or card stands next to the bars. */
+const BAR_PX = 8;
+const BAR_STEP = 10;
+const MAX_BARS = 3;
+const LABEL_H = 32;
+/** How tall a job's card is taken to be until it has been drawn and measured. */
+const CARD_H_GUESS = 170;
 
 /** Things that overlap in time sit side by side in lanes; one with nothing alongside it takes the
  * whole width. `items` come in start order. */
@@ -366,68 +372,160 @@ function inLanes<T extends { from: number; to: number }>(items: T[]) {
   return placed;
 }
 
-/** An employee's day, 0 to 24 hours from top to bottom, beside their jobs. The hour numbers run down
- * the middle, over the day's colour; a job assigned to them stands on the left from the moment it was
- * assigned until they accept it (still waiting, it runs to now), and once accepted its work stands on
- * the right from the moment they accepted it to the moment they finished (green while it is still
- * going) - so every job can be followed from being given out to being done. A red line marks now. */
-function EmployeeDayRail({
-  spans,
-  offers,
+/** One job on an employee's day: the stretch it was waiting for them (kind "offer", the left side) or
+ * the stretch they worked on it (kind "work", the right side). */
+type DayItem = {
+  /** Unique on the day: a job can stand on both sides. */
+  id: string;
+  request: ServiceRequest;
+  kind: 'offer' | 'work';
+  from: number;
+  to: number;
+  /** Still open - waiting to be accepted, or being worked: it stands as the job's full card, with its
+   * buttons. A finished one is a short label. */
+  live: boolean;
+  /** For a work item: still going. For an offer item: nobody has answered it yet. */
+  open: boolean;
+};
+
+/** An employee's whole day in one table, 0 to 24 hours from top to bottom, across the full width of
+ * their column. The hour numbers run down the middle, over the day's colour; assigned work stands on
+ * the left, accepted work on the right. A job stands where its time is: a job given to them starts on
+ * the left at the moment it was assigned (amber, running down to now while it waits), and once they
+ * accept it, it starts on the right at the moment they accepted it (blue, green while it is still
+ * going) - its full card while it is open, a short label once it is done. Beside the hour numbers each
+ * job also has a bar from its start to its end, so how long it held them can be read to the minute. A
+ * red line marks now. */
+function EmployeeDay({
+  items,
+  busy,
   dutyFrom,
   dutyTo,
   nowMin,
+  renderCard,
 }: {
-  spans: DaySpan[];
-  offers: OfferSpan[];
+  items: DayItem[];
+  /** The stretches they worked (see busyIntervals), for the strip's green. */
+  busy: [number, number][];
   dutyFrom: number;
   dutyTo: number;
   nowMin: number;
+  renderCard: (request: ServiceRequest) => React.ReactNode;
 }) {
+  // A card's height is only known once it has been drawn; until then it is guessed.
+  const [cardHeight, setCardHeight] = useState<Record<string, number>>({});
   const px = (minutes: number) => (Math.min(Math.max(minutes, 0), 1440) / 60) * HOUR_PX;
-  const busy = busyIntervals(spans);
   const passed = Math.min(dutyTo, nowMin);
-  const block = (
-    key: string,
-    from: number,
-    to: number,
-    lane: number,
-    lanes: number,
-    fill: string,
-    content: (height: number) => React.ReactNode
-  ) => {
-    const top = px(from);
-    const height = Math.max(px(to) - top, 14);
+
+  const layOut = (kind: DayItem['kind']) => {
+    const list = items.filter((item) => item.kind === kind).sort((a, b) => a.from - b.from);
+    // A card or label starts at its job's start, or just under the one above it when they would overlap.
+    let cursor = 0;
+    const labels = list.map((item) => {
+      const height = item.live ? (cardHeight[item.id] ?? CARD_H_GUESS) : LABEL_H;
+      const top = Math.max(px(item.from), cursor);
+      cursor = top + height + 4;
+      return { item, top, height };
+    });
+    const bars = inLanes(list);
+    const gutter = Math.min(MAX_BARS, Math.max(1, ...bars.map((bar) => bar.lanes))) * BAR_STEP;
+    return { labels, bars, gutter, bottom: cursor };
+  };
+  const left = layOut('offer');
+  const right = layOut('work');
+  const bandHeight = Math.max(DAY_PX, left.bottom, right.bottom);
+
+  const colourOf = (item: DayItem) =>
+    item.kind === 'offer' ? (item.open ? '#FBBF24' : '#FDE68A') : item.open ? '#16A34A' : BLUE;
+
+  const lane = (kind: DayItem['kind'], laid: ReturnType<typeof layOut>) => {
+    const onRight = kind === 'work';
+    const inset = laid.gutter + 6;
     return (
-      <View key={key} style={{ position: 'absolute', top, height, left: `${(lane / lanes) * 100}%`, width: `${100 / lanes}%`, padding: 1 }}>
-        <View
-          style={{
-            flex: 1,
-            borderRadius: 4,
-            paddingHorizontal: 4,
-            paddingVertical: height >= 22 ? 1 : 0,
-            overflow: 'hidden',
-            justifyContent: 'center',
-            backgroundColor: fill,
-          }}
-        >
-          {content(height)}
-        </View>
+      <View style={{ flex: 1, height: bandHeight }}>
+        {laid.bars.map(({ item, lane: index }) => (
+          <View
+            key={`bar-${item.id}`}
+            style={{
+              position: 'absolute',
+              top: px(item.from),
+              height: Math.max(px(item.to) - px(item.from), 4),
+              width: BAR_PX,
+              borderRadius: 3,
+              backgroundColor: colourOf(item),
+              ...(onRight ? { left: 2 + Math.min(index, MAX_BARS - 1) * BAR_STEP } : { right: 2 + Math.min(index, MAX_BARS - 1) * BAR_STEP }),
+            }}
+          />
+        ))}
+        {laid.labels.map(({ item, top }) => {
+          const place = onRight ? { left: inset, right: 2 } : { left: 2, right: inset };
+          if (item.live) {
+            return (
+              <View
+                key={item.id}
+                style={{ position: 'absolute', top, ...place }}
+                onLayout={(e) => {
+                  const height = Math.round(e.nativeEvent.layout.height);
+                  setCardHeight((prev) => (Math.abs((prev[item.id] ?? 0) - height) > 1 ? { ...prev, [item.id]: height } : prev));
+                }}
+              >
+                {renderCard(item.request)}
+              </View>
+            );
+          }
+          const waited = formatDuration((item.to - item.from) * 60_000);
+          return (
+            <View
+              key={item.id}
+              style={{
+                position: 'absolute',
+                top,
+                height: LABEL_H,
+                ...place,
+                borderRadius: 4,
+                borderLeftWidth: 3,
+                borderLeftColor: colourOf(item),
+                backgroundColor: item.kind === 'offer' ? '#FEF3C7' : '#DBEAFE',
+                paddingHorizontal: 6,
+                justifyContent: 'center',
+                overflow: 'hidden',
+              }}
+            >
+              <Text className="text-[10.5px] font-bold" style={{ color: item.kind === 'offer' ? '#78350F' : '#1E3A8A' }} numberOfLines={1}>
+                {`${ticketLabel(item.request.ticket_no) ?? ''} ${item.request.issue_type}`.trim()}
+              </Text>
+              <Text className="text-[9.5px]" style={{ color: item.kind === 'offer' ? '#78350F' : '#1E3A8A' }} numberOfLines={1}>
+                {`${clock(item.from)}–${clock(item.to)} · ${item.kind === 'offer' ? `accepted in ${waited}` : waited}`}
+              </Text>
+            </View>
+          );
+        })}
       </View>
     );
   };
+
   return (
-    <View style={{ width: RAIL_PX }}>
+    <View>
       <View className="flex-row" style={{ height: 16 }}>
-        <Text className="text-center text-[9.5px] font-bold" style={{ width: OFFER_LANE_PX, color: '#B45309' }}>
+        <Text className="flex-1 text-center text-[9.5px] font-bold" style={{ color: '#B45309' }}>
           Assigned
         </Text>
         <View style={{ width: HOURS_PX }} />
-        <Text className="text-center text-[9.5px] font-bold" style={{ width: WORK_LANE_PX, color: '#15803D' }}>
+        <Text className="flex-1 text-center text-[9.5px] font-bold" style={{ color: '#15803D' }}>
           Accepted
         </Text>
       </View>
-      <View style={{ height: DAY_PX, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' }}>
+      <View
+        style={{
+          height: bandHeight,
+          flexDirection: 'row',
+          borderRadius: 8,
+          backgroundColor: '#FFFFFF',
+          borderWidth: 1,
+          borderColor: '#E5E7EB',
+          overflow: 'hidden',
+        }}
+      >
         {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
           <View
             key={h}
@@ -441,88 +539,22 @@ function EmployeeDayRail({
             }}
           />
         ))}
+        {lane('offer', left)}
         {/* The middle strip, as wide as the hour numbers: white for duty hours still to come, red for duty
             time that went unused, green for time worked, grey off duty. */}
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            left: OFFER_LANE_PX,
-            width: HOURS_PX,
-            backgroundColor: '#E5E7EB',
-            borderLeftWidth: 1,
-            borderRightWidth: 1,
-            borderColor: '#D1D5DB',
-          }}
-        >
+        <View style={{ width: HOURS_PX, height: bandHeight, backgroundColor: '#E5E7EB', borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#D1D5DB' }}>
           <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: px(dutyTo) - px(dutyFrom), backgroundColor: '#FFFFFF' }} />
           <View style={{ position: 'absolute', left: 0, right: 0, top: px(dutyFrom), height: Math.max(0, px(passed) - px(dutyFrom)), backgroundColor: UNUSED_RED }} />
           {busy.map(([from, to]) => (
             <View key={from} style={{ position: 'absolute', left: 0, right: 0, top: px(from), height: Math.max(px(to) - px(from), 2), backgroundColor: WORKED_GREEN }} />
           ))}
+          {Array.from({ length: 24 }, (_, h) => (
+            <Text key={h} className="text-[9px] font-semibold text-gray-800" style={{ position: 'absolute', left: 3, top: px(h * 60) + 1 }}>
+              {h}
+            </Text>
+          ))}
         </View>
-        {Array.from({ length: 24 }, (_, h) => (
-          <Text key={h} className="text-[9px] font-semibold text-gray-800" style={{ position: 'absolute', left: OFFER_LANE_PX + 4, top: px(h * 60) + 1 }}>
-            {h}
-          </Text>
-        ))}
-
-        <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: OFFER_LANE_PX }}>
-          {inLanes(offers).map(({ item: o, lane, lanes }) =>
-            block(o.id, o.from, o.to, lane, lanes, o.waiting ? '#FBBF24' : '#FDE68A', (height) =>
-              height >= 22 ? (
-                <>
-                  <Text className="text-[10.5px] font-bold" style={{ color: '#78350F' }} numberOfLines={height >= 70 ? 2 : 1}>
-                    {`${o.ticket ?? ''} ${o.title}`.trim()}
-                  </Text>
-                  {height >= 38 && (
-                    <Text className="text-[9.5px]" style={{ color: '#78350F' }} numberOfLines={1}>
-                      {`${clock(o.from)}–${o.waiting ? 'now' : clock(o.to)}`}
-                    </Text>
-                  )}
-                  {height >= 50 && (
-                    <Text className="text-[9.5px]" style={{ color: '#78350F' }} numberOfLines={1}>
-                      {o.waiting ? `waiting ${formatDuration((o.to - o.from) * 60_000)}` : `accepted in ${formatDuration((o.to - o.from) * 60_000)}`}
-                    </Text>
-                  )}
-                </>
-              ) : (
-                <Text className="text-[9px] font-bold" style={{ color: '#78350F', lineHeight: 12 }} numberOfLines={1}>
-                  {`${o.ticket ?? o.title} ${clock(o.from)}`}
-                </Text>
-              )
-            )
-          )}
-        </View>
-
-        <View style={{ position: 'absolute', top: 0, bottom: 0, left: OFFER_LANE_PX + HOURS_PX, right: 0 }}>
-          {inLanes(spans).map(({ item: s, lane, lanes }) =>
-            block(s.id, s.from, s.to, lane, lanes, s.running ? '#16A34A' : BLUE, (height) =>
-              height >= 22 ? (
-                <>
-                  <Text className="text-[10.5px] font-bold text-white" numberOfLines={height >= 70 ? 2 : 1}>
-                    {`${s.ticket ?? ''} ${s.title}`.trim()}
-                  </Text>
-                  {height >= 38 && (
-                    <Text className="text-[9.5px] text-white" numberOfLines={1}>
-                      {`${clock(s.from)}–${s.running ? 'now' : clock(s.to)}`}
-                    </Text>
-                  )}
-                  {height >= 50 && (
-                    <Text className="text-[9.5px] text-white" numberOfLines={1}>
-                      {formatDuration((s.to - s.from) * 60_000)}
-                    </Text>
-                  )}
-                </>
-              ) : (
-                <Text className="text-[9px] font-bold text-white" style={{ lineHeight: 12 }} numberOfLines={1}>
-                  {`${s.ticket ?? s.title} ${clock(s.from)}`}
-                </Text>
-              )
-            )
-          )}
-        </View>
+        {lane('work', right)}
         <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />
       </View>
     </View>
@@ -538,7 +570,7 @@ function Column({
   avatar,
   phone,
   headerExtra,
-  side,
+  timeline,
   children,
   wide,
 }: {
@@ -551,15 +583,15 @@ function Column({
   phone?: string | null;
   /** Under the name in the column's header - how long an employee worked today. */
   headerExtra?: React.ReactNode;
-  /** Beside the column's cards - an employee's day rail. */
-  side?: React.ReactNode;
+  /** The column holds an employee's day, a table of its own, and needs room for two lanes of cards. */
+  timeline?: boolean;
   children: React.ReactNode;
   wide: boolean;
 }) {
   return (
     <View
       className="rounded-2xl border border-gray-200 bg-gray-50"
-      style={wide ? { minWidth: side ? 540 : 320, flexBasis: side ? 540 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
+      style={wide ? { minWidth: timeline ? 560 : 320, flexBasis: timeline ? 560 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
     >
       <View className="rounded-t-2xl px-3.5 py-3" style={{ backgroundColor: tint, gap: 8 }}>
         <View className="flex-row items-center gap-2.5">
@@ -594,14 +626,7 @@ function Column({
         </View>
         {headerExtra}
       </View>
-      {side ? (
-        <View className="flex-row p-3" style={{ gap: 12 }}>
-          {side}
-          <View style={{ flex: 1, gap: 10, minWidth: 0 }}>{children}</View>
-        </View>
-      ) : (
-        <View className="p-3" style={{ gap: 10 }}>{children}</View>
-      )}
+      <View className="p-3" style={{ gap: 10 }}>{children}</View>
     </View>
   );
 }
@@ -1738,6 +1763,15 @@ export function WorkHubPanel({
         const dutyFrom = minutesOf(employment.work_start_time, 9 * 60);
         const dutyTo = minutesOf(employment.work_end_time, 17 * 60);
         const figures = dayFigures(spans, dutyFrom, dutyTo, nowMinutes);
+        // What stands on their day: every offer and every stretch of work, the open ones as full cards.
+        // With a search typed in, only the open jobs it finds.
+        const liveIds = new Set(jobs.map((r) => r.id));
+        const dayItems: DayItem[] = [
+          ...offers.map((o): DayItem => ({ id: `offer:${o.id}`, request: o.request, kind: 'offer', from: o.from, to: o.to, live: o.waiting, open: o.waiting })),
+          ...spans.map((s): DayItem => ({ id: `work:${s.id}`, request: s.request, kind: 'work', from: s.from, to: s.to, live: s.running, open: s.running })),
+        ].filter((item) => (item.live ? liveIds.has(item.request.id) : !searching));
+        const placedIds = new Set(dayItems.filter((item) => item.live).map((item) => item.request.id));
+        const offPage = jobs.filter((r) => !placedIds.has(r.id));
         return (
           <Column
             key={employment.id}
@@ -1773,22 +1807,34 @@ export function WorkHubPanel({
                 </View>
               </View>
             }
-            side={
-              wide ? (
-                <EmployeeDayRail
-                  spans={spans}
-                  offers={offers}
+            timeline={wide}
+            wide={wide}
+          >
+            {wide ? (
+              <>
+                <EmployeeDay
+                  items={dayItems}
+                  busy={busyIntervals(spans)}
                   dutyFrom={dutyFrom}
                   dutyTo={dutyTo}
                   nowMin={nowMinutes}
+                  renderCard={(r) => <JobCard request={r} footer={reassignFooter(r)} />}
                 />
-              ) : undefined
-            }
-            wide={wide}
-          >
-            {jobs.length === 0
-              ? emptyNote('Free right now.')
-              : jobs.map((r) => <JobCard key={r.id} request={r} footer={reassignFooter(r)} />)}
+                {/* A job of theirs that has no time on the day (no recorded start) is still theirs to see. */}
+                {offPage.length > 0 && (
+                  <View style={{ gap: 8 }}>
+                    <Text className="text-[11px] font-bold text-gray-500">No time recorded yet</Text>
+                    {offPage.map((r) => (
+                      <JobCard key={r.id} request={r} footer={reassignFooter(r)} />
+                    ))}
+                  </View>
+                )}
+              </>
+            ) : jobs.length === 0 ? (
+              emptyNote('Free right now.')
+            ) : (
+              jobs.map((r) => <JobCard key={r.id} request={r} footer={reassignFooter(r)} />)
+            )}
           </Column>
         );
       })}
