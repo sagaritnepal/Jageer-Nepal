@@ -1191,7 +1191,7 @@ function TransactionForm({
           await createTx.mutateAsync({
             owner_id: userId,
             ...values,
-            // A bill made from a job points back at it - that is what moves the job to Awaiting payment.
+            // A bill made from a job points back at it - that is what makes the job Billed.
             ...(jobPrefill
               ? {
                   source_type: 'service_request_bill',

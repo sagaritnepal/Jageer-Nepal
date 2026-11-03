@@ -668,7 +668,7 @@ export default function CompanyDashboard() {
     { label: 'Assigned', value: jobStats.assigned, amount: jobStats.money.assigned, color: '#0EA5E9' , stage: 'my_jobs' },
     { label: 'In progress', value: jobStats.working, amount: jobStats.money.working, color: '#16A34A' , stage: 'my_jobs' },
     { label: 'Done, to be billed', value: jobStats.toBill, amount: jobStats.money.toBill, color: '#7C3AED' , stage: 'completed' },
-    { label: 'Awaiting payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' , stage: 'awaiting_payment' },
+    { label: 'Awaiting payment', value: jobStats.unpaid, amount: jobStats.money.unpaid, color: '#B45309' , stage: 'completed' },
   ];
   const stageTotal = stageRows.reduce((s_, r) => s_ + r.value, 0);
   const stageAmount = stageRows.reduce((s_, r) => s_ + r.amount, 0);

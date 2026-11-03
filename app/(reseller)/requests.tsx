@@ -19,7 +19,7 @@ import { newJobHref } from '../../lib/utils/newJobHref';
 import { STATUS_ACTION_LABEL } from '../../lib/utils/orderStatus';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { ticketLabel } from '../../lib/utils/ticket';
-import { jobStages, type StageStepState } from '../../lib/utils/jobTimeline';
+import { billingStages, jobStages, type Billing, type StageStepState } from '../../lib/utils/jobTimeline';
 import { numericDateLabel } from '../../lib/utils/nepaliDate';
 import { entryDay } from '../../lib/utils/ledgerStatement';
 import { useCalendarMode } from '../../lib/hooks/useCalendarMode';
@@ -58,26 +58,18 @@ type Stage =
   | 'my_jobs'
   | 'in_progress'
   | 'completed'
-  | 'awaiting_payment'
-  | 'paid'
   | 'cancelled';
 
 /** The page behind the cards - plain white, with the job cards in warm cream on it. */
 const PAGE_BG = '#FFFFFF';
 
-const STAGE_ORDER: Stage[] = [
-  'requests',
-  'my_jobs',
-  'completed',
-  'awaiting_payment',
-  'paid',
-  'cancelled',
-];
+const STAGE_ORDER: Stage[] = ['requests', 'my_jobs', 'completed', 'cancelled'];
 // The numbered pipeline is the job itself, finishing at Completed. What
-// happens to the money after that - part paid, settled - sits in the row
-// of chips underneath, where Cancelled already lived.
+// happens to the money after that - billed, paid - is not a stage of its
+// own: those jobs stay under Completed, where their progress bar reads
+// Completed - Billed - Paid. Cancelled sits in the chip underneath.
 const WORKING_STAGES: Stage[] = ['requests', 'my_jobs', 'completed'];
-const SIDE_STAGES: Stage[] = ['awaiting_payment', 'paid', 'cancelled'];
+const SIDE_STAGES: Stage[] = ['cancelled'];
 
 const STAGE_META: Record<
   Stage,
@@ -87,13 +79,11 @@ const STAGE_META: Record<
   waiting_customer: { label: 'Waiting on customer', todo: 'Quote & wait for approval', icon: 'time-outline', color: '#D97706', tint: '#FFFBEB' },
   my_jobs: { label: 'My Jobs', todo: 'Assign a technician and follow the work', icon: 'briefcase', color: '#2563EB', tint: '#EFF6FF' },
   in_progress: { label: 'Job in progress', todo: 'Technician is working', icon: 'build', color: '#2563EB', tint: '#EFF6FF' },
-  completed: { label: 'Completed', todo: 'Work done - collect payment', icon: 'checkmark-circle', color: '#16A34A', tint: '#F0FDF4' },
-  awaiting_payment: { label: 'Awaiting payment', todo: 'Part paid - collect the rest', icon: 'cash-outline', color: '#DC2626', tint: '#FEF2F2' },
-  paid: { label: 'Paid', todo: 'Paid & delivered', icon: 'checkmark-done-circle', color: '#047857', tint: '#ECFDF5' },
+  completed: { label: 'Completed', todo: 'Work done - bill it and collect payment', icon: 'checkmark-circle', color: '#16A34A', tint: '#F0FDF4' },
   cancelled: { label: 'Cancelled', todo: 'Nothing left to do', icon: 'close-circle', color: '#9CA3AF', tint: '#F3F4F6' },
 };
 
-function stageOf(item: ServiceRequest, billedJobs?: Set<string>): Stage {
+function stageOf(item: ServiceRequest): Stage {
   switch (item.status) {
     case 'cancelled':
       return 'cancelled';
@@ -112,18 +102,22 @@ function stageOf(item: ServiceRequest, billedJobs?: Set<string>): Stage {
       // waiting for one - "My Jobs" is every job being worked, start to finish.
       return 'my_jobs';
     case 'resolved':
-      // Finished and settled leaves the pipeline; part paid is the one
-      // still worth chasing; anything else is simply done but unpaid.
-      if (item.payment_status === 'paid') return 'paid';
-      // Once a bill has been created for the job it waits for the money.
-      if (item.payment_status === 'partial' || billedJobs?.has(item.id)) return 'awaiting_payment';
+      // Finished stays here whether it is billed or paid yet - see billingOf.
       return 'completed';
   }
 }
 
+/** How far a finished job's money has got: paid; billed (a bill has been created for it, or part of it
+ * is paid) and waiting for the rest; or just done. */
+function billingOf(item: ServiceRequest, billedJobs?: Set<string>): Billing {
+  if (item.payment_status === 'paid') return 'paid';
+  if (item.payment_status === 'partial' || billedJobs?.has(item.id)) return 'billed';
+  return 'completed';
+}
+
 // A pending order hasn't been looked at yet (same as an unclaimed request);
 // a confirmed one still needs delivering; shipped is under way; delivered
-// means there's nothing left to do.
+// is done, and sits with the other finished work.
 function orderStageOf(order: Order): Stage {
   switch (order.status) {
     case 'pending':
@@ -133,7 +127,7 @@ function orderStageOf(order: Order): Stage {
     case 'shipped':
       return 'my_jobs';
     case 'delivered':
-      return 'paid';
+      return 'completed';
     case 'cancelled':
       return 'cancelled';
     default:
@@ -142,9 +136,10 @@ function orderStageOf(order: Order): Stage {
 }
 
 type JobItem =
-  | { kind: 'request'; id: string; request: ServiceRequest }
+  /** `billing` is set on a finished job: how far its money has got (see billingOf). */
+  | { kind: 'request'; id: string; request: ServiceRequest; billing?: Billing }
   | { kind: 'order'; id: string; order: Order }
-  | { kind: 'sale'; id: string; sale: BusinessTransaction; stage: Stage };
+  | { kind: 'sale'; id: string; sale: BusinessTransaction; billing: Billing };
 
 type JobAction = {
   label: string;
@@ -162,6 +157,7 @@ const TAGS = {
   own: { label: 'Your customer', bg: '#F5F3FF', fg: '#6D28D9' },
   order: { label: 'Shop order', bg: '#ECFDF5', fg: '#047857' },
   unpaid: { label: 'Unpaid', bg: '#FEF2F2', fg: '#DC2626' },
+  billed: { label: 'Billed', bg: '#FFFBEB', fg: '#92400E' },
   paid: { label: 'Paid', bg: '#F0FDF4', fg: '#15803D' },
   holdRequested: { label: 'Hold requested', bg: '#FFFBEB', fg: '#92400E' },
   onHold: { label: 'On hold', bg: '#FFFBEB', fg: '#92400E' },
@@ -188,8 +184,11 @@ type JobRowData = {
   select?: { checked: boolean; onToggle: () => void };
   /** The job's token number, shown in its own column. */
   token?: string | null;
-  /** Assigned / WIP / Hold / Completed, drawn as four labelled segments. */
+  /** Assigned / WIP / Hold / Completed - or, for finished work, Completed / Billed / Paid - drawn as
+   * labelled segments. */
   progress?: { label: string; state: StageStepState }[];
+  /** A short line under the progress, e.g. "Part paid". */
+  progressNote?: string;
   /** When the job started and ended and how long it took - shown under the progress. */
   timeDetails?: string[];
   tag: Tag;
@@ -419,6 +418,8 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
             <Ionicons name={data.select.checked ? 'checkbox' : 'square-outline'} size={19} color={data.select.checked ? '#0F766E' : '#9CA3AF'} />
           </Pressable>
         )}
+        {/* Completed has room for a tick box at the start of every row; a billed or paid one has none. */}
+        {stage === 'completed' && !data.select && <View style={{ width: 20 }} />}
         <Text className="text-[12px] font-bold text-gray-800" style={{ width: w.token, flexShrink: 0 }} numberOfLines={1}>
           {data.token ?? '—'}
         </Text>
@@ -491,7 +492,7 @@ function JobRowView({ data, stage, wide }: { data: JobRowData; stage: Stage; wid
 
         <View style={{ width: w.status, flexShrink: 0 }}>
           {data.progress ? (
-            <JobProgressBars steps={data.progress} details={data.timeDetails} />
+            <JobProgressBars steps={data.progress} note={data.progressNote} details={data.timeDetails} />
           ) : (
             <Text className="text-[11.5px] font-semibold text-gray-700" numberOfLines={1}>
               {data.tag.label}
@@ -583,6 +584,7 @@ function finishedLines(item: ServiceRequest, card: JobCard | undefined): string[
 function RequestJobRow({
   item,
   stage,
+  billing,
   wide,
   onEditChalan,
   selected,
@@ -590,6 +592,8 @@ function RequestJobRow({
 }: {
   item: ServiceRequest;
   stage: Stage;
+  /** A finished job: how far its money has got - not billed yet, billed, or paid. */
+  billing?: Billing;
   wide: boolean;
   /** Finished jobs: open the chalan - to see it, or to type the number in when there is none. */
   onEditChalan?: (item: ServiceRequest) => void;
@@ -610,7 +614,7 @@ function RequestJobRow({
   );
   const { data: technicianProfile } = useSupabaseRow('profiles', item.technician_id ?? undefined);
   // A finished job lists what was used on it, from the technician's job card.
-  const finishedStage = stage === 'completed' || stage === 'awaiting_payment' || stage === 'paid';
+  const finishedStage = stage === 'completed';
   const { data: jobCards } = useSupabaseQuery('job_cards', {
     filters: { service_request_id: item.id },
     enabled: finishedStage || wide,
@@ -658,7 +662,7 @@ function RequestJobRow({
     action = { label: 'Review hold request', short: 'Review hold', icon: 'pause-circle-outline', primary: true, onPress: open };
   } else if (stage === 'in_progress') {
     action = { label: 'View job', icon: 'eye-outline', primary: false, onPress: open };
-  } else if (stage === 'completed') {
+  } else if (stage === 'completed' && billing === 'completed') {
     // The finished job becomes a bill: its products and installation pre-filled.
     action = {
       label: 'Create bill',
@@ -666,7 +670,7 @@ function RequestJobRow({
       primary: true,
       onPress: () => router.push(`/(reseller)/transactions?type=sale&add=1&fromJob=${item.id}` as any),
     };
-  } else if (stage === 'awaiting_payment') {
+  } else if (stage === 'completed' && billing === 'billed') {
     action = { label: 'Record payment', icon: 'cash-outline', primary: true, onPress: open };
   } else {
     action = { label: 'View', icon: 'eye-outline', primary: false, onPress: open };
@@ -677,20 +681,22 @@ function RequestJobRow({
       ? TAGS.holdRequested
       : stage === 'in_progress' && item.hold_status === 'on_hold'
         ? TAGS.onHold
-        : stage === 'awaiting_payment' || stage === 'completed'
-          ? TAGS.unpaid
-          : stage === 'paid'
+        : stage === 'completed'
+          ? billing === 'paid'
             ? TAGS.paid
-            : item.origin === 'app'
-              ? TAGS.app
-              : TAGS.own;
+            : billing === 'billed'
+              ? TAGS.billed
+              : TAGS.unpaid
+          : item.origin === 'app'
+            ? TAGS.app
+            : TAGS.own;
 
   const place =
     stage === 'in_progress' && technicianProfile
       ? `${technicianProfile.full_name ?? 'Technician'}${distance != null ? ` · ${distance.toFixed(1)} km away` : ''}`
       : (item.location_data?.address ?? null);
-  // Where the job has got to: Assigned, WIP, Hold, Completed.
-  const progress = jobStages(item, jobCards?.[0]);
+  // Where the job has got to: Assigned, WIP, Hold, Completed - and once it is done, Completed, Billed, Paid.
+  const progress = stage === 'completed' && billing ? billingStages(billing) : jobStages(item, jobCards?.[0]);
 
   // Any job this reseller owns can be cancelled while it's still open (a
   // no-show app customer included); only their own walk-in jobs can be
@@ -710,6 +716,8 @@ function RequestJobRow({
         technician: technicianProfile?.full_name ?? null,
         token: ticketLabel(item.ticket_no),
         progress,
+        progressNote:
+          stage === 'completed' && item.payment_status === 'partial' ? `Part paid: ${formatAmount(item.amount_paid)}` : undefined,
         place: wide ? (item.location_data?.address ?? null) : place,
         when: formatScheduledWhen(item.scheduled_date, item.scheduled_time),
         date: item.scheduled_date ?? entryDay(null, item.created_at),
@@ -728,7 +736,7 @@ function RequestJobRow({
               }
             : undefined,
         select:
-          wide && stage === 'completed' && onToggleSelect
+          wide && stage === 'completed' && billing === 'completed' && onToggleSelect
             ? { checked: !!selected, onToggle: () => onToggleSelect(item) }
             : undefined,
         tag,
@@ -814,25 +822,25 @@ function OrderJobRow({
 }
 
 /** A sale bill added straight to a customer (not through a job). It starts under Completed with
- * no bill number; once the number is added it moves to Awaiting payment, and to Paid when the
- * customer's ledger is settled. */
-function SaleBillRow({ sale, stage, wide }: { sale: BusinessTransaction; stage: Stage; wide: boolean }) {
+ * no bill number; once the number is added it is Billed, and Paid when the customer's ledger is
+ * settled - all of it still under Completed. */
+function SaleBillRow({ sale, billing, wide }: { sale: BusinessTransaction; billing: Billing; wide: boolean }) {
   const hasBillNo = !!sale.bill_no?.trim();
   const editPath = `/(reseller)/transactions?type=sale&add=1&edit=${sale.id}`;
   const open = () => router.push(editPath as any);
   const action: JobAction = !hasBillNo
     ? { label: 'Add bill number', short: 'Add bill no.', icon: 'document-text-outline', primary: true, onPress: open }
-    : stage === 'paid'
+    : billing === 'paid'
       ? { label: 'View bill', icon: 'eye-outline', primary: false, onPress: open }
       : { label: 'Record payment', icon: 'cash-outline', primary: true, onPress: () => router.push('/(reseller)/quick-payment?type=in' as any) };
   const tag: Tag = !hasBillNo
     ? { label: 'Needs bill no.', bg: '#F3F4F6', fg: '#4B5563' }
-    : stage === 'paid'
+    : billing === 'paid'
       ? TAGS.paid
       : TAGS.unpaid;
   return (
     <JobRowView
-      stage={stage}
+      stage="completed"
       wide={wide}
       data={{
         icon: (
@@ -845,6 +853,7 @@ function SaleBillRow({ sale, stage, wide }: { sale: BusinessTransaction; stage: 
         ),
         title: hasBillNo ? `Sale · Bill #${sale.bill_no}` : 'Sale · no bill number yet',
         who: sale.party_name ?? 'Customer',
+        progress: billingStages(billing),
         place: null,
         when: sale.bill_date ?? sale.created_at.slice(0, 10),
         date: entryDay(sale.bill_date, sale.created_at),
@@ -902,7 +911,7 @@ export default function ResellerRequestQueue() {
     enabled: !!userId,
   });
   // Sale bills added straight to a customer, and every customer's ledger entries to tell which
-  // of them are settled: these follow Completed -> Awaiting payment -> Paid too.
+  // of them are settled: these read Completed -> Billed -> Paid too.
   const { data: directSales } = useSupabaseQuery('business_transactions', {
     filters: userId ? { owner_id: userId, type: 'sale' } : {},
     orderBy: { column: 'created_at', ascending: false },
@@ -964,7 +973,14 @@ export default function ResellerRequestQueue() {
         .filter((t) => t.source_type === 'service_request_bill')
         .flatMap((t) => [...(t.source_id ? [t.source_id] : []), ...(t.source_job_ids ?? [])])
     );
-    (mine ?? []).forEach((item) => groups.get(stageOf(item, billedJobs))!.push({ kind: 'request', id: item.id, request: item }));
+    (mine ?? []).forEach((item) =>
+      groups.get(stageOf(item))!.push({
+        kind: 'request',
+        id: item.id,
+        request: item,
+        billing: item.status === 'resolved' ? billingOf(item, billedJobs) : undefined,
+      })
+    );
     (sellingOrders ?? []).forEach((order) =>
       groups.get(orderStageOf(order))!.push({ kind: 'order', id: order.id, order })
     );
@@ -977,12 +993,12 @@ export default function ResellerRequestQueue() {
       // Only bills typed in by hand to a saved customer; ones a job or order wrote are already
       // in the pipeline as that job or order.
       if (sale.source_type || !sale.customer_id) return;
-      const stage: Stage = !sale.bill_no?.trim()
+      const billing: Billing = !sale.bill_no?.trim()
         ? 'completed'
         : (owed.get(sale.customer_id) ?? 0) > 0
-          ? 'awaiting_payment'
+          ? 'billed'
           : 'paid';
-      groups.get(stage)!.push({ kind: 'sale', id: sale.id, sale, stage });
+      groups.get('completed')!.push({ kind: 'sale', id: sale.id, sale, billing });
     });
     return groups;
   }, [incoming, mine, sellingOrders, directSales, ledgerEntries]);
@@ -1061,13 +1077,14 @@ export default function ResellerRequestQueue() {
         key={`r-${item.id}`}
         item={item.request}
         stage={activeStage}
+        billing={item.billing}
         wide={tableMode}
         onEditChalan={openChalan}
         selected={pickedJobs.has(item.id)}
         onToggleSelect={togglePicked}
       />
     ) : item.kind === 'sale' ? (
-      <SaleBillRow key={`s-${item.id}`} sale={item.sale} stage={item.stage} wide={tableMode} />
+      <SaleBillRow key={`s-${item.id}`} sale={item.sale} billing={item.billing} wide={tableMode} />
     ) : (
       <OrderJobRow key={`o-${item.id}`} order={item.order} stage={activeStage} wide={tableMode} productMap={productMap} />
     );

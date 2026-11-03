@@ -179,3 +179,16 @@ export function jobStages(
     { label: 'Completed', state: state('done', resolved) },
   ];
 }
+
+/** Where a finished job's money has got to: done but not billed, billed and waiting for the money, paid. */
+export type Billing = 'completed' | 'billed' | 'paid';
+
+/** The three words a finished job is read by in the Completed table: Completed, Billed, Paid. The one
+ * it is on is `current`, the ones before it `done`. */
+export function billingStages(billing: Billing): { label: string; state: StageStepState }[] {
+  const at = (['completed', 'billed', 'paid'] as const).indexOf(billing);
+  return ['Completed', 'Billed', 'Paid'].map((label, index) => ({
+    label,
+    state: index === at ? 'current' : index < at ? 'done' : 'todo',
+  }));
+}
