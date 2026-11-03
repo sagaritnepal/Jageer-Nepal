@@ -22,10 +22,11 @@ import { PersonAvatar } from '../PersonAvatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { showAlert, getErrorMessage } from '../../utils/alert';
 import { formatScheduledWhen } from '../../utils/scheduledTime';
-import { numericDateLabel, toAdLabel, toBsLabel } from '../../utils/nepaliDate';
+import { numericDateLabel, toAdLabel, toBsHistoryLabel, toBsLabel } from '../../utils/nepaliDate';
 import { formatDuration, formatDurationBetween } from '../../utils/duration';
 import { entryDay } from '../../utils/ledgerStatement';
 import { useCalendarMode } from '../../hooks/useCalendarMode';
+import { DateField } from '../DateTimeFields';
 import {
   EditableAmount,
   FULL_TABLE_WIDTH,
@@ -184,28 +185,44 @@ function OverdueChip() {
   );
 }
 
-function JobCard({ request, footer }: { request: ServiceRequest; footer?: React.ReactNode }) {
+/** `compact` is the narrow card in an employee's day: no picture or address, the job's name on two lines. */
+function JobCard({ request, footer, compact }: { request: ServiceRequest; footer?: React.ReactNode; compact?: boolean }) {
   const chip = statusChip(request);
   return (
-    <View className="rounded-xl border border-gray-200 bg-white p-3">
-      <Pressable onPress={() => router.push(`/(reseller)/request/${request.id}` as any)} className="flex-row items-start gap-2.5">
-        <CategoryBadge category={request.issue_type} size={30} />
+    <View className={`rounded-xl border border-gray-200 bg-white ${compact ? 'p-2' : 'p-3'}`}>
+      <Pressable
+        onPress={() => router.push(`/(reseller)/request/${request.id}` as any)}
+        className={compact ? '' : 'flex-row items-start gap-2.5'}
+      >
+        {!compact && <CategoryBadge category={request.issue_type} size={30} />}
         <View className="flex-1">
           <View className="flex-row items-center" style={{ gap: 8 }}>
             <TicketChip no={request.ticket_no} />
-            <Text className="text-[13.5px] font-bold text-gray-900" style={{ flex: 1, minWidth: 0 }} numberOfLines={1}>
+            {!compact && (
+              <Text className="text-[13.5px] font-bold text-gray-900" style={{ flex: 1, minWidth: 0 }} numberOfLines={1}>
+                {request.issue_type}
+              </Text>
+            )}
+          </View>
+          {compact && (
+            <Text className="mt-1 text-[12px] font-bold text-gray-900" numberOfLines={2}>
               {request.issue_type}
             </Text>
-          </View>
+          )}
           <Text className="mt-0.5 text-[11.5px] text-gray-500" numberOfLines={1}>
-            {request.customer_name ?? 'Customer'} · {when(request)}
+            {compact ? (request.customer_name ?? 'Customer') : `${request.customer_name ?? 'Customer'} · ${when(request)}`}
           </Text>
-          <Text className="mt-0.5 text-[11.5px] text-gray-500" numberOfLines={1}>
-            {request.location_data?.address ?? 'No address'}
-          </Text>
+          {!compact && (
+            <Text className="mt-0.5 text-[11.5px] text-gray-500" numberOfLines={1}>
+              {request.location_data?.address ?? 'No address'}
+            </Text>
+          )}
           <View className="mt-1.5 flex-row flex-wrap items-center" style={{ gap: 6 }}>
-            <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: chip.bg }}>
-              <Text className="text-[10.5px] font-bold" style={{ color: chip.color }}>
+            <View
+              className={compact ? 'rounded-lg px-2 py-0.5' : 'rounded-full px-2 py-0.5'}
+              style={{ backgroundColor: chip.bg, ...(compact ? { maxWidth: '100%' } : null) }}
+            >
+              <Text className="text-[10.5px] font-bold" style={{ color: chip.color }} numberOfLines={compact ? 2 : undefined}>
                 {chip.label}
               </Text>
             </View>
@@ -222,18 +239,16 @@ function JobCard({ request, footer }: { request: ServiceRequest; footer?: React.
 /** One stretch of today a technician had a job under way, in minutes from midnight (0 - 1440). */
 type DaySpan = { id: string; request: ServiceRequest; ticket: string | null; title: string; from: number; to: number; running: boolean };
 
-/** The stretches of today a technician spent on jobs: from when they started it (the job card) to when
+/** The stretches of a day a technician spent on jobs: from when they started it (the job card) to when
  * they finished it - or to now, while it is still under way. A job that began yesterday starts at
  * midnight; one with no recorded start or finish is left out rather than guessed. */
-function workedToday(
+function workedOn(
   requests: ServiceRequest[],
   times: Map<string, JobTimes> | undefined,
   technicianId: string,
+  dayStart: number,
   now: number
 ): DaySpan[] {
-  const midnight = new Date(now);
-  midnight.setHours(0, 0, 0, 0);
-  const dayStart = midnight.getTime();
   const spans: DaySpan[] = [];
   for (const r of requests) {
     if (r.technician_id !== technicianId) continue;
@@ -259,17 +274,15 @@ function workedToday(
  * assigned to when they accepted it - or to now, while it is still waiting. */
 type OfferSpan = { id: string; request: ServiceRequest; ticket: string | null; title: string; from: number; to: number; waiting: boolean };
 
-/** The jobs assigned to a technician today, each as the stretch it waited for them to accept. Once
+/** The jobs assigned to a technician on a day, each as the stretch it waited for them to accept. Once
  * accepted it stays here as how long the wait was, and its work shows on the other side of the rail. */
-function offeredToday(
+function offeredOn(
   requests: ServiceRequest[],
   times: Map<string, JobTimes> | undefined,
   technicianId: string,
+  dayStart: number,
   now: number
 ): OfferSpan[] {
-  const midnight = new Date(now);
-  midnight.setHours(0, 0, 0, 0);
-  const dayStart = midnight.getTime();
   const offers: OfferSpan[] = [];
   for (const r of requests) {
     if (r.technician_id !== technicianId || !r.assigned_at) continue;
@@ -402,6 +415,7 @@ function EmployeeDay({
   dutyFrom,
   dutyTo,
   nowMin,
+  showNow,
   renderCard,
 }: {
   items: DayItem[];
@@ -409,7 +423,10 @@ function EmployeeDay({
   busy: [number, number][];
   dutyFrom: number;
   dutyTo: number;
+  /** How far into the day it is: the real time on today, the whole day (1440) on a day gone by, 0 on a day to come. */
   nowMin: number;
+  /** Draw the red line for now - only on today. */
+  showNow: boolean;
   renderCard: (request: ServiceRequest) => React.ReactNode;
 }) {
   // A card's height is only known once it has been drawn; until then it is guessed.
@@ -555,7 +572,7 @@ function EmployeeDay({
           ))}
         </View>
         {lane('work', right)}
-        <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />
+        {showNow && <View style={{ position: 'absolute', left: 0, right: 0, top: px(nowMin) - 1, height: 2, backgroundColor: '#DC2626' }} />}
       </View>
     </View>
   );
@@ -570,7 +587,6 @@ function Column({
   avatar,
   phone,
   headerExtra,
-  timeline,
   children,
   wide,
 }: {
@@ -583,15 +599,13 @@ function Column({
   phone?: string | null;
   /** Under the name in the column's header - how long an employee worked today. */
   headerExtra?: React.ReactNode;
-  /** The column holds an employee's day, a table of its own, and needs room for two lanes of cards. */
-  timeline?: boolean;
   children: React.ReactNode;
   wide: boolean;
 }) {
   return (
     <View
       className="rounded-2xl border border-gray-200 bg-gray-50"
-      style={wide ? { minWidth: timeline ? 560 : 320, flexBasis: timeline ? 560 : 320, flexGrow: 1, flexShrink: 0 } : undefined}
+      style={wide ? { minWidth: 320, flexBasis: 320, flexGrow: 1, flexShrink: 0 } : undefined}
     >
       <View className="rounded-t-2xl px-3.5 py-3" style={{ backgroundColor: tint, gap: 8 }}>
         <View className="flex-row items-center gap-2.5">
@@ -1495,9 +1509,18 @@ export function WorkHubPanel({
   const now = useNow();
   // How far into today it is, for the red "now" line in each employee's day bar.
   const nowMinutes = new Date(now).getHours() * 60 + new Date(now).getMinutes();
-  // Which day the bars are for, in both calendars: "Tue, Nov 3, 2026 AD · Kartik 17, 2083 BS".
   const today = entryDay(null, new Date(now).toISOString());
-  const todayLabel = `${toAdLabel(today)} AD · ${toBsLabel(today)} BS`;
+  // The day the employees' tables are for: today, or the one picked with the calendar.
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const day = pickedDay ?? today;
+  const isToday = day === today;
+  const [dayYear, dayMonth, dayDate] = day.split('-').map(Number);
+  const dayStart = new Date(dayYear, dayMonth - 1, dayDate).getTime();
+  // How far into that day it is: the real time on today, all of it on a day gone by, none on a day to come.
+  const elapsedMinutes = isToday ? nowMinutes : day < today ? 1440 : 0;
+  // The day in both calendars: "Tue, Nov 3, 2026 AD · Kartik 17, 2083 BS".
+  const dayLabel = `${toAdLabel(day)} AD · ${toBsLabel(day)} BS`;
+  useCalendarMode(); // the date button below is drawn again when the AD / BS toggle changes
   const { data: employees } = useMyEmployees(userId);
 
   // The list is this stage's jobs, the newest first - by the date and time each was put in. The
@@ -1731,7 +1754,7 @@ export function WorkHubPanel({
 
       {(!searching || foundOpenToTeam.length > 0) && (
       <Column
-        title="Open to the team"
+        title="Outsource Technician"
         subtitle="First of your employees to accept gets it"
         count={foundOpenToTeam.length}
         color="#059669"
@@ -1758,28 +1781,29 @@ export function WorkHubPanel({
       {employees.map(({ employment, profile }) => {
         const jobs = foundWith(profile.id);
         if (searching && jobs.length === 0) return null;
-        const spans = workedToday(requests, jobTimes, profile.id, now);
-        const offers = offeredToday(requests, jobTimes, profile.id, now);
+        const spans = workedOn(requests, jobTimes, profile.id, dayStart, now);
+        const offers = offeredOn(requests, jobTimes, profile.id, dayStart, now);
         const dutyFrom = minutesOf(employment.work_start_time, 9 * 60);
         const dutyTo = minutesOf(employment.work_end_time, 17 * 60);
-        const figures = dayFigures(spans, dutyFrom, dutyTo, nowMinutes);
-        // What stands on their day: every offer and every stretch of work, the open ones as full cards.
-        // With a search typed in, only the open jobs it finds.
+        const figures = dayFigures(spans, dutyFrom, dutyTo, elapsedMinutes);
+        const dutyText = `On duty ${employment.work_start_time?.slice(0, 5) ?? '09:00'}–${employment.work_end_time?.slice(0, 5) ?? '17:00'}`;
+        // Who they are to you: their employee number and their designation ("MTPL-05 · Jr. Technician").
+        const designation = [employment.employee_code, employment.job_title].filter(Boolean).join(' · ');
+        // What stands on their day: every offer and every stretch of work. Today's open jobs are full cards;
+        // on another day, and for finished work, short labels. With a search typed in, only the open jobs
+        // it finds.
         const liveIds = new Set(jobs.map((r) => r.id));
         const dayItems: DayItem[] = [
-          ...offers.map((o): DayItem => ({ id: `offer:${o.id}`, request: o.request, kind: 'offer', from: o.from, to: o.to, live: o.waiting, open: o.waiting })),
-          ...spans.map((s): DayItem => ({ id: `work:${s.id}`, request: s.request, kind: 'work', from: s.from, to: s.to, live: s.running, open: s.running })),
+          ...offers.map((o): DayItem => ({ id: `offer:${o.id}`, request: o.request, kind: 'offer', from: o.from, to: o.to, live: isToday && o.waiting, open: o.waiting })),
+          ...spans.map((s): DayItem => ({ id: `work:${s.id}`, request: s.request, kind: 'work', from: s.from, to: s.to, live: isToday && s.running, open: s.running })),
         ].filter((item) => (item.live ? liveIds.has(item.request.id) : !searching));
         const placedIds = new Set(dayItems.filter((item) => item.live).map((item) => item.request.id));
-        const offPage = jobs.filter((r) => !placedIds.has(r.id));
+        const offPage = isToday ? jobs.filter((r) => !placedIds.has(r.id)) : [];
         return (
           <Column
             key={employment.id}
             title={profile.full_name ?? 'Technician'}
-            subtitle={
-              employment.job_title ??
-              `On duty ${employment.work_start_time?.slice(0, 5) ?? '09:00'}–${employment.work_end_time?.slice(0, 5) ?? '17:00'}`
-            }
+            subtitle={designation || dutyText}
             count={jobs.length}
             color={BLUE}
             tint="#EFF6FF"
@@ -1787,8 +1811,13 @@ export function WorkHubPanel({
             phone={profile.phone}
             headerExtra={
               <View style={{ gap: 1 }}>
+                {!!designation && (
+                  <Text className="text-[11px] text-gray-600" numberOfLines={1}>
+                    {dutyText}
+                  </Text>
+                )}
                 <Text className="text-[11px] font-bold text-gray-900" numberOfLines={1}>
-                  {todayLabel}
+                  {dayLabel}
                 </Text>
                 <View className="flex-row flex-wrap items-center" style={{ columnGap: 10 }}>
                   <View className="flex-row items-center" style={{ gap: 4 }}>
@@ -1800,14 +1829,13 @@ export function WorkHubPanel({
                     <Text className="text-[11px] font-semibold text-gray-700">Not used {minutesLabel(figures.unused)}</Text>
                   </View>
                   <Text className="text-[11px] text-gray-600">
-                    {`${spans.length} job${spans.length === 1 ? '' : 's'} today${spans.some((s) => s.running) ? ' · working now' : ''}${
-                      offers.some((o) => o.waiting) ? ` · ${offers.filter((o) => o.waiting).length} waiting to accept` : ''
-                    }`}
+                    {`${spans.length} job${spans.length === 1 ? '' : 's'}${isToday ? ' today' : ''}${
+                      isToday && spans.some((s) => s.running) ? ' · working now' : ''
+                    }${isToday && offers.some((o) => o.waiting) ? ` · ${offers.filter((o) => o.waiting).length} waiting to accept` : ''}`}
                   </Text>
                 </View>
               </View>
             }
-            timeline={wide}
             wide={wide}
           >
             {wide ? (
@@ -1817,8 +1845,9 @@ export function WorkHubPanel({
                   busy={busyIntervals(spans)}
                   dutyFrom={dutyFrom}
                   dutyTo={dutyTo}
-                  nowMin={nowMinutes}
-                  renderCard={(r) => <JobCard request={r} footer={reassignFooter(r)} />}
+                  nowMin={elapsedMinutes}
+                  showNow={isToday}
+                  renderCard={(r) => <JobCard request={r} compact footer={reassignFooter(r)} />}
                 />
                 {/* A job of theirs that has no time on the day (no recorded start) is still theirs to see. */}
                 {offPage.length > 0 && (
@@ -2076,10 +2105,29 @@ export function WorkHubPanel({
               </Pressable>
             )}
           </View>
-          {wide && canSlide && (
+          {wide && (
             <View className="ml-auto flex-row items-center" style={{ gap: 6 }}>
-              <Text className="text-[11.5px] text-gray-500">More columns</Text>
-              {([-1, 1] as const).map((direction) => {
+              {/* Which day the employees' tables show. The calendar is the app's own (BS or AD). */}
+              <DateField
+                value={day}
+                onChange={(picked) => setPickedDay(picked === today ? null : picked)}
+                renderTrigger={(open) => (
+                  <Pressable
+                    onPress={open}
+                    accessibilityRole="button"
+                    accessibilityLabel="Pick the day"
+                    className="h-10 flex-row items-center gap-2 rounded-lg border border-gray-300 bg-white px-3"
+                  >
+                    <Ionicons name="calendar-outline" size={16} color="#374151" />
+                    <Text className="text-[12.5px] font-semibold text-gray-800">
+                      {toBsHistoryLabel(day)}
+                      {isToday ? ' · Today' : ''}
+                    </Text>
+                  </Pressable>
+                )}
+              />
+              {canSlide && <Text className="text-[11.5px] text-gray-500">More columns</Text>}
+              {canSlide && ([-1, 1] as const).map((direction) => {
                 const disabled = direction === -1 ? slideX <= 4 : slideX + slideView >= slideContent - 4;
                 return (
                   <Pressable

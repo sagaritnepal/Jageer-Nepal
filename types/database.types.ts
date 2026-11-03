@@ -109,6 +109,9 @@ export interface TechnicianEmployment {
   /** The employer's own label and private note for this employee. */
   job_title: string | null;
   employer_note: string | null;
+  /** The employer's own number for this employee, e.g. "MTPL-05" (migration 0106). Not there until that
+   * migration has been run on the database. */
+  employee_code?: string | null;
   /** 'supervisor' can hand this reseller's work to the rest of the team;
    * 'technician' just carries their own jobs (migration 0077). */
   staff_role: 'technician' | 'supervisor';
