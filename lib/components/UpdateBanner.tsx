@@ -2,9 +2,20 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Application from 'expo-application';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LATEST_RELEASE_API, pickUpdate } from '../utils/appUpdate';
+
+/** The installed APK's versionCode, or NaN. expo-application is a native module, so an APK built before it was
+ * added does not have it - and loading it there throws. Over-the-air updates reach those APKs too, so it is
+ * loaded here, on demand: a missing module is just "no banner", never a crash at launch. */
+function installedVersionCode(): number {
+  try {
+    const raw = (require('expo-application') as typeof import('expo-application')).nativeBuildVersion;
+    return raw ? Number(raw) : NaN;
+  } catch {
+    return NaN;
+  }
+}
 
 /** An APK installed by hand never updates itself. On launch, the Android app compares its own versionCode
  * with the newest GitHub Release and, if that is newer, offers the APK. Stays silent when offline, when
@@ -15,8 +26,7 @@ export function UpdateBanner() {
 
   useEffect(() => {
     if (Platform.OS !== 'android' || __DEV__) return;
-    const raw = Application.nativeBuildVersion;
-    const installed = raw ? Number(raw) : NaN;
+    const installed = installedVersionCode();
     if (!Number.isFinite(installed)) return;
 
     let cancelled = false;
