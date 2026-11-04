@@ -94,6 +94,8 @@ interface Movement {
   rate: number;
   amount: number;
   hsCode: string;
+  /** The item's name as it was typed or picked on this bill. */
+  name: string;
 }
 
 /** Quantities and prices keep their decimals (2.5 kg, Rs 12.50); `money` would round. */
@@ -452,6 +454,7 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
           rate: r,
           amount: Number(item.amount) || q * r,
           hsCode: item.hs_code ?? '',
+          name: (item.description ?? '').trim(),
         });
         map.set(key, list);
       });
@@ -520,8 +523,34 @@ export function InventoryScreen({ basePath }: { basePath: string }) {
       })
       .filter((r): r is InventoryRow => r !== null);
 
+    // Everything bought on a Purchase bill is stock, whether or not it is a catalog product (with or without a
+    // picture) or was ever saved as a typed item - a name only the bill knows (an imported bill, an edited one,
+    // a wholesale order that arrived) still gets its row, as "Bills only", named as it was last bought.
+    const listed = new Set([...seenNames, ...financeItemRows.map((r) => nameKey(r.name))]);
+    const purchasedItemRows: InventoryRow[] = [];
+    for (const [key, list] of movementsByName) {
+      const purchased = purchasedByName.get(key) ?? 0;
+      if (listed.has(key) || purchased === 0) continue;
+      const lastBought = [...list].reverse().find((m) => m.dir === 'in');
+      purchasedItemRows.push({
+        key: `b-${key}`,
+        name: lastBought?.name || key,
+        category: null,
+        price: null,
+        cost: null,
+        stockLevel: null,
+        sold: soldByName.get(key) ?? 0,
+        purchased,
+        status: 'untracked',
+        value: null,
+        productId: null,
+        imageUrl: null,
+        listed: false,
+      });
+    }
+
     // A to Z: case and stray spaces do not matter, and 2 comes before 10.
-    return [...productRows, ...financeItemRows].sort((a, b) =>
+    return [...productRows, ...financeItemRows, ...purchasedItemRows].sort((a, b) =>
       a.name.trim().localeCompare(b.name.trim(), undefined, { sensitivity: 'base', numeric: true })
     );
   }, [products, financeItems, movementsByName]);

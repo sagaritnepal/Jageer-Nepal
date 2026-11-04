@@ -186,10 +186,10 @@ function AccountPill({ row }: { row: BookRow }) {
   );
 }
 
-/** Every entry of the day (or week / month) in one cash-book table, in date and
- * time order: opening balance first, then cash in / paid out / expenses (which
- * move the running balance) mixed with the sales and purchase bills and
- * transfers (which don't), closing balance last. It is the same table as the
+/** Every entry of the day (or week / month) in one cash-book table, newest
+ * first: cash in / paid out / expenses (which move the running balance) mixed
+ * with the sales and purchase bills and transfers (which don't), then the
+ * opening balance, and the closing balance in the footer. It is the same table as the
  * Statement's (BookTable, the same columns, widths and styles), with the
  * running Balance after Cash out. `dayLabel` is given for a view of more than
  * one day, and puts a date band above each day's entries. */
@@ -207,8 +207,13 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   onOpenRow: (row: BookRow) => void;
 }) {
   const [calendarMode] = useCalendarMode();
+  // The newest entry comes first and the opening line last; the running Balance still builds up from the opening, so
+  // each row shows the balance after it. SN stays the entry's place in time (the first of the period is 1).
+  const entries = rows.filter((r) => r.kind !== 'opening');
+  const place = new Map(entries.map((r, i) => [r.id, i + 1]));
+  const shownRows = [...entries].reverse().concat(rows.filter((r) => r.kind === 'opening'));
   // SN, then the date with its time under it (the opening line has neither), as on the Statement.
-  const snCell = (r: BookRow, index: number) => <Text className="text-[12.5px] text-gray-500">{r.kind === 'opening' ? '' : index}</Text>;
+  const snCell = (r: BookRow) => <Text className="text-[12.5px] text-gray-500">{r.kind === 'opening' ? '' : place.get(r.id)}</Text>;
   const dateCell = (r: BookRow, short: boolean) =>
     r.kind === 'opening' ? null : (
       <View style={{ minWidth: 0 }}>
@@ -263,7 +268,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
 
   const columns: BookColumn<BookRow>[] = full
     ? [
-        { key: 'sn', label: 'SN', width: COL.sn, render: (r, index) => snCell(r, index) },
+        { key: 'sn', label: 'SN', width: COL.sn, render: (r) => snCell(r) },
         { key: 'date', label: 'Date', width: COL.date, render: (r) => dateCell(r, false) },
         {
           // The bill's own number - not an amount; anything that is not a bill has none.
@@ -300,7 +305,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
         { key: 'balance', label: 'Balance', width: COL.balance, align: 'right', render: balanceCell },
       ]
     : [
-        { key: 'sn', label: 'SN', width: 34, render: (r, index) => snCell(r, index) },
+        { key: 'sn', label: 'SN', width: 34, render: (r) => snCell(r) },
         { key: 'date', label: 'Date', width: 84, render: (r) => dateCell(r, true) },
         { key: 'details', label: 'Transaction details', render: (r) => detailsCell(r, true) },
         {
@@ -340,7 +345,7 @@ function DayBookTable({ rows, opening, totalIn, totalOut, closing, full, dayLabe
   return (
     <BookTable
       columns={columns}
-      rows={rows}
+      rows={shownRows}
       rowKey={(r) => r.id}
       // Tapping an entry opens it for editing; the opening-balance line and anything without a record behind it stays inert.
       onRowPress={onOpenRow}

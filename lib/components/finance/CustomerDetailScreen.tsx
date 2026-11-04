@@ -1020,7 +1020,9 @@ function CustomerDetail({ id, basePath }: { id: string; basePath: string }) {
     for (const g of list) {
       g.side = g.key.startsWith('v|') || (g.key.startsWith('row|') && !!g.rows[0]?.vendor) ? 'vendor' : 'customer';
     }
-    return list;
+    // The line with the latest entry is on top.
+    const latest = (g: VehicleGroup) => g.rows.reduce((a, r) => (r.createdAt > a ? r.createdAt : a), '');
+    return list.sort((a, b) => (a.lastDay === b.lastDay ? latest(b).localeCompare(latest(a)) : a.lastDay < b.lastDay ? 1 : -1));
   }, [statementAsc]);
   const [openGroup, setOpenGroup] = useState<VehicleGroup | null>(null);
 
@@ -1592,9 +1594,11 @@ function VehicleEntries({
 }) {
   const vendor = group.side === 'vendor';
   let running = 0;
-  // Oldest first (the bills were gathered before the payments), so "left" runs as the money came.
+  // "Left" runs as the money came, oldest first (the bills were gathered before the payments) - and the entries
+  // are shown newest first, the latest on top.
   const ordered = [...group.rows].sort((a, b) => a.day.localeCompare(b.day) || a.createdAt.localeCompare(b.createdAt));
-  const lines = ordered.map((r) => {
+  const lines = ordered
+    .map((r) => {
     const part = group.parts.get(r.key) ?? { billed: 0, paid: 0, received: 0 };
     running = round2(running + (vendor ? part.billed - part.paid + part.received : part.billed + part.paid - part.received));
     return {
@@ -1603,7 +1607,8 @@ function VehicleEntries({
       payable: vendor ? Math.max(0, running) : Math.max(0, -running),
       receivable: vendor ? Math.max(0, -running) : Math.max(0, running),
     };
-  });
+    })
+    .reverse();
   type Line = (typeof lines)[number];
   const fig = (v: number, color: string) =>
     v ? (
@@ -1636,11 +1641,12 @@ function VehicleEntries({
       </View>
     ),
   };
-  const last = lines[lines.length - 1];
+  // The balance left is the one after the latest entry, which is on top.
+  const last = lines[0];
   const sum = (f: (l: Line) => number) => round2(lines.reduce((s, l) => s + f(l), 0));
   const columns: BookColumn<Line>[] = full
     ? [
-        { key: 'sn', label: 'SN', width: 52, render: (_l, i) => <Text className="text-[12.5px] text-gray-500">{i + 1}</Text> },
+        { key: 'sn', label: 'SN', width: 52, render: (_l, i) => <Text className="text-[12.5px] text-gray-500">{lines.length - i}</Text> },
         { key: 'details', label: 'Details', render: details },
         {
           // The date, with the entry's number under it.

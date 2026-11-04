@@ -3128,6 +3128,14 @@ export type FeedItem =
   | { kind: 'vendor'; id: string; date: string; entry: VendorLedgerEntry; vendorName: string | null }
   | { kind: 'transfer'; id: string; date: string; transfer: AccountTransfer };
 
+/** Newest first: by the day an entry sits on, and within a day by when it was put in - so the latest log is on top. */
+function newestFirst(a: FeedItem, b: FeedItem): number {
+  const byDay = new Date(b.date).getTime() - new Date(a.date).getTime();
+  if (byDay !== 0) return byDay;
+  const stamp = (i: FeedItem) => (i.kind === 'business' ? i.tx.created_at : i.kind === 'transfer' ? i.transfer.created_at : i.entry.created_at) ?? '';
+  return stamp(b).localeCompare(stamp(a));
+}
+
 // "Today" / "Yesterday" / "N days ago" for anything in the past; falls back
 // to a plain date for anything future-dated (shouldn't normally happen).
 function dayLabel(dateStr: string): string {
@@ -3517,7 +3525,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
       return (transactions ?? [])
         .filter((t) => t.type === filter)
         .map((tx) => ({ kind: 'business' as const, id: tx.id, date: tx.bill_date ?? tx.created_at, tx }))
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        .sort(newestFirst);
     }
     const businessItems: FeedItem[] = (transactions ?? []).map((tx) => ({
       kind: 'business',
@@ -3554,9 +3562,7 @@ export function TransactionsScreen({ basePath }: { basePath?: string }) {
       date: transfer.transfer_date ?? transfer.created_at,
       transfer,
     }));
-    return [...businessItems, ...ledgerItems, ...vendorItems, ...transferItems].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+    return [...businessItems, ...ledgerItems, ...vendorItems, ...transferItems].sort(newestFirst);
   }, [transactions, ledgerEntries, vendorLedgerEntries, transfers, customerNameById, filter]);
 
   // feed is already newest-first, so grouping by day label as we walk it

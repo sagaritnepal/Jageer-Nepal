@@ -22,7 +22,6 @@ import { ticketLabel } from '../../lib/utils/ticket';
 import { computeOwed, owedByMonth } from '../../lib/utils/receivableAgeing';
 import { withFrom } from '../../lib/hooks/useCameFrom';
 import { localTodayIso } from '../../lib/utils/localDate';
-import { newJobHref } from '../../lib/utils/newJobHref';
 import { supabase } from '../../lib/supabase';
 import { WEB_SIDEBAR_MIN_WIDTH } from '../../lib/components/web/WebSidebarShell';
 import { CARD_SHADOW, RecentActivityCard } from '../../lib/components/finance/dashboard/FinanceDashboard';
@@ -1035,32 +1034,9 @@ export default function CompanyDashboard() {
     </Panel>
   );
 
-  const quick = (
-    <Panel title="Quick actions">
-      <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-        {[
-          { label: 'New sale', icon: 'trending-up' as const, path: '/(reseller)/transactions?type=sale&add=1' },
-          { label: 'New purchase', icon: 'cart' as const, path: '/(reseller)/transactions?type=purchase&add=1' },
-          { label: 'Received', icon: 'arrow-down-circle' as const, path: '/(reseller)/quick-payment?type=in' },
-          { label: 'Payment out', icon: 'arrow-up-circle' as const, path: '/(reseller)/quick-payment?type=out' },
-          { label: 'New job', icon: 'add-circle' as const, path: newJobHref() },
-          { label: 'Ledger', icon: 'people' as const, path: '/(reseller)/customers' },
-          { label: 'Day book', icon: 'book' as const, path: '/(reseller)/daybook' },
-          { label: 'My team', icon: 'construct' as const, path: '/(reseller)/employees' },
-        ].map((a) => (
-          <Pressable key={a.label} onPress={() => go(a.path)} className="flex-row items-center rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5" style={{ gap: 8 }}>
-            <Ionicons name={a.icon} size={16} color="#1E3A8A" />
-            <Text className="text-[13px] font-semibold text-gray-800">{a.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </Panel>
-  );
-
   return (
     <ScrollView className="flex-1" style={{ backgroundColor: '#F6F7FB' }} contentContainerStyle={{ padding: wide ? 28 : 14, gap: 18, paddingBottom: 60 }}>
       {hero}
-      {quick}
       {periodBar}
       {periodMenu}
       {/* beside the chart the list shows as many entries as fill the card; stacked on a phone it has no height to fill */}
